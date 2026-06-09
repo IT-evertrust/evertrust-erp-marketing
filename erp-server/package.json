@@ -1,0 +1,42 @@
+{
+  "name": "erp-server",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/main",
+  "scripts": {
+    "build": "nest build",
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "start:debug": "nest start --debug --watch",
+    "start:prod": "node dist/main",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@nestjs/common": "^11.1.26",
+    "@nestjs/config": "^4.0.4",
+    "@nestjs/core": "^11.1.26",
+    "@nestjs/platform-express": "^11.1.26",
+    "@nestjs/typeorm": "^11.0.1",
+    "@prisma/client": "^7.8.0",
+    "dotenv": "^17.4.2",
+    "pg": "^8.21.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "typeorm": "^1.0.0"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.23",
+    "@types/node": "^25.9.2",
+    "prisma": "^7.8.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3"
+  }
+}

@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: erp-postgres
+    environment:
+      POSTGRES_USER: ${DB_USER:-evertrust-erp}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-evertrust-erp}
+      POSTGRES_DB: ${DB_NAME:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-evertrust-erp}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - erp-network
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: erp-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@erp.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
+    ports:
+      - "5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - erp-network
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+
+networks:
+  erp-network:
+    driver: bridge
