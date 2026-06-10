@@ -1,0 +1,85 @@
+name: ai-stack
+
+services:
+  litellm:
+    # -database variant bundles Prisma for the DATABASE_URL-backed virtual-key store
+    image: ghcr.io/berriai/litellm-database:main-v1.83.14-stable
+    container_name: ai-litellm
+    restart: unless-stopped
+    command: ["--config", "/app/config.yaml", "--port", "4000", "--num_workers", "1"]
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?Set in ai-stack/.env (sk-..., openssl rand -hex 24)}
+      # Encrypts credentials at rest in the DB. Like an n8n encryption key: set once, NEVER change.
+      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:?Set in ai-stack/.env (openssl rand -base64 32)}
+      # Rides the existing erp-postgres via the erp-server docker network (NOT
+      # host.docker.internal: a native Homebrew postgres on the mini shadows
+      # loopback port 5432, so the host path reaches the wrong server)
+      DATABASE_URL: postgresql://litellm:${LITELLM_DB_PASSWORD:?Set in ai-stack/.env}@erp-postgres:5432/litellm
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      # Port 4000 is funneled to the public internet — keep the admin UI off it
+      DISABLE_ADMIN_UI: "True"
+      # Trev's Ollama on the tailnet (primary model host). Until his machine is onboarded
+      # this points at the mini's own Ollama so the stack works end to end.
+      TAILNET_OLLAMA: ${TAILNET_OLLAMA:?Set in ai-stack/.env (http://100.x.y.z:11434)}
+    ports:
+      - "127.0.0.1:4000:4000" # loopback only: reachable via funnel + this host, never the LAN
+    volumes:
+      - ./config/litellm-config.yaml:/app/config.yaml:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4000/health/liveliness', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - ai-network
+      - erp-network
+
+  redis:
+    # "global storage" response cache — cache only, no persistence, hard memory ceiling
+    image: redis:8.2-alpine
+    container_name: ai-redis
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory", "64mb", "--maxmemory-policy", "allkeys-lru", "--save", ""]
+    mem_limit: 128m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ai-network
+    # no ports: internal to the compose network only
+
+  qdrant:
+    image: qdrant/qdrant:v1.17.1
+    container_name: ai-qdrant
+    restart: unless-stopped
+    environment:
+      # With this set, ALL endpoints (incl. /dashboard) require the api-key header
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:?Set in ai-stack/.env (openssl rand -hex 24)}
+      QDRANT__TELEMETRY_DISABLED: "true"
+    ports:
+      - "127.0.0.1:6333:6333" # REST; funneled on :8443. gRPC 6334 deliberately not published.
+    volumes:
+      - qdrant_data:/qdrant/storage
+    mem_limit: 512m
+    networks:
+      - ai-network
+
+volumes:
+  qdrant_data:
+
+networks:
+  ai-network:
+    driver: bridge
+  # erp-server stack's network — litellm reaches erp-postgres directly through it.
+  # Hard dependency: bring up erp-server's compose before this one.
+  erp-network:
+    external: true
+    name: erp-server_erp-network

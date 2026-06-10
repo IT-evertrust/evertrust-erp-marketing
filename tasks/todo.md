@@ -13,15 +13,22 @@ Backlog items below are seeded only from verified defects in the current codebas
 
 ## Current Focus
 
-**Shared infra stack on the Mac mini** (plan approved 2026-06-10; repo side implemented, cutover pending):
+**AI backend (Hermes gateway) + n8n-cloud migration** (plan approved 2026-06-10; mini side DEPLOYED):
 
-- [x] Harden `erp-server/docker-compose.yml`: restart policies, required secrets (`${VAR:?}`), pinned images (`n8nio/n8n:2.25.6`, `dpage/pgadmin4:9.15`), `HOST_NAME`-driven n8n URLs, `N8N_SECURE_COOKIE=false`, n8n healthcheck, loopback-only n8n-postgres, pgAdmin behind `--profile tools`, dead `N8N_BASIC_AUTH_*` block and obsolete `version:` key removed.
-- [x] `erp-server/.env.example` committed template (names + placeholders only).
-- [x] `app.module.ts`: TypeORM `synchronize: false` (shared DB safety).
-- [x] `docs/team-hosting.md` runbook (Tailscale access, mini checklist, deploy flow, per-dev DBs, n8n rules, backups, recovery).
-- [ ] **Cutover on the Mac mini** (human steps, follow docs/team-hosting.md): mini checklist §3, clone repo, create `.env` with fresh secrets (vault), `docker compose up -d`, n8n owner setup, create per-dev databases, laptops switch `DB_HOST` to `mac-mini-ca-mac.tailc3d837.ts.net`.
-- [ ] Set up the nightly backup job on the mini (docs §8) once an external SSD is attached.
-- [ ] Commit the repo-side changes (compose, .env.example, app.module.ts, docs, .claude updates, tasks/) — nothing is staged yet; keep the root `.gitignore` fix as its own commit.
+- [x] Local n8n retired (containers removed, volumes kept); `erp-server/docker-compose.yml` = postgres only.
+- [x] `ai-stack/` deployed on the mini: LiteLLM gateway (healthy, virtual key minted → `~/.evertrust/n8n-virtual-key.json`), Redis cache, Qdrant (API-key enforced). litellm DB rides erp-postgres via the shared docker network (host.docker.internal is shadowed by brew postgres — see Backlog).
+- [x] Gateway smoke-tested: `/v1/models` lists all 5 aliases; `hermes` chat completion returns through the mini's Ollama; Qdrant 401s without key.
+- [x] Ollama tuned (KEEP_ALIVE 5m, flash attention, q8 KV) via LaunchAgent + live setenv.
+- [ ] **USER: enable Funnel on the tailnet** (admin console → Access Controls → nodeAttrs funnel), then `tailscale funnel --bg 4000` + `tailscale funnel --bg --https=8443 6333`. Blocks n8n cloud connectivity.
+- [ ] **USER: run** `sudo pmset -a sleep 0 displaysleep 0 disksleep 0 womp 1 autorestart 1 powernap 0` (mini still has sleep=1!).
+- [ ] **USER: cap Docker Desktop VM at 3 GB** (Settings → Resources; currently 3.9 GB).
+- [ ] **USER: vault** — store `ai-stack/.env` values + the n8n virtual key.
+- [ ] Trev onboarding (docs/team-hosting.md §6): Tailscale, Ollama on 0.0.0.0, pull hermes3:8b + deepseek-r1, set `TAILNET_OLLAMA` in ai-stack/.env.
+- [ ] n8n cloud Phase 2 (after funnel): create `LiteLLM Gateway (mac-mini)` + `Qdrant (mac-mini)` credentials in BOTH projects; swap REACH BAZOOKA test's 3 nodes (guinea pig); build LLM AB HARNESS.
+- [ ] n8n cloud Phase 3: KB INGEST workflow + RAG AGENT rework (retrieval first, model second; update IN PLACE — dedup state).
+- [ ] n8n cloud Phase 4: tiered node migration per plan (P1 hermes, P2 deepseek, P3 ContractMaker last; web-search + German template nodes stay OpenAI).
+- [ ] Verify cache hit-rate behavior on repeated identical calls (cache key header present; hit timing not yet confirmed).
+- [ ] Set up the nightly backup job (docs §8) once an external SSD is attached.
 
 ## Backlog
 
@@ -30,7 +37,8 @@ Backlog items below are seeded only from verified defects in the current codebas
 - [ ] **Resolve the client/server port collision.** `erp-server/src/main.ts` hardcodes `app.listen(3000)` and `erp-client`'s `npm run dev` also defaults to port 3000. Make the server read a `PORT` env var with default 3001 (it currently reads no port env at all), and align `NEXT_PUBLIC_API_URL` in `erp-server/.env` with the new port.
 - [ ] **TLS for the n8n editor** (`tailscale serve`): would let us remove `N8N_SECURE_COOKIE: "false"` from the compose file and set `N8N_PROTOCOL: https` (see docs/team-hosting.md §9).
 - [ ] **Add a real test setup to `erp-server`.** `npm test` is a failing stub (`echo "Error: no test specified" && exit 1`); there is no jest config, no `*.spec.ts`, no `test/` dir. Add jest + `@nestjs/testing`, a first spec for `app.controller.ts`, and replace the `test` script.
-- [ ] **Commit the root `.gitignore` `.DS_Store` fix.** Uncommitted edit appending a macOS block (`.DS_Store` + `**/.DS_Store`). Commit it as its own commit; never commit the `.DS_Store` file itself.
+- [ ] **Consolidate the two Postgreses on the mini.** Homebrew postgresql@18 owns loopback 5432 (something actively connects to it) while Docker erp-postgres owns the published port — `localhost:5432` means different DBs depending on where you stand. Decide: retire brew postgres (move whatever uses it into the container) or make brew the ERP DB and drop the container. Until then: containers use the docker network, laptops use the Tailscale name.
+- [ ] **Old n8n volumes cleanup.** `erp-server_n8n_data`, `erp-server_n8n_postgres_data`, `erp-server_pgadmin_data` still on disk; delete after confirming nothing local is needed (n8n is cloud now).
 
 ## Done
 

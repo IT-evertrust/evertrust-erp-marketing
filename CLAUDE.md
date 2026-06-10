@@ -9,7 +9,8 @@ Monorepo for the EverTrust ERP and marketing platform (two independent npm packa
 - `erp-client/src/app/` — Next.js App Router (layout.tsx, page.tsx, globals.css; still create-next-app boilerplate). Path alias `@/*` → `./src/*`. Tailwind v4 is configured in globals.css via `@theme inline` — there is NO tailwind.config.* and none should be added.
 - `erp-server/src/` — NestJS source: main.ts (port 3000 hardcoded), app.module.ts, app.controller.ts + app.service.ts (single `GET /` → "Hello World!"), prisma.service.ts (exists but not registered in any module yet).
 - `erp-server/prisma/schema.prisma` — Prisma schema (example User/Post models only; no migrations directory yet).
-- `erp-server/docker-compose.yml` — postgres, n8n-postgres, n8n (pgAdmin on demand via `--profile tools`) on the `erp-network` bridge network. The team's shared instance runs 24/7 on the Mac mini over Tailscale — see `docs/team-hosting.md`.
+- `erp-server/docker-compose.yml` — ERP Postgres only (local n8n/pgAdmin retired 2026-06-10; n8n runs on n8n CLOUD). Runs 24/7 on the Mac mini — see `docs/team-hosting.md`.
+- `ai-stack/` — the "Hermes req" AI gateway on the Mac mini: LiteLLM (OpenAI-compatible, port 4000 loopback, funneled at 443) + Redis cache + Qdrant vector DB (6333 loopback, funneled at 8443). Routes n8n-cloud LLM calls to Ollama backends (Trev's machine primary, mini fallback). Config: `ai-stack/config/litellm-config.yaml`.
 - `.claude/` — settings, skills, project subagents (`agents/`) and slash commands (`commands/`).
 - `tasks/` — todo.md and lessons.md per the workflow rules below.
 
@@ -40,14 +41,13 @@ npm run lint   # bare eslint — must be run from inside erp-client/
 Docker (run from `erp-server/`, like the npm scripts):
 
 ```bash
-cd erp-server
-docker compose up -d                          # postgres + n8n; REQUIRES a filled .env (see .env.example)
-docker compose --profile tools up -d pgadmin  # pgAdmin, on demand only
-docker compose ps                             # status / healthchecks
-docker compose logs                           # add a service name to filter
+cd erp-server && docker compose up -d   # ERP postgres; REQUIRES .env (see .env.example)
+cd ai-stack && docker compose up -d     # LiteLLM gateway + Redis + Qdrant; REQUIRES ai-stack/.env
+                                        # (erp-server stack must be up first — shared network)
+docker compose ps / logs                # status / debug, from the respective directory
 ```
 
-The compose file fails fast without `DB_PASSWORD`, `N8N_DB_PASSWORD`, `N8N_ENCRYPTION_KEY`, and `HOST_NAME` set in `erp-server/.env`.
+Both compose files fail fast on missing required env vars (`${VAR:?}` syntax).
 
 ## Services & Ports
 
@@ -55,20 +55,18 @@ The compose file fails fast without `DB_PASSWORD`, `N8N_DB_PASSWORD`, `N8N_ENCRY
 |---|---|---|
 | erp-server (NestJS) | 3000 | Hardcoded in `erp-server/src/main.ts`; PORT env var is not read |
 | erp-client (next dev) | 3000 | CONFLICT with server — `next dev` auto-bumps to 3001 if the server already holds 3000 |
-| postgres (erp-postgres) | 5432 | ERP database; may also clash with a locally installed Postgres |
-| pgadmin (erp-pgadmin) | 5050 | On demand only (`docker compose --profile tools up -d pgadmin`) |
-| n8n (erp-n8n) | 5678 | Pinned `n8nio/n8n:2.25.6`; upgrades are deliberate tag bumps |
-| n8n-postgres | 5433 | n8n's own database; bound to 127.0.0.1 on its host only |
-
-Infra host is parameterized via `HOST_NAME` in `.env`: `localhost` for a laptop-local stack, `mac-mini-ca-mac.tailc3d837.ts.net` for the team's shared Mac mini stack (`docs/team-hosting.md`).
+| postgres (erp-postgres, Docker) | 5432 | ERP database. **TRAP: on the Mac mini a native Homebrew postgresql@18 also listens on loopback 5432** — `localhost:5432` ON the mini hits the brew instance, not the container; containers via `host.docker.internal` hit brew too. Use the docker network (`erp-postgres:5432`) from containers, the Tailscale name from laptops |
+| LiteLLM gateway (ai-litellm) | 4000 (127.0.0.1) | Public via Tailscale Funnel :443 once enabled; OpenAI-compatible `/v1` |
+| Qdrant (ai-qdrant) | 6333 (127.0.0.1) | Public via Funnel :8443; API-key required |
+| Redis (ai-redis) | — | compose-network internal only (gateway cache) |
+| n8n | — | n8n CLOUD (evertrustgmbh.app.n8n.cloud); local n8n retired, old volumes kept |
 
 ## Environment
 
-- `erp-server/.env.example` is the committed template — copy to `erp-server/.env` (gitignored) and fill in. `erp-client` has no .env files at all.
-- Compose REQUIRES (fails fast via `${VAR:?}`): `DB_PASSWORD`, `N8N_DB_PASSWORD`, `N8N_ENCRYPTION_KEY`, `HOST_NAME`. Defaulted: `DB_USER`, `DB_NAME`, `N8N_DB_USER`, `N8N_DB_NAME`, `N8N_PORT`, `GENERIC_TIMEZONE`, `PGADMIN_EMAIL`. `PGADMIN_PASSWORD` is needed only with the tools profile.
-- The server code additionally reads `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `LOG_LEVEL` via @nestjs/config. `CORS_ORIGIN` exists as a var name but is not read by any code yet.
+- Committed templates: `erp-server/.env.example` (DB + app vars) and `ai-stack/.env.example` (gateway keys, Qdrant key, Trev's Ollama address). Copy to `.env` (gitignored) and fill in; team values live in the vault. `erp-client` has no .env files.
+- The server code reads `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `LOG_LEVEL` via @nestjs/config. `CORS_ORIGIN` exists as a var name but is not read by any code yet.
 - Prisma's datasource url is NOT configured: `schema.prisma` has no `url` field and there is no `prisma.config.ts` (required by Prisma 7), so migrate/studio commands fail.
-- `N8N_ENCRYPTION_KEY` can never change after n8n's first boot — stored credentials become undecryptable.
+- `LITELLM_SALT_KEY` can never change after first boot (encrypts gateway DB credentials); the n8n virtual key for the gateway lives in `~/.evertrust/n8n-virtual-key.json` on the mini + the vault.
 - Never commit .env files or put secret values in code, docs, or compose defaults.
 
 ## Custom Agents & Commands
@@ -90,9 +88,11 @@ Slash commands in `.claude/commands/`:
 - Dual ORM: both `typeorm` and `@prisma/client` are in erp-server deps. Prisma is the intended ORM (per commit history), but `app.module.ts` currently wires `TypeOrmModule.forRoot` (with `synchronize: false` — must stay false, the DB is shared) while `PrismaService` is unregistered dead code. Use Prisma for new work; TypeORM is slated for removal.
 - Prisma datasource url missing: no `prisma.config.ts` and no `url` in schema.prisma, so `prisma:migrate`, `prisma:migrate:deploy`, and `prisma:studio` all fail (Prisma 7 does not auto-load .env). `prisma:generate` works.
 - Port collision: server hardcodes 3000 and `next dev` defaults to 3000; next auto-bumps to 3001 when the server runs — keep any client API URL in sync.
-- Postgres data persistence: both postgres services mount their volume at `/var/lib/postgresql` (not `/var/lib/postgresql/data`). That is correct ONLY for postgres:18+ images — downgrading the image tag would put data outside the named volume and lose it on container recreation.
+- Loopback 5432 shadowing on the mini: Homebrew postgresql@18 owns `localhost:5432` locally (see Services table) — a process IS actively using it, so don't stop it casually; consolidation is a backlog item.
+- Postgres data persistence: the volume mounts at `/var/lib/postgresql` (no `/data`) — correct ONLY for postgres:18+ images.
 - No test framework on the server (`npm test` exits 1); the client has no tests either.
-- Server startup connects eagerly to Postgres — `npm run start:dev` crashes if the docker compose stack is not up.
+- Server startup connects eagerly to Postgres — `npm run start:dev` crashes if no Postgres is reachable.
+- Tailscale Funnel not yet enabled on the tailnet (admin-console toggle) — until then n8n cloud cannot reach the gateway.
 
 ---
 

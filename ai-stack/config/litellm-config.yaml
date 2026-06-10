@@ -1,0 +1,62 @@
+# LiteLLM "Hermes req" gateway — model routing for the EVERTRUST n8n cloud workflows.
+# n8n talks OpenAI-compatible /v1 to this gateway; the gateway routes to Ollama backends.
+# Aliases are what n8n selects as "model". Routing priority: Trev's machine (free, primary)
+# -> mini's local hermes3:8b (free fallback) -> deepseek-cloud (paid, last resort).
+
+model_list:
+  # PRIMARY — Trev's Ollama over the tailnet (TAILNET_OLLAMA in .env).
+  - model_name: hermes
+    litellm_params:
+      model: ollama_chat/hermes3:8b
+      api_base: os.environ/TAILNET_OLLAMA
+      num_ctx: 16384
+
+  # PRIMARY — Trev's DeepSeek (pull deepseek-r1:14b or what his RAM allows).
+  # Until his machine serves it, calls fail fast and the fallback chain takes over.
+  - model_name: deepseek
+    litellm_params:
+      model: ollama_chat/deepseek-r1:14b
+      api_base: os.environ/TAILNET_OLLAMA
+      num_ctx: 16384
+
+  # FALLBACK 1 — the mini's native Ollama (Metal). Free but weaker/slower; 8 GB machine,
+  # so context is capped lower and the model unloads after 5 idle minutes.
+  - model_name: hermes-mini
+    litellm_params:
+      model: ollama_chat/hermes3:8b
+      api_base: http://host.docker.internal:11434
+      num_ctx: 8192
+
+  # FALLBACK 2 (optional, PAID) — Ollama Cloud via the mini's signed-in daemon.
+  - model_name: deepseek-cloud
+    litellm_params:
+      model: ollama_chat/deepseek-v4-pro:cloud
+      api_base: http://host.docker.internal:11434
+
+  # Embeddings for the Qdrant RAG path (nomic-embed-text pulled on the mini; 768 dims).
+  - model_name: local-embed
+    litellm_params:
+      model: ollama/nomic-embed-text
+      api_base: http://host.docker.internal:11434
+
+litellm_settings:
+  cache: true
+  cache_params:
+    type: redis          # host/port from REDIS_HOST/REDIS_PORT env; in-memory layer sits on top
+    ttl: 3600            # exact-match response cache
+  drop_params: true      # silently drop OpenAI params Ollama doesn't support
+  request_timeout: 600   # local models can be slow under load — don't 504 early
+
+router_settings:
+  num_retries: 1
+  fallbacks:
+    - hermes: ["hermes-mini"]
+    - deepseek: ["hermes-mini", "deepseek-cloud"]
+  allowed_fails: 2
+  cooldown_time: 60
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL
+  store_model_in_db: false          # this file in git is the single source of truth
+  store_prompts_in_spend_logs: true # the durable "storage" leg: full request/response audit trail
