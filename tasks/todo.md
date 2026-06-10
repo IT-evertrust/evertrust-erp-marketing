@@ -19,10 +19,11 @@ Backlog items below are seeded only from verified defects in the current codebas
 - [x] `ai-stack/` deployed on the mini: LiteLLM gateway (healthy, virtual key minted → `~/.evertrust/n8n-virtual-key.json`), Redis cache, Qdrant (API-key enforced). litellm DB rides erp-postgres via the shared docker network (host.docker.internal is shadowed by brew postgres — see Backlog).
 - [x] Gateway smoke-tested: `/v1/models` lists all 5 aliases; `hermes` chat completion returns through the mini's Ollama; Qdrant 401s without key.
 - [x] Ollama tuned (KEEP_ALIVE 5m, flash attention, q8 KV) via LaunchAgent + live setenv.
-- [ ] **USER: enable Funnel on the tailnet** (admin console → Access Controls → nodeAttrs funnel), then `tailscale funnel --bg 4000` + `tailscale funnel --bg --https=8443 6333`. Blocks n8n cloud connectivity.
-- [ ] **USER: run** `sudo pmset -a sleep 0 displaysleep 0 disksleep 0 womp 1 autorestart 1 powernap 0` (mini still has sleep=1!).
-- [ ] **USER: cap Docker Desktop VM at 3 GB** (Settings → Resources; currently 3.9 GB).
-- [ ] **USER: vault** — store `ai-stack/.env` values + the n8n virtual key.
+- [x] Funnel LIVE (2026-06-10): gateway at https://mac-mini-ca-mac.tailc3d837.ts.net (443) and Qdrant (:8443), both verified over public HTTPS with auth enforced (401 keyless). Let's Encrypt cert to Sep 2026.
+- [x] pmset applied (sleep 0, autorestart) and Docker VM capped at ~3 GB.
+- [ ] **USER: vault** — store `ai-stack/.env` values + the n8n virtual key (`~/.evertrust/n8n-virtual-key.json`).
+- [ ] **USER: disable key expiry** on mac-mini-ca-mac + evertrusts-macbook-pro (admin console → Machines).
+- [ ] **USER: n8n credentials** (browser, evertrustgmbh.app.n8n.cloud, in BOTH projects): OpenAI credential `LiteLLM Gateway (mac-mini)` (key from the virtual-key file, Base URL https://mac-mini-ca-mac.tailc3d837.ts.net/v1) + Qdrant credential `Qdrant (mac-mini)` (https://mac-mini-ca-mac.tailc3d837.ts.net:8443, QDRANT_API_KEY).
 - [x] Team on the tailnet (2026-06-10): mac-mini-ca-mac, evertrusts-macbook-pro (Trev/Khanh, 100.93.32.103), lams-macbook-air, iphone-15-pro-max. `TAILNET_OLLAMA` wired to Trev's address; gateway recreated; **fallback chain verified live** (primary dark → mini's hermes3:8b answered).
 - [ ] **TREV: open up Ollama on his MacBook** (docs/team-hosting.md §6): `launchctl setenv OLLAMA_HOST 0.0.0.0:11434`, `launchctl setenv OLLAMA_KEEP_ALIVE 30m`, restart Ollama.app, `ollama pull hermes3:8b` + `ollama pull deepseek-r1:14b`. Port 11434 currently unreachable from the mini — until then all traffic rides the fallback.
 - [ ] **USER: disable key expiry** for evertrusts-macbook-pro AND mac-mini-ca-mac (admin console → Machines; his key expires in 5 months).
