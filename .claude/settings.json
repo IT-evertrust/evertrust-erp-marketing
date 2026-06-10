@@ -5,5 +5,57 @@
     "code-simplifier@claude-plugins-official": true,
     "frontend-design@claude-plugins-official": true,
     "playground@claude-plugins-official": true
+  },
+  "permissions": {
+    "allow": [
+      "Bash(cd:*)",
+      "Bash(ls:*)",
+      "Bash(npm run:*)",
+      "Bash(npm install:*)",
+      "Bash(npm ci:*)",
+      "Bash(npx prisma generate:*)",
+      "Bash(npx prisma migrate dev:*)",
+      "Bash(npx prisma migrate status:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx eslint:*)",
+      "Bash(npx next:*)",
+      "Bash(docker compose up:*)",
+      "Bash(docker compose ps:*)",
+      "Bash(docker compose logs:*)",
+      "Bash(docker compose config:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker logs:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(docker compose down:*)",
+      "Bash(docker volume rm:*)",
+      "Bash(npx prisma migrate reset:*)",
+      "Bash(npx prisma db push:*)",
+      "Bash(rm -rf:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./**/.env)",
+      "Read(./**/.env.local)",
+      "Read(./**/.env.*.local)",
+      "Read(./**/.env.development)",
+      "Read(./**/.env.production)",
+      "Read(./**/.env.test)",
+      "Edit(./.env)",
+      "Edit(./**/.env)",
+      "Edit(./**/.env.local)",
+      "Edit(./**/.env.*.local)",
+      "Edit(./**/.env.development)",
+      "Edit(./**/.env.production)",
+      "Edit(./**/.env.test)"
+    ]
   }
 }

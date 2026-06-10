@@ -3,8 +3,9 @@
   "configurations": [
     {
       "name": "web",
-      "runtimeExecutable": "corepack",
-      "runtimeArgs": ["pnpm", "--filter", "@evertrust/web", "dev"],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "erp-client",
       "port": 3000
     }
   ]

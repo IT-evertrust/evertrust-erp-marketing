@@ -18,7 +18,8 @@ import { AppService } from "./app.service";
       password: process.env.DB_PASSWORD || "erpadmin123",
       database: process.env.DB_NAME || "erp_db",
       entities: ["dist/**/*.entity{.ts,.js}"],
-      synchronize: true,
+      // never true: multiple laptops share one Postgres (docs/team-hosting.md)
+      synchronize: false,
       logging: process.env.LOG_LEVEL === "debug",
     }),
   ],

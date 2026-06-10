@@ -1,16 +1,19 @@
-version: '3.8'
+name: erp-server
 
 services:
   postgres:
     image: postgres:18-alpine
     container_name: erp-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${DB_USER:-evertrust-erp}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-evertrust-erp}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in erp-server/.env (see .env.example)}
       POSTGRES_DB: ${DB_NAME:-postgres}
     ports:
       - "5432:5432"
     volumes:
+      # /var/lib/postgresql (without /data) is correct ONLY for postgres 18+ images;
+      # pre-18 tags need /var/lib/postgresql/data or data lands outside the volume
       - postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-evertrust-erp}"]
@@ -21,11 +24,16 @@ services:
       - erp-network
 
   pgadmin:
-    image: dpage/pgadmin4:latest
+    image: dpage/pgadmin4:9.15
     container_name: erp-pgadmin
+    restart: unless-stopped
+    # On-demand only: docker compose --profile tools up -d pgadmin
+    profiles: ["tools"]
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@erp.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
+      # ':-' not ':?' — compose interpolates profile-disabled services too, so ':?'
+      # would break 'up' for everyone; pgAdmin itself refuses an empty password
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-}
     ports:
       - "5050:80"
     depends_on:
@@ -36,9 +44,75 @@ services:
     networks:
       - erp-network
 
+  n8n-postgres:
+    image: postgres:18-alpine
+    container_name: n8n-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${N8N_DB_USER:-n8n}
+      POSTGRES_PASSWORD: ${N8N_DB_PASSWORD:?Set N8N_DB_PASSWORD in erp-server/.env (see .env.example)}
+      POSTGRES_DB: ${N8N_DB_NAME:-n8n}
+    ports:
+      # loopback-only: nothing outside this host ever talks to n8n's database
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - n8n_postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${N8N_DB_USER:-n8n}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - erp-network
+
+  n8n:
+    # Pinned: n8n runs one-way DB migrations on boot — upgrades must be deliberate
+    # tag bumps (export workflows first), never an accidental 'compose pull'
+    image: n8nio/n8n:2.25.6
+    container_name: erp-n8n
+    restart: unless-stopped
+    environment:
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: n8n-postgres
+      DB_POSTGRESDB_PORT: 5432
+      DB_POSTGRESDB_DATABASE: ${N8N_DB_NAME:-n8n}
+      DB_POSTGRESDB_USER: ${N8N_DB_USER:-n8n}
+      DB_POSTGRESDB_PASSWORD: ${N8N_DB_PASSWORD:?Set N8N_DB_PASSWORD in erp-server/.env (see .env.example)}
+      # NEVER change after first boot — all credentials stored in n8n become undecryptable
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?Set N8N_ENCRYPTION_KEY in erp-server/.env (openssl rand -base64 32)}
+      N8N_HOST: ${HOST_NAME:?Set HOST_NAME in erp-server/.env (localhost for a local stack, Tailscale name on the shared host)}
+      N8N_PORT: ${N8N_PORT:-5678}
+      N8N_PROTOCOL: http
+      # Required for login over plain http from other devices (cookie is Secure-flagged
+      # by default). Traffic is WireGuard-encrypted via Tailscale. Remove this and set
+      # N8N_PROTOCOL: https once the editor sits behind TLS (e.g. tailscale serve).
+      N8N_SECURE_COOKIE: "false"
+      WEBHOOK_URL: http://${HOST_NAME}:${N8N_PORT:-5678}/
+      N8N_EDITOR_BASE_URL: http://${HOST_NAME}:${N8N_PORT:-5678}/
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE:-Europe/Berlin}
+      TZ: ${GENERIC_TIMEZONE:-Europe/Berlin}
+      N8N_DIAGNOSTICS_ENABLED: "false"
+    ports:
+      - "5678:5678"
+    depends_on:
+      n8n-postgres:
+        condition: service_healthy
+    volumes:
+      - n8n_data:/home/node/.n8n
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:5678/healthz >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - erp-network
+
 volumes:
   postgres_data:
   pgadmin_data:
+  n8n_postgres_data:
+  n8n_data:
 
 networks:
   erp-network:
