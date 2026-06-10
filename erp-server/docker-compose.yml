@@ -36,9 +36,30 @@ services:
     networks:
       - erp-network
 
+  n8n:
+    image: n8nio/n8n
+    container_name: erp-n8n
+    ports:
+      - "5678:5678"
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${DB_NAME}
+      - DB_POSTGRESDB_USER=${DB_USER}
+      - DB_POSTGRESDB_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - erp-network
+
 volumes:
   postgres_data:
   pgadmin_data:
+  n8n_data:
 
 networks:
   erp-network:
