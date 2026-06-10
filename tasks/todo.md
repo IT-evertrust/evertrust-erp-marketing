@@ -23,7 +23,9 @@ Backlog items below are seeded only from verified defects in the current codebas
 - [ ] **USER: run** `sudo pmset -a sleep 0 displaysleep 0 disksleep 0 womp 1 autorestart 1 powernap 0` (mini still has sleep=1!).
 - [ ] **USER: cap Docker Desktop VM at 3 GB** (Settings → Resources; currently 3.9 GB).
 - [ ] **USER: vault** — store `ai-stack/.env` values + the n8n virtual key.
-- [ ] Trev onboarding (docs/team-hosting.md §6): Tailscale, Ollama on 0.0.0.0, pull hermes3:8b + deepseek-r1, set `TAILNET_OLLAMA` in ai-stack/.env.
+- [x] Team on the tailnet (2026-06-10): mac-mini-ca-mac, evertrusts-macbook-pro (Trev/Khanh, 100.93.32.103), lams-macbook-air, iphone-15-pro-max. `TAILNET_OLLAMA` wired to Trev's address; gateway recreated; **fallback chain verified live** (primary dark → mini's hermes3:8b answered).
+- [ ] **TREV: open up Ollama on his MacBook** (docs/team-hosting.md §6): `launchctl setenv OLLAMA_HOST 0.0.0.0:11434`, `launchctl setenv OLLAMA_KEEP_ALIVE 30m`, restart Ollama.app, `ollama pull hermes3:8b` + `ollama pull deepseek-r1:14b`. Port 11434 currently unreachable from the mini — until then all traffic rides the fallback.
+- [ ] **USER: disable key expiry** for evertrusts-macbook-pro AND mac-mini-ca-mac (admin console → Machines; his key expires in 5 months).
 - [ ] n8n cloud Phase 2 (after funnel): create `LiteLLM Gateway (mac-mini)` + `Qdrant (mac-mini)` credentials in BOTH projects; swap REACH BAZOOKA test's 3 nodes (guinea pig); build LLM AB HARNESS.
 - [ ] n8n cloud Phase 3: KB INGEST workflow + RAG AGENT rework (retrieval first, model second; update IN PLACE — dedup state).
 - [ ] n8n cloud Phase 4: tiered node migration per plan (P1 hermes, P2 deepseek, P3 ContractMaker last; web-search + German template nodes stay OpenAI).
