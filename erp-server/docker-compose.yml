@@ -51,6 +51,7 @@ services:
     # host.docker.internal, which hit the brew postgres on the mini's loopback.
     env_file: .env
     environment:
+      NODE_ENV: production   # logger.module.ts switches pino transport on this
       PORT: "3001"
       UPLOAD_DIR: /app/uploads
     command: ["sh", "/app/erp-server/api-start.sh"]   # idempotent migrate + seed, then exec API
