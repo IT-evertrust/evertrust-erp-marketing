@@ -1,9 +1,5 @@
 # EverTrust ERP & Marketing
 
-> ⚠ **CUTOVER IN PROGRESS (2026-06-11):** the ERP still serves from Render/Vercel; the mini's
-> erp-api/erp-web containers and the `/erp` Funnel path are pending (see `tasks/todo.md`
-> Current Focus). Delete this banner when the teardown item is checked.
-
 pnpm + Turborepo monorepo for the EverTrust ERP and marketing platform (migrated from the
 archived `Ryugwki/evertrust-ERP` repo on 2026-06-11; hosting moved from Render/Vercel to the
 Mac mini):

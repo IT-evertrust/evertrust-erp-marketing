@@ -1,10 +1,5 @@
 # Team Hosting — Mac mini: ERP (web + API + Postgres) + AI Gateway
 
-> ⚠ **CUTOVER IN PROGRESS (2026-06-11):** the ERP still serves from Render/Vercel. The mini
-> hosts Postgres (pgvector) + the AI stack today; erp-api/erp-web containers and the `/erp`
-> Funnel path go live with the remaining steps in `tasks/todo.md` (Current Focus). Until the
-> teardown item is checked, treat Render/Vercel as production. Delete this banner afterwards.
-
 The Mac mini runs 24/7 and hosts two Docker stacks — including the FULL ERP (`erp-web`
 Next.js + `erp-api` NestJS + Postgres; previously Vercel + Render, both retired at cutover).
 **n8n runs on n8n CLOUD** (the local n8n was retired 2026-06-10; its volumes
