@@ -2,15 +2,11 @@ packages:
   - 'erp-server'
   - 'erp-client'
   - 'packages/*'
+# pnpm 11 form (onlyBuiltDependencies was removed in v11 — don't re-add it,
+# it is silently ignored).
 allowBuilds:
   '@nestjs/core': true
   argon2: true
   esbuild: true
   sharp: true
   unrs-resolver: true
-onlyBuiltDependencies:
-  - esbuild
-  - '@nestjs/core'
-  - argon2
-  - unrs-resolver
-  - sharp

@@ -1,8 +1,13 @@
 # Team Hosting — Mac mini: ERP (web + API + Postgres) + AI Gateway
 
-The Mac mini runs 24/7 and hosts two Docker stacks — since 2026-06-11 that includes the FULL
-ERP (`erp-web` Next.js + `erp-api` NestJS + Postgres; previously Vercel + Render, both
-retired). **n8n runs on n8n CLOUD** (the local n8n was retired 2026-06-10; its volumes
+> ⚠ **CUTOVER IN PROGRESS (2026-06-11):** the ERP still serves from Render/Vercel. The mini
+> hosts Postgres (pgvector) + the AI stack today; erp-api/erp-web containers and the `/erp`
+> Funnel path go live with the remaining steps in `tasks/todo.md` (Current Focus). Until the
+> teardown item is checked, treat Render/Vercel as production. Delete this banner afterwards.
+
+The Mac mini runs 24/7 and hosts two Docker stacks — including the FULL ERP (`erp-web`
+Next.js + `erp-api` NestJS + Postgres; previously Vercel + Render, both retired at cutover).
+**n8n runs on n8n CLOUD** (the local n8n was retired 2026-06-10; its volumes
 `erp-server_n8n_data` / `erp-server_n8n_postgres_data` are kept on disk just in case).
 
 ```
@@ -56,7 +61,7 @@ without checking — consolidating the two Postgreses is an open backlog item.
 
 ## 3. Mac mini one-time checklist
 
-- [ ] **Power (NOT yet applied!):** `sudo pmset -a sleep 0 displaysleep 0 disksleep 0 womp 1 autorestart 1 powernap 0`
+- [x] **Power (applied 2026-06-10, verify with `pmset -g`):** `sudo pmset -a sleep 0 displaysleep 0 disksleep 0 womp 1 autorestart 1 powernap 0`
 - [ ] Auto-login + FileVault OFF (power-cut recovery; office door is the physical control).
 - [ ] Docker Desktop: "Start when you sign in" ON; cap VM memory at **4.5 GB** (Settings →
       Resources) — raised from 3 GB on 2026-06-11 when erp-api/erp-web moved onto the mini.
@@ -86,10 +91,19 @@ Repo lives at `~/Documents/evertrust-erp-marketing` on the mini. ONE named infra
 
 ```bash
 git pull
-cd erp-server && docker compose up -d          # ERP postgres first (shared network)
+cd erp-server && docker compose up -d --build  # ERP stack first (shared network).
+                                               # --build matters: the services pin image: tags,
+                                               # so plain `up -d` reuses a stale image after a
+                                               # git pull or a NEXT_PUBLIC_API_URL change.
 cd ../ai-stack && docker compose up -d         # then the AI stack
 docker compose ps                              # everything healthy
 ```
+
+Fresh-volume bootstrap (new machine / disaster recovery): `erp-server/postgres-init/` creates
+the `evertrust` DB and — when `LITELLM_DB_PASSWORD` is set in `erp-server/.env` — the litellm
+role/DB on first initdb. Seeding an EMPTY production DB requires a one-shot
+`SEED_DEV_USERS=true` on erp-api (see api-start.sh); change the admin password immediately
+after and remove the var.
 
 Secrets: `erp-server/.env` and `ai-stack/.env`, both gitignored + `chmod 600`, canonical
 copies in the team vault, transferred via Screen Sharing/scp/AirDrop only.
@@ -105,9 +119,17 @@ Mint more keys: `curl http://127.0.0.1:4000/key/generate -H "Authorization: Bear
 ```bash
 docker exec -it erp-postgres createdb -U evertrust-erp erp_<yourname>
 ```
-Schema experiments and `drizzle-kit migrate` (`corepack pnpm --filter @evertrust/db
-db:migrate`) → your own DB only. The prod `evertrust` DB is migrated exclusively by the
-erp-api container on restart (idempotent, see `erp-server/api-start.sh`).
+Schema experiments and `drizzle-kit migrate` → your own DB only. NOTE: the db scripts read
+`DATABASE_URL` from the SHELL environment (drizzle.config.ts dotenv-loads only
+`packages/db/.env`, which doesn't exist — `erp-server/.env` is NOT picked up), so invoke as:
+
+```bash
+DATABASE_URL='postgresql://evertrust-erp:<pw>@mac-mini-ca-mac.tailc3d837.ts.net:5432/erp_<yourname>' \
+  corepack pnpm --filter @evertrust/db db:migrate
+```
+
+The prod `evertrust` DB is migrated exclusively by the erp-api container on restart
+(idempotent, see `erp-server/api-start.sh`).
 
 ## 6. Trev's machine — the primary model host
 
@@ -138,8 +160,10 @@ Model aliases n8n uses (gateway routes them): `hermes`, `deepseek` (Trev), `herm
 #!/bin/zsh
 set -euo pipefail
 ROOT="/Volumes/ERP-Backup/erp-backups"; DIR="$ROOT/$(date +%F)"; mkdir -p "$DIR"
-docker exec erp-postgres pg_dumpall -U evertrust-erp | gzip > "$DIR/erp-postgres.sql.gz"  # incl. litellm DB
+docker exec erp-postgres pg_dumpall -U evertrust-erp | gzip > "$DIR/erp-postgres.sql.gz"  # incl. evertrust + litellm DBs
 docker run --rm -v ai-stack_qdrant_data:/data -v "$DIR":/backup alpine tar czf /backup/qdrant_data.tgz -C /data .
+# Uploaded tender documents — pg_dumpall only saves their metadata rows, the files live here:
+docker run --rm -v erp-server_uploads:/data -v "$DIR":/backup alpine tar czf /backup/uploads.tgz -C /data .
 find "$ROOT" -mindepth 1 -maxdepth 1 -type d -mtime +14 -exec rm -rf {} +
 ```
 Monthly restore drill: restore the dump into a scratch DB; an unrestored backup is a hope,

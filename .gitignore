@@ -131,6 +131,9 @@ dist
 # Turborepo cache
 .turbo/
 
+# API file uploads (local dev writes erp-server/uploads/; Docker uses a named volume)
+/erp-server/uploads/
+
 # yarn v3
 .pnp.*
 .yarn/*

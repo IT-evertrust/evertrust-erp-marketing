@@ -8,12 +8,11 @@
 .git
 **/*.tsbuildinfo
 
-# Local env + editor/OS cruft. (All .env files — runtime env comes from compose,
-# never baked into the image; also keeps a local apps/api/.env out of the image.)
-.env
-**/.env
-**/.env.local
-**/.env.*.local
+# Local env + editor/OS cruft. ALL dotenv variants are excluded (runtime env
+# comes from compose, never baked into the image) — next build would otherwise
+# read a stray gitignored .env.production and inline its NEXT_PUBLIC_* values.
+**/.env*
+!**/.env.example
 .DS_Store
 **/.DS_Store
 

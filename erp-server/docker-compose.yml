@@ -24,14 +24,21 @@ services:
       POSTGRES_USER: ${DB_USER:-evertrust-erp}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in erp-server/.env (see .env.example)}
       POSTGRES_DB: ${DB_NAME:-postgres}
+      # Consumed by postgres-init/01-init-dbs.sh on a FRESH volume only (creates
+      # the litellm role/DB for the ai-stack; same value as in ai-stack/.env).
+      LITELLM_DB_PASSWORD: ${LITELLM_DB_PASSWORD:-}
     ports:
       - "5432:5432"   # published: laptops connect via the mini's Tailscale name
     volumes:
       # /var/lib/postgresql (without /data) is correct ONLY for postgres 18+ images;
       # pre-18 tags need /var/lib/postgresql/data or data lands outside the volume
       - postgres_data_pg18:/var/lib/postgresql
+      # Fresh-volume bootstrap: creates the evertrust (+ litellm) DBs (see script).
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-evertrust-erp}"]
+      # -h 127.0.0.1 forces TCP: the entrypoint's first-boot temp server listens
+      # on the unix socket only and would otherwise answer pg_isready too early.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${DB_USER:-evertrust-erp} -d ${DB_NAME:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 5

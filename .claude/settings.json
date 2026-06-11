@@ -1,11 +1,4 @@
 {
-  "enabledPlugins": {
-    "claude-code-setup@claude-plugins-official": true,
-    "claude-md-management@claude-plugins-official": true,
-    "code-simplifier@claude-plugins-official": true,
-    "frontend-design@claude-plugins-official": true,
-    "playground@claude-plugins-official": true
-  },
   "permissions": {
     "allow": [
       "Bash(cd:*)",
@@ -32,12 +25,6 @@
       "Bash(git add:*)",
       "Bash(git commit:*)"
     ],
-    "ask": [
-      "Bash(git push:*)",
-      "Bash(docker compose down:*)",
-      "Bash(docker volume rm:*)",
-      "Bash(rm -rf:*)"
-    ],
     "deny": [
       "Read(./.env)",
       "Read(./**/.env)",
@@ -53,6 +40,22 @@
       "Edit(./**/.env.development)",
       "Edit(./**/.env.production)",
       "Edit(./**/.env.test)"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(docker compose down:*)",
+      "Bash(docker volume rm:*)",
+      "Bash(rm -rf:*)"
     ]
+  },
+  "enabledPlugins": {
+    "claude-code-setup@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "frontend-design@claude-plugins-official": true,
+    "playground@claude-plugins-official": true,
+    "skill-creator@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": true,
+    "context-mode@context-mode": true
   }
 }

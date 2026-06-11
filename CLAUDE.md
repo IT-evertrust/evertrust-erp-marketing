@@ -1,13 +1,17 @@
 # EverTrust ERP & Marketing
 
+> ⚠ **CUTOVER IN PROGRESS (2026-06-11):** the ERP still serves from Render/Vercel; the mini's
+> erp-api/erp-web containers and the `/erp` Funnel path are pending (see `tasks/todo.md`
+> Current Focus). Delete this banner when the teardown item is checked.
+
 pnpm + Turborepo monorepo for the EverTrust ERP and marketing platform (migrated from the
 archived `Ryugwki/evertrust-ERP` repo on 2026-06-11; hosting moved from Render/Vercel to the
 Mac mini):
-- `erp-server/` — `@evertrust/api`: NestJS 11 backend (23 feature modules, JWT + argon2 auth,
-  L1–L5 RBAC, audit log, Drizzle ORM)
+- `erp-server/` — `@evertrust/api`: NestJS 11 backend (22 modules — 17 feature + infra, JWT +
+  argon2 auth, L1–L5 RBAC, audit log, Drizzle ORM)
 - `erp-client/` — `@evertrust/web`: Next.js 15 App Router frontend (React 19, Tailwind v4,
   shadcn/ui, React Query; design standard in `erp-client/DESIGN.md`)
-- `packages/db/` — `@evertrust/db`: Drizzle schema (~20 tables), migrations in `drizzle/`
+- `packages/db/` — `@evertrust/db`: Drizzle schema (32 tables), migrations in `drizzle/`
   (0000–0018 + `meta/` journal), idempotent seed
 - `packages/shared/` — `@evertrust/shared`: Zod DTOs, the 7-state tender STATE_MACHINE,
   ROLE_PERMISSIONS, pricing engine pure functions — single source of truth shared by api + web
@@ -34,6 +38,10 @@ corepack pnpm --filter @evertrust/db db:generate  # drizzle-kit generate (after 
 corepack pnpm --filter @evertrust/db db:migrate   # apply migrations (target = DATABASE_URL)
 corepack pnpm --filter @evertrust/db db:seed      # idempotent bootstrap seed
 ```
+
+The db scripts read `DATABASE_URL` from the SHELL environment (dotenv only loads
+`packages/db/.env`, which doesn't exist) — prefix the command:
+`DATABASE_URL='postgresql://…' corepack pnpm --filter @evertrust/db db:migrate`.
 
 Docker (the production stack on the Mac mini):
 
