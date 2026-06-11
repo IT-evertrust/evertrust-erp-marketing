@@ -32,6 +32,13 @@ src = src.replace(
 src = src.replace("const runId = $('Make Wait Control').first().json.runId;",
                   "const runId = $('Build Groups').first().json.runId;")
 
+# 2b. Build Search Query: $('...').item hangs the cloud task runner on partial
+# runs / Execute step (same class as the Decide: Should Hunt? bug) — use .first()
+_item_old = "const meta = $('Decide: Should Hunt?').item.json;"
+_item_new = "const meta = (($('Decide: Should Hunt?').first() || {}).json) || {};"
+assert _item_old.replace("'", "\\u0027") in src or _item_old in src or json.dumps(_item_old)[1:-1] in src, "Build Search Query .item line not found"
+src = src.replace(json.dumps(_item_old)[1:-1], json.dumps(_item_new)[1:-1])
+
 # 3. new node definitions, inserted before the fan-out wiring line
 mk_batch_control = (
     "const g = $('Loop Over Groups').first().json;\n"
@@ -40,8 +47,11 @@ mk_batch_control = (
     "const gi = g.groupIndex || 0;\n"
     "let cum = 0;\n"
     "for (let k = 0; k <= gi; k++) cum += Math.floor(N / G) + (k < N % G ? 1 : 0);\n"
-    "console.log('[Batch] dispatched group ' + gi + '/' + (G - 1) + ' -> cumulative target ' + cum + '/' + N + ' rows');\n"
-    "return [{ json: { runId: g.runId, groupIndex: gi, expectedGroups: G, expectedSegments: N, cumTarget: cum, pollStartMs: Date.now(), batchMaxWaitMs: 1500000 } }];"
+    "const groupSize = Math.floor(N / G) + (gi < N % G ? 1 : 0);\n"
+    "const perSegmentMs = 240000;\n"
+    "const batchMaxWaitMs = Math.min(groupSize * perSegmentMs, 5400000);\n"
+    "console.log('[Batch] group ' + gi + '/' + (G - 1) + ' (' + groupSize + ' segments) -> target ' + cum + '/' + N + ' rows, budget ' + Math.round(batchMaxWaitMs / 60000) + 'min');\n"
+    "return [{ json: { runId: g.runId, groupIndex: gi, expectedGroups: G, expectedSegments: N, cumTarget: cum, pollStartMs: Date.now(), batchMaxWaitMs: batchMaxWaitMs } }];"
 )
 eval_batch_poll = (
     "const ctrl = $('Make Batch Control').first().json;\n"
