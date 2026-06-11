@@ -13,6 +13,23 @@ Backlog items below are seeded only from verified defects in the current codebas
 
 ## Current Focus
 
+**ERP migration: evertrust-ERP → this repo + hosting to the Mac mini** (plan approved 2026-06-11,
+`~/.claude/plans/breezy-knitting-koala.md`; retires Render/Vercel):
+
+- [x] Preflight: both repos main == origin/main; SearXNG baseline committed (8147d72).
+- [x] Monorepo imported on branch `migrate-evertrust-erp`: apps/api→`erp-server/`, apps/web→`erp-client/`, `packages/{db,shared}`, root workspace files, infra Dockerfiles; boilerplate (Prisma/TypeORM hello-world + create-next-app) deleted; path rewrites applied; pnpm-lock importer keys regenerated (`--frozen-lockfile` verified).
+- [x] VERIFIED on the mini: `pnpm run build` ✅, `typecheck` (4 pkgs) ✅, `lint` ✅, `test` 35 suites / 299 tests ✅; Docker images build green (`evertrust-api:prod` 2.13GB, `evertrust-web:prod` 486MB, NEXT_PUBLIC_API_URL=tailnet host baked).
+- [x] New `erp-server/docker-compose.yml`: postgres → `pgvector/pgvector:pg18` (new volume `postgres_data_pg18`), + `erp-api` (3001) + `erp-web` (3000) services; consolidated `.env.example` matching `src/config/env.schema.ts`.
+- [x] Docs swept: CLAUDE.md rewritten (monorepo/Drizzle/pnpm), team-hosting.md (ERP on the mini, funnel `/erp` path), drizzle-database agent replaces prisma-database, /db-migrate + /dev-up rewritten.
+- [ ] Postgres image swap on the mini: stop ai-stack → `pg_dumpall` → down → new image+volume → restore litellm + per-dev DBs → ai-stack up healthy.
+- [ ] Raise Docker Desktop VM cap 3 GB → 4.5 GB (Settings → Resources, needs Docker restart).
+- [ ] **USER: Render DB external connection string** (Render dashboard → evertrust-db → External Database URL) for the production dump. Then: suspend Render API → `pg_dump --no-owner --no-acl -Fc` → `createdb evertrust` → `pg_restore`.
+- [ ] Fill `erp-server/.env` per new `.env.example` (JWT_SECRET re-mint ok; N8N_* webhook URLs from Render dashboard env; values → vault, chmod 600).
+- [ ] `docker compose up -d --build` + smoke tests (health db:ok, login over tailnet, tender detail, doc upload, API jest suite).
+- [ ] Funnel `/erp` path: `tailscale funnel --bg --set-path /erp 3001`; verify path-strip via `curl …ts.net/erp/health` (fallback: global prefix or Caddy strip).
+- [ ] n8n cloud: search for `onrender.com`, repoint arsenal callback to `https://mac-mini-ca-mac.tailc3d837.ts.net/erp/arsenal/runs/callback`, match ARSENAL_INGEST_TOKEN; one arsenal run end-to-end.
+- [ ] **USER: teardown LAST** (after smoke + callback green): delete Vercel project, Render service + DB; archive `Ryugwki/evertrust-ERP` with a README pointer.
+
 **AI backend (Hermes gateway) + n8n-cloud migration** (plan approved 2026-06-10; mini side DEPLOYED):
 
 - [x] Local n8n retired (containers removed, volumes kept); `erp-server/docker-compose.yml` = postgres only.
@@ -57,11 +74,8 @@ Context: the 3 "(Web)" nodes (`Country Profiler (Web)`, `Search Companies (Web)`
 
 ## Backlog
 
-- [ ] **Fix Prisma config (migrations are broken).** `npm run prisma:migrate`, `prisma:migrate:deploy`, and `prisma:studio` in `erp-server` all fail with "The datasource.url property is required in your Prisma config file". Prisma 7 moved the datasource URL out of `schema.prisma` into a `prisma.config.ts`, which does not exist, and the Prisma 7 CLI no longer auto-loads `.env`. Create `/Users/macco/Documents/evertrust-erp-marketing/erp-server/prisma.config.ts` that loads env (dotenv is already a dependency) and supplies the datasource url from `DATABASE_URL` (already named in `erp-server/.env`). Verify with `npm run prisma:migrate`.
-- [ ] **Pick ONE ORM.** Both stacks are installed: TypeORM (`typeorm@1.0.0` + `@nestjs/typeorm` + `pg`) is what's actually wired via `TypeOrmModule.forRoot` in `erp-server/src/app.module.ts` (now with `synchronize: false` and zero entity files), while `src/prisma.service.ts` is dead code — never registered in any module. Either: go Prisma (register `PrismaService` as a provider, remove `typeorm`/`@nestjs/typeorm`/`pg` and the TypeORM config, including the hardcoded DB password fallback in `app.module.ts`), or go TypeORM (delete `prisma.service.ts`, `prisma/`, `@prisma/client`, `prisma`, and the `prisma:*` scripts). Don't build features until this is decided.
-- [ ] **Resolve the client/server port collision.** `erp-server/src/main.ts` hardcodes `app.listen(3000)` and `erp-client`'s `npm run dev` also defaults to port 3000. Make the server read a `PORT` env var with default 3001 (it currently reads no port env at all), and align `NEXT_PUBLIC_API_URL` in `erp-server/.env` with the new port.
-- [ ] **TLS for the n8n editor** (`tailscale serve`): would let us remove `N8N_SECURE_COOKIE: "false"` from the compose file and set `N8N_PROTOCOL: https` (see docs/team-hosting.md §9).
-- [ ] **Add a real test setup to `erp-server`.** `npm test` is a failing stub (`echo "Error: no test specified" && exit 1`); there is no jest config, no `*.spec.ts`, no `test/` dir. Add jest + `@nestjs/testing`, a first spec for `app.controller.ts`, and replace the `test` script.
+- [x] ~~Fix Prisma config~~ / ~~Pick ONE ORM~~ / ~~port collision~~ / ~~add tests~~ — all RESOLVED by the 2026-06-11 migration: the boilerplate was replaced by the real ERP (Drizzle ORM, PORT env default 3001, 35 jest suites). Prisma/TypeORM are gone from the repo.
+- [ ] **TLS for the ERP UI / API on the tailnet** (`tailscale serve`): would upgrade laptop access from plain HTTP to HTTPS and allow COOKIE_SECURE=true (see docs/team-hosting.md §9).
 - [ ] **Consolidate the two Postgreses on the mini.** Homebrew postgresql@18 owns loopback 5432 (something actively connects to it) while Docker erp-postgres owns the published port — `localhost:5432` means different DBs depending on where you stand. Decide: retire brew postgres (move whatever uses it into the container) or make brew the ERP DB and drop the container. Until then: containers use the docker network, laptops use the Tailscale name.
 - [ ] **Old n8n volumes cleanup.** `erp-server_n8n_data`, `erp-server_n8n_postgres_data`, `erp-server_pgadmin_data` still on disk; delete after confirming nothing local is needed (n8n is cloud now).
 

@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Marketing — RAG v3 (full report)</title>
+<style>
+  :root{--bg:#0b0b0e;--panel:#141418;--panel2:#17171c;--line:rgba(255,255,255,.08);
+    --txt:#e9e9ee;--muted:#8b8b95;--faint:#6a6a73;--good:#34d399;--mid:#fbbf24;--low:#f87171;--sky:#38bdf8;--violet:#a78bfa;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:24px}
+  .phead h1{font-size:24px;margin:0 0 4px;letter-spacing:-.02em}.phead p{margin:0 0 14px;color:var(--muted);font-size:13px}
+  .funnel{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+  .kpi{flex:1;min-width:110px;border:1px solid var(--line);border-radius:11px;padding:10px 13px;background:var(--panel)}
+  .kpi .v{font-size:18px;font-weight:700}.kpi .k{font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em}
+  .kpi.alert{border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.05)}
+  .toptabs{display:flex;gap:6px;margin-bottom:14px}
+  .toptab{padding:8px 16px;border-radius:9px;cursor:pointer;color:var(--muted);font-weight:600;font-size:13px;border:1px solid var(--line);background:var(--panel)}
+  .toptab.on{color:var(--txt);background:var(--panel2);border-color:rgba(56,189,248,.4)}
+  .toptab .b{font-size:11px;background:rgba(251,191,36,.18);color:var(--mid);padding:1px 7px;border-radius:999px;margin-left:6px;font-weight:700}
+  .view{display:none}.view.on{display:block}
+  .board{display:grid;grid-template-columns:320px 1fr;gap:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px}
+  .list-h{padding:13px 16px;border-bottom:1px solid var(--line);font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);display:flex;justify-content:space-between}
+  .row{padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer}.row:hover{background:var(--panel2)}
+  .row.sel{background:linear-gradient(90deg,rgba(56,189,248,.10),transparent);box-shadow:inset 3px 0 0 var(--sky)}
+  .row .t{font-weight:600;font-size:13px}.row .q{color:var(--muted);font-size:11.8px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row .b2{display:flex;gap:8px;align-items:center;margin-top:6px}
+  .area{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;text-transform:capitalize}
+  .area.finance{background:rgba(56,189,248,.14);color:var(--sky)}.area.technical{background:rgba(167,139,250,.14);color:var(--violet)}.area.timeline{background:rgba(251,191,36,.14);color:var(--mid)}
+  .row .ago{color:var(--faint);font-size:10.5px}
+  .det{padding:18px 20px}.det-h{display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap}.det-h h2{margin:0;font-size:17px}
+  .pill{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;background:rgba(251,191,36,.14);color:var(--mid)}
+  .cpill{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px}.cpill.good{background:rgba(52,211,153,.14);color:var(--good)}.cpill.mid{background:rgba(251,191,36,.14);color:var(--mid)}.cpill.low{background:rgba(248,113,113,.14);color:var(--low)}
+  .det .email{color:var(--muted);font-size:12.5px;margin-bottom:14px}
+  .label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin:16px 0 8px}
+  details.thread{border:1px solid var(--line);border-radius:11px;background:var(--panel2);overflow:hidden;margin-bottom:4px}
+  details.thread>summary{list-style:none;cursor:pointer;padding:11px 14px;font-size:12.5px;color:var(--muted);display:flex;gap:8px;align-items:center}
+  details.thread>summary::-webkit-details-marker{display:none}details.thread>summary:before{content:"▸";color:var(--faint)}details.thread[open]>summary:before{content:"▾"}
+  .msg{padding:0 14px 12px 14px}.msg .txt{font-size:12.5px;color:#cfd0d6;white-space:pre-wrap;border-left:2px solid var(--line);padding-left:10px}
+  .ctx{border:1px solid var(--line);border-radius:11px;background:var(--panel2);padding:13px 15px}
+  .ctx .qz{border-left:2px solid var(--sky);padding-left:10px;color:#cfd0d6;font-size:13px;font-style:italic}
+  .ctx .meta{display:grid;grid-template-columns:130px 1fr;gap:6px 12px;font-size:12.5px;margin-top:11px}.ctx .meta .k{color:var(--muted)}
+  .cite{border:1px solid var(--line);border-radius:9px;background:var(--panel);padding:9px 11px;margin-top:8px}.cite .s{font-size:11px;color:var(--sky);font-weight:600;margin-bottom:3px}.cite .x{font-size:12px;color:#cfd0d6}
+  .field{margin-bottom:10px}.field input,.field textarea{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:9px;color:var(--txt);font:13px/1.5 inherit;padding:9px 11px;resize:vertical}
+  .field textarea{min-height:170px;white-space:pre-wrap}.field .fl{font-size:11px;color:var(--faint);margin-bottom:4px}
+  .actions{display:flex;gap:8px;margin-top:14px;align-items:center}
+  .btn{font-size:13px;font-weight:600;padding:9px 16px;border-radius:9px;border:1px solid var(--line);background:transparent;color:var(--txt);cursor:pointer}
+  .btn.go{background:var(--good);color:#04261a;border-color:transparent}.btn.danger{color:var(--low);border-color:rgba(248,113,113,.3)}
+  .conf{margin-left:auto;color:var(--faint);font-size:11.5px}
+  .warn{margin-top:10px;font-size:12px;color:var(--mid);background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);border-radius:9px;padding:8px 11px}
+  /* report */
+  .ctrls{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+  .seg{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}.seg span{padding:6px 13px;font-size:12.5px;color:var(--muted);cursor:pointer}.seg span.on{background:var(--panel2);color:var(--txt)}
+  .picker,.sync{border:1px solid var(--line);border-radius:9px;background:var(--panel);padding:7px 12px;font-size:12.5px;color:var(--txt);cursor:pointer}.sync{margin-left:auto;color:var(--sky)}
+  .sec{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin-bottom:14px}
+  .sec>.h{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin-bottom:12px}
+  .fbox{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .fcell{border:1px solid var(--line);border-radius:11px;background:var(--panel2);padding:13px}.fcell .v{font-size:21px;font-weight:700;color:var(--sky)}.fcell .k{font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em}
+  .stepf{display:flex;align-items:center;gap:4px}
+  .st{flex:1;border:1px solid var(--line);border-radius:10px;background:var(--panel2);padding:11px 8px;text-align:center}
+  .st .v{font-size:19px;font-weight:700}.st .k{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em}.st .pc{font-size:10px;color:var(--sky)}
+  .arr{color:var(--faint);font-size:14px;flex:0 0 14px;text-align:center}
+  .sg{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .sgb{border:1px solid var(--line);border-radius:11px;background:var(--panel2);padding:13px 15px}
+  .sgb .ttl{font-size:12px;color:var(--muted);margin-bottom:9px;font-weight:600}
+  .kv{display:flex;justify-content:space-between;font-size:13px;padding:4px 0;border-bottom:1px dashed var(--line)}.kv:last-child{border:none}.kv b{font-weight:700}
+  .attr .arow{display:flex;align-items:center;gap:12px;font-size:13px;padding:9px 0;border-bottom:1px solid var(--line)}.attr .arow:last-child{border:none}
+  .attr .tn{font-weight:600;color:var(--sky);flex:1}.attr .tm{color:var(--muted);font-size:12px;flex:0 0 150px}.attr .tv{font-weight:700;flex:0 0 80px;text-align:right}
+  .pstage{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line);font-size:13px}.pstage:last-child{border:none}
+  .pstage .dot{width:8px;height:8px;border-radius:50%;background:var(--good)}.pstage .nm{font-weight:600;flex:0 0 160px}.pstage .rn{color:var(--muted);flex:0 0 140px;font-size:12px}.pstage .mt{flex:1}
+  .spark{display:flex;gap:2px;align-items:flex-end;height:24px}.spark i{width:5px;background:var(--sky);border-radius:1px;opacity:.7}
+  .note{margin-top:16px;color:var(--faint);font-size:11px;text-align:center}
+  /* ===== Growth Engine + Campaigns tabs ===== */
+  .h{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin:0 0 12px}
+  .gbar{display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+  .qa{border:1px solid var(--line);background:var(--panel);color:var(--txt);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:600;cursor:pointer}
+  .qa:hover{border-color:rgba(56,189,248,.4)}
+  .qa.primary{background:var(--sky);color:#04222e;border-color:transparent}
+  .menu{position:relative}
+  .pop{position:absolute;top:100%;left:0;margin-top:4px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;display:none;z-index:40;min-width:180px}
+  .menu.open .pop{display:block}
+  .pop button{display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--txt);padding:8px 10px;border-radius:7px;cursor:pointer;font-size:13px}.pop button:hover{background:var(--panel2)}
+  .engine{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1px solid var(--line);border-radius:11px;background:var(--panel2);padding:9px 13px;margin-bottom:20px;font-size:12.5px}
+  .engine .lab{color:var(--faint);text-transform:uppercase;letter-spacing:.06em;font-size:10.5px;margin-right:4px}
+  .est{display:inline-flex;align-items:center;gap:6px;color:var(--muted)}.est b{color:var(--txt)}
+  .engine .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+  .dot.ok{background:var(--good)}.dot.idle{background:var(--faint)}.dot.run{background:var(--sky)}
+  .engine .sep{color:var(--line)}.engine .next{margin-left:auto;color:var(--faint)}
+  .seq{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+  .sq{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:13px 12px;transition:.2s}
+  .sq .ix{font-size:9.5px;color:var(--faint);font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+  .sq .nm{font-weight:700;font-size:13px;margin:5px 0 2px}
+  .sq .rn{font-size:11px;color:var(--faint)}
+  .sq .v{font-size:24px;font-weight:800;margin-top:8px}
+  .sq .run{margin-top:10px;width:100%;border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:8px;padding:6px;font-size:12px;font-weight:600;cursor:pointer}
+  .sq .run:hover{border-color:rgba(56,189,248,.4);color:var(--txt)}
+  .sq.run-on{box-shadow:inset 0 0 0 1px rgba(56,189,248,.5)}
+  @media(max-width:880px){.seq{grid-template-columns:repeat(2,1fr)}}
+  .act{border:none;border-radius:9px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap}
+  .act.sky{background:var(--sky);color:#04222e}.act.ghost{background:transparent;border:1px solid var(--line);color:var(--muted)}
+  .cstats{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+  .camp{border:1px solid var(--line);border-radius:12px;background:var(--panel);margin-bottom:10px}
+  .camp>summary{list-style:none;cursor:pointer;padding:13px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .camp>summary::-webkit-details-marker{display:none}.camp>summary:before{content:"▸";color:var(--faint);font-size:11px}.camp[open]>summary:before{content:"▾"}
+  .cn{font-weight:600;font-size:14px;flex:0 0 210px}
+  #campaigns .pill{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;background:rgba(52,211,153,.14);color:var(--good)}
+  #campaigns .pill.run{background:rgba(56,189,248,.14);color:var(--sky)}
+  #campaigns .pill.sch{background:rgba(251,191,36,.14);color:var(--mid)}
+  .miniF{display:flex;gap:13px;font-size:12px;color:var(--muted)}.miniF b{color:var(--txt)}
+  .cact{margin-left:auto;display:flex;gap:6px}.cact .qa{padding:6px 11px;font-size:12px}
+  .cbody{padding:2px 16px 14px 34px;color:var(--muted);font-size:12.5px}
+  #campaigns .carow{display:flex;gap:10px;padding:7px 0;border-bottom:1px dashed var(--line)}#campaigns .carow:last-child{border:none}
+  #campaigns .carow .stg{flex:0 0 130px;color:var(--txt);font-weight:600}#campaigns .carow .tm{flex:0 0 90px;color:var(--faint)}
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-start;justify-content:center;z-index:50;padding:40px 20px;overflow:auto}
+  .overlay.on{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;max-width:520px;width:100%;padding:20px}
+  .modal h3{margin:0 0 4px;font-size:17px}.modal .sub{color:var(--muted);font-size:12.5px;margin-bottom:14px}
+  .modal .x{float:right;cursor:pointer;color:var(--muted);font-size:18px;line-height:1}
+  .fld{margin-bottom:8px}.fld .fl{font-size:10.5px;color:var(--faint);margin-bottom:3px}
+  .fld input,.fld textarea{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--txt);font:13px/1.5 inherit;padding:8px 10px;resize:vertical}
+  .drow{display:flex;gap:8px;margin-top:12px}
+  .toast{position:fixed;bottom:20px;right:20px;background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--good);border-radius:10px;padding:11px 15px;font-size:13px;z-index:60;opacity:0;transform:translateY(10px);transition:.22s;max-width:330px}
+  .toast.on{opacity:1;transform:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="phead"><h1>Marketing</h1><p>AIM new campaigns · track what's deployed · review RAG drafts · read the Growth-Engine report. <em style="color:var(--faint)">(mockup v4)</em></p></div>
+  <div class="funnel">
+    <div class="kpi"><div class="v">7</div><div class="k">Leads</div></div>
+    <div class="kpi"><div class="v">8</div><div class="k">Emails</div></div>
+    <div class="kpi"><div class="v">2</div><div class="k">Replies</div></div>
+    <div class="kpi"><div class="v">1</div><div class="k">Meetings</div></div>
+    <div class="kpi alert"><div class="v" style="color:var(--mid)">3</div><div class="k">Drafts to review</div></div>
+  </div>
+  <div class="toptabs">
+    <div class="toptab on" data-v="drafts" onclick="vw(this)">Draft review <span class="b">3</span></div>
+    <div class="toptab" data-v="report" onclick="vw(this)">Report</div>
+    <div class="toptab" data-v="growth" onclick="vw(this)">Growth Engine</div>
+    <div class="toptab" data-v="campaigns" onclick="vw(this)">Campaigns</div>
+  </div>
+
+  <div class="view on" id="drafts">
+    <div class="board">
+      <div class="card" style="align-self:start"><div class="list-h"><span>Awaiting review</span><span style="color:var(--mid)">3</span></div><div id="list"></div></div>
+      <div class="card"><div class="det" id="det"></div></div>
+    </div>
+  </div>
+
+  <div class="view" id="report">
+    <div class="ctrls">
+      <div class="seg"><span>Day</span><span class="on">Week</span><span>Month</span></div>
+      <div class="picker">All campaigns ▾</div><div class="sync">⟳ Sync from n8n</div>
+    </div>
+
+    <div class="sec"><div class="h">Funnel</div>
+      <div class="fbox">
+        <div class="fcell"><div class="v">7</div><div class="k">Leads found</div></div>
+        <div class="fcell"><div class="v">8</div><div class="k">Emails sent</div></div>
+        <div class="fcell"><div class="v">2</div><div class="k">Replies</div></div>
+        <div class="fcell"><div class="v">1</div><div class="k">Meetings</div></div>
+      </div>
+    </div>
+
+    <div class="sec"><div class="h">RAG draft funnel</div>
+      <div class="stepf">
+        <div class="st"><div class="v">5</div><div class="k">Unsure</div></div><div class="arr">▸</div>
+        <div class="st"><div class="v">3</div><div class="k">Drafted</div><div class="pc">60%</div></div><div class="arr">▸</div>
+        <div class="st"><div class="v">1</div><div class="k">Approved</div><div class="pc">33%</div></div><div class="arr">▸</div>
+        <div class="st"><div class="v">1</div><div class="k">Sent</div><div class="pc">100%</div></div><div class="arr">▸</div>
+        <div class="st"><div class="v">0</div><div class="k">Replied</div><div class="pc">0%</div></div>
+      </div>
+    </div>
+
+    <div class="sec"><div class="h">Draft outcomes &amp; response timing</div>
+      <div class="sg">
+        <div class="sgb"><div class="ttl">Outcomes (30d)</div>
+          <div class="kv"><span>Sent</span><b>6</b></div>
+          <div class="kv"><span>Edited → sent</span><b>4</b></div>
+          <div class="kv"><span>Discarded</span><b>1</b></div>
+          <div class="kv"><span>Approval rate</span><b style="color:var(--good)">86%</b></div>
+          <div class="kv"><span>Avg edits / draft</span><b>1.3</b></div>
+        </div>
+        <div class="sgb"><div class="ttl">Response timing</div>
+          <div class="kv"><span>Unsure → draft ready</span><b>12 min</b></div>
+          <div class="kv"><span>Draft → sent</span><b>3.4 h</b></div>
+          <div class="kv"><span>Stale drafts (&gt;24h)</span><b style="color:var(--mid)">2</b></div>
+          <div class="kv"><span>Fastest send</span><b>22 min</b></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec attr"><div class="h">Tender attribution — what this activity is advancing</div>
+      <div class="arow"><span class="tn">LED Retrofit Berlin 2026</span><span class="tm">4 touches · 1 meeting</span><span class="tv">€2.4M</span></div>
+      <div class="arow"><span class="tn">Straßenbeleuchtung München 2026</span><span class="tm">3 touches · 1 meeting</span><span class="tv">€3.1M</span></div>
+      <div class="arow"><span class="tn">Modulare Verwaltungsgebäude — Bund</span><span class="tm">2 touches</span><span class="tv">€8.6M</span></div>
+      <div class="arow"><span class="tn" style="color:var(--muted)">Unlinked activity</span><span class="tm">5 touches</span><span class="tv">—</span></div>
+    </div>
+
+    <div class="sec" style="margin-bottom:0"><div class="h">Per stage · this period</div>
+      <div class="pstage"><span class="dot"></span><span class="nm">Lead Satellite</span><span class="rn">3 runs · 100% ok</span><span class="mt">Leads 7</span><span class="spark"><i style="height:30%"></i><i style="height:55%"></i><i style="height:40%"></i><i style="height:80%"></i><i style="height:100%"></i></span></div>
+      <div class="pstage"><span class="dot" style="background:var(--faint)"></span><span class="nm">Ammo Forge</span><span class="rn">0 runs</span><span class="mt" style="color:var(--muted)">Templates —</span><span class="spark"></span></div>
+      <div class="pstage"><span class="dot"></span><span class="nm">Reach Bazooka</span><span class="rn">6 runs · ok</span><span class="mt">Emails 8</span><span class="spark"><i style="height:50%"></i><i style="height:70%"></i><i style="height:60%"></i><i style="height:90%"></i><i style="height:75%"></i></span></div>
+      <div class="pstage"><span class="dot"></span><span class="nm">Reply Glock</span><span class="rn">10 runs · 100% ok</span><span class="mt">Replies 2 · Meetings 1</span><span class="spark"><i style="height:40%"></i><i style="height:65%"></i><i style="height:80%"></i><i style="height:55%"></i><i style="height:70%"></i></span></div>
+      <div class="pstage"><span class="dot"></span><span class="nm">RAG Agent</span><span class="rn">8 runs · ok</span><span class="mt">Drafts 3</span><span class="spark"><i style="height:45%"></i><i style="height:60%"></i><i style="height:50%"></i><i style="height:70%"></i><i style="height:65%"></i></span></div>
+      <div class="pstage"><span class="dot"></span><span class="nm">Sleeper Grenade</span><span class="rn">1 run · ok</span><span class="mt">Swept 2</span><span class="spark"><i style="height:20%"></i><i style="height:0%"></i><i style="height:35%"></i><i style="height:10%"></i><i style="height:25%"></i></span></div>
+    </div>
+  </div>
+
+  <div class="view" id="growth">
+    <div class="gbar">
+      <button class="qa primary" onclick="aim()">🎯 AIM — Lock &amp; Load</button>
+      <div class="menu" id="stagemenu"><button class="qa" onclick="toggleMenu(event)">▷ Run a stage ▾</button>
+        <div class="pop">
+          <button onclick="runStage('Lead Satellite','leads')">Lead Satellite</button>
+          <button onclick="runStage('Ammo Forge','ammo')">Ammo Forge</button>
+          <button onclick="runStage('Reach Bazooka','baz')">Reach Bazooka</button>
+          <button onclick="runStage('Reply Glock','glk')">Reply Glock</button>
+          <button onclick="runStage('RAG Agent','rag')">RAG Agent</button>
+          <button onclick="runStage('Sleeper Grenade','slp')">Sleeper Grenade</button>
+        </div>
+      </div>
+      <button class="qa" onclick="sync()">⟳ Sync</button>
+    </div>
+
+    <div class="engine">
+      <span class="lab">Engine</span>
+      <span class="est"><span class="dot ok"></span>Lead Sat <b id="leads">7</b></span><span class="sep">·</span>
+      <span class="est"><span class="dot idle"></span>Ammo <b id="ammo">—</b></span><span class="sep">·</span>
+      <span class="est"><span class="dot ok"></span>Bazooka <b id="baz">8</b></span><span class="sep">·</span>
+      <span class="est"><span class="dot run"></span>Glock <b id="glk">2/1</b></span><span class="sep">·</span>
+      <span class="est"><span class="dot ok"></span>RAG <b id="rag">3</b></span><span class="sep">·</span>
+      <span class="est"><span class="dot ok"></span>Sleeper <b id="slp">2</b></span>
+      <span class="next">next: Bazooka 08:00 · 0 errors</span>
+    </div>
+
+    <p class="h">AIM sequence — the arsenal pipeline</p>
+    <div class="seq">
+      <div class="sq" id="sq-leads"><div class="ix">01 · Target</div><div class="nm">Lead Satellite</div><div class="rn">09:59 · 100% ok</div><div class="v" id="v-leads">7</div><button class="run" onclick="runStage('Lead Satellite','leads')">▷ Run</button></div>
+      <div class="sq" id="sq-ammo"><div class="ix">02 · Arm</div><div class="nm">Ammo Forge</div><div class="rn">idle</div><div class="v" id="v-ammo" style="color:var(--faint)">—</div><button class="run" onclick="runStage('Ammo Forge','ammo')">▷ Run</button></div>
+      <div class="sq" id="sq-baz"><div class="ix">03 · Fire</div><div class="nm">Reach Bazooka</div><div class="rn">08:00 · ok</div><div class="v" id="v-baz">8</div><button class="run" onclick="runStage('Reach Bazooka','baz')">▷ Run</button></div>
+      <div class="sq" id="sq-glk"><div class="ix">04 · Catch</div><div class="nm">Reply Glock</div><div class="rn">running…</div><div class="v" id="v-glk" style="color:var(--sky)">2/1</div><button class="run" onclick="runStage('Reply Glock','glk')">▷ Run</button></div>
+      <div class="sq" id="sq-rag"><div class="ix">05 · Answer</div><div class="nm">RAG Agent</div><div class="rn">10:44 · ok</div><div class="v" id="v-rag">3</div><button class="run" onclick="runStage('RAG Agent','rag')">▷ Run</button></div>
+      <div class="sq" id="sq-slp"><div class="ix">06 · Revive</div><div class="nm">Sleeper Grenade</div><div class="rn">1 run · ok</div><div class="v" id="v-slp">2</div><button class="run" onclick="runStage('Sleeper Grenade','slp')">▷ Run</button></div>
+    </div>
+  </div>
+
+  <div class="view" id="campaigns">
+    <div class="cstats">
+      <div class="kpi"><div class="v">3</div><div class="k">Campaigns</div></div>
+      <div class="kpi"><div class="v">2</div><div class="k">Active</div></div>
+      <div class="kpi"><div class="v">14</div><div class="k">Leads</div></div>
+      <div class="kpi"><div class="v">3</div><div class="k">Replies</div></div>
+      <div class="kpi"><div class="v">1</div><div class="k">Meetings</div></div>
+    </div>
+
+    <div class="gbar" style="margin-bottom:12px;align-items:baseline">
+      <p class="h" style="margin:0">Deployed by Growth Engine — track &amp; drill in</p>
+      <span class="spacer" style="margin-left:auto"></span>
+      <button class="qa" onclick="syncDrive()">⟳ Sync with Drive</button>
+    </div>
+    <p style="color:var(--faint);font-size:11.5px;margin:-4px 0 14px">Drive folder = source of truth — a campaign whose folder you delete drops out here on sync (n8n run history can't be trusted to reflect deletions).</p>
+
+    <details class="camp" open>
+      <summary>
+        <span class="cn">Container Poland 2026</span><span class="pill">DEPLOYED</span>
+        <span class="miniF"><span>Leads <b>7</b></span><span>Emails <b>8</b></span><span>Replies <b>2</b></span><span>Mtg <b>1</b></span></span>
+        <span class="cact"><button class="qa" onclick="event.preventDefault();runStage('Reach Bazooka','baz')">▷ Run stage</button><button class="qa" onclick="event.preventDefault();toast('Opening campaign…')">Open</button></span>
+      </summary>
+      <div class="cbody">
+        <div class="carow"><span class="stg">Lead Satellite</span><span class="tm">09:59</span><span>Found 7 leads (PL · container)</span></div>
+        <div class="carow"><span class="stg">Reach Bazooka</span><span class="tm">08:00</span><span>Sent 8 (news-hook + COLD-AGG)</span></div>
+        <div class="carow"><span class="stg">Reply Glock</span><span class="tm">10:12</span><span>2 replies · 1 meeting booked</span></div>
+        <div class="carow"><span class="stg">RAG Agent</span><span class="tm">10:44</span><span>3 reply drafts — awaiting approval</span></div>
+      </div>
+    </details>
+
+    <details class="camp">
+      <summary>
+        <span class="cn">LED Retrofit Berlin 2026</span><span class="pill run">RUNNING</span>
+        <span class="miniF"><span>Leads <b>5</b></span><span>Emails <b>6</b></span><span>Replies <b>1</b></span><span>Mtg <b>0</b></span></span>
+        <span class="cact"><button class="qa" onclick="event.preventDefault();runStage('Reply Glock','glk')">▷ Run stage</button><button class="qa" onclick="event.preventDefault();toast('Opening campaign…')">Open</button></span>
+      </summary>
+      <div class="cbody">
+        <div class="carow"><span class="stg">Lead Satellite</span><span class="tm">Yesterday</span><span>Found 5 leads (DE · LED retrofit)</span></div>
+        <div class="carow"><span class="stg">Ammo Forge</span><span class="tm">Yesterday</span><span>Forged news-hook template</span></div>
+        <div class="carow"><span class="stg">Reach Bazooka</span><span class="tm">08:00</span><span>Sent 6 · 1 reply pending Glock</span></div>
+      </div>
+    </details>
+
+    <details class="camp" id="cmp-muenchen">
+      <summary>
+        <span class="cn">Straßenbeleuchtung München 2026</span><span class="pill sch">SCHEDULED</span>
+        <span class="miniF"><span>Leads <b>—</b></span><span>Emails <b>—</b></span><span>Replies <b>—</b></span><span>Mtg <b>—</b></span></span>
+        <span class="cact"><button class="qa" onclick="event.preventDefault();toast('Deploying campaign…')">▷ Deploy</button><button class="qa" onclick="event.preventDefault();toast('Opening campaign…')">Open</button></span>
+      </summary>
+      <div class="cbody">
+        <div class="carow"><span class="stg">AIM</span><span class="tm">locked</span><span>DE · street lighting · München — first Bazooka 08:00 tomorrow</span></div>
+      </div>
+    </details>
+  </div>
+
+  <p class="note">Mockup v4 — 4 tabs: Draft review · Report · Growth Engine (AIM + arsenal sequence) · Campaigns (deployed tracking). Buttons are mock (toasts/modal).</p>
+</div>
+
+<!-- overlay + toast (shared by Growth Engine + Campaigns) -->
+<div class="overlay" id="ov" onclick="if(event.target===this)closeModal()"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const DRAFTS=[
+ {id:"cp",company:"Code & Pepper",email:"a.kopiczko@codeandpepper.com",area:"finance",ago:"10:44",conf:0.86,
+  thread:{from:"Adam Kopiczko",when:"Today 10:41",txt:"Hi Hanna, thanks for the info earlier. Quick question on commercials — could you give me a quick overview of what your Market Entry package covers, and how your success fee works on a typical German public tender?\n\nBest, Adam"},
+  question:"Could you give me a quick overview of what your Market Entry package covers, and how your success fee works?",
+  unsureSection:"Market Entry package scope + success fee",explain:"Commercial package scope and fee structure",knowledge:"Evertrust — Services & Pricing KB",
+  cites:[{s:"Services & Pricing KB · §2 Market Entry",x:"Prepares the company to bid under its own name: document review & structuring, qualification certificates, references, tax/insurance docs, platform onboarding, advisory."},{s:"Services & Pricing KB · §4 Fees",x:"Fixed submission fee + success commission on award; rate is a % of contract value, scaled down for higher-value contracts."}],
+  subject:"Market Entry package and success fee overview",
+  body:"Dear Code & Pepper,\n\nOur Market Entry package is the setup phase that prepares your company to participate in German tenders under your own company name — document review & structuring, qualification certificates, references, tax/insurance documents, platform onboarding, and market-entry advisory.\n\nOn the tender side, our model combines a fixed submission fee with a success commission on award. The success fee is a percentage of contract value, scaled down for higher-value contracts.\n\nKind regards,\nHanna Nguyen\nEVERTRUST GmbH"},
+ {id:"nw",company:"Nordwind Energie GmbH",email:"einkauf@nordwind-energie.de",area:"technical",ago:"09:59",conf:0.82,
+  thread:{from:"Einkauf Nordwind",when:"Today 09:55",txt:"Before we proceed — can your modular units meet German KRITIS reliability standards, and what uptime SLA do you guarantee?"},
+  question:"Can your modular units meet German KRITIS reliability standards, and what uptime SLA do you guarantee?",
+  unsureSection:"KRITIS certification and uptime SLA",explain:"Technical compliance + service-level guarantee",knowledge:"Evertrust — Technical & Compliance KB",
+  cites:[{s:"Technical & Compliance KB · KRITIS",x:"Units engineered to German KRITIS reliability; certification evidence provided at qualification."},{s:"Technical & Compliance KB · SLA",x:"99.5% uptime SLA with service credits; defined response-and-restore window."}],
+  subject:"KRITIS compliance & our uptime SLA",
+  body:"Dear Nordwind Energie GmbH,\n\nOur modular units meet German KRITIS reliability requirements, with full certification documentation provided during qualification. We guarantee a 99.5% uptime SLA backed by service credits and a defined response-and-restore window. Happy to walk your technical team through the evidence on a short call.\n\nKind regards,\nHanna Nguyen\nEVERTRUST GmbH"},
+ {id:"bm",company:"Baltic Modular Sp. z o.o.",email:"office@balticmodular.pl",area:"timeline",ago:"09:59",conf:0.74,
+  thread:{from:"Office Baltic Modular",when:"Today 09:52",txt:"What's a realistic lead time from order to on-site deployment for around 20 office modules?"},
+  question:"What's a realistic lead time from order to on-site deployment for ~20 office modules?",
+  unsureSection:"Deployment lead time for ~20 modules",explain:"Delivery timeline / capacity question",knowledge:"Evertrust — Delivery & Capacity KB",
+  cites:[{s:"Delivery & Capacity KB · Lead times",x:"Order-to-site for 10–25 modules: 6–8 weeks subject to configuration and site readiness; staged delivery available."}],
+  subject:"Lead time for a 20-module deployment",
+  body:"Dear Baltic Modular Sp. z o.o.,\n\nFor ~20 office modules, a realistic order-to-on-site lead time is 6–8 weeks, depending on configuration and site readiness. Staged delivery can begin earlier so your first units are usable while the rest are completed.\n\nIf you can share the site and required date, we'll confirm an exact schedule.\n\nKind regards,\nHanna Nguyen\nEVERTRUST GmbH"}
+];
+const cc=c=>c>=0.85?"good":(c>=0.80?"mid":"low");
+let cur="cp";
+function renderList(){document.getElementById("list").innerHTML=DRAFTS.map(d=>`<div class="row" data-id="${d.id}" onclick="pick('${d.id}')"><div class="t">${d.company}</div><div class="q">"${d.question}"</div><div class="b2"><span class="area ${d.area}">${d.area}</span><span class="ago">draft · ${d.ago}</span></div></div>`).join("");}
+function render(){const d=DRAFTS.find(x=>x.id===cur);document.getElementById("det").innerHTML=
+   `<div class="det-h"><h2>${d.company}</h2><span class="pill">✉ Gmail draft · not sent</span><span class="cpill ${cc(d.conf)}">● ${d.conf.toFixed(2)} confidence</span></div>
+    <div class="email">${d.email} · unsure area: <b style="color:var(--txt);text-transform:capitalize">${d.area}</b></div>
+    <div class="label">Original thread</div>
+    <details class="thread"><summary>From ${d.thread.from} · ${d.thread.when}</summary><div class="msg"><div class="txt">${d.thread.txt}</div></div></details>
+    <div class="label">Context — why this needs a reply</div>
+    <div class="ctx"><div class="qz">"${d.question}"</div>
+      <div class="meta"><div class="k">Unsure about</div><div>${d.unsureSection}</div><div class="k">Area</div><div style="text-transform:capitalize">${d.area} — ${d.explain}</div></div>
+      <div class="label" style="margin:12px 0 6px">Grounded in: ${d.knowledge}</div>
+      ${d.cites.map(c=>`<div class="cite"><div class="s">${c.s}</div><div class="x">${c.x}</div></div>`).join("")}</div>
+    <div class="label">Drafted reply — edit before sending</div>
+    <div class="field"><div class="fl">Subject</div><input value="${d.subject.replace(/"/g,'&quot;')}"/></div>
+    <div class="field"><div class="fl">Body</div><textarea>${d.body}</textarea></div>
+    ${d.conf<0.80?`<div class="warn">⚠ Lower confidence (${d.conf.toFixed(2)}) — verify against the cited source before sending.</div>`:""}
+    <div class="actions"><button class="btn go">✓ Approve &amp; send</button><button class="btn">Save edits</button><button class="btn danger">Discard</button><span class="conf">RAG draft · n8n sends on approve</span></div>`;
+  document.querySelectorAll(".row").forEach(r=>r.classList.toggle("sel",r.dataset.id===cur));}
+function pick(id){cur=id;render();}
+function vw(el){document.querySelectorAll(".toptab").forEach(t=>t.classList.remove("on"));el.classList.add("on");var v=el.getAttribute("data-v");document.querySelectorAll(".view").forEach(x=>x.classList.toggle("on",x.id===v));}
+renderList();render();
+
+/* ---- Growth Engine + Campaigns (merged) ---- */
+let tT;
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('on');clearTimeout(tT);tT=setTimeout(()=>t.classList.remove('on'),2600);}
+function openModal(html){document.getElementById('modal').innerHTML=html;document.getElementById('ov').classList.add('on');}
+function closeModal(){document.getElementById('ov').classList.remove('on');}
+function toggleMenu(e){e.stopPropagation();document.getElementById('stagemenu').classList.toggle('open');}
+document.addEventListener('click',function(){var m=document.getElementById('stagemenu');if(m)m.classList.remove('open');});
+function runStage(name,key){
+  toast(name+' — running…');
+  var m=document.getElementById('stagemenu');if(m)m.classList.remove('open');
+  var card=document.getElementById('sq-'+key);if(card)card.classList.add('run-on');
+  setTimeout(function(){
+    if(key!=='glk'){
+      var e=document.getElementById(key);if(e){var n=parseInt(e.textContent)||0;e.textContent=n+1;}
+      var sv=document.getElementById('v-'+key);if(sv){var n2=parseInt(sv.textContent)||0;sv.textContent=n2+1;}
+    }
+    if(card)card.classList.remove('run-on');
+    toast(name+' done ✓ · +1');
+  },900);
+}
+function sync(){toast('Syncing from n8n…');setTimeout(function(){toast('Synced ✓ · 0 new errors');},900);}
+function aim(){
+  openModal('<span class="x" onclick="closeModal()">✕</span><h3>🎯 AIM — Lock &amp; Load</h3><div class="sub">Target a niche, lock a campaign — the arsenal sequence runs it. (mock)</div>'+
+    '<div class="fld"><div class="fl">Niche</div><input placeholder="LED retrofit"></div>'+
+    '<div class="fld"><div class="fl">Country / region</div><input placeholder="Germany"></div>'+
+    '<div class="fld"><div class="fl">Project</div><input placeholder="LED Retrofit Berlin 2026" id="aim-proj"></div>'+
+    '<div class="drow"><button class="act sky" onclick="deploy()">Deploy campaign</button><button class="act ghost" onclick="closeModal()">Cancel</button></div>');
+}
+function deploy(){var p=(document.getElementById('aim-proj').value)||'new campaign';closeModal();toast('🎯 Launched: '+p+' — arsenal running');}
+function syncDrive(){
+  toast('Scanning Drive "Evertrust Campaigns" folder…');
+  setTimeout(function(){
+    // mock: München's Drive folder was deleted → archive it out of the active list.
+    var gone=document.getElementById('cmp-muenchen');
+    if(gone&&gone.parentNode){gone.parentNode.removeChild(gone);toast('Synced with Drive ✓ · 2 in Drive · 1 archived (folder deleted)');}
+    else{toast('Synced with Drive ✓ · 2 in Drive · 0 changes');}
+  },900);
+}
+</script>
+</body>
+</html>

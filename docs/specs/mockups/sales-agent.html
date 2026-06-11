@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Sales Agent — v4 (4 meetings)</title>
+<style>
+  :root{--bg:#0b0b0e;--panel:#141418;--panel2:#17171c;--line:rgba(255,255,255,.08);
+    --txt:#e9e9ee;--muted:#8b8b95;--faint:#6a6a73;--good:#34d399;--mid:#fbbf24;--low:#f87171;--sky:#38bdf8;--violet:#a78bfa;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:24px}
+  .phead h1{font-size:24px;margin:0 0 4px;letter-spacing:-.02em}.phead p{margin:0 0 18px;color:var(--muted);font-size:13px}
+  .board{display:grid;grid-template-columns:300px 1fr;gap:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px}
+  .list-h{padding:13px 16px;border-bottom:1px solid var(--line);font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint)}
+  .mtg{padding:12px 16px;border-bottom:1px solid var(--line);cursor:pointer;display:flex;gap:10px;align-items:flex-start}
+  .mtg:hover{background:var(--panel2)}
+  .mtg.sel{background:linear-gradient(90deg,rgba(56,189,248,.10),transparent);box-shadow:inset 3px 0 0 var(--sky)}
+  .mtg .t{font-weight:600;font-size:13px}.mtg .m{color:var(--muted);font-size:11.5px;margin-top:2px}
+  .chip{margin-left:auto;flex:0 0 auto;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px}
+  .chip.good{background:rgba(52,211,153,.14);color:var(--good)}.chip.mid{background:rgba(251,191,36,.14);color:var(--mid)}.chip.low{background:rgba(248,113,113,.14);color:var(--low)}
+  .det-h{padding:16px 20px;border-bottom:1px solid var(--line)}
+  .det-h h2{margin:0 0 4px;font-size:17px}.det-h .meta{color:var(--muted);font-size:12.5px}.det-h .meta a{color:var(--sky);text-decoration:none}
+  .lens{display:inline-block;font-size:11px;font-weight:700;color:var(--violet);background:rgba(167,139,250,.12);padding:2px 8px;border-radius:999px;margin-left:8px}
+  .tabs{display:flex;gap:4px;padding:10px 16px 0}
+  .tab{padding:8px 14px;border-radius:9px 9px 0 0;cursor:pointer;color:var(--muted);font-weight:600;font-size:13px}
+  .tab.on{color:var(--txt);background:var(--panel2);border:1px solid var(--line);border-bottom:none}
+  .pane{padding:18px 20px;display:none}.pane.on{display:block}
+  .label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin:18px 0 8px}.label:first-child{margin-top:0}
+  .meta-grid{display:grid;grid-template-columns:140px 1fr;gap:6px 14px;font-size:13px}.meta-grid .k{color:var(--muted)}
+  .overview{color:#cfd0d6;font-size:13.5px}
+  .signals{display:flex;gap:8px;flex-wrap:wrap}
+  .sig{flex:1;min-width:120px;border:1px solid var(--line);border-radius:10px;padding:9px 11px;background:var(--panel2)}
+  .sig .v{font-size:15px;font-weight:700}.sig .k{font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em}
+  .tender-box{margin-top:8px;border:1px solid var(--line);border-radius:11px;padding:12px 14px;background:var(--panel2)}
+  .tender-box .hd{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-bottom:10px;flex-wrap:wrap}
+  .tender-box .hd .btn{margin-left:auto;font-size:12px;font-weight:600;padding:6px 12px;border-radius:8px;background:transparent;color:var(--sky);border:1px solid rgba(56,189,248,.35);cursor:pointer}
+  .search{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;color:var(--txt);font-size:13px;margin-bottom:8px}
+  .topt{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;border:1px solid var(--line);margin-bottom:6px}
+  .topt.best{border-color:rgba(167,139,250,.4);background:rgba(167,139,250,.06)}
+  .topt .tt{font-weight:600;font-size:13px}.topt .ts{color:var(--muted);font-size:11.5px}.topt .match{font-size:11px;font-weight:700;color:var(--violet)}
+  .topt .lk{margin-left:auto;font-size:12px;font-weight:600;padding:5px 11px;border-radius:8px;background:var(--sky);color:#05202b;border:none;cursor:pointer}
+  .overall{display:flex;gap:22px;align-items:center;margin-bottom:6px}
+  .ring{width:74px;height:74px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center}
+  .ring .in{width:56px;height:56px;border-radius:50%;background:var(--panel);display:grid;place-items:center}
+  .ring .in b{font-size:18px}.ring .in span{font-size:9px;color:var(--muted)}
+  .cap{font-size:10px;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;text-align:center;margin-top:5px}
+  .dim{margin-bottom:13px}.dim .row{display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px}
+  .bar{height:7px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden}.bar>i{display:block;height:100%;border-radius:999px}
+  .dim p{margin:6px 0 0;color:var(--muted);font-size:12.5px}.ev{color:var(--faint);font-style:italic}
+  details.item{border:1px solid var(--line);border-radius:11px;margin-bottom:8px;background:var(--panel2);overflow:hidden}
+  details.item.good-edge{box-shadow:inset 3px 0 0 var(--good)}details.item.improve-edge{box-shadow:inset 3px 0 0 var(--mid)}
+  details.item>summary{list-style:none;cursor:pointer;padding:11px 14px;display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:600}
+  details.item>summary::-webkit-details-marker{display:none}
+  details.item>summary:before{content:"▸";color:var(--faint);font-size:11px}
+  details.item[open]>summary:before{content:"▾"}
+  .meth{font-size:11px;color:var(--violet);background:rgba(167,139,250,.12);padding:2px 9px;border-radius:999px;margin-left:auto;font-weight:600}
+  .body{padding:0 14px 12px 32px}
+  .quote{border-left:2px solid var(--line);padding-left:10px;color:#cfd0d6;font-size:12.5px;font-style:italic;margin:6px 0}
+  .ln{font-size:12.5px;margin:4px 0}.ln b{color:var(--muted);font-weight:600}
+  .flag{color:var(--low)}
+  /* nested coaching accordion: Main → Sub → detail */
+  .acctools{display:flex;gap:8px;margin:2px 0 14px}
+  .acctools button{font-size:11.5px;font-weight:600;padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--muted);cursor:pointer}
+  .acctools button:hover{color:var(--txt);border-color:rgba(56,189,248,.4)}
+  details.m1{border:1px solid var(--line);border-radius:12px;background:var(--panel2);margin-bottom:10px;overflow:hidden}
+  details.m1>summary{list-style:none;cursor:pointer;padding:13px 15px;display:flex;align-items:center;gap:11px;font-size:14px;font-weight:700;user-select:none}
+  details.m1>summary::-webkit-details-marker{display:none}
+  details.m1>summary:before{content:"▸";color:var(--faint);font-size:11px}
+  details.m1[open]>summary:before{content:"▾"}
+  details.m1>summary .ico{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;font-size:14px}
+  details.m1>summary .sc{margin-left:auto;display:flex;align-items:center;gap:9px}
+  .cnt{font-size:11px;color:var(--faint);font-weight:600}
+  .scbadge{font-size:12px;font-weight:700;padding:2px 9px;border-radius:999px}
+  .m1b{padding:4px 13px 12px}
+  details.m2{border:1px solid var(--line);border-radius:9px;background:var(--panel);margin-bottom:7px;overflow:hidden}
+  details.m2:last-child{margin-bottom:0}
+  details.m2.good-edge{box-shadow:inset 3px 0 0 var(--good)}
+  details.m2.improve-edge{box-shadow:inset 3px 0 0 var(--mid)}
+  details.m2>summary{list-style:none;cursor:pointer;padding:10px 13px;display:flex;align-items:center;gap:9px;font-size:13px;font-weight:600;user-select:none}
+  details.m2>summary::-webkit-details-marker{display:none}
+  details.m2>summary:before{content:"▸";color:var(--faint);font-size:10px}
+  details.m2[open]>summary:before{content:"▾"}
+  details.m2>summary .sc{margin-left:auto}
+  .m2b{padding:4px 13px 12px 30px}
+  .m2b .bar{margin-top:2px}
+  .m2b p{margin:8px 0 0;color:var(--muted);font-size:12.5px}
+  .note{margin-top:16px;color:var(--faint);font-size:11px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="phead"><h1>Sales Agent</h1><p>Read&nbsp;AI meeting summaries + Hormozi-lens coaching. <em style="color:var(--faint)">(mockup — click any meeting)</em></p></div>
+  <div class="board">
+    <div class="card" style="align-self:start"><div class="list-h">Recent meetings</div><div id="list"></div></div>
+    <div class="card">
+      <div class="det-h" id="deth"></div>
+      <div class="tabs"><div class="tab on" data-t="sum" onclick="tab(this)">Summary</div><div class="tab" data-t="coach" onclick="tab(this)">Coaching</div></div>
+      <div class="pane on" id="sum"></div>
+      <div class="pane" id="coach"></div>
+    </div>
+  </div>
+  <p class="note">Static mockup — 4 meetings with full data. Tabs switch; cards expand; tender picker shows the link flow.</p>
+</div>
+
+<script>
+const MEETINGS = [
+  {
+    id:"kodeca", chip:"3.0", chipc:"mid",
+    title:"Kodeca — German tender matching pitch", listTitle:"Kodeca — tender matching pitch",
+    listMeta:"Jun 3 · ~15 min · Hanna → Vic",
+    metaLine:"2026-06-03 · ~15 min · 2,243 words · AE Hanna Gia Nguyen → Vic Kurs",
+    md:{AE:"Hanna Gia Nguyen","Client contact":"Vic Kurs","Product pitched":"German public tender matching & bid-application (EverTrust)",Duration:"~15 min · 2,243 words",Flags:"none"},
+    sig:{talk:"62% / 38%",sent:"Positive-leaning",sentc:"good",eng:"74",q:"6 / 4"},
+    exec:"Hanna opened with a clear value proposition — matching Polish IT vendors to German public tenders — and described fees and process. Vic showed interest but Hanna didn't get the quantified cost-of-inaction, gave no concrete admin-fee number or risk-reversal, and pushed for a quick decision without fully building quantified value.",
+    tender:{linked:false, best:{name:"LED Retrofit Berlin 2026",match:"87%",meta:"NOT_STARTED · buyer Land Berlin · deadline Jul 15 · €2.4M"}, others:[{name:"IT Vendor Framework — Bund 2026",meta:"OPEN · deadline Aug 1 · €5.0M"},{name:"Container Buffer — Hamburg Port",meta:"NOT_STARTED · deadline Jul 30"}]},
+    headline:"Interested but non-committal buyer; solid opener, but missing budget discovery, risk-reversal, and quantified value before the ask.",
+    ae:{o:"3.0",dims:[{n:"Communication",s:3,note:'Conveyed dream outcome + social proof; didn\'t hit all Value-Equation levers or neutralize the admin-fee objection. <span class="ev">"…how high is the admin fee?" → deferred to email.</span>'},{n:"Understanding client needs",s:3,note:'Asked about experience & role; got no quantified status-quo cost or budget. <span class="ev">Vic: "I\'m not the decision maker…"</span>'},{n:"Technical explanations",s:3,note:"Gave commission %, said admin fee is upfront, but no amount and no risk-reversal."}]},
+    cl:{o:"3.0",dims:[{n:"Buying intent",s:3},{n:"Pain acknowledgment",s:3},{n:"Decision authority",s:3},{n:"Objection profile",s:3},{n:"Misunderstandings",s:3}]},
+    worked:[{n:1,t:"Discover before pitching",m:"Discover Before Pitching",q:"Early discovery of past tender experience",w:"surfaced relevant context for fit."},{n:2,t:"Articulated the dream outcome",m:"Value Equation",q:"Market expansion & stability",w:"painted the life-after vision."},{n:3,t:"Anchored on price",m:"Anchor High",q:"Commission 3.5–4%",w:"a clear pricing anchor."},{n:4,t:"Social proof",m:"Value Equation",q:"Awarded project (€687,000)",w:"raised perceived likelihood of success."},{n:5,t:"Created urgency",m:"CLOSER",q:"Urgency around shortlisting",w:"shortens the time-delay lever when used right."}],
+    improve:[{n:1,t:"Quantify cost of status quo",m:"Cost of Status Quo",wh:"never asked the cost of NOT pursuing German tenders.",tr:'"What\'s the cost to Kodeca of not entering this year?" — before quoting fees.'},{n:2,t:"Discover budget before quoting",m:"Discover Budget",tr:'"What budget have you set aside for entry costs?" before terms.'},{n:3,t:"Add a risk reversal",m:"Risk Reversal",tr:"commission only from funded invoices + money-back on admin fee if not shortlisted."},{n:4,t:"Name the objection proactively",m:"Name the Objection",wh:"deferred the admin-fee question.",tr:'"You\'re probably wondering how high the admin fee is — here\'s why, and how we mitigate it."'},{n:5,t:"Build value before urgency",m:"CLOSER",tr:"tie contract sizes to Kodeca's numbers, then introduce the deadline."}],
+    conf:"0.84", run:"3987"
+  },
+  {
+    id:"stadtwerke", chip:"4.1", chipc:"good",
+    title:"Stadtwerke München — LED retrofit qualification", listTitle:"Stadtwerke München — LED retrofit",
+    listMeta:"Jun 2 · 28 min",
+    metaLine:"2026-06-02 · 28 min · 3,810 words · AE Hanna Gia Nguyen → Markus Brandt (Procurement) + 1",
+    md:{AE:"Hanna Gia Nguyen","Client contact":"Markus Brandt — Procurement Lead","Product pitched":"City-wide LED streetlight retrofit · modular, KRITIS-grade delivery",Duration:"28 min · 3,810 words",Flags:"none"},
+    sig:{talk:"48% / 52%",sent:"Positive",sentc:"good",eng:"86",q:"9 / 7"},
+    exec:"A tight, discovery-first qualification call. Hanna quantified the buyer's reliability pain (recurring streetlight outages), anchored on a premium modular-delivery SLA, and held pricing until value was established. She secured a concrete next step — a commercial deep-dive plus same-day spec sheet — and captured the July procurement window.",
+    tender:{linked:true, name:"Straßenbeleuchtung München 2026", meta:"OPEN · buyer Stadtwerke München · deadline Jul 22 · €3.1M"},
+    headline:"Strong qualification call — clear pain, anchored value, concrete next step. Tighten the budget ask.",
+    ae:{o:"4.0",dims:[{n:"Communication",s:4,note:"Balanced talk-time, led with discovery, and tied modular delivery to KRITIS reliability."},{n:"Understanding client needs",s:4,note:"Quantified outage cost and the July window; mapped the decision process."},{n:"Technical explanations",s:4,note:"Explained the SLA + certification path concretely and offered a reference project."}]},
+    cl:{o:"4.2",dims:[{n:"Buying intent",s:4},{n:"Pain acknowledgment",s:4},{n:"Decision authority",s:4},{n:"Objection profile",s:4},{n:"Misunderstandings",s:5}]},
+    worked:[{n:1,t:"Discovery before pitching",m:"Discover Before Pitching",q:"Asked about outage history and SLA expectations first",w:"grounded the pitch in the buyer's real pain."},{n:2,t:"Reliability as the dream outcome",m:"Value Equation",q:"Zero-outage public lighting",w:"high-value outcome for a KRITIS buyer."},{n:3,t:"Anchored on the premium tier",m:"Anchor High",q:"Led with the 6-week SLA tier",w:"set a strong reference point."},{n:4,t:"Offered an uptime guarantee",m:"Risk Reversal",q:"99.5% uptime or service credits",w:"reduced perceived delivery risk."},{n:5,t:"Locked a concrete next step",m:"CLOSER",q:"Commercial deep-dive booked + owner named",w:"clear forward motion."}],
+    improve:[{n:1,t:"Get the allocated budget",m:"Discover Budget",wh:"value was strong but no budget figure was confirmed.",tr:'"What budget band is earmarked for this retrofit?" before the commercial call.'},{n:2,t:"Send the leave-behind same day",m:"Reduce Effort/Delay",tr:"email the spec sheet within the hour while interest is hot."}],
+    conf:"0.90", run:"3992"
+  },
+  {
+    id:"bima", chip:"4.5", chipc:"good",
+    title:"BImA Berlin — modular units discovery", listTitle:"BImA Berlin — modular units",
+    listMeta:"May 30 · 41 min",
+    metaLine:"2026-05-30 · 41 min · 5,640 words · AE Hanna Gia Nguyen → Dr. Lena Vogt (Project Lead) + 3",
+    md:{AE:"Hanna Gia Nguyen","Client contact":"Dr. Lena Vogt — Project Lead (BImA)","Product pitched":"Rapidly-deployable modular buildings · offices, healthcare modules, temporary schools",Duration:"41 min · 5,640 words",Flags:"none"},
+    sig:{talk:"41% / 59%",sent:"Positive",sentc:"good",eng:"92",q:"12 / 15"},
+    exec:"An exemplary discovery call. Hanna spent most of the time listening, mapped BImA's deployment timeline and KRITIS constraints, quantified the cost of delays, and co-built the business case. She named the budget question early and offered a staged risk-reversal, ending with strong mutual next steps and an internal champion.",
+    tender:{linked:true, name:"Modulare Verwaltungsgebäude — Bund 2026", meta:"NOT_STARTED · buyer BImA · deadline Aug 14 · €8.6M"},
+    headline:"Textbook discovery — listened more than pitched, quantified value, identified a champion. Could trial-close a touch earlier.",
+    ae:{o:"4.7",dims:[{n:"Communication",s:5,note:"Listened 59% of the time; reflected back BImA's priorities precisely."},{n:"Understanding client needs",s:5,note:"Quantified deployment-delay cost and mapped the multi-stakeholder process."},{n:"Technical explanations",s:4,note:"Clear on modular options; deferred one certification detail to follow-up."}]},
+    cl:{o:"4.4",dims:[{n:"Buying intent",s:5},{n:"Pain acknowledgment",s:5},{n:"Decision authority",s:4},{n:"Objection profile",s:4},{n:"Misunderstandings",s:5}]},
+    worked:[{n:1,t:"Discovery dominated the call",m:"Discover Before Pitching",q:"~25 min of questions before any pitch",w:"earned trust and surfaced the real constraints."},{n:2,t:"Quantified deployment-speed value",m:"Value Equation",q:"Weeks-not-months to occupancy",w:"tied speed directly to BImA's cost of delay."},{n:3,t:"Named budget early",m:"Discover Budget",q:"Asked the allocated envelope upfront",w:"avoided quoting blind."},{n:4,t:"Staged risk-reversal",m:"Risk Reversal",q:"Pilot module before full rollout",w:"de-risked a large commitment."},{n:5,t:"Mutual action plan + champion",m:"CLOSER",q:"Co-built next steps; Dr. Vogt to sponsor internally",w:"strong forward commitment."}],
+    improve:[{n:1,t:"Trial-close a little earlier",m:"CLOSER",wh:"discovery ran long before testing commitment.",tr:'mid-call: "If we can hit your timeline, is this something you\'d champion?"'},{n:2,t:"Confirm the procurement regime",m:"Qualify the Process",tr:"verify above/below EU threshold to tailor the bid format."}],
+    conf:"0.92", run:"3984"
+  },
+  {
+    id:"rheinmain", chip:"2.4", chipc:"low",
+    title:"Rhein-Main Logistik — follow-up", listTitle:"Rhein-Main Logistik — follow-up",
+    listMeta:"May 28 · 12 min",
+    metaLine:"2026-05-28 · 12 min · 1,410 words · AE Hanna Gia Nguyen → Stefan Adler",
+    md:{AE:"Hanna Gia Nguyen","Client contact":"Stefan Adler","Product pitched":"Container buffer / inland depot modular systems",Duration:"12 min · 1,410 words",Flags:'<span class="flag">⚠ low engagement · no next step set</span>'},
+    sig:{talk:"78% / 22%",sent:"Neutral → negative",sentc:"low",eng:"51",q:"3 / 1"},
+    exec:"A rushed follow-up. Hanna dominated the conversation, re-pitched features without re-establishing the pain, never confirmed budget or decision authority, and ended without a concrete next step. The buyer disengaged toward the end.",
+    tender:{linked:false, best:{name:"Container Buffer — Hamburg Port",match:"64%",meta:"NOT_STARTED · deadline Jul 30"}, others:[{name:"Inland Depot Modernisation — DB Cargo",meta:"OPEN · deadline Sep 5"}]},
+    headline:"Weak follow-up — AE dominated airtime, no pain re-established, no authority/budget, no next step. Recoverable with a reset call.",
+    ae:{o:"2.3",dims:[{n:"Communication",s:2,note:'Talked 78% of the time; monologued features. <span class="ev">Buyer went quiet in the last third.</span>'},{n:"Understanding client needs",s:2,note:"No discovery — assumed the prior pain still held without checking."},{n:"Technical explanations",s:3,note:"Specs were accurate but delivered without context the buyer asked for."}]},
+    cl:{o:"2.4",dims:[{n:"Buying intent",s:2},{n:"Pain acknowledgment",s:2},{n:"Decision authority",s:2},{n:"Objection profile",s:3},{n:"Misunderstandings",s:3}]},
+    worked:[{n:1,t:"Maintained rapport",m:"Build Rapport",q:"Friendly, referenced the prior call",w:"kept the relationship warm despite a weak call."},{n:2,t:"Accurate technical recall",m:"Credibility",q:"Recalled prior requirements correctly",w:"showed preparation."}],
+    improve:[{n:1,t:"Talk far less, listen more",m:"Discover Before Pitching",wh:"78% AE talk-time — buyer barely spoke.",tr:"open with a question and aim for a 40/60 talk ratio."},{n:2,t:"Re-establish the pain",m:"Cost of Status Quo",wh:"re-pitched features without re-confirming the problem.",tr:'"Since we last spoke, what\'s changed about the depot bottleneck?"'},{n:3,t:"Confirm decision authority",m:"Qualify",wh:"never checked who signs off.",tr:'"Who else needs to be in the room to move this forward?"'},{n:4,t:"Secure a concrete next step",m:"CLOSER",wh:"call ended with no date or action.",tr:"always leave with a scheduled next step + owner."},{n:5,t:"Quantify value vs. status quo",m:"Value Equation",tr:"link the container-buffer ROI to Rhein-Main's throughput numbers."}],
+    conf:"0.81", run:"3979"
+  }
+];
+
+let cur = "kodeca", curTab = "sum";
+const HEX = {good:"#34d399",mid:"#fbbf24",low:"#f87171"};
+const col = s => s>=4?"good":(s>=3?"mid":"low");
+const pct = s => Math.round(s/5*100);
+
+function dimHTML(d){
+  const c=col(d.s);
+  return `<div class="dim"><div class="row"><span>${d.n}</span><b style="color:${HEX[c]}">${d.s}/5</b></div>
+    <div class="bar"><i style="width:${pct(d.s)}%;background:${HEX[c]}"></i></div>${d.note?`<p>${d.note}</p>`:""}</div>`;
+}
+function ringHTML(o,label){
+  const c=col(parseFloat(o));
+  return `<div><div class="ring" style="background:conic-gradient(${HEX[c]} ${pct(parseFloat(o))}%,rgba(255,255,255,.08) 0)"><div class="in"><b>${o}</b><span>/ 5</span></div></div><div class="cap">${label}</div></div>`;
+}
+function tenderHTML(t){
+  if(t.linked) return `<div class="tender-box"><div class="hd">🔗 Linked: <b style="color:var(--txt)">${t.name}</b> <span style="color:var(--muted)">· ${t.meta}</span><button class="btn">Change</button></div></div>`;
+  return `<div class="tender-box"><div class="hd">🔗 Not linked yet<button class="btn">+ Link to tender</button></div>
+    <input class="search" placeholder="Search tenders by title, buyer, niche…"/>
+    <div class="topt best"><div><div class="tt">✨ ${t.best.name} <span class="match">· ${t.best.match} match</span></div><div class="ts">${t.best.meta}</div></div><button class="lk">Link</button></div>
+    ${t.others.map(o=>`<div class="topt"><div><div class="tt">${o.name}</div><div class="ts">${o.meta}</div></div><button class="lk">Link</button></div>`).join("")}</div>`;
+}
+// nested coaching helpers: Main → Sub → detail
+function scoreBadge(s){const c=col(parseFloat(s));return `<span class="scbadge" style="background:${HEX[c]}22;color:${HEX[c]}">${s}/5</span>`;}
+function m1(ico,bg,name,scHtml,bodyHtml){return `<details class="m1"><summary><span class="ico" style="background:${bg}">${ico}</span>${name}<span class="sc">${scHtml}</span></summary><div class="m1b">${bodyHtml}</div></details>`;}
+function m2dim(d){const c=col(d.s);return `<details class="m2"><summary>${d.n}<span class="sc">${scoreBadge(d.s)}</span></summary><div class="m2b"><div class="bar"><i style="width:${pct(d.s)}%;background:${HEX[c]}"></i></div>${d.note?`<p>${d.note}</p>`:`<p style="color:var(--faint)">No extra note for this area.</p>`}</div></details>`;}
+function m2worked(w){return `<details class="m2 good-edge"><summary>${w.n} · ${w.t}<span class="meth">${w.m}</span></summary><div class="m2b"><p class="quote">"${w.q}"</p><div class="ln"><b>Why:</b> ${w.w}</div></div></details>`;}
+function m2improve(w){return `<details class="m2 improve-edge"><summary>${w.n} · ${w.t}<span class="meth">${w.m}</span></summary><div class="m2b">${w.wh?`<div class="ln"><b>What happened:</b> ${w.wh}</div>`:""}<div class="ln"><b>Try:</b> ${w.tr}</div></div></details>`;}
+function allDet(open){document.querySelectorAll("#coach details").forEach(d=>d.open=open);}
+function render(){
+  const m = MEETINGS.find(x=>x.id===cur);
+  document.getElementById("deth").innerHTML =
+    `<h2>${m.title} <span class="lens">Hormozi lens</span></h2><div class="meta">${m.metaLine} · <a href="#">▶ Recording</a></div>`;
+  document.getElementById("sum").innerHTML =
+    `<div class="label">Meeting metadata</div><div class="meta-grid">${Object.entries(m.md).map(([k,v])=>`<div class="k">${k}</div><div>${v}</div>`).join("")}</div>
+     <div class="label">Read AI signals</div><div class="signals">
+       <div class="sig"><div class="v">${m.sig.talk}</div><div class="k">Talk ratio · AE / client</div></div>
+       <div class="sig"><div class="v" style="color:${HEX[m.sig.sentc]}">${m.sig.sent}</div><div class="k">Sentiment</div></div>
+       <div class="sig"><div class="v">${m.sig.eng}</div><div class="k">Engagement (Read score)</div></div>
+       <div class="sig"><div class="v">${m.sig.q}</div><div class="k">Questions · AE / client</div></div></div>
+     <div class="label">Executive summary</div><p class="overview">${m.exec}</p>
+     <div class="label">Tender</div>${tenderHTML(m.tender)}`;
+  document.getElementById("coach").innerHTML =
+    `<div class="overall">${ringHTML(m.ae.o,"AE performance")}${ringHTML(m.cl.o,"Client analysis")}<div style="color:var(--muted);font-size:12.5px;max-width:320px">${m.headline}</div></div>
+     <div class="acctools"><button onclick="allDet(true)">⤢ Expand all</button><button onclick="allDet(false)">⤡ Collapse all</button></div>
+     ${m1("📊","rgba(56,189,248,.14)","AE performance",scoreBadge(m.ae.o)+`<span class="cnt">${m.ae.dims.length} areas</span>`, m.ae.dims.map(m2dim).join(""))}
+     ${m1("🧭","rgba(167,139,250,.14)","Client analysis",scoreBadge(m.cl.o)+`<span class="cnt">${m.cl.dims.length} areas</span>`, m.cl.dims.map(m2dim).join(""))}
+     ${m1("✅","rgba(52,211,153,.14)","What worked",`<span class="cnt">${m.worked.length} highlights</span>`, m.worked.map(m2worked).join(""))}
+     ${m1("🔧","rgba(251,191,36,.14)","What to improve",`<span class="cnt">${m.improve.length} suggestions</span>`, m.improve.map(m2improve).join(""))}
+     <div style="margin-top:14px;color:var(--faint);font-size:11.5px">AI confidence ${m.conf} · scored from the Read AI transcript · workflow run ${m.run}</div>`;
+  // restore active tab
+  document.querySelectorAll(".pane").forEach(p=>p.classList.toggle("on", p.id===curTab));
+  document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on", t.getAttribute("data-t")===curTab));
+  // list selection
+  document.querySelectorAll(".mtg").forEach(el=>el.classList.toggle("sel", el.dataset.id===cur));
+}
+function renderList(){
+  document.getElementById("list").innerHTML = MEETINGS.map(m=>
+    `<div class="mtg" data-id="${m.id}" onclick="pick('${m.id}')"><div><div class="t">${m.listTitle}</div><div class="m">${m.listMeta}</div></div><span class="chip ${m.chipc}">${m.chip}</span></div>`).join("");
+}
+function pick(id){ cur=id; render(); }
+function tab(el){ curTab=el.getAttribute("data-t"); render(); }
+renderList(); render();
+</script>
+</body>
+</html>

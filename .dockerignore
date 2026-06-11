@@ -1,0 +1,30 @@
+# Keep the Docker build context small AND ensure host-built (macOS) artifacts
+# never leak into the linux images. Everything below is regenerated inside the
+# image by `pnpm install` / `nest build` / `next build`.
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+.git
+**/*.tsbuildinfo
+
+# Local env + editor/OS cruft. (All .env files — runtime env comes from compose,
+# never baked into the image; also keeps a local apps/api/.env out of the image.)
+.env
+**/.env
+**/.env.local
+**/.env.*.local
+.DS_Store
+**/.DS_Store
+
+# Docs / non-build assets.
+**/*.md
+*.pdf
+
+# Repo areas that never belong in the api/web images (the ai-stack runs as its
+# own compose project; docs/tasks/.claude are not build inputs).
+ai-stack/
+docs/
+tasks/
+.claude/
+.github/

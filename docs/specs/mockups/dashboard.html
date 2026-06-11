@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Dashboard — Operations cockpit</title>
+<style>
+  :root{--bg:#0b0b0e;--panel:#141418;--panel2:#17171c;--line:rgba(255,255,255,.08);
+    --txt:#e9e9ee;--muted:#8b8b95;--faint:#6a6a73;--good:#34d399;--mid:#fbbf24;--low:#f87171;--sky:#38bdf8;--violet:#a78bfa;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+  .wrap{max-width:1120px;margin:0 auto;padding:24px}
+  .phead{display:flex;align-items:center;gap:12px;margin-bottom:18px}
+  .phead h1{font-size:23px;margin:0;letter-spacing:-.02em}.phead .d{color:var(--muted);font-size:13px}
+  .seg{margin-left:auto;display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .seg span{padding:6px 13px;font-size:12.5px;color:var(--muted);cursor:pointer}.seg span.on{background:var(--panel2);color:var(--txt)}
+  .h{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin:0 0 11px}
+  /* kpis */
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:20px}
+  .kpi{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:13px 15px}
+  .kpi .v{font-size:22px;font-weight:800}.kpi .k{font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em}
+  .kpi .dlt{font-size:11px;color:var(--good);margin-top:2px}
+  /* funnel */
+  .sec{margin-bottom:22px}
+  .stepf{display:flex;align-items:center;gap:4px}
+  .st{flex:1;border:1px solid var(--line);border-radius:11px;background:var(--panel2);padding:12px 8px;text-align:center}
+  .st .v{font-size:20px;font-weight:700}.st .k{font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em}.st .pc{font-size:10px;color:var(--sky)}
+  .arr{color:var(--faint);flex:0 0 16px;text-align:center}
+  /* attention */
+  .att{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .acard{border:1px solid var(--line);border-radius:12px;padding:13px 15px;background:var(--panel);cursor:pointer;transition:.15s}
+  .acard:hover{border-color:rgba(56,189,248,.45);transform:translateY(-1px)}
+  .acard.amber{border-color:rgba(251,191,36,.35);background:rgba(251,191,36,.05)}.acard.ok{border-color:rgba(52,211,153,.3)}
+  .acard .n{font-size:24px;font-weight:800}.acard .l{font-size:12px;color:var(--muted);margin-top:1px}.acard .go{font-size:11px;color:var(--sky);margin-top:6px;font-weight:600}
+  /* areas */
+  .areas{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+  .area{border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:16px 18px;cursor:pointer;transition:.15s}
+  .area:hover{border-color:rgba(56,189,248,.45)}
+  .area .tt{font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px}
+  .area .tt .arrow{margin-left:auto;color:var(--faint)}
+  .area .stats{display:flex;gap:18px;margin-top:10px;font-size:12.5px;color:var(--muted)}
+  .area .stats b{color:var(--txt);font-size:16px;display:block;font-weight:700}
+  .ico{width:9px;height:9px;border-radius:50%}
+  /* activity + pipeline */
+  .cols{display:grid;grid-template-columns:1.3fr 1fr;gap:16px}
+  .card{border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:16px 18px}
+  .feed .f{display:flex;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line);font-size:12.5px}.feed .f:last-child{border:none}
+  .feed .ft{flex:0 0 60px;color:var(--faint)}.feed .fd{color:var(--muted)}.feed .fd b{color:var(--txt)}
+  .pl .row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:12.5px}.pl .row:last-child{border:none}
+  .pl .tn{flex:1;color:var(--sky);font-weight:600}.pl .tv{font-weight:700}
+  .toast{position:fixed;bottom:20px;right:20px;background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--sky);border-radius:10px;padding:11px 15px;font-size:13px;z-index:60;opacity:0;transform:translateY(10px);transition:.22s}.toast.on{opacity:1;transform:none}
+  .note{margin-top:14px;color:var(--faint);font-size:11px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="phead">
+    <div><h1>Good afternoon, Hanna</h1><div class="d">Tuesday, 3 June 2026 · everything's running · 0 errors</div></div>
+    <div class="seg" onclick="seg(event)"><span>Today</span><span class="on">7 days</span><span>30 days</span></div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="v">7</div><div class="k">Leads</div><div class="dlt">▲ this week</div></div>
+    <div class="kpi"><div class="v">8</div><div class="k">Emails sent</div></div>
+    <div class="kpi"><div class="v">2</div><div class="k">Replies</div></div>
+    <div class="kpi"><div class="v">1</div><div class="k">Meetings</div></div>
+    <div class="kpi"><div class="v" style="color:var(--good)">1</div><div class="k">Customers won</div></div>
+  </div>
+
+  <div class="sec">
+    <p class="h">Acquisition funnel · 7 days</p>
+    <div class="stepf">
+      <div class="st"><div class="v">7</div><div class="k">Leads</div></div><div class="arr">▸</div>
+      <div class="st"><div class="v">7</div><div class="k">Emailed</div><div class="pc">100%</div></div><div class="arr">▸</div>
+      <div class="st"><div class="v">2</div><div class="k">Replied</div><div class="pc">29%</div></div><div class="arr">▸</div>
+      <div class="st"><div class="v">1</div><div class="k">Meeting</div><div class="pc">50%</div></div><div class="arr">▸</div>
+      <div class="st"><div class="v" style="color:var(--good)">1</div><div class="k">Won</div><div class="pc">100%</div></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <p class="h">Needs attention</p>
+    <div class="att">
+      <div class="acard amber" onclick="go('Marketing — Draft review')"><div class="n" style="color:var(--mid)">3</div><div class="l">RAG drafts to approve</div><div class="go">→ Marketing</div></div>
+      <div class="acard" onclick="go('Sales Agent')"><div class="n" style="color:var(--sky)">1</div><div class="l">meeting to coach</div><div class="go">→ Sales</div></div>
+      <div class="acard" onclick="go('Key Account')"><div class="n" style="color:var(--violet)">2</div><div class="l">hot leads to convert</div><div class="go">→ Key Account</div></div>
+      <div class="acard ok" onclick="go('Report')"><div class="n" style="color:var(--good)">0</div><div class="l">failures · deadlines at risk</div><div class="go">all clear</div></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <p class="h">Areas</p>
+    <div class="areas">
+      <div class="area" onclick="go('Growth Engine')"><div class="tt"><span class="ico" style="background:var(--good)"></span>Growth Engine<span class="arrow">→</span></div><div class="stats"><div><b>1</b>campaign live</div><div><b>26</b>runs · 7d</div><div><b>08:00</b>next send</div></div></div>
+      <div class="area" onclick="go('Marketing')"><div class="tt"><span class="ico" style="background:var(--mid)"></span>Marketing<span class="arrow">→</span></div><div class="stats"><div><b>3</b>drafts pending</div><div><b>86%</b>approval</div><div><b>8</b>emails 7d</div></div></div>
+      <div class="area" onclick="go('Sales Agent')"><div class="tt"><span class="ico" style="background:var(--sky)"></span>Sales Agent<span class="arrow">→</span></div><div class="stats"><div><b>4</b>meetings</div><div><b>3.5</b>avg /5</div><div><b>1</b>to coach</div></div></div>
+      <div class="area" onclick="go('Key Account')"><div class="tt"><span class="ico" style="background:var(--violet)"></span>Key Account<span class="arrow">→</span></div><div class="stats"><div><b>2</b>hot leads</div><div><b>1</b>customer won</div><div><b>0</b>at risk</div></div></div>
+    </div>
+  </div>
+
+  <div class="cols">
+    <div class="card feed">
+      <p class="h">Recent activity</p>
+      <div class="f"><span class="ft">10:44</span><span class="fd"><b>RAG Agent</b> drafted 3 replies to unsure leads — awaiting approval</span></div>
+      <div class="f"><span class="ft">09:59</span><span class="fd"><b>Lead Satellite</b> found 7 leads for Container Poland 2026</span></div>
+      <div class="f"><span class="ft">08:00</span><span class="fd"><b>Reach Bazooka</b> sent 8 outreach emails (news-hook + COLD-AGG)</span></div>
+      <div class="f"><span class="ft">Mon</span><span class="fd"><b>Reply Glock</b> booked 1 meeting · 2 replies handled</span></div>
+      <div class="f"><span class="ft">Mon</span><span class="fd"><b>Sales Agent</b> coached "Stadtwerke München" — 4.1/5</span></div>
+    </div>
+    <div class="card pl">
+      <p class="h">Pipeline by tender</p>
+      <div class="row"><span class="tn">LED Retrofit Berlin 2026</span><span class="tv">€2.4M</span></div>
+      <div class="row"><span class="tn">Straßenbeleuchtung München</span><span class="tv">€3.1M</span></div>
+      <div class="row"><span class="tn">Modulare Verwaltungsgebäude</span><span class="tv">€8.6M</span></div>
+      <div class="row"><span style="flex:1;color:var(--faint)">Total attributed</span><span class="tv" style="color:var(--good)">€14.1M</span></div>
+    </div>
+  </div>
+
+  <p class="note">Mockup — executive cockpit concept. Period toggle + area/attention cards are clickable. One direction; redirect anytime.</p>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+  let tT;function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');clearTimeout(tT);tT=setTimeout(()=>t.classList.remove('on'),2200);}
+  function go(name){toast('Opening '+name+'…');}
+  function seg(e){if(e.target.tagName!=='SPAN')return;[...e.currentTarget.children].forEach(s=>s.classList.remove('on'));e.target.classList.add('on');toast('Range: '+e.target.textContent);}
+</script>
+</body>
+</html>

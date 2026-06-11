@@ -1,0 +1,139 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1780156298565,
+      "tag": "0000_chilly_blink",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1780165988966,
+      "tag": "0001_common_giant_girl",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780167165629,
+      "tag": "0002_low_thing",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1780168352894,
+      "tag": "0003_icy_human_cannonball",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1780175147194,
+      "tag": "0004_amusing_katie_power",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1780176000000,
+      "tag": "0005_user_roles_positions",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1780180000000,
+      "tag": "0006_user_permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1780184000000,
+      "tag": "0007_hermes_rfqs",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1780188000000,
+      "tag": "0008_submission_file_list",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1780192000000,
+      "tag": "0009_arsenal_callback",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1780196000000,
+      "tag": "0010_arsenal_run_metrics",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1780200000000,
+      "tag": "0011_arsenal_run_n8n_exec",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1780204000000,
+      "tag": "0012_key_account_leads",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1780208000000,
+      "tag": "0013_user_phone",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1780562000000,
+      "tag": "0014_meetings",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1780563000000,
+      "tag": "0015_personas_transcript",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1780564000000,
+      "tag": "0016_campaign_drive_sync",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1780565000000,
+      "tag": "0017_lead_stage_ongoing",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1780566000000,
+      "tag": "0018_performance",
+      "breakpoints": true
+    }
+  ]
+}

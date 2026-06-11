@@ -1,21 +1,26 @@
-# Team Hosting — Mac mini: ERP Postgres + AI Gateway
+# Team Hosting — Mac mini: ERP (web + API + Postgres) + AI Gateway
 
-The Mac mini runs 24/7 and hosts two Docker stacks. Apps (`erp-server` NestJS, `erp-client`
-Next.js) run on laptops. **n8n runs on n8n CLOUD** (the local n8n was retired 2026-06-10; its
-volumes `erp-server_n8n_data` / `erp-server_n8n_postgres_data` are kept on disk just in case).
+The Mac mini runs 24/7 and hosts two Docker stacks — since 2026-06-11 that includes the FULL
+ERP (`erp-web` Next.js + `erp-api` NestJS + Postgres; previously Vercel + Render, both
+retired). **n8n runs on n8n CLOUD** (the local n8n was retired 2026-06-10; its volumes
+`erp-server_n8n_data` / `erp-server_n8n_postgres_data` are kept on disk just in case).
 
 ```
+team browsers ──tailnet──► mac-mini-ca-mac.tailc3d837.ts.net:3000 (erp-web) ──► :3001 (erp-api) ──► erp-postgres
+n8n cloud ──HTTPS+token──► Funnel :443 path /erp ──► erp-api :3001 (arsenal run callbacks)
 n8n cloud ──HTTPS+key──► Funnel :443 ──► LiteLLM "Hermes req" gateway ──► Ollama backends:
                                           │ cache: in-memory + Redis        ├ Trev's machine (tailnet, PRIMARY)
                                           │ audit: requests logged to PG    ├ mini hermes3:8b (fallback, free)
 n8n cloud ──HTTPS+api-key─► Funnel :8443 ─► Qdrant (RAG vectors)            └ deepseek-cloud (paid, optional)
 n8n cloud ──HTTPS+X-Search-Key─► Funnel :10000 ─► Caddy auth ─► SearXNG (web search for agents)
-laptops ──tailnet──► mac-mini-ca-mac.tailc3d837.ts.net:5432 (ERP Postgres)
+laptops ──tailnet──► mac-mini-ca-mac.tailc3d837.ts.net:5432 (ERP Postgres, per-dev DBs)
 ```
 
 | What | Where | Port |
 |---|---|---|
-| ERP Postgres | `erp-server/docker-compose.yml` | 5432 (published) |
+| ERP web (Next.js) | `erp-server/docker-compose.yml` (`erp-web`) | 3000 (published, tailnet access) |
+| ERP API (NestJS) | `erp-server/docker-compose.yml` (`erp-api`) | 3001 (published) + Funnel :443 path **/erp** |
+| ERP Postgres (pgvector/pg18) | `erp-server/docker-compose.yml` | 5432 (published) |
 | LiteLLM gateway | `ai-stack/docker-compose.yml` | 4000 loopback → Funnel **:443** |
 | Qdrant | `ai-stack/docker-compose.yml` | 6333 loopback → Funnel **:8443** |
 | SearXNG (behind Caddy auth) | `ai-stack/docker-compose.yml` | 8088 loopback → Funnel **:10000** |
@@ -24,13 +29,14 @@ laptops ──tailnet──► mac-mini-ca-mac.tailc3d837.ts.net:5432 (ERP Postg
 
 ## 1. Connecting from your laptop
 
-Install [Tailscale](https://tailscale.com/download), join the team tailnet. Then in your
-laptop's `erp-server/.env` (values from the vault):
+Install [Tailscale](https://tailscale.com/download), join the team tailnet.
+
+- **Using the ERP:** just open `http://mac-mini-ca-mac.tailc3d837.ts.net:3000` and log in.
+- **Developing:** in your laptop's `erp-server/.env` (values from the vault):
 
 ```bash
-DB_HOST=mac-mini-ca-mac.tailc3d837.ts.net
-DB_PORT=5432
-DB_NAME=erp_<yourname>     # your own database — see section 5
+DATABASE_URL=postgresql://evertrust-erp:<password>@mac-mini-ca-mac.tailc3d837.ts.net:5432/erp_<yourname>
+# your own per-dev database — see section 5. NEVER point a laptop at the prod `evertrust` DB.
 ```
 
 Fallbacks if the name doesn't resolve: `tailscale status` → `ping 100.81.249.124` → ask the
@@ -52,18 +58,22 @@ without checking — consolidating the two Postgreses is an open backlog item.
 
 - [ ] **Power (NOT yet applied!):** `sudo pmset -a sleep 0 displaysleep 0 disksleep 0 womp 1 autorestart 1 powernap 0`
 - [ ] Auto-login + FileVault OFF (power-cut recovery; office door is the physical control).
-- [ ] Docker Desktop: "Start when you sign in" ON; cap VM memory at **3 GB** (Settings →
-      Resources) — the mini has only 8 GB and the local Hermes fallback needs headroom.
+- [ ] Docker Desktop: "Start when you sign in" ON; cap VM memory at **4.5 GB** (Settings →
+      Resources) — raised from 3 GB on 2026-06-11 when erp-api/erp-web moved onto the mini.
+      The mini has only 8 GB and the local Hermes fallback needs headroom; if Ollama starts
+      swapping, prefer trimming container mem_limits over raising the VM cap further.
 - [ ] Tailscale signed in; **disable key expiry** for the mini in the admin console.
 - [ ] **Enable Funnel on the tailnet** (one-time, admin console → Access Controls; the policy
       needs `"nodeAttrs": [{"target": ["autogroup:member"], "attr": ["funnel"]}]`), then:
       ```bash
-      tailscale funnel --bg 4000               # :443   → gateway
-      tailscale funnel --bg --https=8443 6333  # :8443  → Qdrant
-      tailscale funnel --bg --https=10000 8088 # :10000 → SearXNG (Caddy auth proxy)
+      tailscale funnel --bg 4000                    # :443 /      → gateway
+      tailscale funnel --bg --set-path /erp 3001    # :443 /erp   → erp-api (n8n callbacks)
+      tailscale funnel --bg --https=8443 6333       # :8443       → Qdrant
+      tailscale funnel --bg --https=10000 8088      # :10000      → SearXNG (Caddy auth proxy)
       tailscale funnel status
       ```
-      `--bg` persists across reboots.
+      `--bg` persists across reboots. Funnel supports ONLY ports 443/8443/10000 — additional
+      services must be path-mounts on :443 like `/erp`.
 - [ ] Ollama: tuned via `~/Library/LaunchAgents/com.evertrust.ollama-env.plist`
       (KEEP_ALIVE 5m, flash attention, q8 KV cache, parallel 1 — keeps the 8 GB machine
       breathing); Ollama.app removed from plain Login Items (the agent starts it).
@@ -90,12 +100,14 @@ Mint more keys: `curl http://127.0.0.1:4000/key/generate -H "Authorization: Bear
 
 ## 5. Per-developer databases (ERP Postgres)
 
-`erp_<yourname>` per developer + `erp_shared` for integration, on the one Docker Postgres:
+`erp_<yourname>` per developer + `erp_shared` for integration, on the one Docker Postgres
+(which also holds the prod `evertrust` DB and the gateway's `litellm` DB):
 ```bash
 docker exec -it erp-postgres createdb -U evertrust-erp erp_<yourname>
 ```
-Schema experiments and (once Prisma is wired) `migrate dev` → your own DB only. TypeORM
-`synchronize` stays `false` forever.
+Schema experiments and `drizzle-kit migrate` (`corepack pnpm --filter @evertrust/db
+db:migrate`) → your own DB only. The prod `evertrust` DB is migrated exclusively by the
+erp-api container on restart (idempotent, see `erp-server/api-start.sh`).
 
 ## 6. Trev's machine — the primary model host
 
@@ -135,10 +147,12 @@ not a backup. (n8n cloud is backed up by n8n; export important workflows periodi
 
 ## 9. Exposure rules
 
-- Remote access for humans = Tailscale. The ONLY public surfaces are the three Funnel ports
-  (gateway 443 with virtual-key auth, Qdrant 8443 with API key, SearXNG 10000 with
-  X-Search-Key header enforced by a Caddy proxy) — required because n8n cloud lives outside
-  the tailnet. **Never port-forward anything on the office router.**
+- Remote access for humans = Tailscale (the ERP UI on :3000 is tailnet-only — it is NOT
+  funneled). The ONLY public surfaces are the Funnel mounts (gateway 443 `/` with virtual-key
+  auth, erp-api 443 `/erp` whose only JWT-less route is the arsenal callback guarded by
+  `x-arsenal-token`, Qdrant 8443 with API key, SearXNG 10000 with X-Search-Key header enforced
+  by a Caddy proxy) — required because n8n cloud lives outside the tailnet. **Never
+  port-forward anything on the office router.**
 - SearXNG live since 2026-06-10 (`tailscale funnel --bg --https=10000 8088`): web-search
   backend for the WF-03 agent nodes, so they can move off OpenAI's hosted webSearch.
 - Future: `tailscale serve`/TLS for prettier setups.
@@ -148,6 +162,8 @@ not a backup. (n8n cloud is backed up by n8n; export important workflows periodi
 | Symptom | Do this |
 |---|---|
 | Power cut | Automatic: autorestart → auto-login → Docker + Tailscale at login → `unless-stopped` containers + funnel resume. Verify `docker compose ps` in both stacks. |
+| ERP unreachable from a laptop | `tailscale status` on both ends; then `docker compose ps` in erp-server — erp-web needs erp-api healthy, erp-api needs postgres healthy (it migrates+seeds on boot, allow ~60s after restart). |
+| n8n arsenal callback failing | `curl https://mac-mini-ca-mac.tailc3d837.ts.net/erp/health` — if 404/timeout, re-check `tailscale funnel status` for the `/erp` path mount; then `docker logs erp-api`. |
 | n8n workflows erroring on LLM calls | `docker compose ps` (ai-stack), `docker logs ai-litellm`. Trev's machine offline → calls auto-fall back to `hermes-mini` (slower, weaker — expected). |
 | Gateway up but slow | Mini is swapping (hermes-mini loaded). Wait for the 5-min keep-alive unload, or point n8n traffic at `deepseek-cloud` temporarily. |
 | litellm restart-looping | `docker logs ai-litellm` — DB reachable? erp-server stack must be up (shared network). |

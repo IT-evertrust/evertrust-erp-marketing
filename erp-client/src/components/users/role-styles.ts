@@ -1,0 +1,40 @@
+import type { UserRole } from '@evertrust/shared';
+
+// Per-role visual language, shared by the role tiles + the team table so the
+// colour coding (authority: warm = high → neutral = low) stays consistent.
+//  - dot:   a solid swatch for accent bars + status dots
+//  - tint:  subtle bg+text for avatars / chips
+//  - blurb: one-line "what this role can do" (doubles as the access legend)
+export const ROLE_STYLES: Record<
+  UserRole,
+  { dot: string; tint: string; blurb: string }
+> = {
+  SUPER_ADMIN: {
+    dot: 'bg-amber-400',
+    tint: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+    blurb: 'Full control — including user management.',
+  },
+  ADMIN: {
+    dot: 'bg-sky-400',
+    tint: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
+    blurb: 'Everything except managing users.',
+  },
+  MANAGER: {
+    dot: 'bg-emerald-400',
+    tint: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+    blurb: 'Tenders, pricing & approvals, campaigns.',
+  },
+  EMPLOYEE: {
+    dot: 'bg-zinc-400',
+    tint: 'bg-muted text-muted-foreground',
+    blurb: 'Day-to-day operations — read + tender work.',
+  },
+};
+
+// Authority order, highest → lowest, for the tiles.
+export const ROLE_ORDER: UserRole[] = [
+  'SUPER_ADMIN',
+  'ADMIN',
+  'MANAGER',
+  'EMPLOYEE',
+];

@@ -1,0 +1,504 @@
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm';
+import { schema } from '@evertrust/db';
+import {
+  ARSENAL_STAGE_META,
+  isArsenalRunOk,
+  type ArsenalRunSource,
+  type ArsenalStage,
+  type MarketingReportDto,
+  type MarketingReportPeriod,
+  type MarketingStageReportDto,
+} from '@evertrust/shared';
+import { DB, type DbClient } from '../db/db.tokens';
+import { tenantScope } from '../common/tenant';
+import { AppConfigService } from '../config/app-config.service';
+import type { Env } from '../config/env.schema';
+
+type CampaignRow = typeof schema.campaigns.$inferSelect;
+type ArsenalRunRow = typeof schema.arsenalRuns.$inferSelect;
+
+// ArsenalStage → the env var holding that stage's n8n webhook URL. `as const
+// satisfies` keeps the literal key types (so config.get returns string, not the
+// whole Env value union) while still checking every value is a real Env key.
+const STAGE_WEBHOOK_ENV = {
+  LEAD_SATELLITE: 'N8N_LEAD_SATELLITE_WEBHOOK_URL',
+  AMMO_FORGE: 'N8N_AMMO_FORGE_WEBHOOK_URL',
+  REACH_BAZOOKA: 'N8N_REACH_BAZOOKA_WEBHOOK_URL',
+  REPLY_GLOCK: 'N8N_REPLY_GLOCK_WEBHOOK_URL',
+  SLEEPER_GRENADE: 'N8N_SLEEPER_GRENADE_WEBHOOK_URL',
+} as const satisfies Record<ArsenalStage, keyof Env>;
+
+// The HTTP method each stage's n8n webhook listens on. n8n registers a webhook
+// per method+path, so POSTing to a GET-only webhook returns 404. The existing
+// Reply Glock / Sleeper manual webhooks are GET ("Workflow got started"); AIM /
+// Lead Satellite / Ammo Forge are POST. Bazooka has no webhook yet (GET to match
+// the others' pattern once one is added).
+const STAGE_METHOD: Record<ArsenalStage, 'GET' | 'POST'> = {
+  LEAD_SATELLITE: 'POST',
+  AMMO_FORGE: 'POST',
+  REACH_BAZOOKA: 'GET',
+  REPLY_GLOCK: 'GET',
+  SLEEPER_GRENADE: 'GET',
+};
+
+// Fires an arsenal stage's n8n webhook ("Run now" + the daily scheduler) and
+// records the hand-off in arsenal_runs. ERP-first + observable: the webhook call
+// is best-effort and the ERP owns only the hand-off (DISPATCHED) — n8n then runs
+// async. The run row is written for BOTH success and failure so every trigger is
+// visible. A non-2xx / network error records FAILED rather than 500-ing.
+@Injectable()
+export class ArsenalService {
+  constructor(
+    @Inject(DB) private readonly db: DbClient,
+    private readonly config: AppConfigService,
+  ) {}
+
+  // Recent arsenal runs visible to the caller's org PLUS global (scheduled) runs,
+  // which carry no org. Newest-first, capped. (Low volume; filtered in-process to
+  // keep the org-OR-null scope simple.)
+  async listRuns(orgId: string): Promise<ArsenalRunRow[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.arsenalRuns)
+      .orderBy(desc(schema.arsenalRuns.createdAt));
+    return rows
+      .filter((r) => r.organizationId === orgId || r.organizationId === null)
+      .slice(0, 50);
+  }
+
+  // Clear the run feed (test-data reset): deletes the org's arsenal_runs PLUS the
+  // global (null-org) scheduled runs that show in its Live activity. Returns the
+  // count removed.
+  async clearRuns(orgId: string): Promise<number> {
+    const all = await this.db.select().from(schema.arsenalRuns);
+    const count = all.filter(
+      (r) => r.organizationId === orgId || r.organizationId === null,
+    ).length;
+    await this.db
+      .delete(schema.arsenalRuns)
+      .where(eq(schema.arsenalRuns.organizationId, orgId));
+    await this.db
+      .delete(schema.arsenalRuns)
+      .where(isNull(schema.arsenalRuns.organizationId));
+    return count;
+  }
+
+  // The org's Growth-Engine settings (the editable daily Bazooka time + timezone).
+  // Defaults to off (null) when no row exists yet.
+  async getSettings(
+    orgId: string,
+  ): Promise<{ bazookaDailyAt: string | null; bazookaTimezone: string | null }> {
+    const rows = await this.db
+      .select()
+      .from(schema.arsenalSettings)
+      .where(eq(schema.arsenalSettings.organizationId, orgId))
+      .limit(1);
+    return {
+      bazookaDailyAt: rows[0]?.bazookaDailyAt ?? null,
+      bazookaTimezone: rows[0]?.bazookaTimezone ?? null,
+    };
+  }
+
+  // Upsert the org's daily Bazooka time + timezone (time null = off). Returns the
+  // saved values.
+  async updateSettings(
+    orgId: string,
+    input: { bazookaDailyAt: string | null; bazookaTimezone: string | null },
+    userId: string,
+  ): Promise<{ bazookaDailyAt: string | null; bazookaTimezone: string | null }> {
+    const { bazookaDailyAt, bazookaTimezone } = input;
+    const existing = await this.db
+      .select()
+      .from(schema.arsenalSettings)
+      .where(eq(schema.arsenalSettings.organizationId, orgId))
+      .limit(1);
+
+    if (existing[0]) {
+      await this.db
+        .update(schema.arsenalSettings)
+        .set({
+          bazookaDailyAt,
+          bazookaTimezone,
+          updatedBy: userId,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.arsenalSettings.id, existing[0].id));
+    } else {
+      await this.db.insert(schema.arsenalSettings).values({
+        organizationId: orgId,
+        bazookaDailyAt,
+        bazookaTimezone,
+        updatedBy: userId,
+      });
+    }
+    return { bazookaDailyAt, bazookaTimezone };
+  }
+
+  // Every org that has a daily Bazooka time set — the scheduler arms one timer per
+  // row on boot (each interpreted in its saved timezone).
+  async settingsWithDailyTime(): Promise<
+    {
+      organizationId: string;
+      bazookaDailyAt: string;
+      bazookaTimezone: string | null;
+    }[]
+  > {
+    const rows = await this.db
+      .select()
+      .from(schema.arsenalSettings)
+      .where(isNotNull(schema.arsenalSettings.bazookaDailyAt));
+    return rows
+      .filter((r) => r.bazookaDailyAt !== null)
+      .map((r) => ({
+        organizationId: r.organizationId,
+        bazookaDailyAt: r.bazookaDailyAt as string,
+        bazookaTimezone: r.bazookaTimezone ?? null,
+      }));
+  }
+
+  // Fire a stage. PER_CAMPAIGN stages require a campaignId (and send that
+  // campaign's context); GLOBAL stages take none. orgId is null only for the
+  // scheduler's GLOBAL runs. 400 if the stage isn't configured / a PER_CAMPAIGN
+  // stage is missing its campaign; 404 if the campaign is cross-org.
+  async run(
+    orgId: string | null,
+    stage: ArsenalStage,
+    opts: { campaignId?: string; source: ArsenalRunSource; userId?: string | null },
+  ): Promise<ArsenalRunRow> {
+    const meta = ARSENAL_STAGE_META[stage];
+    let campaignId: string | null = null;
+    let payload: Record<string, unknown>;
+
+    // A campaign was chosen (a targeted run from a campaign) → send that
+    // campaign's context. Otherwise it's a global run (e.g. the Arsenal panel) —
+    // fire the stage's webhook with no campaign; n8n processes across campaigns.
+    if (opts.campaignId) {
+      if (!orgId) {
+        throw new BadRequestException('A campaign-scoped run needs a tenant.');
+      }
+      const campaign = await this.requireCampaign(orgId, opts.campaignId);
+      campaignId = campaign.id;
+      payload = { stage, campaign: this.campaignPayload(campaign) };
+    } else {
+      payload = { stage, source: 'erp' };
+    }
+
+    const webhookUrl = this.config.get(STAGE_WEBHOOK_ENV[stage]);
+    if (!webhookUrl) {
+      throw new BadRequestException(
+        `${meta.label} is not wired up yet — set ${STAGE_WEBHOOK_ENV[stage]} (and add a Webhook trigger to the n8n workflow).`,
+      );
+    }
+
+    const outcome = await this.fire(webhookUrl, STAGE_METHOD[stage], payload);
+
+    const inserted = await this.db
+      .insert(schema.arsenalRuns)
+      .values({
+        organizationId: orgId,
+        stage,
+        campaignId,
+        source: opts.source,
+        status: outcome.status,
+        detail: outcome.detail,
+        triggeredBy: opts.userId ?? null,
+      })
+      .returning();
+
+    const row = inserted[0];
+    if (!row) throw new Error('Failed to record arsenal run');
+    return row;
+  }
+
+  // Record an autonomous n8n run reported back via the callback (source N8N). This
+  // is the n8n→ERP writeback: n8n runs a stage on its own schedule / Drive poll and
+  // POSTs the FINAL outcome here so it shows in the per-campaign Live activity feed.
+  // The campaign (and its org) is resolved from the ERP campaignId OR the Drive
+  // folder id n8n knows natively; neither given = a global stage (org/campaign null).
+  // No JWT here — the controller gates this on the shared ingest token. Cross-org
+  // by design: the token is the trust boundary; the run is attributed to the
+  // campaign's own org. 404 if a given campaignId / driveFolderId matches nothing.
+  async recordCallback(input: {
+    stage: ArsenalStage;
+    status: 'SUCCESS' | 'ERROR';
+    campaignId?: string;
+    driveFolderId?: string;
+    detail?: string;
+    metrics?: Record<string, number>;
+  }): Promise<{ id: string }> {
+    let campaign: CampaignRow | null = null;
+    if (input.campaignId) {
+      const rows = await this.db
+        .select()
+        .from(schema.campaigns)
+        .where(eq(schema.campaigns.id, input.campaignId))
+        .limit(1);
+      campaign = rows[0] ?? null;
+      if (!campaign) {
+        throw new NotFoundException(
+          `No campaign for campaignId ${input.campaignId}`,
+        );
+      }
+    } else if (input.driveFolderId) {
+      const rows = await this.db
+        .select()
+        .from(schema.campaigns)
+        .where(eq(schema.campaigns.driveFolderId, input.driveFolderId))
+        .limit(1);
+      campaign = rows[0] ?? null;
+      if (!campaign) {
+        throw new NotFoundException(
+          `No campaign for driveFolderId ${input.driveFolderId}`,
+        );
+      }
+    }
+
+    const inserted = await this.db
+      .insert(schema.arsenalRuns)
+      .values({
+        organizationId: campaign?.organizationId ?? null,
+        stage: input.stage,
+        campaignId: campaign?.id ?? null,
+        source: 'N8N',
+        status: input.status,
+        detail: input.detail ?? null,
+        metrics: input.metrics ?? null,
+        triggeredBy: null,
+      })
+      .returning();
+
+    const row = inserted[0];
+    if (!row) throw new Error('Failed to record arsenal callback');
+    return { id: row.id };
+  }
+
+  // ----- Marketing report --------------------------------------------------
+
+  // The Growth-Engine sequence report for a period (day/week/month). Aggregates
+  // the org's runs (+ global null-org runs) into per-stage health (runs, ok/error,
+  // trend) + funnel metric sums (null until n8n reports them). Low volume → fetch
+  // all + window-filter in JS (mirrors listRuns).
+  async getReport(
+    orgId: string,
+    period: MarketingReportPeriod,
+    campaignId?: string,
+  ): Promise<MarketingReportDto> {
+    const now = new Date();
+    const { from, labels, indexOf, count } = this.buildBuckets(period, now);
+
+    const allRuns = await this.db.select().from(schema.arsenalRuns);
+    // Org (+ global null-org) runs in the window. When scoped to a campaign, only
+    // runs tagged with it — global-stage runs (campaignId null) drop out, which is
+    // honest: they aren't attributed to a campaign until reported per loop-iteration.
+    const runs = allRuns.filter(
+      (r) =>
+        (r.organizationId === orgId || r.organizationId === null) &&
+        (!campaignId || r.campaignId === campaignId) &&
+        indexOf(new Date(r.createdAt)) >= 0,
+    );
+
+    const stages: MarketingStageReportDto[] = (
+      Object.keys(ARSENAL_STAGE_META) as ArsenalStage[]
+    ).map((stage) => {
+      const stageRuns = runs.filter((r) => r.stage === stage);
+      const ok = stageRuns.filter((r) => isArsenalRunOk(r.status)).length;
+      const trend = new Array<number>(count).fill(0);
+      const metrics: Record<string, number> = {};
+      for (const r of stageRuns) {
+        const idx = indexOf(new Date(r.createdAt));
+        if (idx >= 0) trend[idx] = (trend[idx] ?? 0) + 1;
+        const m = r.metrics;
+        if (m) {
+          for (const [k, v] of Object.entries(m)) {
+            if (typeof v === 'number' && Number.isFinite(v)) {
+              metrics[k] = (metrics[k] ?? 0) + v;
+            }
+          }
+        }
+      }
+      return {
+        stage,
+        runs: stageRuns.length,
+        ok,
+        errors: stageRuns.length - ok,
+        successRate: stageRuns.length ? ok / stageRuns.length : null,
+        metrics,
+        trend,
+      };
+    });
+
+    // Funnel: sum across all runs; null when no run carried that key (= awaiting n8n).
+    const FUNNEL_KEYS = [
+      'leadsFound',
+      'emailsSent',
+      'repliesHandled',
+      'meetingsBooked',
+    ] as const;
+    const present: Partial<Record<string, boolean>> = {};
+    const sum: Partial<Record<string, number>> = {};
+    for (const r of runs) {
+      const m = r.metrics;
+      if (!m) continue;
+      for (const k of FUNNEL_KEYS) {
+        const v = m[k];
+        if (typeof v === 'number' && Number.isFinite(v)) {
+          present[k] = true;
+          sum[k] = (sum[k] ?? 0) + v;
+        }
+      }
+    }
+    const funnelVal = (k: string): number | null =>
+      present[k] ? (sum[k] ?? 0) : null;
+    const funnel = {
+      leadsFound: funnelVal('leadsFound'),
+      emailsSent: funnelVal('emailsSent'),
+      repliesHandled: funnelVal('repliesHandled'),
+      meetingsBooked: funnelVal('meetingsBooked'),
+    };
+
+    const totalOk = runs.filter((r) => isArsenalRunOk(r.status)).length;
+
+    const campaignRows = await this.db
+      .select()
+      .from(schema.campaigns)
+      .where(tenantScope(orgId, schema.campaigns));
+    const campaignsLaunched = campaignRows.filter((c) => {
+      if (campaignId && c.id !== campaignId) return false;
+      const when = c.deployedAt ?? c.createdAt;
+      return when ? indexOf(new Date(when)) >= 0 : false;
+    }).length;
+
+    return {
+      period,
+      campaignId: campaignId ?? null,
+      from: from.toISOString(),
+      to: now.toISOString(),
+      buckets: labels,
+      kpis: {
+        campaignsLaunched,
+        totalRuns: runs.length,
+        successRate: runs.length ? totalOk / runs.length : null,
+        meetingsBooked: funnel.meetingsBooked,
+      },
+      funnel,
+      stages,
+    };
+  }
+
+  // Build the time buckets for a period: a ROLLING window — day = last 24h
+  // (hourly bars), week = last 7 days, month = last 30 days (daily bars). Returns
+  // the window start, bucket-start labels (oldest->newest), and a date->bucket-index
+  // fn (-1 = outside the window).
+  private buildBuckets(period: MarketingReportPeriod, now: Date) {
+    const HOUR = 3_600_000;
+    const DAY = 86_400_000;
+    const labels: string[] = [];
+    let from: Date;
+    let indexOf: (d: Date) => number;
+
+    if (period === 'day') {
+      // Last 24 hours, one bar per hour (epoch-aligned hour boundaries).
+      const N = 24;
+      const curHour = Math.floor(now.getTime() / HOUR) * HOUR;
+      const start = curHour - (N - 1) * HOUR;
+      from = new Date(start);
+      for (let i = 0; i < N; i++) {
+        labels.push(new Date(start + i * HOUR).toISOString());
+      }
+      indexOf = (d) => {
+        const h = Math.floor(d.getTime() / HOUR) * HOUR;
+        const idx = Math.round((h - start) / HOUR);
+        return idx >= 0 && idx < N ? idx : -1;
+      };
+    } else {
+      // week = last 7 days, month = last 30 days; one bar per UTC day.
+      const N = period === 'week' ? 7 : 30;
+      const today = Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+      );
+      const start = today - (N - 1) * DAY;
+      from = new Date(start);
+      for (let i = 0; i < N; i++) {
+        labels.push(new Date(start + i * DAY).toISOString().slice(0, 10));
+      }
+      indexOf = (d) => {
+        const day = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+        const idx = Math.round((day - start) / DAY);
+        return idx >= 0 && idx < N ? idx : -1;
+      };
+    }
+    return { from, labels, indexOf, count: labels.length };
+  }
+
+  // Hit the stage webhook with its configured method; map the outcome to a run
+  // status + detail. GET webhooks just trigger the workflow (no body); POST ones
+  // carry the JSON payload (campaign context).
+  private async fire(
+    webhookUrl: string,
+    method: 'GET' | 'POST',
+    payload: Record<string, unknown>,
+  ): Promise<{ status: 'DISPATCHED' | 'FAILED'; detail: string }> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20_000);
+    try {
+      const res = await fetch(webhookUrl, {
+        method,
+        headers:
+          method === 'GET' ? undefined : { 'Content-Type': 'application/json' },
+        body: method === 'GET' ? undefined : JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      return res.ok
+        ? { status: 'DISPATCHED', detail: `HTTP ${res.status}` }
+        : { status: 'FAILED', detail: `webhook HTTP ${res.status}` };
+    } catch (err) {
+      return {
+        status: 'FAILED',
+        detail: err instanceof Error ? err.message : 'webhook call failed',
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  // Load a campaign within the org, or 404.
+  private async requireCampaign(
+    orgId: string,
+    campaignId: string,
+  ): Promise<CampaignRow> {
+    const rows = await this.db
+      .select()
+      .from(schema.campaigns)
+      .where(
+        and(
+          tenantScope(orgId, schema.campaigns),
+          eq(schema.campaigns.id, campaignId),
+        ),
+      )
+      .limit(1);
+    const row = rows[0];
+    if (!row) throw new NotFoundException('Campaign not found');
+    return row;
+  }
+
+  // The campaign context PER_CAMPAIGN stages receive (the AIM inputs + Drive refs).
+  private campaignPayload(c: CampaignRow) {
+    return {
+      campaignId: c.id,
+      name: c.name,
+      niche: c.niche,
+      target: c.target,
+      country: c.country,
+      state: c.state,
+      project: c.project,
+      gmailLabel: c.gmailLabel,
+      salesCalendarId: c.salesCalendarId,
+      whatsappNumber: c.whatsappNumber,
+      driveFolderId: c.driveFolderId,
+      driveFolderUrl: c.driveFolderUrl,
+    };
+  }
+}

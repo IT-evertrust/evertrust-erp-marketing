@@ -1,0 +1,770 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Evertrust — Intern Onboarding Pack</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  html { font-size: 11pt; }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    color: #1a1a1a;
+    line-height: 1.55;
+    margin: 0;
+  }
+  h1, h2, h3, h4 { color: #0c2340; line-height: 1.25; }
+  h1 { font-size: 26pt; margin: 0 0 .2em; letter-spacing: -.01em; }
+  h2 { font-size: 17pt; margin: 1.6em 0 .4em; border-bottom: 1px solid #d0d7e2; padding-bottom: .2em; }
+  h3 { font-size: 13pt; margin: 1.2em 0 .3em; }
+  h4 { font-size: 11pt; margin: 1em 0 .3em; }
+  p { margin: .5em 0; }
+  ul, ol { margin: .4em 0 .8em; padding-left: 1.4em; }
+  li { margin: .15em 0; }
+  table { width: 100%; border-collapse: collapse; margin: .8em 0; font-size: 10pt; }
+  th, td { border: 1px solid #d0d7e2; padding: 6px 9px; text-align: left; vertical-align: top; }
+  th { background: #eef2f7; font-weight: 600; }
+  code { font-family: "Consolas", "Cascadia Mono", monospace; font-size: .92em; background: #f1f3f6; padding: 1px 4px; border-radius: 3px; }
+  pre { background: #0c2340; color: #e8edf4; padding: 12px 14px; border-radius: 5px; font-family: "Consolas", "Cascadia Mono", monospace; font-size: 9.5pt; overflow-x: auto; line-height: 1.4; }
+  pre code { background: transparent; color: inherit; padding: 0; }
+  blockquote { border-left: 3px solid #0c2340; margin: .8em 0; padding: .2em 0 .2em 1em; color: #333; font-style: italic; background: #f7f9fc; }
+  a { color: #0c5aa0; text-decoration: none; }
+  hr { border: 0; border-top: 1px solid #d0d7e2; margin: 1.5em 0; }
+  .cover {
+    page-break-after: always;
+    height: 95vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    border-left: 6px solid #0c2340;
+    padding-left: 28px;
+  }
+  .cover .eyebrow { font-size: 10pt; text-transform: uppercase; letter-spacing: .15em; color: #6a7686; margin-bottom: 1em; }
+  .cover h1 { font-size: 38pt; margin: 0 0 .3em; }
+  .cover .sub { font-size: 14pt; color: #3a4757; max-width: 30em; margin-bottom: 2.5em; }
+  .cover .meta { font-size: 10pt; color: #6a7686; }
+  .section { page-break-before: always; }
+  .toc ol { list-style: none; padding: 0; counter-reset: toc; }
+  .toc li { counter-increment: toc; padding: .4em 0; border-bottom: 1px dotted #d0d7e2; font-size: 11pt; }
+  .toc li::before { content: counter(toc, decimal-leading-zero) "  "; color: #6a7686; font-weight: 600; }
+  .badge { display: inline-block; padding: 1px 7px; border-radius: 9px; font-size: 9pt; font-weight: 600; }
+  .badge-frozen { background: #d9e6f5; color: #1a3a66; }
+  .badge-auto { background: #d9f0db; color: #1a5a23; }
+  .badge-parked { background: #f0e6d9; color: #6b4a1a; }
+  .callout { background: #fff8e1; border-left: 4px solid #c8a13a; padding: .7em 1em; margin: 1em 0; }
+  .callout-danger { background: #fdecec; border-left-color: #b2392f; }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<section class="cover">
+  <div class="eyebrow">Evertrust GmbH</div>
+  <h1>Intern Onboarding Pack</h1>
+  <div class="sub">Your first week of reading. Read in order. Each section builds on the previous.</div>
+  <div class="meta">Last updated 2026-05-25 · Internal use only</div>
+</section>
+
+<!-- TOC -->
+<section class="section toc">
+  <h1>Read in this order</h1>
+  <ol>
+    <li><strong>The business</strong> — what Evertrust actually does, in 2 minutes</li>
+    <li><strong>The ERP</strong> — the internal system we're building and why</li>
+    <li><strong>The 8-phase workflow</strong> — the single most important diagram in this company</li>
+    <li><strong>Progress snapshot</strong> — what's built, what's in flight, what's not started</li>
+    <li><strong>Team and roles</strong> — tiers (L1–L5), lanes, and how work routes</li>
+    <li><strong>Tooling rules</strong> — stack, naming conventions, TEST → PROD discipline</li>
+    <li><strong>Glossary</strong> — German tender vocab, internal jargon, agent codenames</li>
+    <li><strong>Workflow canonical reference</strong> — the full authoritative scope doc (companion to <em>Workflow_17.xlsx</em>)</li>
+  </ol>
+  <h3>How to use this pack</h3>
+  <ul>
+    <li>Read top-to-bottom. Each chapter builds on the previous one.</li>
+    <li>Anything in <strong>bold</strong> is locked policy — don't relitigate without your team lead.</li>
+    <li>Anything marked <span class="badge badge-frozen">FROZEN</span> or <span class="badge badge-parked">PARKED</span> is intentionally out of scope right now. Don't try to fix it.</li>
+    <li>You will hear words like <em>Argus</em>, <em>Hermes</em>, <em>Sieve</em>, <em>GAEB</em>, <em>Vergabe</em>, <em>T-2</em>, <em>LV</em>, <em>L5 PIC</em>. They're all in the glossary.</li>
+  </ul>
+</section>
+
+<!-- 01 -->
+<section class="section">
+  <h1>01 · What Evertrust Does</h1>
+  <p><strong>Evertrust GmbH</strong> is a German company that wins and executes public-sector tenders (<em>öffentliche Ausschreibungen</em>).</p>
+
+  <h2>In plain English</h2>
+  <p>German government bodies — cities, schools, hospitals, public authorities — publish purchase requests on public procurement portals. They might need:</p>
+  <ul>
+    <li>500 LED light fixtures for a school</li>
+    <li>12 shipping containers for a construction site office</li>
+    <li>Daily office cleaning for a Kita (daycare)</li>
+    <li>Photovoltaic panels for a public building</li>
+    <li>DGUV safety inspections</li>
+  </ul>
+  <p>Companies bid for the work, the buyer picks one, the winner delivers.</p>
+  <p>Evertrust's job is to:</p>
+  <ol>
+    <li><strong>Find</strong> the relevant tenders (out of hundreds posted daily).</li>
+    <li><strong>Match</strong> them to the right end-customer profile.</li>
+    <li><strong>Price</strong> them accurately (parts cost + labor + margin + risk).</li>
+    <li><strong>Get customer approval</strong> in writing.</li>
+    <li><strong>Submit</strong> the bid before the deadline.</li>
+    <li><strong>Deliver</strong> if we win.</li>
+  </ol>
+  <p>We're paid for the deliveries — but the whole pipeline is the product. A missed deadline = €0. A wrong price = lost money or lost tender. The competitive edge is <strong>speed × accuracy × volume</strong>.</p>
+
+  <h2>Where the team sits</h2>
+  <ul>
+    <li><strong>Germany HQ</strong> — CEO + commercial relationships with German customers and suppliers.</li>
+    <li><strong>Vietnam ops office</strong> — the engine room. Ops team researches tenders, prices them, prepares submission packs. Marketing team scouts customers and partners.</li>
+  </ul>
+  <p>You'll likely be in the Vietnam office. Most of the work is in German (we'll get to vocabulary in the glossary).</p>
+
+  <h2>Active niches</h2>
+  <ul>
+    <li><strong>LED</strong> — lighting fixtures (the most mature niche; 10,000-SKU catalog already seeded)</li>
+    <li><strong>Container</strong> — shipping/office/sanitary containers</li>
+    <li><strong>Cleaning</strong> (<em>Reinigungsleistungen</em>) — office, school, glass, facade</li>
+    <li><strong>DGUV</strong> — pending partner approval (safety inspections)</li>
+    <li><strong>PV</strong> — pending (photovoltaics)</li>
+  </ul>
+
+  <div class="callout callout-danger">
+    <strong>The non-negotiable rule:</strong> No customer approval in writing = no submission. This is a process rule, not a software check. Email / WhatsApp / call-confirmed-by-text all count. But we never submit a bid the customer hasn't approved. Ever.
+  </div>
+</section>
+
+<!-- 02 -->
+<section class="section">
+  <h1>02 · The Evertrust ERP</h1>
+  <p>We're building a custom internal application — the <strong>Evertrust ERP</strong> — to run the entire tender pipeline.</p>
+
+  <h2>Why we're building this</h2>
+  <p>The team used to operate out of Lark Base + Google Sheets + scattered trackers. Problems:</p>
+  <ul>
+    <li>Operational state was spread across 4–5 tools — nobody had one truth.</li>
+    <li>Reporting required pulling from multiple places.</li>
+    <li>AI agents and n8n workflows had no consistent API to write to.</li>
+    <li>No control panel for the boss to see "what's blocked, what's urgent, who owns it."</li>
+  </ul>
+  <p>The ERP fixes that by being <strong>one</strong> place for everything.</p>
+
+  <h2>What it does today</h2>
+  <ul>
+    <li><strong>Auth</strong> — login with username OR email + password. 3 view tiers (Super Admin, Admin, Employee).</li>
+    <li><strong>Tender records</strong> — each tender has a portal-issued <em>Vergabe ID</em>, niche, customer, deadline, status, assigned L5 PIC, value estimate, checklist.</li>
+    <li><strong>Customer records</strong> — 26 seeded, with per-niche preferences (what they buy, what they reject).</li>
+    <li><strong>Supplier records</strong> — seeded from the LED catalog. Used by Hermes (outbound RFQ agent).</li>
+    <li><strong>Pricing engine</strong> — multi-source price suggestions with quality signals:
+      <ul>
+        <li><code>REAL_QUOTES</code> — green light, real supplier data</li>
+        <li><code>MIXED</code> — yellow, some real, some estimate</li>
+        <li><code>ESTIMATE_ONLY</code> — red, confidence capped at 60, can't auto-approve</li>
+      </ul>
+    </li>
+    <li><strong>Time tracking + salary</strong> — internal visibility only (NOT certified for German labor law; payroll runs externally via DATEV or Personio).</li>
+    <li><strong>AI bot</strong> — only Super Admin + Admin can ask it to create tasks. Read-only for everyone.</li>
+    <li><strong>Task routing, announcements, workflow error log</strong> — the supporting plumbing.</li>
+  </ul>
+
+  <h2>Stack</h2>
+  <ul>
+    <li><strong>Frontend</strong> — Next.js 15.1.4 (Turbopack), React 19, TypeScript 5.7, Tailwind 3.4 + shadcn UI</li>
+    <li><strong>Backend</strong> — Next.js API routes, NextAuth v5 (beta) for sessions</li>
+    <li><strong>Database</strong> — PostgreSQL 16 with Prisma 6.2 ORM</li>
+    <li><strong>AI</strong> — <code>@anthropic-ai/sdk</code> 0.96 (Claude)</li>
+    <li><strong>Automation spine</strong> — n8n (cloud) for moving data between systems</li>
+  </ul>
+
+  <h2>The rules (LOCKED as of 2026-05-22)</h2>
+  <ul>
+    <li>The stack is <strong>Claude Code + n8n + the Evertrust ERP</strong>. Nothing else.</li>
+    <li><strong>All operational state lives in the ERP's Postgres database.</strong></li>
+    <li><strong>n8n moves data; it never stores operational state.</strong> It's the scheduler, not the source of truth.</li>
+    <li><strong>The ERP UI is the daily-ops interface.</strong> Not Lark, not Sheets, not a third-party tracker.</li>
+    <li><strong>Lark is deprecated.</strong> Don't propose Lark Base, Lark Docs, Lark tasks, or Lark webhooks for new work.</li>
+    <li><strong>Google tools are minimized.</strong> Gmail only for email sends (the Hermes agent). Drive/Sheets/Calendar only for legacy or external requirements until ERP parity ships.</li>
+    <li><strong>Google Sheets is NEVER the default database.</strong></li>
+  </ul>
+  <div class="callout">If you're tempted to "just use a spreadsheet for this" — stop. Ask first.</div>
+
+  <h2>Where the code lives</h2>
+<pre><code>evertrust-erp/
+├── prisma/
+│   ├── schema.prisma     ← the database (single source of truth)
+│   └── seed.ts           ← seeded users, customers, tenders, dev rows
+├── src/
+│   ├── app/              ← Next.js routes (pages + API)
+│   ├── lib/
+│   │   └── pricing/      ← the pricing engine
+│   └── components/       ← UI
+└── scripts/              ← seed importers, sample pickers</code></pre>
+  <p>You don't need to understand all of it on day one.</p>
+</section>
+
+<!-- 03 -->
+<section class="section">
+  <h1>03 · The 8-Phase Tender Workflow</h1>
+  <p>This is the most important page in this pack. Everything else hangs off it.</p>
+  <p>Every tender flows through 8 phases. Each phase is a group of workflow rows (R01–R52) from our canonical workflow document, <strong>Evertrust_Workflow_17.xlsx</strong>.</p>
+
+  <h2>The 8 phases at a glance</h2>
+  <table>
+    <thead><tr><th>Phase</th><th>Rows</th><th>Name</th><th>What happens</th><th>Posture</th></tr></thead>
+    <tbody>
+      <tr><td><strong>1</strong></td><td>R01–R14</td><td>Partner scouting</td><td>Finding and signing partner companies whose tenders we'll execute.</td><td><span class="badge badge-frozen">FROZEN</span></td></tr>
+      <tr><td><strong>2</strong></td><td>R15–R15c</td><td>Tender search + intake</td><td>Scrape portals → extract → store in the ERP.</td><td><span class="badge badge-auto">Automate</span></td></tr>
+      <tr><td><strong>3</strong></td><td>R16–R19</td><td>Per-client shortlist + confirm/reject</td><td>Match each tender against client profiles → ask client → reject loops to next; all-reject trashes.</td><td><span class="badge badge-auto">Automate</span></td></tr>
+      <tr><td><strong>4</strong></td><td>R20–R22</td><td>Record open + assign + upload</td><td>Open ERP record → auto-assign L5 PIC → upload TYPE 1 docs.</td><td><span class="badge badge-auto">Automate</span></td></tr>
+      <tr><td><strong>5</strong></td><td>R23–R29</td><td>Pricing (AI + L5 + L3)</td><td>AI estimate → L5 refines → L3 senior signs off. Track A.</td><td><span class="badge badge-auto">Auto mixed</span></td></tr>
+      <tr><td><strong>6</strong></td><td>R30–R31</td><td>Client approval + deadline check</td><td>Get written customer approval → T-2 safety check.</td><td><span class="badge badge-auto">Auto + gate</span></td></tr>
+      <tr><td><strong>7</strong></td><td>R32–R37</td><td>Documents + QC + submit</td><td>Prepare TYPE 2 docs → optional L4 QC → submit at T-2. Track B converges here.</td><td><span class="badge badge-auto">Automate</span></td></tr>
+      <tr><td><strong>8</strong></td><td>R38–R52</td><td>Result + follow-up</td><td>Win/lose, contract, billing, KPI, partner review.</td><td><span class="badge badge-parked">Parked</span></td></tr>
+    </tbody>
+  </table>
+
+  <h2>Phase status chain — LOCKED (7 values)</h2>
+  <p>Every tender in the ERP has one of these statuses:</p>
+<pre><code>NOT_STARTED → PIC_PRICING → CUSTOMER_PRICING → DOCUMENTS → SUBMITTED → AWARDED → LOST</code></pre>
+  <ul>
+    <li><code>NOT_STARTED</code> — set when a record is first opened (Phase 4)</li>
+    <li><code>PIC_PRICING</code> — L5 is pricing it (Phase 5)</li>
+    <li><code>CUSTOMER_PRICING</code> — pricing pack sent to client for approval (Phase 5 → 6)</li>
+    <li><code>DOCUMENTS</code> — TYPE 2 documents being prepared (Phase 7, or Phase 5 Track B parallel)</li>
+    <li><code>SUBMITTED</code> — bid is in (Phase 7)</li>
+    <li><code>AWARDED</code> — we won (Phase 8)</li>
+    <li><code>LOST</code> — we didn't (Phase 8)</li>
+  </ul>
+  <p>Older docs may show 5-value or 10-value enums — those are deprecated. Use the 7 above.</p>
+
+  <h2>Track A and Track B run in parallel (Phase 5)</h2>
+  <ul>
+    <li><strong>Track A = Pricing</strong> — R25 (supplier quotes) → R27 (pricing pack) → R28 (senior judgment) → R29 (send to client)</li>
+    <li><strong>Track B = Documentation</strong> — R32 (TYPE 2 docs) → R33 (forms complete) → R34 (L4 QC, conditional)</li>
+  </ul>
+  <p><strong>Both tracks can start as soon as R24 marks the tender ready-to-price.</strong> They don't have to be sequential. Both must finish before R35 (submit).</p>
+
+  <h2>Two crucial dates</h2>
+  <ul>
+    <li><strong>T-5</strong> — pricing should be done 5 days before the deadline.</li>
+    <li><strong>T-2</strong> — submission target is 2 days before the deadline. We never aim for the deadline itself.</li>
+  </ul>
+  <p>If a tender is at risk of missing T-2, L4 escalates to L3. If still at risk, L3 escalates to L2.</p>
+
+  <h2>High-risk rule</h2>
+  <p>A tender is flagged <strong>high-risk</strong> when either:</p>
+  <ul>
+    <li>More than 35% of LV (line items) are benchmark-only (no real supplier price), OR</li>
+    <li>The top-5 most-expensive line items don't have a supplier link / reference / backup.</li>
+  </ul>
+
+  <h2>R34 L4 QC is conditional</h2>
+  <p>Not every tender gets L4 QC. Required for: risky, complex, high-value, sensitive customer, or anything Trev flags. Routine tenders can go directly L5 → submission.</p>
+
+  <h2>R27 pricing flow</h2>
+  <ol>
+    <li>Build the price in <strong>Excel</strong>.</li>
+    <li>Convert it through <strong>GAEB Online 2025</strong> (a German tender-format converter).</li>
+    <li>Write the result back into a <strong>PDF</strong> or <strong>GAEB X83</strong> file (the format the portal expects).</li>
+  </ol>
+</section>
+
+<!-- 04 -->
+<section class="section">
+  <h1>04 · Progress Snapshot (2026-05-25)</h1>
+  <p>A practical view of what's done, what's being built, and what's not started.</p>
+
+  <h2>Built and live</h2>
+
+  <h3>ERP core</h3>
+  <ul>
+    <li><strong>Authentication</strong> — login with username OR email, bcrypt-hashed passwords, NextAuth sessions.</li>
+    <li><strong>Three view tiers</strong> — Super Admin, Admin, Employee. Admins can toggle between views.</li>
+    <li><strong>Seed data</strong> — 6 starting users, 26 customers, 5 example tenders, 53 workflow dev-rows.</li>
+  </ul>
+
+  <h3>Database</h3>
+  <p>The full Prisma schema is in place. Major tables:</p>
+  <ul>
+    <li><code>User</code>, <code>Employee</code>, <code>ClockEvent</code> — identity and time tracking</li>
+    <li><code>Tender</code>, <code>TenderChecklistTemplate</code>, <code>TenderChecklistItem</code> — tender records and checklists</li>
+    <li><code>Customer</code>, <code>CustomerShortlistEntry</code>, <code>CustomerChecklistPreference</code> — customer profiles + matching rules</li>
+    <li><code>Supplier</code>, <code>PriceObservation</code> — supplier directory + price evidence</li>
+    <li><code>Task</code>, <code>Announcement</code>, <code>Lead</code>, <code>Campaign</code> — operational plumbing</li>
+    <li><code>WorkflowError</code>, <code>DocumentFile</code>, <code>AuditLog</code> — observability and compliance</li>
+    <li><code>BotConversation</code>, <code>BotMessage</code> — AI chat history</li>
+    <li><code>DevPhase</code>, <code>DevRow</code> — the 8 phases and 53 dev rows themselves, modelled in the DB</li>
+  </ul>
+
+  <h3>Pricing engine (Phase 5)</h3>
+  <ul>
+    <li>Combines price evidence from multiple sources (<code>SUPPLIER_QUOTE</code>, <code>MANUAL</code>, <code>AI_ESTIMATE</code>, etc.).</li>
+    <li>Weights them — supplier quote 90, manual 50, AI estimate 40. A single real supplier quote dominates AI estimates.</li>
+    <li>Returns a quality signal (<code>REAL_QUOTES</code> / <code>MIXED</code> / <code>ESTIMATE_ONLY</code>).</li>
+    <li>Caps confidence at 60 and blocks auto-accept when all evidence is estimate-only.</li>
+    <li>Emits warnings (e.g. "Only 1 real quote — a second will materially improve confidence").</li>
+  </ul>
+
+  <h3>Catalogs and price data</h3>
+  <ul>
+    <li><strong>LED catalog</strong> — 10,000-SKU bank with German specs, GTIN, manufacturer, alias index (~168k aliases for matching messy German LV line-items). Includes AI estimates as starting points.</li>
+    <li><strong>Container catalog</strong> — 22 hand-curated items, German aliases, no prices.</li>
+    <li><strong>Cleaning catalog</strong> — 15 hand-curated Reinigungsleistungen items, no prices.</li>
+    <li><strong>Real-price data</strong> — 27 web-researched market prices across 2 batches. Average correction vs AI estimate: <strong>-69%</strong> (AI bank was systematically inflated 3× on consumer/SMB items).</li>
+    <li><strong>Supplier seeds</strong> — 5 known LED manufacturers. <code>primaryEmail = null</code> deliberately, so Hermes refuses to send until L4 verifies a real contact.</li>
+  </ul>
+
+  <h3>Real-price intake pipeline</h3>
+  <p>Anyone can expand the price data without engineering help:</p>
+  <ul>
+    <li>Drop a CSV in <code>data/seed/intake/</code> (template at <code>data/seed/real-prices-template.csv</code>).</li>
+    <li>Run <code>pnpm tsx scripts/import-real-prices-csv.ts</code>.</li>
+    <li>Done. Idempotent, supports all 5 real sources, auto-creates suppliers.</li>
+  </ul>
+
+  <h3>Legal library</h3>
+  <p>Markdown corpus of German + Vietnamese procurement and labor law under <code>legal-sources/</code>. Used by Hermes to cite clauses when drafting.</p>
+
+  <h2>In design — not yet built</h2>
+  <ul>
+    <li><strong>Argus</strong> — Phase 2 tender scraper (Service-Bund, DTVP portals).</li>
+    <li><strong>Scribe</strong> — Phase 2 parser (GAEB X81/X82/X83, PDF OCR, structured field extraction).</li>
+    <li><strong>Sieve</strong> — Phase 3 bid/skip rules engine.</li>
+    <li><strong>Hermes</strong> — outbound messages (supplier RFQs, customer pricing approval, deadline pings). Gmail-only.</li>
+    <li><strong>n8n PROD workflows</strong> — workspace provisioned at <code>evertrustgmbh.app.n8n.cloud</code> but nothing posts to the ERP yet. First PROD pair: <strong>Workflow Error Logger → ERP <code>/api/errors</code></strong>.</li>
+  </ul>
+
+  <h2>Not yet started</h2>
+  <ul>
+    <li><strong>Production deployment</strong> — still on <code>localhost:3000</code>. PROD will live on a Mac mini once delivered.</li>
+    <li><strong>Nightly PostgreSQL backup</strong> — needs to be wired before PROD.</li>
+    <li><strong><code>ANTHROPIC_API_KEY</code></strong> in the ERP <code>.env</code> — bot is disabled until set.</li>
+  </ul>
+
+  <div class="callout">
+    <strong>What this means for you:</strong> if you're touching code, the ERP repo is real and runnable today. If you're touching operations, the pricing engine has real data and a real intake pipeline you can feed. If you're touching n8n, you'll be shipping the first live integrations — naming and TEST/PROD discipline matters.
+  </div>
+</section>
+
+<!-- 05 -->
+<section class="section">
+  <h1>05 · Team and Roles</h1>
+  <p>The team uses a 5-tier authority model. You will hear "L5", "L4", "L3" constantly. This is what they mean.</p>
+
+  <h2>Tier model</h2>
+  <table>
+    <thead><tr><th>Tier</th><th>Role</th><th>What they own</th></tr></thead>
+    <tbody>
+      <tr><td><strong>L1</strong></td><td>Super Admin / CEO / Strategy</td><td>Strategic direction. Final escalation terminal. Executive customer relationships.</td></tr>
+      <tr><td><strong>L2</strong></td><td>Governance / Director</td><td>Policy, approvals, AI rollout, escalation terminal. Measured by <em>decisions made on time</em>, not by tender output.</td></tr>
+      <tr><td><strong>L3</strong></td><td>Lane leads</td><td>Run a lane end-to-end. Operations, Marketing/Sales, HR (dual role).</td></tr>
+      <tr><td><strong>L4</strong></td><td>Niche / project leads</td><td>Own a niche or specific project. Sits above the L5 PIC on each tender.</td></tr>
+      <tr><td><strong>L5</strong></td><td>Members (executors)</td><td>Day-to-day operators. Each tender has one <strong>L5 PIC</strong>, by name.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Lanes</h2>
+  <ul>
+    <li><strong>OPERATIONS</strong> — the tender pipeline (Phases 2–7).</li>
+    <li><strong>MARKETING</strong> — partner scouting, customer acquisition (Phase 1 — frozen).</li>
+    <li><strong>HR</strong> — hiring, payroll, time tracking.</li>
+  </ul>
+
+  <h2>How work routes</h2>
+  <p>Routine work moves <strong>down</strong>: L3 → L4 → L5 picks it up.</p>
+  <p>Escalation moves <strong>up</strong>:</p>
+  <ul>
+    <li>L5 stuck → L4 helps.</li>
+    <li>L4 stuck → L3 helps.</li>
+    <li>L3 needs policy / approval → L2.</li>
+    <li>L2 needs strategic call → L1.</li>
+  </ul>
+  <p><strong>Not every problem escalates to L2.</strong> Routine new-supplier outreach, normal pricing, normal customer follow-up — stays at L4/L5. Only strategic / sensitive / high-risk / outside-lane cases go to L2.</p>
+
+  <h2>Each tender has one L5 PIC</h2>
+  <p>Every tender record in the ERP has a single named <code>assignedPicId</code>. That person is accountable for moving it through Phases 4–7. If they're stuck, they escalate — they don't drop it.</p>
+
+  <h2>Open seat: L5 CRM</h2>
+  <p>There's currently no dedicated L5 for client follow-up / CRM chasing. The CEO is covering it interim. This affects workflow rows 17–20, 29–30, 33, 38–43, 48–49. Don't be surprised if customer-side follow-up feels manual — that's why.</p>
+
+  <h2>Resigned — do not route work to</h2>
+  <p>If you see these names in old documents, they're gone: Norman, July, Tiger.</p>
+</section>
+
+<!-- 06 -->
+<section class="section">
+  <h1>06 · Tooling Rules</h1>
+  <p>These rules are locked. If you're tempted to break one, ask first.</p>
+
+  <h2>The stack</h2>
+  <blockquote><strong>Claude Code + n8n + the Evertrust ERP.</strong> Nothing else.</blockquote>
+
+  <h2>What's in / what's out</h2>
+  <h3>IN</h3>
+  <ul>
+    <li><strong>The Evertrust ERP</strong> (<code>localhost:3000</code> today, PROD on Mac mini later) — for ALL operational state.</li>
+    <li><strong>n8n</strong> (<code>evertrustgmbh.app.n8n.cloud</code>) — for moving data between systems. Reads/writes the ERP via HTTP API.</li>
+    <li><strong>Claude Code</strong> — for development, agent orchestration, doc writing, reviews.</li>
+    <li><strong>Gmail</strong> — for outbound email actions only (Hermes).</li>
+    <li><strong>PostgreSQL</strong> — the ERP's database. You don't touch it directly; you go through the ERP API.</li>
+  </ul>
+  <h3>OUT (deprecated as of 2026-05-22)</h3>
+  <ul>
+    <li><strong>Lark Base / Docs / tasks / webhooks</strong> — do not propose for new work.</li>
+    <li>82 legacy doc references to Lark will be swept in a future cleanup.</li>
+  </ul>
+  <h3>Minimized</h3>
+  <ul>
+    <li><strong>Google Sheets</strong> — never the default database. Only for legacy or external party requirements.</li>
+    <li><strong>Google Drive / Calendar</strong> — only for legacy or external requirements until ERP parity ships.</li>
+  </ul>
+
+  <h2>n8n naming convention</h2>
+<pre><code>[Lane] - [Function] - [Environment]</code></pre>
+  <p>Examples:</p>
+  <ul>
+    <li><code>Operations - Argus Service-Bund Scrape - TEST</code></li>
+    <li><code>Operations - Submission Evidence Logger - PROD</code></li>
+    <li><code>Supplier - Quote Request Router - TEST</code></li>
+    <li><code>CRM - Client Follow Up - PROD</code></li>
+  </ul>
+  <p><strong>Only two environments exist: TEST and PROD.</strong> No third value. No "DEV", no "STAGING".</p>
+
+  <h2>TEST vs PROD discipline</h2>
+  <ul>
+    <li><strong>Every PROD workflow has a TEST sibling.</strong> Always.</li>
+    <li><strong>TEST is never deleted after promotion.</strong> It stays alongside PROD forever, for re-testing.</li>
+    <li><strong>TEST writes only TEST-tagged rows. PROD writes only PROD-tagged rows.</strong></li>
+  </ul>
+
+  <h2>Promoting TEST → PROD: the 8 conditions</h2>
+  <p>A workflow can be promoted from TEST to PROD only when <strong>all 8</strong> are true:</p>
+  <ol>
+    <li>Three clean consecutive TEST runs (no error).</li>
+    <li>An intentional failure was triggered and logged in the error workflow.</li>
+    <li>Schema in the ERP confirmed (target tables/columns exist and accept the payload).</li>
+    <li>Blueprint document is complete and in <code>/docs/</code>.</li>
+    <li>PROD credentials owned by an L4+ person (not just stored in the workflow).</li>
+    <li>Workflow writes only PROD-tagged rows.</li>
+    <li>The error trigger is wired to the Workflow Error Logger.</li>
+    <li>Change-log sign-off in <code>docs/trev-change-log.md</code> (the change is approved, not pending).</li>
+  </ol>
+  <p>If you can't tick all 8 — it stays in TEST.</p>
+
+  <h2>Don't overbuild</h2>
+  <p>For each n8n workflow, default to:</p>
+  <ul>
+    <li>1 trigger</li>
+    <li>1 happy path</li>
+    <li>1 error path</li>
+    <li>≤ 12 nodes preferred</li>
+    <li>Native nodes first, expressions over Code nodes, no premature sub-workflows.</li>
+  </ul>
+
+  <h2>ERP-first, always</h2>
+  <p>Every n8n workflow reads and writes operational data <strong>through the ERP's HTTP API</strong> — never directly to Postgres.</p>
+
+  <h2>Change log</h2>
+  <p>Every meaningful change goes into <code>docs/trev-change-log.md</code> as <strong>Pending</strong> first. Once approved + implemented → <strong>Approved</strong>. If dropped → <strong>Rejected/Postponed</strong> with a reason.</p>
+
+  <h2>Trev's control view</h2>
+  <p>The boss (L2) measures the team by the answer to these five questions:</p>
+  <ol>
+    <li>What is <strong>urgent</strong>?</li>
+    <li>What is <strong>blocked</strong>?</li>
+    <li><strong>Who owns</strong> it?</li>
+    <li>What <strong>deadline</strong> is at risk?</li>
+    <li>What needs Trev's <strong>decision</strong>?</li>
+  </ol>
+  <p>When you design a dashboard, report, workflow, or chat update — these are the questions to answer.</p>
+</section>
+
+<!-- 07 -->
+<section class="section">
+  <h1>07 · Glossary</h1>
+  <p>Skim once on day one. Come back when you hear a word you don't know.</p>
+
+  <h2>German tender vocabulary</h2>
+  <table>
+    <thead><tr><th>German</th><th>English</th><th>What it means here</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Ausschreibung</strong></td><td>Tender / public bid</td><td>The thing we're going after.</td></tr>
+      <tr><td><strong>Vergabe</strong></td><td>Award (of a tender)</td><td>Each tender has a portal-issued <strong>Vergabe ID</strong> — our tender code in the ERP.</td></tr>
+      <tr><td><strong>Vergabe-ID</strong></td><td>Tender ID</td><td>Unique ID from the procurement portal. We use it as our tender code (no internal numbering).</td></tr>
+      <tr><td><strong>LV</strong> (<em>Leistungsverzeichnis</em>)</td><td>Bill of quantities</td><td>The line-by-line spec. Each line = qty × description × price.</td></tr>
+      <tr><td><strong>GAEB</strong></td><td>German exchange format</td><td>Standard for exchanging LV files. Variants: <strong>X81</strong> (buyer request), <strong>X83</strong> (priced response), <strong>X86</strong> (award).</td></tr>
+      <tr><td><strong>Reinigungsleistungen</strong></td><td>Cleaning services</td><td>The "Cleaning" niche.</td></tr>
+      <tr><td><strong>Bürocontainer / Sanitärcontainer</strong></td><td>Office / sanitary container</td><td>Common Container-niche items.</td></tr>
+      <tr><td><strong>Hochbau / Tiefbau</strong></td><td>Building / civil engineering</td><td>Historical niches; mostly inactive.</td></tr>
+      <tr><td><strong>Bietergemeinschaft</strong></td><td>Bidding consortium</td><td>A group bid. Not our default mode.</td></tr>
+      <tr><td><strong>Eignungsnachweis</strong></td><td>Proof of eligibility</td><td>Documents proving we're allowed to bid (insurance, registrations, etc.). Part of TYPE 1.</td></tr>
+      <tr><td><strong>Nachweis</strong></td><td>Proof / certificate</td><td>Any required document.</td></tr>
+      <tr><td><strong>Frist</strong></td><td>Deadline</td><td>What T-2 / T-5 are measured against.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Internal jargon</h2>
+  <table>
+    <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><strong>The 52-row workflow</strong></td><td>Canonical tender process, 52 rows (R01–R52) × 8 phases. v17 is current.</td></tr>
+      <tr><td><strong>The 8 phases</strong></td><td>Automation-posture grouping of the 52 rows.</td></tr>
+      <tr><td><strong>Status chain</strong></td><td>The 7 locked tender statuses (see Chapter 03).</td></tr>
+      <tr><td><strong>PIC</strong></td><td>Person In Charge. Each tender has one <strong>L5 PIC</strong>, by name.</td></tr>
+      <tr><td><strong>L1–L5</strong></td><td>Authority tiers (see Chapter 05).</td></tr>
+      <tr><td><strong>Lane</strong></td><td>OPERATIONS, MARKETING, or HR.</td></tr>
+      <tr><td><strong>Niche</strong></td><td>The category — LED, Container, Cleaning, DGUV, PV.</td></tr>
+      <tr><td><strong>TYPE 1 docs</strong></td><td>Eligibility / company docs (insurance, registration). Same for every tender.</td></tr>
+      <tr><td><strong>TYPE 2 docs</strong></td><td>Tender-specific docs (filled-out forms for this bid).</td></tr>
+      <tr><td><strong>T-2 / T-5</strong></td><td>"T minus 2 days" / "T minus 5 days" from deadline. Pricing target T-5; submission target T-2.</td></tr>
+      <tr><td><strong>R34 QC</strong></td><td>Optional L4 quality-check. Conditional — only for risky/complex/high-value/sensitive tenders.</td></tr>
+      <tr><td><strong>High-risk tender</strong></td><td>≥35% of LV lines are benchmark-only OR top-5 most-expensive lines lack supplier backup.</td></tr>
+      <tr><td><strong>Track A / Track B</strong></td><td>Phase 5 splits into Track A (pricing) and Track B (documentation), in parallel.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>ERP / engineering vocabulary</h2>
+  <table>
+    <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><strong>The ERP</strong></td><td>Our internal Next.js app. Replacement for Lark Base + Sheets.</td></tr>
+      <tr><td><strong>Prisma schema</strong></td><td>Database definition at <code>evertrust-erp/prisma/schema.prisma</code>. Single source of truth.</td></tr>
+      <tr><td><strong>Seed data</strong></td><td>Initial dataset loaded into a fresh DB via <code>prisma/seed.ts</code>.</td></tr>
+      <tr><td><strong>/api/...</strong></td><td>HTTP routes the ERP exposes. n8n calls these instead of touching DB directly.</td></tr>
+      <tr><td><strong>PriceObservation</strong></td><td>One row of price evidence — what was paid, by whom, when, source.</td></tr>
+      <tr><td><strong>Source (price)</strong></td><td><code>SUPPLIER_QUOTE</code>, <code>COMPETITOR_WINNER</code>, <code>OUR_SUBMITTED</code>, <code>MANUAL</code>, <code>OUR_BENCHMARK</code>, <code>AI_ESTIMATE</code>, <code>IBAU_HISTORICAL</code>.</td></tr>
+      <tr><td><strong>Quality signal</strong></td><td>Engine's verdict on a price: <code>REAL_QUOTES</code> (green) / <code>MIXED</code> (yellow) / <code>ESTIMATE_ONLY</code> (red).</td></tr>
+      <tr><td><strong>Confidence</strong></td><td>0–100 score on a price suggestion. Capped at 60 if all evidence is estimate-only.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>n8n vocabulary</h2>
+  <table>
+    <thead><tr><th>Term</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Workflow</strong></td><td>A single n8n automation. Named <code>[Lane] - [Function] - [Environment]</code>.</td></tr>
+      <tr><td><strong>TEST / PROD</strong></td><td>The only two environments.</td></tr>
+      <tr><td><strong>The 8 conditions</strong></td><td>Promotion checklist for TEST → PROD (see Chapter 06).</td></tr>
+      <tr><td><strong>Workflow Error Logger</strong></td><td>Shared error workflow every other workflow points its error trigger at.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Agent codenames (Claude Code subagents)</h2>
+  <table>
+    <thead><tr><th>Codename</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Argus</strong></td><td>Scrapes German tender portals (Phase 2).</td></tr>
+      <tr><td><strong>Scribe</strong></td><td>Parses raw scraped notices and GAEB/PDF files.</td></tr>
+      <tr><td><strong>Sieve</strong></td><td>Decides bid/skip on a parsed tender (Phase 3).</td></tr>
+      <tr><td><strong>Hermes</strong></td><td>Drafts and sends outbound messages — supplier RFQs, customer approval, reminders.</td></tr>
+      <tr><td><strong>Hydra</strong></td><td>Decomposes multi-phase goals; routes work to other agents.</td></tr>
+      <tr><td><strong>Eve</strong></td><td>Reviews work before it ships — code, n8n promotions, pricing math.</td></tr>
+      <tr><td><strong>Nero</strong></td><td>Writes code — ERP features, n8n workflows, scripts.</td></tr>
+      <tr><td><strong>Aza</strong></td><td>Writes documentation, summaries, daily notes, change-log entries.</td></tr>
+      <tr><td><strong>Cipher</strong></td><td>Security review — secret leaks, recipient verification, bot permissions.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>The boss's five questions</h2>
+  <p>When asked "what's the state?" — frame your update around these five:</p>
+  <ol>
+    <li>What is <strong>urgent</strong>?</li>
+    <li>What is <strong>blocked</strong>?</li>
+    <li><strong>Who owns</strong> it?</li>
+    <li>What <strong>deadline</strong> is at risk?</li>
+    <li>What needs my <strong>decision</strong>?</li>
+  </ol>
+
+  <hr>
+  <p style="text-align:center; color:#6a7686; margin-top:2em;"><em>One more chapter — the canonical workflow reference is next.</em></p>
+</section>
+
+<!-- 08 -->
+<section class="section">
+  <h1>08 · The Canonical Workflow Reference</h1>
+  <blockquote>This is the <strong>authoritative scope reference</strong> for the 52-row tender workflow.<br>
+  Version 1.0 · 2026-05-15 · Owner: Trev<br>
+  Companion to <em>Evertrust_Workflow_17.xlsx</em> (the canonical visual workflow). Chapter 03 was the summary; this chapter is the full text.</blockquote>
+
+  <h2>1. Why this model</h2>
+  <p>The 8-phase split groups the 52-row workflow spine by <strong>automation posture</strong>, not by visual swimlane. Each phase has one clear question: <em>do we automate this, partially automate it, or leave it manual?</em></p>
+  <p><strong>The model is locked.</strong> Any change to phase boundaries goes through <code>docs/trev-change-log.md</code> as a Pending entry first.</p>
+
+  <h2>2. The 8 phases (full table)</h2>
+  <table>
+    <thead><tr><th>Phase</th><th>Rows</th><th>Name</th><th>Automation posture</th></tr></thead>
+    <tbody>
+      <tr><td><strong>1</strong></td><td>R01–R14</td><td>Partner scouting</td><td><span class="badge badge-frozen">FROZEN</span> Kha will handle this lane; adapt his version later. Out of current automation scope.</td></tr>
+      <tr><td><strong>2</strong></td><td>R15–R15c</td><td>Tender search + intake</td><td>Automate. Search → extract → store in the ERP.</td></tr>
+      <tr><td><strong>3</strong></td><td>R16–R19</td><td>Per-client shortlist + confirm/reject loop</td><td>Automate. Build shortlist → send → if reject: loop to next client; if all reject: trash.</td></tr>
+      <tr><td><strong>4</strong></td><td>R20–R22</td><td>Record open + assign + upload</td><td>Automate. Missing-docs check → open record → auto-assign L5 PIC → upload TYPE 1 docs.</td></tr>
+      <tr><td><strong>5</strong></td><td>R23–R29</td><td>Pricing (AI + L5 + L3)</td><td>Automate (mixed). AI-assisted pricing → L5 red/yellow line check (human) → L3 final check. Status chain lives here. Track A pricing <strong>and</strong> Track B documentation run in parallel from this phase.</td></tr>
+      <tr><td><strong>6</strong></td><td>R30–R31</td><td>Client approval + deadline check</td><td>Automate (with mandatory human gate). Written customer approval required before submission. T-2 deadline safety check.</td></tr>
+      <tr><td><strong>7</strong></td><td>R32–R37</td><td>Documentation + QC + submit</td><td>Automate. TYPE 2 docs → L4 QC (conditional) → submit at T-2 → save proof + update tracker. Track B finishes here.</td></tr>
+      <tr><td><strong>8</strong></td><td>R38–R52</td><td>Result + follow-up</td><td><span class="badge badge-parked">PARKED</span> Keep as-is for now. Post-submission, clarification, award/loss, contract, billing, KPI, partner review, risk.</td></tr>
+    </tbody>
+  </table>
+
+  <h2>3. The status chain (Phase 5 + Phase 7)</h2>
+<pre><code>Not Started → PIC Pricing → Customer Pricing → Documents → Submitted</code></pre>
+  <p>(then <code>Awarded</code> / <code>Lost</code> in Phase 8.)</p>
+  <ul>
+    <li><code>Not Started</code> — set at Phase 4 (R21 record opened).</li>
+    <li><code>PIC Pricing</code> — set when Phase 5 (R24 → R27) begins.</li>
+    <li><code>Customer Pricing</code> — set when Phase 5 (R29) sends pricing pack to client.</li>
+    <li><code>Documents</code> — set when Phase 7 (R32) doc prep starts (or when Phase 5 Track B begins running in parallel).</li>
+    <li><code>Submitted</code> — set when Phase 7 (R35) submits via portal.</li>
+  </ul>
+  <p>The 5-value core vocabulary is locked from the May 15 reconciliation. Replaces 15-value and 10-value enums in deprecated schema docs.</p>
+
+  <h2>4. Track A and Track B (Phase 5 parallel split)</h2>
+  <ul>
+    <li><strong>Track A — Pricing</strong>: R25 supplier quotes → R27 build pricing pack → R27a Tender Overview Brief → R28 senior judgment → R29 send to client → R30 client approval</li>
+    <li><strong>Track B — Documentation</strong>: R32 prepare TYPE 2 docs → R33 forms complete → R34 L4 QC</li>
+  </ul>
+  <p><strong>The tracks run in parallel.</strong> Phase 5 contains Track A in full + the <em>start</em> of Track B (R32 doc prep can fire as soon as R24 confirms ready-to-price; it does not wait for pricing to complete). Phase 7 contains Track B's QC + submission tail (R33–R37) plus the convergence point at R35 (submit).</p>
+  <p><strong>Implication for automation design:</strong> the doc-prep workflow can be triggered from the same event that fires the pricing workflow (R24 → ready-to-price). They do not need to be sequential. Both must complete before R35 submits.</p>
+
+  <h2>5. Letter-suffix branches (preserved from v16, verbatim in v17)</h2>
+  <table>
+    <thead><tr><th>Code</th><th>Phase</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td>R7a / R7b</td><td>1 (frozen)</td><td>Partner replies — Yes / No</td></tr>
+      <tr><td>R8a / R8b</td><td>1 (frozen)</td><td>Partner relevant — Yes / No</td></tr>
+      <tr><td>R9a / R9b</td><td>1 (frozen)</td><td>Strategic partner — No / Yes</td></tr>
+      <tr><td>R11a, R12a, R13a/R13b</td><td>1 (frozen)</td><td>Partner doc gates</td></tr>
+      <tr><td><strong>R15a</strong></td><td><strong>2</strong></td><td>★ Download tender package from portal; upload TYPE 1 docs to staging</td></tr>
+      <tr><td><strong>R15b</strong></td><td><strong>2</strong></td><td>★ High-volume / complex trigger? If Yes → fire R25 immediately</td></tr>
+      <tr><td><strong>R15c</strong></td><td><strong>2</strong></td><td>★ Filter tender against each active client profile (niche, LV value, location, size, blacklist/whitelist)</td></tr>
+      <tr><td>R18a</td><td>3</td><td>Client rejects — Yes → mark no-go</td></tr>
+      <tr><td>R19a / R19b</td><td>3</td><td>Client confirms — No (loop back) / Yes (open record)</td></tr>
+      <tr><td>R20a / R20b</td><td>4</td><td>Missing docs — Yes (chase + flag) / No (hand to Operations)</td></tr>
+      <tr><td>R23a</td><td>5</td><td>Complex → assign L4 QC Lead</td></tr>
+      <tr><td>R24a / R24b</td><td>5</td><td>Ready to price — No (log gaps) / Yes (build pricing)</td></tr>
+      <tr><td>R25a</td><td>5</td><td>Need supplier quote — Yes (request)</td></tr>
+      <tr><td>R26a</td><td>5</td><td>Input delayed — Yes (escalate deadline risk)</td></tr>
+      <tr><td>R27a</td><td>5</td><td>★ PIC Tender Overview Brief (parallel with R27)</td></tr>
+      <tr><td>R28a</td><td>5</td><td>Senior judgment → reroute to L4 QC</td></tr>
+      <tr><td>R30a / R30b</td><td>6</td><td>Client approves — No (revise/stop) / Yes (check deadline)</td></tr>
+      <tr><td><strong>R31a / R31b</strong></td><td><strong>6</strong></td><td>Deadline unsafe — Yes (escalate / reduce / decline) / No (proceed to submit)</td></tr>
+    </tbody>
+  </table>
+  <div class="callout">R31b is <strong>not</strong> a separate action — it's the "no, deadline safe, proceed" branch. The submit action itself is R35 (Phase 7).</div>
+
+  <h2>6. What changed from v16 → v17</h2>
+  <table>
+    <thead><tr><th>Aspect</th><th>v16</th><th>v17</th></tr></thead>
+    <tbody>
+      <tr><td>Phase count</td><td>4 visual phases</td><td>8 automation phases</td></tr>
+      <tr><td>Phase 1 freeze rationale</td><td>"out of current scope per v15 freeze"</td><td>"Kha will handle, adapt his version later"</td></tr>
+      <tr><td>Phase 2 name</td><td>"TENDER SCREENING + INTAKE" (R15–R20)</td><td>"TENDER SEARCH + INTAKE" (R15–R15c only)</td></tr>
+      <tr><td>Phase 3</td><td>(inside v16 Phase 2)</td><td><strong>New.</strong> "Per-client shortlist + confirm/reject" (R16–R19)</td></tr>
+      <tr><td>Phase 4</td><td>(inside v16 Phase 3A)</td><td><strong>New.</strong> "Record open + assign + upload" (R20–R22)</td></tr>
+      <tr><td>Phase 5</td><td>"PHASE 3A · PRICING & OVERVIEW (R21–R31)"</td><td>"PRICING (AI + L5 + L3)" (R23–R29 only)</td></tr>
+      <tr><td>Phase 6</td><td>(inside v16 Phase 3A)</td><td><strong>New.</strong> "Client approval + deadline check" (R30–R31)</td></tr>
+      <tr><td>Phase 7</td><td>"PHASE 3B · DOCS & SUBMIT (R32–R37)"</td><td>"Documentation + QC + submit" (R32–R37)</td></tr>
+      <tr><td>Phase 8</td><td>"PHASE 4 · RESULT & FOLLOW-UP"</td><td>"Result + follow-up (PARKED)" (R38–R52)</td></tr>
+      <tr><td>Row content</td><td>52 main + 4 sub-rows</td><td><strong>Identical — zero task-content drift</strong></td></tr>
+      <tr><td>Letter-suffix branches</td><td>All present</td><td>All present, verbatim</td></tr>
+    </tbody>
+  </table>
+  <p>v15 and v16 are preserved untouched as rollback points.</p>
+
+  <h2>7. Build implications (phase-by-phase)</h2>
+
+  <h3>Phase 1 (R01–R14) — frozen</h3>
+  <ul>
+    <li>No automation work here until Kha's version arrives.</li>
+    <li>If Phase 1 visibility is needed, build a read-only dashboard reference. No write paths.</li>
+  </ul>
+
+  <h3>Phase 2 (R15–R15c) — first automation candidate</h3>
+  <ul>
+    <li>R15 — portal search trigger (manual cadence first, scheduled later)</li>
+    <li>R15a — extract package → upload TYPE 1 docs to staging</li>
+    <li>R15b — high-volume detector (LV line count + scope breadth) → fires R25 supplier outreach early</li>
+    <li>R15c — per-client profile filter; depends on the <code>Customer</code> table</li>
+  </ul>
+
+  <h3>Phase 3 (R16–R19) — automation candidate</h3>
+  <ul>
+    <li>R16 — build per-client shortlist (low-risk, mostly ERP writes)</li>
+    <li>R17 — send tenders to matched clients (queue-for-approval before auto-send)</li>
+    <li>R18 / R19 — reject loop + trash logic; state machine: pending → sent → awaiting-reply → confirmed | rejected | timeout</li>
+    <li>"All clients reject → trash" needs a definition of "all"</li>
+  </ul>
+
+  <h3>Phase 4 (R20–R22) — automation candidate</h3>
+  <ul>
+    <li>R20 — missing-docs detector (manual flag at first)</li>
+    <li>R21 — open tender record</li>
+    <li>R22 — auto-assign L5 PIC (round-robin? niche-based? load-balanced? — decide before build)</li>
+    <li>Auto-upload TYPE 1 docs into the per-tender folder</li>
+  </ul>
+
+  <h3>Phase 5 (R23–R29) — most complex automation</h3>
+  <ul>
+    <li>AI pricing assist (Claude) — explicitly approved</li>
+    <li>Track A pricing + Track B doc prep fire in parallel from R24</li>
+    <li>Red / yellow line check stays human (L5)</li>
+    <li>L3 final check stays human</li>
+  </ul>
+
+  <h3>Phase 6 (R30–R31) — automation with mandatory human gate</h3>
+  <ul>
+    <li>R30 written approval is a process rule, not a hard system block (WhatsApp / email / call / text all count)</li>
+    <li>T-2 deadline detector + escalation routing</li>
+  </ul>
+
+  <h3>Phase 7 (R32–R37) — automation candidate</h3>
+  <ul>
+    <li>R32 TYPE 2 doc prep (Library → EPC Document)</li>
+    <li>R34 conditional QC gate (routine → L5 may self-submit; risky / complex / high-value → L4 QC required)</li>
+    <li>R35 submission act stays human (portal interaction)</li>
+    <li>R36–R37 evidence logging is high-value automation (submission proof + timestamp + final file list + tracker update)</li>
+  </ul>
+
+  <h3>Phase 8 (R38–R52) — parked</h3>
+  <ul>
+    <li>Keep manual / as-is for now.</li>
+    <li>KPI roll-up and result entry will eventually automate, but not this iteration.</li>
+  </ul>
+
+  <h2>8. Routing implications</h2>
+  <p>For automation that writes to Person fields, current routing rules:</p>
+  <table>
+    <thead><tr><th>Phase</th><th>Routing</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Frozen — irrelevant for now</td></tr>
+      <tr><td>2</td><td>R15c filter depends on the <code>Customer</code> table, not on a person</td></tr>
+      <tr><td>3</td><td>R17 send to client — interim: L4 (Trev / Thy) until L5 CRM hired</td></tr>
+      <tr><td>4</td><td>R22 assign L5 PIC — assignment surface in the ERP Kanban view</td></tr>
+      <tr><td>5</td><td>Pricing routes to L5 (Phat / Kiet / Huong / Khang / Tien) under L3 Ops</td></tr>
+      <tr><td>6</td><td>R30 approval chase — interim: L4 (Trev / Thy) until L5 CRM hired</td></tr>
+      <tr><td>7</td><td>R34 L4 QC — Trev / Thy</td></tr>
+      <tr><td>8</td><td>Parked</td></tr>
+    </tbody>
+  </table>
+
+  <h2>9. Open design questions (intern note)</h2>
+  <p>These are known gaps. If you're building in one of these phases, ask before assuming:</p>
+  <ol>
+    <li><strong>Phase 3</strong> — definition of "all clients reject → trash" (whitelist exhausted vs timeout-based).</li>
+    <li><strong>Phase 4 R22</strong> — assignment algorithm (round-robin / niche-based / load-balanced).</li>
+    <li><strong>Phase 5 Track B trigger point</strong> — fires from R24 ready-to-price, but the exact event hook is per workflow.</li>
+  </ol>
+
+  <h2>10. Lowest-risk first automations</h2>
+  <p>If you're picking your first automation to build, these are the safe starts:</p>
+  <ul>
+    <li><strong>Phase 4 (R20–R22)</strong> — record open + assign + upload. Self-contained, mostly ERP writes.</li>
+    <li><strong>Phase 7 (R36–R37 evidence logging)</strong> — submission proof capture. High value, low risk.</li>
+  </ul>
+  <p>Both have well-defined inputs/outputs and don't depend on unfinished design questions in Phases 3 or 5.</p>
+
+  <hr>
+  <p style="text-align:center; color:#6a7686; margin-top:2em;"><em>That's the canonical workflow. Welcome to Evertrust.</em></p>
+</section>
+
+</body>
+</html>

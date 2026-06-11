@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Users — Team & access</title>
+<style>
+  :root{--bg:#0b0b0e;--panel:#141418;--panel2:#17171c;--line:rgba(255,255,255,.08);
+    --txt:#e9e9ee;--muted:#8b8b95;--faint:#6a6a73;--good:#34d399;--mid:#fbbf24;--low:#f87171;--sky:#38bdf8;--violet:#a78bfa;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+  .wrap{max-width:1120px;margin:0 auto;padding:24px}
+  .phead{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+  .phead h1{font-size:23px;margin:0}.phead .d{color:var(--muted);font-size:13px}
+  .add{margin-left:auto;background:var(--sky);color:#04222e;border:none;border-radius:9px;padding:9px 15px;font-weight:700;font-size:13px;cursor:pointer}
+  .board{display:grid;grid-template-columns:340px 1fr;gap:16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px}
+  .lhead{padding:12px 14px;border-bottom:1px solid var(--line)}
+  .search{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--txt);font-size:13px;padding:8px 10px}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+  .chip{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:3px 10px;cursor:pointer}.chip.on{background:var(--panel2);color:var(--txt);border-color:rgba(56,189,248,.4)}
+  .u{display:flex;align-items:center;gap:11px;padding:11px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+  .u:hover{background:var(--panel2)}.u.sel{background:linear-gradient(90deg,rgba(56,189,248,.10),transparent);box-shadow:inset 3px 0 0 var(--sky)}
+  .av{width:34px;height:34px;border-radius:50%;flex:0 0 34px;display:grid;place-items:center;font-weight:700;font-size:13px;color:#06121a}
+  .u .nm{font-weight:600;font-size:13px}.u .sd{color:var(--muted);font-size:11.5px;margin-top:1px}
+  .rb{margin-left:auto;font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap}
+  .rb.SUPER_ADMIN{background:rgba(248,113,113,.16);color:var(--low)}.rb.ADMIN{background:rgba(167,139,250,.16);color:var(--violet)}.rb.MANAGER{background:rgba(56,189,248,.16);color:var(--sky)}.rb.EMPLOYEE{background:rgba(139,139,149,.16);color:var(--muted)}
+  .sdot{width:7px;height:7px;border-radius:50%;flex:0 0 7px}.sdot.active{background:var(--good)}.sdot.inactive{background:var(--faint)}
+  /* detail */
+  .det{padding:20px 22px}
+  .dh{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+  .dh .av{width:48px;height:48px;flex:0 0 48px;font-size:17px}
+  .dh h2{margin:0;font-size:18px}.dh .em{color:var(--muted);font-size:12.5px}
+  .statuspill{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px}.statuspill.active{background:rgba(52,211,153,.14);color:var(--good)}.statuspill.inactive{background:rgba(139,139,149,.16);color:var(--muted)}
+  .label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin:20px 0 10px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .fl{font-size:11px;color:var(--faint);margin-bottom:4px}
+  select{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--txt);font-size:13px;padding:8px 10px}
+  select:disabled{opacity:.55;cursor:not-allowed}
+  .lock{font-size:11px;color:var(--mid);margin-top:6px}
+  .perms{display:grid;grid-template-columns:1fr 1fr;gap:2px 22px}
+  .perm{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line);font-size:13px}
+  .perm .pn{flex:1}.perm .pn code{color:var(--muted);font-size:11.5px}
+  .sw{width:38px;height:22px;border-radius:999px;background:rgba(255,255,255,.12);position:relative;cursor:pointer;flex:0 0 38px;transition:.15s}
+  .sw:after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:.15s}
+  .sw.on{background:var(--good)}.sw.on:after{left:18px}
+  .sw.lock{opacity:.5;cursor:not-allowed}
+  .reset{font-size:12px;color:var(--sky);background:none;border:none;cursor:pointer;margin-top:8px;padding:0}
+  .danger{margin-top:22px;border:1px solid rgba(248,113,113,.25);border-radius:11px;padding:13px 15px;background:rgba(248,113,113,.04)}
+  .danger .h{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--low);margin-bottom:10px}
+  .danger .row{display:flex;align-items:center;gap:10px}
+  .btn{font-size:13px;font-weight:600;padding:8px 14px;border-radius:9px;border:1px solid var(--line);background:transparent;color:var(--txt);cursor:pointer}
+  .btn.danger-b{color:var(--low);border-color:rgba(248,113,113,.3)}.btn:disabled{opacity:.45;cursor:not-allowed}
+  .toast{position:fixed;bottom:20px;right:20px;background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--good);border-radius:10px;padding:11px 15px;font-size:13px;z-index:60;opacity:0;transform:translateY(10px);transition:.22s}.toast.on{opacity:1;transform:none}
+  .note{margin-top:14px;color:var(--faint);font-size:11px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="phead"><div><h1>Users</h1><div class="d">Team &amp; access · <span id="cnt">5 users · 4 active</span></div></div><button class="add" onclick="toast('Invite a teammate… (mock)')">+ Add user</button></div>
+  <div class="board">
+    <div class="card" style="align-self:start">
+      <div class="lhead"><input class="search" placeholder="Search name or email…"><div class="chips" id="chips"></div></div>
+      <div id="list"></div>
+    </div>
+    <div class="card"><div class="det" id="det"></div></div>
+  </div>
+  <p class="note">Interactive mockup — pick a user; change role/department/position, flip permissions, deactivate/delete (mock toasts). Super-Admin is role-locked.</p>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const PERMS=[["tenders:read","View tenders"],["tenders:write","Edit tenders"],["pricing:read","View pricing"],["pricing:write","Edit pricing"],["campaigns:read","View Growth Engine"],["campaigns:write","Run / launch campaigns"],["users:manage","Manage users"],["audit:read","View audit log"],["admin:config","Admin config"]];
+const ALL=PERMS.map(p=>p[0]);
+const ROLE_DEF={SUPER_ADMIN:ALL,ADMIN:["tenders:read","tenders:write","pricing:read","pricing:write","campaigns:read","campaigns:write","users:manage","audit:read"],MANAGER:["tenders:read","pricing:read","campaigns:read","campaigns:write"],EMPLOYEE:["tenders:read","pricing:read","campaigns:read"]};
+const DEPTS=["Operations","IT","Consulting","Marketing","Business","HR"];
+const POS=["CEO","CTO","CFO","COO","DEPT_MANAGER","EXECUTIVE","OFFICER","SPECIALIST"];
+const COLORS={SUPER_ADMIN:"#f87171",ADMIN:"#a78bfa",MANAGER:"#38bdf8",EMPLOYEE:"#8b8b95"};
+let U=[
+ {id:"u1",name:"Hanna Gia Nguyen",email:"admin@evertrust-germany.de",role:"SUPER_ADMIN",dept:"Business",pos:"CEO",active:true,perms:[...ALL]},
+ {id:"u2",name:"Markus Brandt",email:"m.brandt@evertrust-germany.de",role:"ADMIN",dept:"Operations",pos:"DEPT_MANAGER",active:true,perms:[...ROLE_DEF.ADMIN]},
+ {id:"u3",name:"Lena Vogt",email:"l.vogt@evertrust-germany.de",role:"MANAGER",dept:"Consulting",pos:"DEPT_MANAGER",active:true,perms:[...ROLE_DEF.MANAGER,"audit:read"]},
+ {id:"u4",name:"Tomáš Novák",email:"t.novak@evertrust-germany.de",role:"EMPLOYEE",dept:"IT",pos:"SPECIALIST",active:true,perms:[...ROLE_DEF.EMPLOYEE]},
+ {id:"u5",name:"Sofia Keller",email:"s.keller@evertrust-germany.de",role:"EMPLOYEE",dept:"Marketing",pos:"OFFICER",active:false,perms:[...ROLE_DEF.EMPLOYEE]}
+];
+let cur="u1",filter="All";
+let tT;function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');clearTimeout(tT);tT=setTimeout(()=>t.classList.remove('on'),2200);}
+function initials(n){return n.split(' ').map(x=>x[0]).slice(0,2).join('').toUpperCase();}
+function chips(){const f=["All","Admins","Managers","Employees","Inactive"];document.getElementById('chips').innerHTML=f.map(c=>`<span class="chip ${c===filter?'on':''}" onclick="setFilter('${c}')">${c}</span>`).join('');}
+function setFilter(c){filter=c;chips();renderList();}
+function match(u){if(filter==="All")return true;if(filter==="Admins")return u.role==="ADMIN"||u.role==="SUPER_ADMIN";if(filter==="Managers")return u.role==="MANAGER";if(filter==="Employees")return u.role==="EMPLOYEE";if(filter==="Inactive")return !u.active;}
+function renderList(){
+  document.getElementById('list').innerHTML=U.filter(match).map(u=>
+   `<div class="u ${u.id===cur?'sel':''}" onclick="pick('${u.id}')">
+      <div class="av" style="background:${COLORS[u.role]}">${initials(u.name)}</div>
+      <div><div class="nm">${u.name}</div><div class="sd">${u.dept} · ${u.pos.replace('_',' ')}</div></div>
+      <span class="rb ${u.role}">${u.role.replace('_',' ')}</span>
+      <span class="sdot ${u.active?'active':'inactive'}" title="${u.active?'active':'inactive'}"></span>
+    </div>`).join('')||'<div style="padding:18px;color:var(--faint);text-align:center">No users</div>';
+}
+function render(){
+  const u=U.find(x=>x.id===cur);const sa=u.role==="SUPER_ADMIN";
+  document.getElementById('det').innerHTML=
+   `<div class="dh"><div class="av" style="background:${COLORS[u.role]}">${initials(u.name)}</div>
+      <div style="flex:1"><h2>${u.name}</h2><div class="em">${u.email}</div></div>
+      <span class="statuspill ${u.active?'active':'inactive'}">${u.active?'Active':'Inactive'}</span></div>
+    <div class="label">Access</div>
+    <div class="grid3">
+      <div><div class="fl">Role</div><select ${sa?'disabled':''} onchange="chg('role',this.value)">${["SUPER_ADMIN","ADMIN","MANAGER","EMPLOYEE"].map(r=>`<option ${r===u.role?'selected':''}>${r}</option>`).join('')}</select>${sa?'<div class="lock">🔒 Super-Admin role is locked</div>':''}</div>
+      <div><div class="fl">Department</div><select onchange="chg('dept',this.value)">${DEPTS.map(d=>`<option ${d===u.dept?'selected':''}>${d}</option>`).join('')}</select></div>
+      <div><div class="fl">Position</div><select onchange="chg('pos',this.value)">${POS.map(p=>`<option ${p===u.pos?'selected':''}>${p.replace('_',' ')}</option>`).join('')}</select></div>
+    </div>
+    <div class="label">Permissions</div>
+    <div class="perms">${PERMS.map(([k,lbl])=>{const on=u.perms.includes(k);return `<div class="perm"><div class="pn">${lbl} <code>${k}</code></div><div class="sw ${on?'on':''} ${sa?'lock':''}" onclick="${sa?'':`togglePerm('${k}',this)`}"></div></div>`;}).join('')}</div>
+    ${sa?'':'<button class="reset" onclick="resetPerms()">↺ Reset to role defaults</button>'}
+    <div class="danger"><div class="h">Danger zone</div><div class="row">
+      <button class="btn" onclick="toggleActive()">${u.active?'Deactivate user':'Activate user'}</button>
+      <button class="btn danger-b" ${sa?'disabled':''} onclick="${sa?'':'del()'}">Delete user</button>
+      ${sa?'<span style="color:var(--faint);font-size:11.5px">Super-Admin can\'t be deleted</span>':''}
+    </div></div>`;
+  document.querySelectorAll('.u').forEach(e=>e.classList.toggle('sel',e.getAttribute('onclick').includes("'"+cur+"'")));
+}
+function pick(id){cur=id;renderList();render();}
+function chg(f,v){const u=U.find(x=>x.id===cur);u[f]=v;if(f==='role'){u.perms=[...ROLE_DEF[v]];}renderList();render();toast('Updated '+f+' → '+v.replace('_',' '));}
+function togglePerm(k,el){const u=U.find(x=>x.id===cur);if(u.perms.includes(k)){u.perms=u.perms.filter(p=>p!==k);el.classList.remove('on');toast('Removed '+k);}else{u.perms.push(k);el.classList.add('on');toast('Granted '+k);}}
+function resetPerms(){const u=U.find(x=>x.id===cur);u.perms=[...ROLE_DEF[u.role]];render();toast('Permissions reset to '+u.role+' defaults');}
+function toggleActive(){const u=U.find(x=>x.id===cur);u.active=!u.active;renderList();render();toast(u.name+(u.active?' activated':' deactivated'));refreshCnt();}
+function del(){const u=U.find(x=>x.id===cur);if(!confirm('Delete '+u.name+'?'))return;U=U.filter(x=>x.id!==cur);cur=U[0].id;renderList();render();toast('User deleted');refreshCnt();}
+function refreshCnt(){document.getElementById('cnt').textContent=U.length+' users · '+U.filter(u=>u.active).length+' active';}
+chips();renderList();render();refreshCnt();
+</script>
+</body>
+</html>

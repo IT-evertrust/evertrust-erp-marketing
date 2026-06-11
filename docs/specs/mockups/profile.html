@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Profile — /users/[id]</title>
+<style>
+  :root{--bg:#0b0b0e;--panel:#141418;--panel2:#17171c;--line:rgba(255,255,255,.08);
+    --txt:#e9e9ee;--muted:#8b8b95;--faint:#6a6a73;--good:#34d399;--mid:#fbbf24;--low:#f87171;--sky:#38bdf8;--violet:#a78bfa;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+  .wrap{max-width:960px;margin:0 auto;padding:24px}
+  .crumb{font-size:12.5px;color:var(--muted);margin-bottom:14px}.crumb a{color:var(--sky);text-decoration:none;cursor:pointer}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px}
+  /* header */
+  .banner{height:84px;border-radius:14px 14px 0 0;background:linear-gradient(120deg,rgba(248,113,113,.35),rgba(167,139,250,.25),rgba(56,189,248,.25))}
+  .head{padding:0 22px 18px;display:flex;align-items:flex-end;gap:16px;margin-top:-34px}
+  .av{width:74px;height:74px;border-radius:18px;flex:0 0 74px;display:grid;place-items:center;font-weight:800;font-size:26px;color:#1b0606;background:#f87171;border:3px solid var(--bg)}
+  .head .id{flex:1;padding-bottom:2px}
+  .head h1{margin:0;font-size:21px;display:flex;align-items:center;gap:10px}
+  .rb{font-size:10.5px;font-weight:700;padding:2px 9px;border-radius:999px;background:rgba(248,113,113,.16);color:var(--low)}
+  .head .sub{color:var(--muted);font-size:13px;margin-top:3px}
+  .head .meta{color:var(--faint);font-size:12px;margin-top:5px;display:flex;gap:14px;flex-wrap:wrap}
+  .head .meta .on{color:var(--good)}
+  .edit{background:var(--sky);color:#04222e;border:none;border-radius:9px;padding:9px 15px;font-weight:700;font-size:13px;cursor:pointer;align-self:center}
+  /* kpis */
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:18px 0}
+  .kpi{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:13px 15px}
+  .kpi .v{font-size:21px;font-weight:800}.kpi .k{font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em}
+  /* tabs */
+  .tabs{display:flex;gap:6px;margin-bottom:14px}
+  .tab{padding:8px 16px;border-radius:9px;cursor:pointer;color:var(--muted);font-weight:600;font-size:13px;border:1px solid var(--line);background:var(--panel)}
+  .tab.on{color:var(--txt);background:var(--panel2);border-color:rgba(56,189,248,.4)}
+  .pane{display:none}.pane.on{display:block}
+  .sec{padding:18px 20px}
+  .label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin:0 0 12px}
+  .feed .f{display:flex;gap:12px;padding:9px 0;border-bottom:1px dashed var(--line);font-size:13px}.feed .f:last-child{border:none}
+  .feed .ft{flex:0 0 70px;color:var(--faint);font-size:12px}.feed .fd b{color:var(--txt)}.feed .fd{color:var(--muted)}
+  .kv{display:grid;grid-template-columns:160px 1fr;gap:9px 14px;font-size:13px}.kv .k{color:var(--muted)}
+  .perms{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+  .pc{font-size:11.5px;color:var(--good);background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.25);padding:3px 9px;border-radius:999px}
+  .arow{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line);font-size:13px}.arow:last-child{border:none}
+  .arow .k{flex:1;color:var(--muted)}.arow .v{color:var(--txt)}.arow .badge{font-size:10.5px;color:var(--good);background:rgba(52,211,153,.12);padding:2px 8px;border-radius:999px}
+  .btn{font-size:12.5px;font-weight:600;padding:7px 13px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--txt);cursor:pointer}
+  .toast{position:fixed;bottom:20px;right:20px;background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--sky);border-radius:10px;padding:11px 15px;font-size:13px;z-index:60;opacity:0;transform:translateY(10px);transition:.22s}.toast.on{opacity:1;transform:none}
+  .note{margin-top:14px;color:var(--faint);font-size:11px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="crumb"><a onclick="toast('Back to Users')">← Users</a> / users / <span style="color:var(--muted)">u1</span></div>
+
+  <div class="card">
+    <div class="banner"></div>
+    <div class="head">
+      <div class="av">HN</div>
+      <div class="id">
+        <h1>Hanna Gia Nguyen <span class="rb">SUPER ADMIN</span></h1>
+        <div class="sub">CEO · Business · admin@evertrust-germany.de</div>
+        <div class="meta"><span class="on">● Active</span><span>Member since Jan 2026</span><span>Last active · now</span></div>
+      </div>
+      <button class="edit" onclick="toast('Edit profile… (mock)')">Edit profile</button>
+    </div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="v">1</div><div class="k">Campaigns launched</div></div>
+    <div class="kpi"><div class="v">8</div><div class="k">Emails sent</div></div>
+    <div class="kpi"><div class="v">4</div><div class="k">Meetings (AE)</div></div>
+    <div class="kpi"><div class="v">6</div><div class="k">Drafts approved</div></div>
+    <div class="kpi"><div class="v" style="color:var(--good)">1</div><div class="k">Customers won</div></div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab on" data-t="act" onclick="tab(this)">Activity</div>
+    <div class="tab" data-t="acc" onclick="tab(this)">Access</div>
+    <div class="tab" data-t="set" onclick="tab(this)">Account</div>
+  </div>
+
+  <div class="card pane on" id="act"><div class="sec feed">
+    <p class="label">Recent activity</p>
+    <div class="f"><span class="ft">10:50</span><span class="fd">Approved RAG reply draft to <b>Code &amp; Pepper</b> — sent via n8n</span></div>
+    <div class="f"><span class="ft">09:00</span><span class="fd">Launched campaign <b>Container Poland 2026</b> via AIM</span></div>
+    <div class="f"><span class="ft">Mon</span><span class="fd">Coached meeting <b>Stadtwerke München</b> → 4.1/5</span></div>
+    <div class="f"><span class="ft">Mon</span><span class="fd">Booked a meeting with <b>Stadtwerke München</b></span></div>
+    <div class="f"><span class="ft">Sun</span><span class="fd">Converted hot lead <b>DealCo</b> → customer</span></div>
+  </div></div>
+
+  <div class="card pane" id="acc"><div class="sec">
+    <p class="label">Role &amp; placement</p>
+    <div class="kv">
+      <div class="k">Role</div><div>SUPER_ADMIN <span style="color:var(--mid);font-size:11.5px">🔒 locked</span></div>
+      <div class="k">Department</div><div>Business</div>
+      <div class="k">Position</div><div>CEO</div>
+    </div>
+    <p class="label" style="margin-top:20px">Effective permissions <button class="btn" style="float:right;padding:4px 10px" onclick="toast('Edit access → Users admin')">Edit access</button></p>
+    <div class="perms">
+      <span class="pc">tenders:read</span><span class="pc">tenders:write</span><span class="pc">pricing:read</span><span class="pc">pricing:write</span><span class="pc">campaigns:read</span><span class="pc">campaigns:write</span><span class="pc">users:manage</span><span class="pc">audit:read</span><span class="pc">admin:config</span>
+    </div>
+  </div></div>
+
+  <div class="card pane" id="set"><div class="sec">
+    <p class="label">Account &amp; security</p>
+    <div class="arow"><span class="k">Email</span><span class="v">admin@evertrust-germany.de</span><span class="badge">verified</span></div>
+    <div class="arow"><span class="k">Phone</span><span class="v">+49 30 1234 567</span><button class="btn" onclick="toast('Edit phone…')">Edit</button></div>
+    <div class="arow"><span class="k">Password</span><span class="v">••••••••</span><button class="btn" onclick="toast('Change password…')">Change</button></div>
+    <div class="arow"><span class="k">Two-factor auth</span><span class="v">Enabled</span><button class="btn" onclick="toast('Manage 2FA…')">Manage</button></div>
+    <div class="arow"><span class="k">Timezone</span><span class="v">Europe/Berlin (CET)</span><button class="btn" onclick="toast('Change timezone…')">Edit</button></div>
+    <div class="arow"><span class="k">Language</span><span class="v">English</span><button class="btn" onclick="toast('Change language…')">Edit</button></div>
+    <div class="arow"><span class="k">Email digests</span><span class="v">Daily</span><button class="btn" onclick="toast('Notification settings…')">Edit</button></div>
+  </div></div>
+
+  <p class="note">Mockup — /users/[id] profile. Tabs + buttons interactive (mock toasts). Reached by clicking a user in the Users page.</p>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+  let tT;function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');clearTimeout(tT);tT=setTimeout(()=>t.classList.remove('on'),2200);}
+  function tab(el){document.querySelectorAll('.tab').forEach(t=>t.classList.remove('on'));el.classList.add('on');var id=el.getAttribute('data-t');document.querySelectorAll('.pane').forEach(p=>p.classList.toggle('on',p.id===id));}
+</script>
+</body>
+</html>

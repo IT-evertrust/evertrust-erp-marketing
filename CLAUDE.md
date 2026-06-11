@@ -1,98 +1,107 @@
 # EverTrust ERP & Marketing
 
-Monorepo for the EverTrust ERP and marketing platform (two independent npm packages, no workspace root):
-- `erp-client/` — Next.js 16 frontend (App Router, React 19 + React Compiler, Tailwind v4 CSS-first)
-- `erp-server/` — NestJS 11 backend with Prisma + PostgreSQL; infra (Postgres, pgAdmin, n8n automation) runs via Docker Compose
-
-## Architecture
-
-- `erp-client/src/app/` — Next.js App Router (layout.tsx, page.tsx, globals.css; still create-next-app boilerplate). Path alias `@/*` → `./src/*`. Tailwind v4 is configured in globals.css via `@theme inline` — there is NO tailwind.config.* and none should be added.
-- `erp-server/src/` — NestJS source: main.ts (port 3000 hardcoded), app.module.ts, app.controller.ts + app.service.ts (single `GET /` → "Hello World!"), prisma.service.ts (exists but not registered in any module yet).
-- `erp-server/prisma/schema.prisma` — Prisma schema (example User/Post models only; no migrations directory yet).
-- `erp-server/docker-compose.yml` — ERP Postgres only (local n8n/pgAdmin retired 2026-06-10; n8n runs on n8n CLOUD). Runs 24/7 on the Mac mini — see `docs/team-hosting.md`.
-- `ai-stack/` — the "Hermes req" AI gateway on the Mac mini: LiteLLM (OpenAI-compatible, port 4000 loopback, funneled at 443) + Redis cache + Qdrant vector DB (6333 loopback, funneled at 8443). Routes n8n-cloud LLM calls to Ollama backends (Trev's machine primary, mini fallback). Config: `ai-stack/config/litellm-config.yaml`.
-- `.claude/` — settings, skills, project subagents (`agents/`) and slash commands (`commands/`).
-- `tasks/` — todo.md and lessons.md per the workflow rules below.
+pnpm + Turborepo monorepo for the EverTrust ERP and marketing platform (migrated from the
+archived `Ryugwki/evertrust-ERP` repo on 2026-06-11; hosting moved from Render/Vercel to the
+Mac mini):
+- `erp-server/` — `@evertrust/api`: NestJS 11 backend (23 feature modules, JWT + argon2 auth,
+  L1–L5 RBAC, audit log, Drizzle ORM)
+- `erp-client/` — `@evertrust/web`: Next.js 15 App Router frontend (React 19, Tailwind v4,
+  shadcn/ui, React Query; design standard in `erp-client/DESIGN.md`)
+- `packages/db/` — `@evertrust/db`: Drizzle schema (~20 tables), migrations in `drizzle/`
+  (0000–0018 + `meta/` journal), idempotent seed
+- `packages/shared/` — `@evertrust/shared`: Zod DTOs, the 7-state tender STATE_MACHINE,
+  ROLE_PERMISSIONS, pricing engine pure functions — single source of truth shared by api + web
+- `ai-stack/` — the AI gateway on the Mac mini: LiteLLM (4000 loopback, funneled :443) +
+  Redis + Qdrant (6333 loopback, funneled :8443) + SearXNG (auth proxy funneled :10000).
+  Routes n8n-cloud LLM calls to Ollama backends. Config: `ai-stack/config/litellm-config.yaml`.
+- `docs/` — `team-hosting.md` (Mac mini hosting model — REQUIRED READING for infra work),
+  `evertrust/` (canonical company/workflow spec, 52-row roadmap), `specs/`
+- `.claude/` — settings, skills, project subagents (`agents/`) and slash commands (`commands/`)
+- `tasks/` — todo.md and lessons.md per the workflow rules below
 
 ## Commands
 
-Server (run from `erp-server/`):
+All from the repo root. pnpm is pinned via `packageManager` (corepack); if `pnpm` is not on
+PATH, prefix with `corepack` (e.g. `corepack pnpm install`).
 
 ```bash
-cd erp-server
-npm run start:dev        # NestJS watch mode (needs Postgres on 5432 up, or startup crashes)
-npm run build            # nest build -> dist/
-npm run prisma:generate  # generate Prisma client (works)
-npm run prisma:migrate   # prisma migrate dev — currently BROKEN, see Known Issues
-npm run prisma:studio    # prisma studio — currently BROKEN, see Known Issues
+pnpm install                                  # whole workspace
+pnpm run build / lint / typecheck / test      # turbo across all packages
+corepack pnpm --filter @evertrust/api test    # API jest suite only (35 suites / 299 tests)
+corepack pnpm --filter @evertrust/api start:dev   # API watch mode (needs DATABASE_URL)
+corepack pnpm --filter @evertrust/web dev     # web dev server on :3000
+corepack pnpm --filter @evertrust/db db:generate  # drizzle-kit generate (after schema edits)
+corepack pnpm --filter @evertrust/db db:migrate   # apply migrations (target = DATABASE_URL)
+corepack pnpm --filter @evertrust/db db:seed      # idempotent bootstrap seed
 ```
 
-The server has NO test script (`npm test` exits 1 by design) and no lint/format scripts — do not invent them.
-
-Client (run from `erp-client/`):
+Docker (the production stack on the Mac mini):
 
 ```bash
-cd erp-client
-npm run dev    # next dev (port 3000 by default)
-npm run build  # next build
-npm run lint   # bare eslint — must be run from inside erp-client/
+cd erp-server && docker compose up -d   # postgres (pgvector) + erp-api + erp-web; REQUIRES .env
+cd ai-stack && docker compose up -d     # LiteLLM gateway + Redis + Qdrant + SearXNG; REQUIRES ai-stack/.env
+                                        # (erp-server stack must be up first — it owns the shared network)
 ```
 
-Docker (run from `erp-server/`, like the npm scripts):
-
-```bash
-cd erp-server && docker compose up -d   # ERP postgres; REQUIRES .env (see .env.example)
-cd ai-stack && docker compose up -d     # LiteLLM gateway + Redis + Qdrant; REQUIRES ai-stack/.env
-                                        # (erp-server stack must be up first — shared network)
-docker compose ps / logs                # status / debug, from the respective directory
-```
-
-Both compose files fail fast on missing required env vars (`${VAR:?}` syntax).
+Both compose files fail fast on missing required env vars (`${VAR:?}` syntax). The erp-api
+container runs idempotent migrate + seed on every start (`erp-server/api-start.sh`).
 
 ## Services & Ports
 
 | Service | Port | Notes |
 |---|---|---|
-| erp-server (NestJS) | 3000 | Hardcoded in `erp-server/src/main.ts`; PORT env var is not read |
-| erp-client (next dev) | 3000 | CONFLICT with server — `next dev` auto-bumps to 3001 if the server already holds 3000 |
-| postgres (erp-postgres, Docker) | 5432 | ERP database. **TRAP: on the Mac mini a native Homebrew postgresql@18 also listens on loopback 5432** — `localhost:5432` ON the mini hits the brew instance, not the container; containers via `host.docker.internal` hit brew too. Use the docker network (`erp-postgres:5432`) from containers, the Tailscale name from laptops |
-| LiteLLM gateway (ai-litellm) | 4000 (127.0.0.1) | Public via Tailscale Funnel :443 once enabled; OpenAI-compatible `/v1` |
+| erp-web (Next.js, Docker) | 3000 | Team access: `http://mac-mini-ca-mac.tailc3d837.ts.net:3000` |
+| erp-api (NestJS, Docker) | 3001 | `GET /health` is public; n8n-cloud callbacks via Funnel path `/erp` on :443 |
+| postgres (erp-postgres, Docker) | 5432 | `pgvector/pgvector:pg18`. Holds `evertrust` (prod), `litellm`, per-dev `erp_<name>` DBs. **TRAP: a native Homebrew postgresql@18 also listens on loopback 5432 on the mini** — use the docker network (`erp-postgres:5432`) from containers, the Tailscale name from laptops |
+| LiteLLM gateway (ai-litellm) | 4000 (127.0.0.1) | Public via Tailscale Funnel :443; OpenAI-compatible `/v1` |
 | Qdrant (ai-qdrant) | 6333 (127.0.0.1) | Public via Funnel :8443; API-key required |
+| SearXNG (ai-searxng-auth) | 8088 (127.0.0.1) | Public via Funnel :10000; X-Search-Key header required |
 | Redis (ai-redis) | — | compose-network internal only (gateway cache) |
 | n8n | — | n8n CLOUD (evertrustgmbh.app.n8n.cloud); local n8n retired, old volumes kept |
 
 ## Environment
 
-- Committed templates: `erp-server/.env.example` (DB + app vars) and `ai-stack/.env.example` (gateway keys, Qdrant key, Trev's Ollama address). Copy to `.env` (gitignored) and fill in; team values live in the vault. `erp-client` has no .env files.
-- The server code reads `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `LOG_LEVEL` via @nestjs/config. `CORS_ORIGIN` exists as a var name but is not read by any code yet.
-- Prisma's datasource url is NOT configured: `schema.prisma` has no `url` field and there is no `prisma.config.ts` (required by Prisma 7), so migrate/studio commands fail.
-- `LITELLM_SALT_KEY` can never change after first boot (encrypts gateway DB credentials); the n8n virtual key for the gateway lives in `~/.evertrust/n8n-virtual-key.json` on the mini + the vault.
+- `erp-server/.env` (gitignored; template `.env.example`) feeds BOTH the compose interpolation
+  (`DB_*`, `NEXT_PUBLIC_API_URL`) and the API's boot-time Zod env contract — the authoritative
+  list of API vars with docs is `erp-server/src/config/env.schema.ts`. Team values in the vault.
+- `erp-client/.env.example` → `.env.local` for laptop dev (`NEXT_PUBLIC_API_URL`). In Docker
+  the value is a BUILD ARG inlined into the bundle — changing it needs an image rebuild.
+- `AUTH_DISABLED=true` turns off login and impersonates a super-admin — dev/demo only, never
+  on the mini.
+- `LITELLM_SALT_KEY` can never change after first boot; the n8n virtual key lives in
+  `~/.evertrust/n8n-virtual-key.json` on the mini + the vault.
 - Never commit .env files or put secret values in code, docs, or compose defaults.
 
 ## Custom Agents & Commands
 
 Subagents in `.claude/agents/`:
 - `nestjs-backend` — NestJS work in erp-server (modules, controllers, services, DI wiring)
-- `nextjs-frontend` — Next.js 16 / React 19 / Tailwind v4 work in erp-client
-- `prisma-database` — Prisma schema, client generation, and migration work
+- `nextjs-frontend` — Next.js / React 19 / Tailwind v4 / shadcn work in erp-client
+- `drizzle-database` — Drizzle schema, migrations, seed, and the Postgres service
 - `code-reviewer` — reviews diffs for bugs, security, and simplicity before completion
 
 Slash commands in `.claude/commands/`:
-- `/dev-up` — bring up Docker services and the dev servers in the right order
-- `/db-migrate` — run the Prisma generate + migrate workflow
+- `/dev-up` — start the Docker ERP stack (pass "dev" for watch-mode dev servers)
+- `/db-migrate` — drizzle-kit generate + migrate workflow
 - `/checkpoint` — record progress in `tasks/todo.md`
 - `/lesson` — capture a correction in `tasks/lessons.md`
 
-## Known Issues
+## Known Issues & Gotchas
 
-- Dual ORM: both `typeorm` and `@prisma/client` are in erp-server deps. Prisma is the intended ORM (per commit history), but `app.module.ts` currently wires `TypeOrmModule.forRoot` (with `synchronize: false` — must stay false, the DB is shared) while `PrismaService` is unregistered dead code. Use Prisma for new work; TypeORM is slated for removal.
-- Prisma datasource url missing: no `prisma.config.ts` and no `url` in schema.prisma, so `prisma:migrate`, `prisma:migrate:deploy`, and `prisma:studio` all fail (Prisma 7 does not auto-load .env). `prisma:generate` works.
-- Port collision: server hardcodes 3000 and `next dev` defaults to 3000; next auto-bumps to 3001 when the server runs — keep any client API URL in sync.
-- Loopback 5432 shadowing on the mini: Homebrew postgresql@18 owns `localhost:5432` locally (see Services table) — a process IS actively using it, so don't stop it casually; consolidation is a backlog item.
-- Postgres data persistence: the volume mounts at `/var/lib/postgresql` (no `/data`) — correct ONLY for postgres:18+ images.
-- No test framework on the server (`npm test` exits 1); the client has no tests either.
-- Server startup connects eagerly to Postgres — `npm run start:dev` crashes if no Postgres is reachable.
-- Tailscale Funnel not yet enabled on the tailnet (admin-console toggle) — until then n8n cloud cannot reach the gateway.
+- Loopback 5432 shadowing on the mini: Homebrew postgresql@18 owns `localhost:5432` locally —
+  a process IS actively using it, so don't stop it casually; consolidation is a backlog item.
+- Postgres volume mounts at `/var/lib/postgresql` (no `/data`) — correct ONLY for postgres 18+
+  images. The pre-migration alpine volume `erp-server_postgres_data` is kept on disk until the
+  pgvector swap is verified; the live volume is `erp-server_postgres_data_pg18`.
+- drizzle-kit cannot do enum value renames/removals incrementally — squash in dev only; never
+  squash migrations already applied to the shared DB. `CREATE EXTENSION vector` was hand-added
+  to migration 0000 and must survive any regeneration.
+- The web image bakes `NEXT_PUBLIC_API_URL` at build time; the api runs under the tsx loader
+  because `@evertrust/db`/`@evertrust/shared` ship raw TS (intentional, do not "fix").
+- Tender roadmap state: Phases 4–6 + most of 7 DONE; Phase 2 (Argus/Scribe intake), Phase 3
+  (Sieve shortlist), Phase 7 R32–R33 (TYPE 2 completeness) and Phase 8 are NOT built — see
+  `docs/evertrust/08-workflow-canonical.md`.
+- The client has no tests; API tests live in `erp-server/test/` (jest).
 
 ---
 

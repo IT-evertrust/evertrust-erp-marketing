@@ -1,13 +1,23 @@
 name: erp-server
 
-# Infra for the ERP backend. n8n runs on n8n CLOUD (local n8n retired 2026-06-10;
-# its old volumes erp-server_n8n_data / erp-server_n8n_postgres_data are kept on
-# disk until the cloud migration is confirmed). The AI gateway stack lives in
-# ../ai-stack/docker-compose.yml.
+# ERP stack on the Mac mini: Postgres (pgvector) + NestJS API + Next.js web.
+# n8n runs on n8n CLOUD (local n8n retired 2026-06-10; its old volumes
+# erp-server_n8n_data / erp-server_n8n_postgres_data are kept on disk until the
+# cloud migration is confirmed). The AI gateway stack lives in
+# ../ai-stack/docker-compose.yml and externally joins this project's erp-network
+# — bring THIS stack up first, and never rename the project or the postgres
+# container (ai-litellm resolves host `erp-postgres` on `erp-server_erp-network`).
 
 services:
   postgres:
-    image: postgres:18-alpine
+    # pgvector-enabled Postgres 18 (Debian-based). Replaced postgres:18-alpine on
+    # 2026-06-11 — the ERP schema's baseline migration runs CREATE EXTENSION
+    # vector, which alpine lacks. The alpine(musl)→debian(glibc) swap required a
+    # dump/restore (collation incompatibility), hence the new volume name; the
+    # old erp-server_postgres_data volume is kept on disk until verified.
+    # Fallback if this tag is ever unavailable for arm64: build FROM postgres:18
+    # and compile pgvector.
+    image: pgvector/pgvector:pg18
     container_name: erp-postgres
     restart: unless-stopped
     environment:
@@ -15,21 +25,81 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in erp-server/.env (see .env.example)}
       POSTGRES_DB: ${DB_NAME:-postgres}
     ports:
-      - "5432:5432"
+      - "5432:5432"   # published: laptops connect via the mini's Tailscale name
     volumes:
       # /var/lib/postgresql (without /data) is correct ONLY for postgres 18+ images;
       # pre-18 tags need /var/lib/postgresql/data or data lands outside the volume
-      - postgres_data:/var/lib/postgresql
+      - postgres_data_pg18:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-evertrust-erp}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    mem_limit: 1g
+    networks:
+      - erp-network
+
+  erp-api:
+    build:
+      context: ..                        # repo root: the image needs the whole pnpm workspace
+      dockerfile: erp-server/Dockerfile
+    image: evertrust-api:prod
+    container_name: erp-api
+    restart: unless-stopped
+    # Full API env contract lives in .env (see .env.example). DATABASE_URL in
+    # there must use host `erp-postgres` (container DNS) — NOT localhost or
+    # host.docker.internal, which hit the brew postgres on the mini's loopback.
+    env_file: .env
+    environment:
+      PORT: "3001"
+      UPLOAD_DIR: /app/uploads
+    command: ["sh", "/app/erp-server/api-start.sh"]   # idempotent migrate + seed, then exec API
+    volumes:
+      - uploads:/app/uploads
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    mem_limit: 1g
+    networks:
+      - erp-network
+
+  erp-web:
+    build:
+      context: ..
+      dockerfile: erp-client/Dockerfile
+      args:
+        # INLINED into the client bundle at build time — the browser-facing API
+        # origin. Changing it requires an image rebuild, not just a restart.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?Set NEXT_PUBLIC_API_URL in erp-server/.env}
+    image: evertrust-web:prod
+    container_name: erp-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      erp-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/login"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    mem_limit: 512m
     networks:
       - erp-network
 
 volumes:
-  postgres_data:
+  postgres_data_pg18:
+  uploads:
 
 networks:
   erp-network:

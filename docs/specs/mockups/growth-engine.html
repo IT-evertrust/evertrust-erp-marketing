@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Growth Engine — interactive</title>
+<style>
+  :root{--bg:#0b0b0e;--panel:#141418;--panel2:#17171c;--line:rgba(255,255,255,.08);
+    --txt:#e9e9ee;--muted:#8b8b95;--faint:#6a6a73;--good:#34d399;--mid:#fbbf24;--low:#f87171;--sky:#38bdf8;--violet:#a78bfa;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--txt);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+  .wrap{max-width:1080px;margin:0 auto;padding:24px}
+  .phead{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .phead h1{font-size:23px;margin:0;letter-spacing:-.02em}.phead .cnt{color:var(--muted);font-size:13px}
+  .toolbar{margin-left:auto;display:flex;gap:8px}
+  .qa{border:1px solid var(--line);background:var(--panel);color:var(--txt);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:600;cursor:pointer}
+  .qa:hover{border-color:rgba(56,189,248,.4)}
+  .qa.primary{background:var(--sky);color:#04222e;border-color:transparent}
+  .menu{position:relative}
+  .pop{position:absolute;top:100%;right:0;margin-top:4px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px;display:none;z-index:40;min-width:180px}
+  .menu.open .pop{display:block}
+  .pop button{display:block;width:100%;text-align:left;background:transparent;border:none;color:var(--txt);padding:8px 10px;border-radius:7px;cursor:pointer;font-size:13px}.pop button:hover{background:var(--panel2)}
+  .engine{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1px solid var(--line);border-radius:11px;background:var(--panel2);padding:9px 13px;margin-bottom:20px;font-size:12.5px}
+  .engine .lab{color:var(--faint);text-transform:uppercase;letter-spacing:.06em;font-size:10.5px;margin-right:4px}
+  .est{display:inline-flex;align-items:center;gap:6px;color:var(--muted)}.est b{color:var(--txt)}
+  .dot{width:7px;height:7px;border-radius:50%}.dot.ok{background:var(--good)}.dot.idle{background:var(--faint)}.dot.run{background:var(--sky)}
+  .sep{color:var(--line)}.next{margin-left:auto;color:var(--faint)}
+  .h{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);margin:0 0 12px}
+  .work{display:flex;flex-direction:column;gap:10px;margin-bottom:24px}
+  .witem{display:flex;align-items:center;gap:15px;border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:15px 17px;transition:.2s}
+  .witem.amber{box-shadow:inset 4px 0 0 var(--mid)}.witem.sky{box-shadow:inset 4px 0 0 var(--sky)}.witem.violet{box-shadow:inset 4px 0 0 var(--violet)}.witem.done{box-shadow:inset 4px 0 0 var(--good);opacity:.6}
+  .witem .big{font-size:30px;font-weight:800;flex:0 0 42px;text-align:center;line-height:1}
+  .witem .m{flex:1}.witem .m .t{font-weight:700;font-size:14.5px}.witem .m .s{color:var(--muted);font-size:12.5px;margin-top:3px}
+  .act{border:none;border-radius:9px;padding:9px 16px;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap}
+  .act.amber{background:var(--mid);color:#3a2c04}.act.sky{background:var(--sky);color:#04222e}.act.violet{background:var(--violet);color:#241844}.act.ghost{background:transparent;border:1px solid var(--line);color:var(--muted)}
+  .act:disabled{opacity:.5;cursor:default}
+  .camp{border:1px solid var(--line);border-radius:12px;background:var(--panel);margin-bottom:10px}
+  .camp>summary{list-style:none;cursor:pointer;padding:13px 16px;display:flex;align-items:center;gap:14px}
+  .camp>summary::-webkit-details-marker{display:none}.camp>summary:before{content:"▸";color:var(--faint);font-size:11px}.camp[open]>summary:before{content:"▾"}
+  .cn{font-weight:600;font-size:14px;flex:0 0 200px}
+  .pill{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;background:rgba(52,211,153,.14);color:var(--good)}
+  .miniF{display:flex;gap:13px;font-size:12px;color:var(--muted)}.miniF b{color:var(--txt)}
+  .cact{margin-left:auto;display:flex;gap:6px}.cact .qa{padding:6px 11px;font-size:12px}
+  .cbody{padding:2px 16px 14px 34px;color:var(--muted);font-size:12.5px}
+  .arow{display:flex;gap:10px;padding:7px 0;border-bottom:1px dashed var(--line)}.arow:last-child{border:none}
+  .arow .stg{flex:0 0 130px;color:var(--txt);font-weight:600}.arow .tm{flex:0 0 90px;color:var(--faint)}
+  /* overlay + modal */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-start;justify-content:center;z-index:50;padding:40px 20px;overflow:auto}
+  .overlay.on{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;max-width:660px;width:100%;padding:20px}
+  .modal h3{margin:0 0 4px;font-size:17px}.modal .sub{color:var(--muted);font-size:12.5px;margin-bottom:14px}
+  .modal .x{float:right;cursor:pointer;color:var(--muted);font-size:18px;line-height:1}
+  .dcard{border:1px solid var(--line);border-radius:11px;background:var(--panel2);padding:13px 14px;margin-bottom:10px}
+  .dcard.gone{display:none}
+  .dcard .dt{font-weight:600;font-size:13.5px;margin-bottom:8px;display:flex;gap:8px;align-items:center}
+  .cpill{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px}.cpill.good{background:rgba(52,211,153,.14);color:var(--good)}.cpill.mid{background:rgba(251,191,36,.14);color:var(--mid)}.cpill.low{background:rgba(248,113,113,.14);color:var(--low)}
+  .fld{margin-bottom:8px}.fld .fl{font-size:10.5px;color:var(--faint);margin-bottom:3px}
+  .fld input,.fld textarea{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:8px;color:var(--txt);font:13px/1.5 inherit;padding:8px 10px;resize:vertical}
+  .fld textarea{min-height:120px;white-space:pre-wrap}
+  .drow{display:flex;gap:8px;margin-top:8px}
+  .empty{text-align:center;color:var(--good);padding:24px;font-weight:600}
+  .toast{position:fixed;bottom:20px;right:20px;background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--good);border-radius:10px;padding:11px 15px;font-size:13px;z-index:60;opacity:0;transform:translateY(10px);transition:.22s;max-width:330px}
+  .toast.on{opacity:1;transform:none}
+  .note{margin-top:8px;color:var(--faint);font-size:11px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="phead">
+    <h1>Growth Engine</h1><span class="cnt" id="cnt">· 6 things need you today</span>
+    <div class="toolbar">
+      <button class="qa primary" onclick="aim()">🎯 AIM — Lock &amp; Load</button>
+      <div class="menu" id="stagemenu"><button class="qa" onclick="toggleMenu(event)">▷ Run a stage ▾</button>
+        <div class="pop">
+          <button onclick="runStage('Lead Satellite','leads',7)">Lead Satellite</button>
+          <button onclick="runStage('Ammo Forge','ammo',0)">Ammo Forge</button>
+          <button onclick="runStage('Reach Bazooka','baz',8)">Reach Bazooka</button>
+          <button onclick="runStage('Reply Glock','glk',0)">Reply Glock</button>
+          <button onclick="runStage('RAG Agent','rag',1)">RAG Agent</button>
+          <button onclick="runStage('Sleeper Grenade','slp',0)">Sleeper Grenade</button>
+        </div>
+      </div>
+      <button class="qa" onclick="sync()">⟳ Sync</button>
+    </div>
+  </div>
+
+  <div class="engine">
+    <span class="lab">Engine</span>
+    <span class="est"><span class="dot ok"></span>Lead Sat <b id="leads">7</b></span><span class="sep">·</span>
+    <span class="est"><span class="dot idle"></span>Ammo <b id="ammo">—</b></span><span class="sep">·</span>
+    <span class="est"><span class="dot ok"></span>Bazooka <b id="baz">8</b></span><span class="sep">·</span>
+    <span class="est"><span class="dot run"></span>Glock <b id="glk">2/1</b></span><span class="sep">·</span>
+    <span class="est"><span class="dot ok"></span>RAG <b id="rag">3</b></span><span class="sep">·</span>
+    <span class="est"><span class="dot ok"></span>Sleeper <b id="slp">2</b></span>
+    <span class="next" id="next">next: Bazooka 08:00 · 0 errors</span>
+  </div>
+
+  <p class="h">Today's work — act from here</p>
+  <div class="work">
+    <div class="witem amber" id="w-drafts">
+      <div class="big" style="color:var(--mid)" id="w-drafts-n">3</div>
+      <div class="m"><div class="t">Reply drafts awaiting your approval</div><div class="s">Code &amp; Pepper · Nordwind Energie · Baltic Modular — RAG-drafted, grounded in the knowledge base.</div></div>
+      <button class="act amber" id="w-drafts-btn" onclick="reviewDrafts()">Review &amp; send →</button>
+    </div>
+    <div class="witem sky" id="w-meet">
+      <div class="big" style="color:var(--sky)">1</div>
+      <div class="m"><div class="t">Meeting ready to coach</div><div class="s">Kodeca — tender matching pitch · scored 3.0/5 · 5 improvement items.</div></div>
+      <button class="act sky" onclick="done('w-meet','Opening coaching for Kodeca…')">Open coaching →</button>
+    </div>
+    <div class="witem violet" id="w-leads">
+      <div class="big" style="color:var(--violet)">2</div>
+      <div class="m"><div class="t">Hot leads ready to convert</div><div class="s">Interested replies flagged by Reply Glock.</div></div>
+      <button class="act violet" onclick="done('w-leads','2 leads converted to customers ✓')">Convert →</button>
+    </div>
+    <div class="witem done">
+      <div class="big" style="color:var(--good)">✓</div>
+      <div class="m"><div class="t">No failures · no deadlines at risk</div><div class="s">All 5 stages green · last sync just now.</div></div>
+      <button class="act ghost" onclick="toast('Opening the report…')">View report</button>
+    </div>
+  </div>
+
+  <p class="h">Campaigns</p>
+  <details class="camp" open>
+    <summary>
+      <span class="cn">Container Poland 2026</span><span class="pill">DEPLOYED</span>
+      <span class="miniF"><span>Leads <b>7</b></span><span>Emails <b>8</b></span><span>Replies <b>2</b></span><span>Mtg <b>1</b></span></span>
+      <span class="cact"><button class="qa" onclick="event.preventDefault();runStage('Reach Bazooka','baz',8)">▷ Run stage</button><button class="qa" onclick="event.preventDefault();toast('Opening campaign…')">Open</button></span>
+    </summary>
+    <div class="cbody">
+      <div class="arow"><span class="stg">Lead Satellite</span><span class="tm">09:59</span><span>Found 7 leads</span></div>
+      <div class="arow"><span class="stg">Reach Bazooka</span><span class="tm">08:00</span><span>Sent 8 (news-hook + COLD-AGG)</span></div>
+      <div class="arow"><span class="stg">RAG Agent</span><span class="tm">10:44</span><span>3 reply drafts — awaiting approval</span></div>
+    </div>
+  </details>
+
+  <p class="note">Interactive mockup — buttons work (mock): run a stage, launch via AIM, approve/send drafts, convert, sync. State updates + toasts.</p>
+</div>
+
+<!-- overlay -->
+<div class="overlay" id="ov" onclick="if(event.target===this)closeModal()"><div class="modal" id="modal"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+let tT;
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('on');clearTimeout(tT);tT=setTimeout(()=>t.classList.remove('on'),2600);}
+function openModal(html){document.getElementById('modal').innerHTML=html;document.getElementById('ov').classList.add('on');}
+function closeModal(){document.getElementById('ov').classList.remove('on');}
+function toggleMenu(e){e.stopPropagation();document.getElementById('stagemenu').classList.toggle('open');}
+document.addEventListener('click',()=>document.getElementById('stagemenu').classList.remove('open'));
+
+const DR=[
+ {id:"cp",co:"Code & Pepper",conf:"0.86",cc:"good",subj:"Market Entry package and success fee overview",body:"Dear Code & Pepper,\n\nOur Market Entry package prepares your company to bid under its own name — document review, qualification certificates, references, tax/insurance docs, platform onboarding, advisory.\n\nThe model combines a fixed submission fee with a success commission on award (a % of contract value, lower for higher-value contracts).\n\nKind regards,\nHanna Nguyen"},
+ {id:"nw",co:"Nordwind Energie GmbH",conf:"0.82",cc:"mid",subj:"KRITIS compliance & our uptime SLA",body:"Dear Nordwind Energie GmbH,\n\nOur modular units meet German KRITIS reliability requirements (certification provided at qualification), with a 99.5% uptime SLA backed by service credits.\n\nKind regards,\nHanna Nguyen"},
+ {id:"bm",co:"Baltic Modular Sp. z o.o.",conf:"0.74",cc:"low",subj:"Lead time for a 20-module deployment",body:"Dear Baltic Modular,\n\nFor ~20 office modules a realistic order-to-on-site lead time is 6–8 weeks; staged delivery can start earlier.\n\nKind regards,\nHanna Nguyen"}
+];
+let remaining=DR.length;
+function reviewDrafts(){
+  openModal(`<span class="x" onclick="closeModal()">✕</span><h3>Review &amp; send — RAG drafts</h3><div class="sub">Edit if needed, then approve. On approve, n8n sends the Gmail draft.</div><div id="dlist">`+
+    DR.map(d=>`<div class="dcard" id="dc-${d.id}"><div class="dt">${d.co} <span class="cpill ${d.cc}">● ${d.conf}</span></div>
+      <div class="fld"><div class="fl">Subject</div><input value="${d.subj.replace(/"/g,'&quot;')}"></div>
+      <div class="fld"><div class="fl">Body</div><textarea>${d.body}</textarea></div>
+      <div class="drow"><button class="act amber" onclick="approve('${d.id}','${d.co.replace(/'/g,"")}')">✓ Approve &amp; send</button><button class="act ghost" onclick="discard('${d.id}')">Discard</button></div></div>`).join('')+`</div>`);
+}
+function approve(id,co){finishDraft(id);toast('Sent to '+co+' ✓ (via n8n)');}
+function discard(id){finishDraft(id);toast('Draft discarded');}
+function finishDraft(id){
+  document.getElementById('dc-'+id).classList.add('gone');
+  remaining--;
+  document.getElementById('w-drafts-n').textContent=remaining;
+  document.getElementById('rag').textContent=remaining;
+  if(remaining===0){
+    document.querySelector('#dlist').innerHTML='<div class="empty">All drafts handled ✓</div>';
+    const w=document.getElementById('w-drafts');w.className='witem done';
+    document.getElementById('w-drafts-n').textContent='✓';
+    document.getElementById('w-drafts-btn').textContent='Done';document.getElementById('w-drafts-btn').disabled=true;
+    setTimeout(closeModal,700);refreshCount();
+  }
+}
+function done(wid,msg){const w=document.getElementById(wid);w.className='witem done';w.querySelector('.act').textContent='Done ✓';w.querySelector('.act').disabled=true;toast(msg);refreshCount();}
+function runStage(name,id,base){
+  toast(name+' — running…');
+  document.getElementById('stagemenu').classList.remove('open');
+  setTimeout(()=>{
+    const el=document.getElementById(id);
+    if(el&&id!=='glk'){const cur=parseInt(el.textContent)||0;el.textContent=cur+1;}
+    toast(name+' done ✓ · +1');
+  },900);
+}
+function sync(){toast('Syncing from n8n…');setTimeout(()=>toast('Synced ✓ · 0 new errors'),900);}
+function aim(){
+  openModal(`<span class="x" onclick="closeModal()">✕</span><h3>🎯 AIM — Lock &amp; Load</h3><div class="sub">Launch a new campaign. (mock)</div>
+    <div class="fld"><div class="fl">Niche</div><input placeholder="LED"></div>
+    <div class="fld"><div class="fl">Country</div><input placeholder="Germany"></div>
+    <div class="fld"><div class="fl">Project</div><input placeholder="LED Retrofit Berlin 2026" id="aim-proj"></div>
+    <div class="drow"><button class="act sky" onclick="deploy()">Deploy campaign</button><button class="act ghost" onclick="closeModal()">Cancel</button></div>`);
+}
+function deploy(){const p=document.getElementById('aim-proj').value||'new campaign';closeModal();toast('🎯 Launched: '+p+' — arsenal running');}
+function refreshCount(){
+  const open=document.querySelectorAll('.witem:not(.done)').length;
+  document.getElementById('cnt').textContent = open>0?('· '+open+' things need you today'):'· all clear 🎉';
+}
+</script>
+</body>
+</html>

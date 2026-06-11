@@ -1,0 +1,16 @@
+packages:
+  - 'erp-server'
+  - 'erp-client'
+  - 'packages/*'
+allowBuilds:
+  '@nestjs/core': true
+  argon2: true
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
+onlyBuiltDependencies:
+  - esbuild
+  - '@nestjs/core'
+  - argon2
+  - unrs-resolver
+  - sharp

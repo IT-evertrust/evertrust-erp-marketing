@@ -1,27 +1,29 @@
 ---
-description: Create and apply a Prisma migration for erp-server, then regenerate the client
-argument-hint: <migration-name>
+description: Generate and apply a Drizzle migration from packages/db schema changes
+argument-hint: [migration-note]
 ---
 
-Run a Prisma migration named "$ARGUMENTS". If no name was given, ask for one and stop.
+Run the Drizzle migration workflow. Optional context from the user: "$ARGUMENTS"
 
-1. Preflight — verify Prisma is actually wired up:
-   Read /Users/macco/Documents/evertrust-erp-marketing/erp-server/prisma/schema.prisma and check
-   whether the `datasource db` block has a `url` configured (or whether an
-   erp-server/prisma.config.ts with a datasource url exists — Prisma 7 expects the url there and
-   does NOT auto-load .env). If neither is configured, STOP and tell the user:
-   "Prisma is not wired up yet — the datasource has no url, so migrations cannot run."
-   Do not attempt workarounds or invent configuration.
-2. Ensure the database is up and healthy:
+1. Ensure the database is up and healthy:
    `cd /Users/macco/Documents/evertrust-erp-marketing/erp-server && docker compose ps postgres`
    The postgres service (container erp-postgres) must show (healthy). If not, suggest running
    /dev-up first and stop.
-3. Create and apply the migration:
-   `cd /Users/macco/Documents/evertrust-erp-marketing/erp-server && npm run prisma:migrate -- --name $ARGUMENTS`
-4. Regenerate the Prisma client:
-   `cd /Users/macco/Documents/evertrust-erp-marketing/erp-server && npm run prisma:generate`
-5. Report the migration name, the new directory under erp-server/prisma/migrations/, and any
-   warnings from the Prisma CLI verbatim.
+2. Generate the migration from schema changes:
+   `cd /Users/macco/Documents/evertrust-erp-marketing && corepack pnpm --filter @evertrust/db db:generate`
+   Show the user the generated SQL file under packages/db/drizzle/ and WAIT for a quick review
+   if it contains DROP or ALTER ... TYPE statements.
+   Caveat: enum value renames/removals don't work incrementally with drizzle-kit — if the
+   diff touches enum values, stop and discuss squashing (dev-only) instead.
+3. Apply it:
+   `cd /Users/macco/Documents/evertrust-erp-marketing && corepack pnpm --filter @evertrust/db db:migrate`
+   DATABASE_URL decides the target — from a laptop that must be your per-dev database
+   (erp_<yourname>), never the shared `evertrust` DB directly (the erp-api container migrates
+   that one itself on restart).
+4. Verify nothing else broke:
+   `corepack pnpm --filter @evertrust/api test`
+5. Report the new migration file, tables/columns affected, and any warnings verbatim.
 
-NEVER run `prisma migrate reset` (it drops the database) — not even if Prisma suggests it.
+NEVER hand-edit a migration that has already been applied anywhere, and NEVER run destructive
+commands (DROP DATABASE, compose down -v) — the litellm and per-dev databases share this Postgres.
 If the migration fails, show the exact error and stop; do not retry destructively.

@@ -1,0 +1,1 @@
+ALTER TABLE "arsenal_settings" ADD COLUMN "bazooka_timezone" text;
