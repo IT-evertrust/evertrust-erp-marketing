@@ -38,6 +38,13 @@ services:
         value: none
       - key: CORS_ORIGINS       # set to the Vercel production URL after the web deploy
         sync: false
+      # ⚠ NO-LOGIN MODE on a PUBLIC API: anyone with the URL can use the ERP.
+      # Team decision 2026-06-11 (matches the old repo). AUTH_DISABLED_USER_EMAIL
+      # should point at a LOW-privilege account so anonymous access isn't super-admin.
+      - key: AUTH_DISABLED
+        value: "true"
+      - key: AUTH_DISABLED_USER_EMAIL
+        sync: false
       - key: UPLOAD_DIR
         value: /tmp/uploads     # ephemeral on free; change to /var/uploads with a disk
       # n8n cloud wiring (values from the vault / erp-server/.env on the mini)
