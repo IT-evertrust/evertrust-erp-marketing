@@ -1,0 +1,68 @@
+# Render Blueprint — EverTrust ERP API only.
+# Database lives on SUPABASE (set DATABASE_URL to the Supabase SESSION pooler URI —
+# IPv4, port 5432; the transaction pooler on 6543 breaks postgres-js prepared
+# statements). Web lives on VERCEL (root directory erp-client). The AI stack
+# (LiteLLM/Qdrant/SearXNG) stays on the Mac mini — see docs/team-hosting.md.
+
+services:
+  - type: web
+    name: evertrust-api
+    runtime: docker
+    repo: https://github.com/evertrust-gmbh/evertrust-erp-marketing
+    region: frankfurt          # EU residency
+    plan: free                 # free = sleeps after ~15 min idle + EPHEMERAL uploads.
+                               # Upgrade to `starter` + uncomment the disk block for
+                               # always-on + durable uploaded documents.
+    dockerfilePath: ./erp-server/Dockerfile
+    dockerContext: .
+    # Render runs the Docker Command without a shell — keep the two-token form.
+    dockerCommand: sh /app/erp-server/api-start.sh
+    healthCheckPath: /health
+    autoDeploy: true
+    # disk:                    # paid plans only — durable storage for uploads
+    #   name: uploads
+    #   mountPath: /var/uploads
+    #   sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production       # gates the dev seed + switches pino transport
+      - key: DATABASE_URL       # Supabase SESSION pooler URI (…pooler.supabase.com:5432)
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: COOKIE_SECURE      # web (vercel.app) and API (onrender.com) are different
+        value: "true"           # sites → secure + SameSite=none for the auth cookie
+      - key: COOKIE_SAMESITE
+        value: none
+      - key: CORS_ORIGINS       # set to the Vercel production URL after the web deploy
+        sync: false
+      - key: UPLOAD_DIR
+        value: /tmp/uploads     # ephemeral on free; change to /var/uploads with a disk
+      # n8n cloud wiring (values from the vault / erp-server/.env on the mini)
+      - key: N8N_API_URL
+        value: https://evertrustgmbh.app.n8n.cloud
+      - key: N8N_API_KEY
+        sync: false
+      - key: ARSENAL_INGEST_TOKEN
+        sync: false
+      - key: N8N_AIM_WEBHOOK_URL
+        value: https://evertrustgmbh.app.n8n.cloud/webhook/aim-deploy-campaign
+      - key: N8N_CAMPAIGNS_LIST_WEBHOOK_URL
+        value: https://evertrustgmbh.app.n8n.cloud/webhook/erp-campaigns-list
+      - key: N8N_LEAD_SATELLITE_WEBHOOK_URL
+        value: https://evertrustgmbh.app.n8n.cloud/webhook/wf03-lead-research
+      - key: N8N_AMMO_FORGE_WEBHOOK_URL
+        value: https://evertrustgmbh.app.n8n.cloud/webhook/wf4-ammo-forge
+      - key: N8N_SLEEPER_GRENADE_WEBHOOK_URL
+        value: https://evertrustgmbh.app.n8n.cloud/webhook/wf8-sleeper-grenade
+      - key: N8N_PROVISION_HOT_LEADS_WEBHOOK_URL
+        value: https://evertrustgmbh.app.n8n.cloud/webhook/provision-hot-leads
+      - key: N8N_HOT_LEADS_PIPELINE_WEBHOOK_URL
+        value: https://evertrustgmbh.app.n8n.cloud/webhook/crm-customer
+      # blank by design: BAZOOKA/REPLY GLOCK have no webhook triggers; no Hermes RFQ wf yet
+      - key: ANTHROPIC_API_KEY  # blank = price-assist off
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-3-5-sonnet-latest
