@@ -90,4 +90,17 @@ Context: the 3 "(Web)" nodes (`Country Profiler (Web)`, `Search Companies (Web)`
 
 ## Review
 
+**2026-06-11 — ERP monorepo import + mini infra ready (branch `migrate-evertrust-erp`).**
+Imported `Ryugwki/evertrust-ERP@c118222` with renames (apps/api→erp-server, apps/web→erp-client,
+packages/* kept), replacing all boilerplate. Verified: pnpm build/lint/typecheck green, 35 jest
+suites / 299 tests green, `--frozen-lockfile` clean, both Docker images build AND boot (web
+/login HTTP 200; api image has dist + curl + tsx). Live infra: Postgres swapped to
+pgvector/pgvector:pg18 with full dump/restore (litellm DB + virtual key verified intact),
+Docker VM 3→4.5 GB, ai-stack healthy, 401-keyless re-verified on all three funnel surfaces.
+A 3-lens adversarially-verified review (20 agents) confirmed 15 findings — all fixed in
+`aaa5dcc`, notably: fresh-volume DB bootstrap (postgres-init), production seed gating
+(SEED_DEV_USERS), uploads-volume backup line, per-dev DATABASE_URL invocation docs, and the
+8 missing docs/evertrust onboarding files. Remaining cutover steps are the unchecked items in
+Current Focus (Render dump needs the user's external DB URL; .env fill is a user step).
+
 **2026-06-10 — Shared-infra compose hardening.** `erp-server/docker-compose.yml` rewritten for the Mac mini hosting model (Tailscale hostname `mac-mini-ca-mac.tailc3d837.ts.net` as canonical `HOST_NAME`); `.env.example`, `docs/team-hosting.md`, `synchronize: false`, and `.claude` doc sync. Verified: `docker compose config` renders cleanly with a throwaway env file and fails fast with each `${VAR:?}` message without one; `npm run build` passes after the app.module.ts change. Stack `up` deliberately NOT re-run locally (existing local n8n volume holds the old encryption key; see docs §11). Cutover on the mini is a human step.
