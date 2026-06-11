@@ -9,6 +9,7 @@ n8n cloud ──HTTPS+key──► Funnel :443 ──► LiteLLM "Hermes req" ga
                                           │ cache: in-memory + Redis        ├ Trev's machine (tailnet, PRIMARY)
                                           │ audit: requests logged to PG    ├ mini hermes3:8b (fallback, free)
 n8n cloud ──HTTPS+api-key─► Funnel :8443 ─► Qdrant (RAG vectors)            └ deepseek-cloud (paid, optional)
+n8n cloud ──HTTPS+X-Search-Key─► Funnel :10000 ─► Caddy auth ─► SearXNG (web search for agents)
 laptops ──tailnet──► mac-mini-ca-mac.tailc3d837.ts.net:5432 (ERP Postgres)
 ```
 
@@ -17,6 +18,7 @@ laptops ──tailnet──► mac-mini-ca-mac.tailc3d837.ts.net:5432 (ERP Postg
 | ERP Postgres | `erp-server/docker-compose.yml` | 5432 (published) |
 | LiteLLM gateway | `ai-stack/docker-compose.yml` | 4000 loopback → Funnel **:443** |
 | Qdrant | `ai-stack/docker-compose.yml` | 6333 loopback → Funnel **:8443** |
+| SearXNG (behind Caddy auth) | `ai-stack/docker-compose.yml` | 8088 loopback → Funnel **:10000** |
 | Redis (gateway cache) | `ai-stack/docker-compose.yml` | internal only |
 | Ollama | native macOS app (Metal) | 11434 loopback |
 
@@ -56,8 +58,9 @@ without checking — consolidating the two Postgreses is an open backlog item.
 - [ ] **Enable Funnel on the tailnet** (one-time, admin console → Access Controls; the policy
       needs `"nodeAttrs": [{"target": ["autogroup:member"], "attr": ["funnel"]}]`), then:
       ```bash
-      tailscale funnel --bg 4000              # :443  → gateway
-      tailscale funnel --bg --https=8443 6333 # :8443 → Qdrant
+      tailscale funnel --bg 4000               # :443   → gateway
+      tailscale funnel --bg --https=8443 6333  # :8443  → Qdrant
+      tailscale funnel --bg --https=10000 8088 # :10000 → SearXNG (Caddy auth proxy)
       tailscale funnel status
       ```
       `--bg` persists across reboots.
@@ -132,11 +135,13 @@ not a backup. (n8n cloud is backed up by n8n; export important workflows periodi
 
 ## 9. Exposure rules
 
-- Remote access for humans = Tailscale. The ONLY public surfaces are the two Funnel ports
-  (gateway 443 with virtual-key auth, Qdrant 8443 with API key) — required because n8n cloud
-  lives outside the tailnet. **Never port-forward anything on the office router.**
-- Future: `tailscale serve`/TLS for prettier setups, funnel port 10000 reserved for a future
-  SearXNG if web-search nodes ever move off OpenAI.
+- Remote access for humans = Tailscale. The ONLY public surfaces are the three Funnel ports
+  (gateway 443 with virtual-key auth, Qdrant 8443 with API key, SearXNG 10000 with
+  X-Search-Key header enforced by a Caddy proxy) — required because n8n cloud lives outside
+  the tailnet. **Never port-forward anything on the office router.**
+- SearXNG live since 2026-06-10 (`tailscale funnel --bg --https=10000 8088`): web-search
+  backend for the WF-03 agent nodes, so they can move off OpenAI's hosted webSearch.
+- Future: `tailscale serve`/TLS for prettier setups.
 
 ## 10. Recovery playbook
 

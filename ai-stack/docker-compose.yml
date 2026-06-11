@@ -72,6 +72,47 @@ services:
     networks:
       - ai-network
 
+  searxng:
+    # Web-search backend for n8n agent tools (WF-03 lead research). No native
+    # auth — ONLY reachable through the searxng-auth proxy, never published.
+    image: searxng/searxng:2026.6.8-f3fab143b
+    container_name: ai-searxng
+    restart: unless-stopped
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET:?Set in ai-stack/.env (openssl rand -hex 32)}
+      SEARXNG_BASE_URL: https://mac-mini-ca-mac.tailc3d837.ts.net:10000/
+    volumes:
+      - ./config/searxng-settings.yml:/etc/searxng/settings.yml:ro
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - ai-network
+    # no ports: internal to the compose network only
+
+  searxng-auth:
+    # Key-checking reverse proxy (SearXNG has no auth of its own).
+    # Funneled on :10000 — same pattern as gateway :443 / Qdrant :8443.
+    image: caddy:2.10-alpine
+    container_name: ai-searxng-auth
+    restart: unless-stopped
+    environment:
+      SEARXNG_API_KEY: ${SEARXNG_API_KEY:?Set in ai-stack/.env (openssl rand -hex 24)}
+    ports:
+      - "127.0.0.1:8088:8088" # loopback only: reachable via funnel + this host, never the LAN
+    volumes:
+      - ./config/searxng-auth.Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      searxng:
+        condition: service_healthy
+    mem_limit: 128m
+    networks:
+      - ai-network
+
 volumes:
   qdrant_data:
 

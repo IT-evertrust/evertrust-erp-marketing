@@ -1,0 +1,35 @@
+# SearXNG settings for the ai-stack search backend (used by n8n agent tools).
+# Mounted read-only into ai-searxng at /etc/searxng/settings.yml.
+# Secret comes from the SEARXNG_SECRET env var (set in ai-stack/.env).
+
+use_default_settings: true
+
+server:
+  # Auth lives in the searxng-auth Caddy proxy in front (X-Search-Key header),
+  # mirroring the api-key pattern of the other funneled services — so the
+  # bot-limiter (which would block n8n's API calls) stays off.
+  limiter: false
+  public_instance: false
+  image_proxy: false
+
+search:
+  # json is what the n8n HTTP Request tool consumes (GET /search?q=...&format=json)
+  formats:
+    - html
+    - json
+
+# Lead research leans on engines that tolerate automated volume; Google is
+# captcha-happy for self-hosted instances, so it stays off.
+engines:
+  - name: google
+    disabled: true
+  - name: duckduckgo
+    disabled: false
+  - name: brave
+    disabled: false
+  - name: bing
+    disabled: false
+  - name: mojeek
+    disabled: false
+  - name: startpage
+    disabled: true

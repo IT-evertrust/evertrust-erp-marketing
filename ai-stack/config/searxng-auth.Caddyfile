@@ -1,0 +1,13 @@
+# Auth proxy in front of SearXNG (which has no native auth). Funnel :10000
+# terminates TLS and forwards here; requests without the right X-Search-Key
+# header are rejected, matching the api-key posture of LiteLLM and Qdrant.
+{
+	admin off
+	auto_https off
+}
+
+:8088 {
+	@unauthed not header X-Search-Key "{$SEARXNG_API_KEY}"
+	respond @unauthed 401
+	reverse_proxy searxng:8080
+}
