@@ -18,10 +18,28 @@ import type {
 } from '@evertrust/shared';
 import { DB, type DbClient } from '../db/db.tokens';
 import { tenantScope } from '../common/tenant';
+import { writeMachineAudit } from '../common/machine-audit';
+import { NichesService } from '../niches/niches.service';
 import { AppConfigService } from '../config/app-config.service';
 
 type LeadRow = typeof schema.leads.$inferSelect;
 type CampaignRow = typeof schema.campaigns.$inferSelect;
+
+// Fields a prospect graduation contributes to its hot lead. nicheId is resolved by
+// the caller (a campaign-sourced lead leaves it NULL — it inherits via campaign).
+export interface GraduateLeadInput {
+  email: string;
+  companyName?: string | null;
+  website?: string | null;
+  city?: string | null;
+  country?: string | null;
+  sourceCampaign?: string | null;
+  campaignId?: string | null;
+  nicheId?: string | null;
+  hotReason?: string | null;
+  stage?: LeadStage;
+  note?: string | null;
+}
 
 // The n8n "Hot Leads Pipeline (per-campaign)" workflow + the node whose output
 // holds the per-lead rows (verified against live execution data).
@@ -112,6 +130,7 @@ export class LeadsService {
   constructor(
     @Inject(DB) private readonly db: DbClient,
     private readonly config: AppConfigService,
+    private readonly niches: NichesService,
   ) {}
 
   async list(
@@ -140,13 +159,18 @@ export class LeadsService {
     if (existing) {
       throw new ConflictException('A lead with this email already exists.');
     }
+    // Free-text niche → the shared niche vocabulary (find-or-create), stored as the
+    // nicheId FK. MANUAL leads carry the niche directly (no campaign to resolve it).
+    const nicheId = input.niche
+      ? (await this.niches.findOrCreate(orgId, input.niche)).id
+      : null;
     const inserted = await this.db
       .insert(schema.leads)
       .values({
         organizationId: orgId,
         email,
         companyName: input.companyName ?? null,
-        niche: input.niche ?? null,
+        nicheId,
         tier: input.tier ?? null,
         country: input.country ?? null,
         sourceCampaign: input.sourceCampaign ?? null,
@@ -194,6 +218,55 @@ export class LeadsService {
     const row = updated[0];
     if (!row) throw new Error('Failed to convert lead');
     return row;
+  }
+
+  // Find-or-create the hot lead for a graduating prospect (the Reply Glock
+  // INTERESTED → hot lead path). Respects the leads (organizationId,email) unique
+  // key: an existing row is returned (created=false), never duplicated. A new row
+  // is source N8N with no createdBy (machine write). Machine route — audited on the
+  // create. The CALLER links prospect.leadId; this only owns the leads row.
+  async graduateFromProspect(
+    orgId: string,
+    input: GraduateLeadInput,
+  ): Promise<{ lead: LeadRow; created: boolean }> {
+    const email = input.email.toLowerCase();
+    const existing = await this.findByEmail(orgId, email);
+    if (existing) return { lead: existing, created: false };
+
+    const inserted = await this.db
+      .insert(schema.leads)
+      .values({
+        organizationId: orgId,
+        email,
+        companyName: input.companyName ?? null,
+        website: input.website ?? null,
+        city: input.city ?? null,
+        country: input.country ?? null,
+        // A campaign-sourced lead leaves nicheId NULL — it inherits via the
+        // campaign (the caller passes null for that case per the drift rule).
+        nicheId: input.nicheId ?? null,
+        sourceCampaign: input.sourceCampaign ?? null,
+        campaignId: input.campaignId ?? null,
+        hotReason: input.hotReason ?? null,
+        note: input.note ?? null,
+        stage: input.stage ?? 'INTERESTED',
+        source: 'N8N',
+        // Stamped explicitly (the column also defaults to now()) so the row is
+        // complete the moment it is returned and mapped to a DTO.
+        updatedAt: new Date(),
+      })
+      .returning();
+    const lead = inserted[0];
+    if (!lead) throw new Error('Failed to create lead');
+
+    await writeMachineAudit(this.db, {
+      organizationId: orgId,
+      entity: 'leads',
+      entityId: lead.id,
+      action: 'CREATE',
+      after: { email, stage: lead.stage, campaignId: lead.campaignId },
+    });
+    return { lead, created: true };
   }
 
   // Import hot leads + graduated customers from the Hot Leads Pipeline execution
@@ -332,6 +405,14 @@ export class LeadsService {
   ): Promise<boolean> {
     const stage = stageForRow(row);
     const existing = await this.findByEmail(orgId, row.email);
+    // Niche resolution: an N8N lead inherits its niche from the linked campaign;
+    // otherwise the sheet's free-text "Niche" is find-or-created into the shared
+    // vocabulary. Falls back to the existing row's nicheId so a re-sync never clears it.
+    const nicheId = campaign
+      ? campaign.nicheId
+      : row.niche
+        ? (await this.niches.findOrCreate(orgId, row.niche)).id
+        : (existing?.nicheId ?? null);
     const fields = {
       companyName: row.companyName,
       companyType: row.companyType,
@@ -339,7 +420,7 @@ export class LeadsService {
       city: row.city,
       country: row.country,
       tier: row.tier,
-      niche: row.niche,
+      nicheId,
       sourceCampaign: row.sourceCampaign,
       campaignId: campaign?.id ?? existing?.campaignId ?? null,
       hotReason: row.hotReason,
@@ -393,13 +474,24 @@ export class LeadsService {
   }
 
   private async ensureCustomer(orgId: string, lead: LeadRow): Promise<string> {
+    // customers.niches is a text[] of niche NAMES; resolve the lead's nicheId FK
+    // back to its display name (empty when the lead has no niche).
+    let nicheNames: string[] = [];
+    if (lead.nicheId) {
+      const n = await this.db
+        .select({ name: schema.niches.name })
+        .from(schema.niches)
+        .where(eq(schema.niches.id, lead.nicheId))
+        .limit(1);
+      if (n[0]) nicheNames = [n[0].name];
+    }
     const inserted = await this.db
       .insert(schema.customers)
       .values({
         organizationId: orgId,
         name: lead.companyName ?? lead.email,
         contact: lead.email,
-        niches: lead.niche ? [lead.niche] : [],
+        niches: nicheNames,
       })
       .returning();
     const customer = inserted[0];

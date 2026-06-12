@@ -21,29 +21,33 @@ function seed(urls: Record<string, string> = {}) {
       id: C_A,
       organizationId: ORG_A,
       name: null,
-      niche: 'LED',
-      target: 'EPC',
+      nicheId: 'niche-led',
       country: 'Germany',
-      state: 'Berlin',
+      region: 'North',
       project: 'LED Retrofit Berlin 2026',
       gmailLabel: 'LED-Berlin-2026',
       salesCalendarId: 'info@evertrust-germany.de',
       whatsappNumber: '+4915112345678',
-      status: 'DEPLOYED',
+      sender: 'info',
+      lifecycle: 'ACTIVE',
       driveFolderId: 'F1',
       driveFolderUrl: 'https://drive/F1',
-      deployError: null,
-      deployedBy: null,
-      deployedAt: null,
+      activatedBy: null,
+      activatedAt: null,
       createdAt: new Date('2026-01-01T00:00:00Z'),
       __seq: 1,
     },
+  ]);
+  // campaignPayload resolves the niche NAME from the campaign's nicheId.
+  const niches = new FakeTable([
+    { id: 'niche-led', organizationId: ORG_A, name: 'LED', slug: 'led', __seq: 1 },
   ]);
   const arsenalRuns = new FakeTable([]);
   const arsenalSettings = new FakeTable([]);
   const { db } = makeFakeDb(
     new Map<unknown, FakeTable>([
       [schema.campaigns, campaigns],
+      [schema.niches, niches],
       [schema.arsenalRuns, arsenalRuns],
       [schema.arsenalSettings, arsenalSettings],
     ]),

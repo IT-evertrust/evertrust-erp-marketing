@@ -4,6 +4,7 @@ import {
   type ArsenalRunDto,
   type ArsenalStage,
   type CampaignDto,
+  type CampaignLifecycle,
 } from '@evertrust/shared';
 
 // The Arsenal as ONE ordered sequence (Growth Engine redesign). AIM is the campaign
@@ -117,16 +118,37 @@ export function latestRunFor(
   };
 }
 
-// AIM status for a campaign comes from its deploy outcome, not arsenal_runs.
+// AIM status for a campaign comes from its lifecycle, not arsenal_runs. A campaign
+// out of DRAFT (ACTIVE / PAUSED / ARCHIVED) has been launched, so AIM reads "ok"
+// from its activation time; a DRAFT hasn't fired the webhook yet, so it's idle.
 export function aimStatus(c: CampaignDto): StageStatus {
-  if (c.status === 'DEPLOYED') {
-    return { outcome: 'ok', at: c.deployedAt ?? c.createdAt };
-  }
-  if (c.status === 'FAILED') {
-    return { outcome: 'failed', at: c.deployedAt ?? c.createdAt };
-  }
-  return { outcome: 'idle', at: null };
+  if (c.lifecycle === 'DRAFT') return { outcome: 'idle', at: null };
+  return { outcome: 'ok', at: c.activatedAt ?? c.createdAt };
 }
+
+// Campaign lifecycle → badge label + dark-shell tint (house semantic palette):
+// DRAFT neutral, ACTIVE emerald (live), PAUSED amber (attention), ARCHIVED muted.
+export const CAMPAIGN_LIFECYCLE_BADGE: Record<
+  CampaignLifecycle,
+  { label: string; className: string }
+> = {
+  DRAFT: {
+    label: 'Draft',
+    className: 'border-slate-500/30 bg-slate-500/10 text-slate-400',
+  },
+  ACTIVE: {
+    label: 'Active',
+    className: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
+  },
+  PAUSED: {
+    label: 'Paused',
+    className: 'border-amber-500/30 bg-amber-500/10 text-amber-400',
+  },
+  ARCHIVED: {
+    label: 'Archived',
+    className: 'border-border bg-muted/40 text-muted-foreground',
+  },
+};
 
 // Dot colour per outcome (emerald / rose / muted-idle) — matches the runs card.
 export const OUTCOME_DOT: Record<RunOutcome, string> = {

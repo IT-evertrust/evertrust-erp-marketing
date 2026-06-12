@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { ContractsCard } from '@/components/growth/contracts-card';
 import { formatDateTime } from '@/lib/tender-format';
 
 const STAGES: LeadStage[] = [
@@ -64,7 +65,7 @@ export function LeadDetailDialog({
 
   return (
     <Dialog open={!!lead} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[85vh] max-w-lg overflow-y-auto">
         {lead ? (
           <>
             <DialogHeader>
@@ -82,7 +83,6 @@ export function LeadDetailDialog({
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
               <Field label="Hot reason" value={lead.hotReason} />
               <Field label="Lead status" value={lead.leadStatus} />
-              <Field label="Niche" value={lead.niche} />
               <Field label="Company type" value={lead.companyType} />
               <Field label="Country" value={lead.country} />
               <Field label="City" value={lead.city} />
@@ -103,6 +103,11 @@ export function LeadDetailDialog({
                 {lead.note}
               </div>
             ) : null}
+
+            <ContractsCard
+              filters={{ leadId: lead.id }}
+              emptyHint="No contracts generated for this lead yet."
+            />
 
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Stage</span>

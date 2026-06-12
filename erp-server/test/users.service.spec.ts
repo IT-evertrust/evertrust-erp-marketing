@@ -338,9 +338,9 @@ describe('UsersService — getStats', () => {
       },
     ]);
     const campaigns = new FakeTable([
-      { id: 'c1', organizationId: ORG_A, deployedBy: ALICE },
-      { id: 'c2', organizationId: ORG_A, deployedBy: ALICE },
-      { id: 'c3', organizationId: ORG_A, deployedBy: BOB },
+      { id: 'c1', organizationId: ORG_A, activatedBy: ALICE },
+      { id: 'c2', organizationId: ORG_A, activatedBy: ALICE },
+      { id: 'c3', organizationId: ORG_A, activatedBy: BOB },
     ]);
     const runs = new FakeTable([
       { id: 'r1', triggeredBy: ALICE },

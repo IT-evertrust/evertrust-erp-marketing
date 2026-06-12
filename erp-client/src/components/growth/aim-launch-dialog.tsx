@@ -1,17 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Crosshair } from 'lucide-react';
 import {
   type CreateCampaignDto,
-  type CampaignRegion,
   type CampaignSender,
-  CAMPAIGN_REGIONS,
   CAMPAIGN_SENDERS,
   CAMPAIGN_SENDER_LABELS,
+  slugify,
 } from '@evertrust/shared';
 import { useCreateCampaign } from '@/hooks/use-campaigns';
+import { useNiches } from '@/hooks/use-niches';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -32,32 +32,42 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-// The 9 AIM inputs (matches the reference Growth-Engine form). `name` is the only
-// optional one. Keyed by the CreateCampaignDto field so the payload is built
-// directly from the form state.
-type Field = {
-  key: keyof CreateCampaignDto;
-  label: string;
-  placeholder: string;
-  required: boolean;
-  // When set, the field renders as a dropdown of these fixed choices instead of
-  // a free-text input (e.g. the location zone).
-  options?: readonly string[];
-  // Optional display labels for `options` when the shown text differs from the
-  // submitted value (e.g. sender key 'hanna' shown as 'hanna@evertrust-germany.de').
-  optionLabels?: Record<string, string>;
+// The AIM "Lock & Load" form, keyed by the CreateCampaignDto fields. Target is
+// gone (target archetypes now live on niche_targets, derived per-niche); the old
+// "State / City" is renamed Region (still free text — a city/voivodeship the Lead
+// Satellite expands into searches); niche is pick-or-create (existing or new name).
+type FormState = {
+  name: string;
+  nicheName: string;
+  country: string;
+  region: string;
+  project: string;
+  gmailLabel: string;
+  whatsappNumber: string;
+  sender: CampaignSender;
 };
 
-const FIELDS: readonly Field[] = [
-  { key: 'name', label: 'Name', placeholder: 'Name this attack (optional)', required: false },
-  { key: 'niche', label: 'Niche', placeholder: 'LED', required: true },
-  { key: 'target', label: 'Target', placeholder: 'EPC, Installer, Operator…', required: true },
-  { key: 'country', label: 'Country', placeholder: 'Germany', required: true },
-  { key: 'state', label: 'State / City', placeholder: 'Select a region', required: true, options: CAMPAIGN_REGIONS },
-  { key: 'project', label: 'Project', placeholder: 'LED Retrofit Berlin 2026', required: true },
-  { key: 'gmailLabel', label: 'Gmail label', placeholder: 'LED-Berlin-2026', required: true },
-  { key: 'whatsappNumber', label: 'WhatsApp number', placeholder: '+49…', required: true },
-  { key: 'sender', label: 'Send from', placeholder: 'info@evertrust-germany.de', required: true, options: CAMPAIGN_SENDERS, optionLabels: CAMPAIGN_SENDER_LABELS },
+const EMPTY_FORM: FormState = {
+  name: '',
+  nicheName: '',
+  country: '',
+  region: '',
+  project: '',
+  gmailLabel: '',
+  whatsappNumber: '',
+  // sender defaults to info@ so its Select shows a valid choice and submit never
+  // posts an empty value (the wire default is also 'info').
+  sender: 'info',
+};
+
+// The text inputs that must be filled before launch (niche/country/project/whatsapp
+// are validated here; region + sender come from Selects that only emit valid values).
+const REQUIRED_TEXT: { key: keyof FormState; label: string }[] = [
+  { key: 'nicheName', label: 'Niche' },
+  { key: 'country', label: 'Country' },
+  { key: 'project', label: 'Project' },
+  { key: 'gmailLabel', label: 'Gmail label' },
+  { key: 'whatsappNumber', label: 'WhatsApp number' },
 ];
 
 // Keep only letters/digits in a label token (drops spaces + punctuation), so
@@ -69,84 +79,98 @@ function slugToken(s: string): string {
 // Auto-build the Gmail label from the AIM inputs: niche · country · zone · year
 // (e.g. "LED-Germany-North-2026"). Empty until a niche is entered; the generic
 // "Anywhere" zone is omitted.
-function deriveGmailLabel(
-  form: Partial<Record<keyof CreateCampaignDto, string>>,
-): string {
-  const niche = slugToken(form.niche ?? '');
+function deriveGmailLabel(form: FormState): string {
+  const niche = slugToken(form.nicheName);
   if (!niche) return '';
-  const country = slugToken(form.country ?? '');
+  const country = slugToken(form.country);
   const zone =
-    form.state && form.state !== 'Anywhere' ? slugToken(form.state) : '';
+    form.region && form.region !== 'Anywhere' ? slugToken(form.region) : '';
   const year = String(new Date().getFullYear());
   return [niche, country, zone, year].filter(Boolean).join('-');
 }
 
 // AIM "Lock & Load": the top-right launch control. Opens the target form; on submit
 // the create hook persists the campaign AND fires the AIM webhook server-side, so
-// the success toast reflects the actual deploy outcome (DEPLOYED / DRAFT / FAILED).
+// the success toast reflects whether it went live (ACTIVE) or saved as a DRAFT.
 export function AimLaunchDialog() {
+  const fieldId = useId();
   const [open, setOpen] = useState(false);
-  // sender defaults to info@ so its dropdown shows a valid choice and submit never
-  // posts an empty value. (Calendar is pinned to info@ in Reply Glock, so the old
-  // "Sales calendar" picker was removed; salesCalendarId is sent as info@ below.)
-  const [form, setForm] = useState<Partial<Record<keyof CreateCampaignDto, string>>>({ sender: 'info' });
+  const [form, setForm] = useState<FormState>(EMPTY_FORM);
   // The Gmail label auto-fills from the other inputs until the user edits it.
   const [labelEdited, setLabelEdited] = useState(false);
   const create = useCreateCampaign();
 
-  const set = (key: keyof CreateCampaignDto, value: string) =>
+  // Existing org niches power the pick-or-create datalist (the user can choose one
+  // or type a brand-new name; the API find-or-creates by slugify(name)).
+  const niches = useNiches(open);
+  const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
-  const val = (key: keyof CreateCampaignDto) => (form[key] ?? '').trim();
+
+  // Does the typed niche already exist (case/space-insensitive via the shared slug)?
+  // Drives a small "new niche" hint so the user knows one will be created.
+  const nicheIsNew = useMemo(() => {
+    const slug = slugify(form.nicheName);
+    if (!slug) return false;
+    return !(niches.data ?? []).some((n) => n.slug === slug);
+  }, [form.nicheName, niches.data]);
 
   // Keep the Gmail label in sync with niche/country/zone (+ year) until the user
-  // types their own. Stored on the form so submit + the required check just work.
+  // types their own.
   useEffect(() => {
     if (labelEdited) return;
     setForm((f) => {
       const next = deriveGmailLabel(f);
       return f.gmailLabel === next ? f : { ...f, gmailLabel: next };
     });
-  }, [form.niche, form.country, form.state, labelEdited]);
+  }, [form.nicheName, form.country, form.region, labelEdited]);
+
+  function reset() {
+    setForm(EMPTY_FORM);
+    setLabelEdited(false);
+  }
 
   function submit() {
-    const missing = FIELDS.filter((f) => f.required && !val(f.key));
+    const missing = REQUIRED_TEXT.filter((f) => !form[f.key].trim());
+    if (!form.region) missing.push({ key: 'region', label: 'Region' });
     if (missing.length > 0) {
       toast.error(`Fill in: ${missing.map((m) => m.label).join(', ')}.`);
       return;
     }
     const input: CreateCampaignDto = {
-      niche: val('niche'),
-      target: val('target'),
-      country: val('country'),
-      // The Select only ever emits a valid region (and required-field check above
-      // guarantees it's set); server-side zod re-validates on the wire.
-      state: val('state') as CampaignRegion,
-      project: val('project'),
-      gmailLabel: val('gmailLabel'),
+      nicheName: form.nicheName.trim(),
+      country: form.country.trim(),
+      region: form.region.trim(),
+      project: form.project.trim(),
+      gmailLabel: form.gmailLabel.trim(),
+      // Calendar is pinned to info@ in Reply Glock, so there's no picker — the
+      // required salesCalendarId is sent as info@.
       salesCalendarId: 'info@evertrust-germany.de',
-      whatsappNumber: val('whatsappNumber'),
-      sender: (val('sender') as CampaignSender) || 'info',
-      ...(val('name') ? { name: val('name') } : {}),
+      whatsappNumber: form.whatsappNumber.trim(),
+      sender: form.sender,
+      ...(form.name.trim() ? { name: form.name.trim() } : {}),
     };
     create.mutate(input, {
       onSuccess: (c) => {
         toast.success(
-          c.status === 'DEPLOYED'
-            ? `Locked & loaded — campaign deployed (${c.project}).`
-            : c.status === 'FAILED'
-              ? `Saved, but the AIM deploy failed: ${c.deployError ?? 'unknown error'}`
-              : `Saved as draft (${c.project}) — the AIM webhook isn't configured yet.`,
+          c.lifecycle === 'DRAFT'
+            ? `Saved as draft (${c.project}) — the AIM webhook isn't configured yet.`
+            : `Locked & loaded — campaign launched (${c.project}).`,
         );
         setOpen(false);
-        setForm({ sender: 'info' });
-        setLabelEdited(false);
+        reset();
       },
       onError: (error) => toast.error(error.message ?? 'Launch failed.'),
     });
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) reset();
+      }}
+    >
       <DialogTrigger asChild>
         <Button>
           <Crosshair />
@@ -162,50 +186,137 @@ export function AimLaunchDialog() {
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
-          {FIELDS.map((f) => (
-            <div key={f.key} className="grid gap-2">
-              <Label htmlFor={`aim-${f.key}`}>
-                {f.label}
-                {f.required ? null : (
-                  <span className="text-muted-foreground"> (optional)</span>
-                )}
-              </Label>
-              {f.options ? (
-                <Select
-                  value={form[f.key] ?? ''}
-                  onValueChange={(v) => set(f.key, v)}
-                >
-                  <SelectTrigger id={`aim-${f.key}`} className="w-full">
-                    <SelectValue placeholder={f.placeholder} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {f.options.map((opt) => (
-                      <SelectItem key={opt} value={opt}>
-                        {f.optionLabels?.[opt] ?? opt}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input
-                  id={`aim-${f.key}`}
-                  value={form[f.key] ?? ''}
-                  placeholder={f.placeholder}
-                  maxLength={f.key === 'name' ? 60 : 200}
-                  onChange={(e) => {
-                    if (f.key === 'gmailLabel') setLabelEdited(true);
-                    set(f.key, e.target.value);
-                  }}
-                />
-              )}
-              {f.key === 'gmailLabel' && !labelEdited ? (
-                <p className="text-xs text-muted-foreground">
-                  Auto-generated from niche · country · zone · year — edit to
-                  override.
-                </p>
-              ) : null}
-            </div>
-          ))}
+          {/* Name (optional) */}
+          <div className="grid gap-2">
+            <Label htmlFor={`${fieldId}-name`}>
+              Name
+              <span className="text-muted-foreground"> (optional)</span>
+            </Label>
+            <Input
+              id={`${fieldId}-name`}
+              value={form.name}
+              placeholder="Name this attack (optional)"
+              maxLength={60}
+              onChange={(e) => set('name', e.target.value)}
+            />
+          </div>
+
+          {/* Niche — pick an existing one or type a new name (API find-or-creates) */}
+          <div className="grid gap-2">
+            <Label htmlFor={`${fieldId}-niche`}>Niche</Label>
+            <Input
+              id={`${fieldId}-niche`}
+              list={`${fieldId}-niche-options`}
+              value={form.nicheName}
+              placeholder="LED"
+              maxLength={120}
+              autoComplete="off"
+              onChange={(e) => set('nicheName', e.target.value)}
+            />
+            <datalist id={`${fieldId}-niche-options`}>
+              {(niches.data ?? []).map((n) => (
+                <option key={n.id} value={n.name} />
+              ))}
+            </datalist>
+            <p className="text-xs text-muted-foreground">
+              {nicheIsNew
+                ? 'New niche — it’ll be created for your org on launch.'
+                : 'Pick an existing niche or type a new name.'}
+            </p>
+          </div>
+
+          {/* Country */}
+          <div className="grid gap-2">
+            <Label htmlFor={`${fieldId}-country`}>Country</Label>
+            <Input
+              id={`${fieldId}-country`}
+              value={form.country}
+              placeholder="Germany"
+              maxLength={120}
+              onChange={(e) => set('country', e.target.value)}
+            />
+          </div>
+
+          {/* Region — free text (was "State / City"); the Lead Satellite expands
+              it into per-city searches, e.g. "Warszawa, Kraków" or "Mazowieckie" */}
+          <div className="grid gap-2">
+            <Label htmlFor={`${fieldId}-region`}>Region</Label>
+            <Input
+              id={`${fieldId}-region`}
+              value={form.region}
+              placeholder="Warszawa, Kraków"
+              maxLength={120}
+              onChange={(e) => set('region', e.target.value)}
+            />
+          </div>
+
+          {/* Project */}
+          <div className="grid gap-2">
+            <Label htmlFor={`${fieldId}-project`}>Project</Label>
+            <Input
+              id={`${fieldId}-project`}
+              value={form.project}
+              placeholder="LED Retrofit Berlin 2026"
+              maxLength={200}
+              onChange={(e) => set('project', e.target.value)}
+            />
+          </div>
+
+          {/* Gmail label — auto-derived until edited */}
+          <div className="grid gap-2">
+            <Label htmlFor={`${fieldId}-gmailLabel`}>Gmail label</Label>
+            <Input
+              id={`${fieldId}-gmailLabel`}
+              value={form.gmailLabel}
+              placeholder="LED-Berlin-2026"
+              maxLength={120}
+              onChange={(e) => {
+                setLabelEdited(true);
+                set('gmailLabel', e.target.value);
+              }}
+            />
+            {!labelEdited ? (
+              <p className="text-xs text-muted-foreground">
+                Auto-generated from niche · country · zone · year — edit to
+                override.
+              </p>
+            ) : null}
+          </div>
+
+          {/* WhatsApp number */}
+          <div className="grid gap-2">
+            <Label htmlFor={`${fieldId}-whatsappNumber`}>WhatsApp number</Label>
+            <Input
+              id={`${fieldId}-whatsappNumber`}
+              value={form.whatsappNumber}
+              placeholder="+49…"
+              maxLength={40}
+              onChange={(e) => set('whatsappNumber', e.target.value)}
+            />
+          </div>
+
+          {/* Sender alias — which Gmail identity BAZOOKA sends from */}
+          <div className="grid gap-2">
+            <Label htmlFor={`${fieldId}-sender`}>Sender alias</Label>
+            <Select
+              value={form.sender}
+              onValueChange={(v) => set('sender', v as CampaignSender)}
+            >
+              <SelectTrigger id={`${fieldId}-sender`} className="w-full">
+                <SelectValue placeholder="info" />
+              </SelectTrigger>
+              <SelectContent>
+                {CAMPAIGN_SENDERS.map((opt) => (
+                  <SelectItem key={opt} value={opt}>
+                    {CAMPAIGN_SENDER_LABELS[opt]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Gmail alias used as the From identity.
+            </p>
+          </div>
         </div>
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => setOpen(false)}>

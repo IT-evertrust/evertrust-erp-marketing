@@ -53,6 +53,82 @@ export const queryKeys = {
     files: (id: string) => ['campaigns', 'files', id] as const,
   },
 
+  // Growth Engine: the org's niche catalog (AIM pick-or-create combobox + the
+  // niche management list) and each niche's targets.
+  niches: {
+    all: ['niches'] as const,
+    list: () => ['niches', 'list'] as const,
+    targets: (id: string) => ['niches', 'targets', id] as const,
+  },
+
+  // Growth Engine: the cold-outreach prospect board + per-prospect drawer.
+  prospects: {
+    all: ['prospects'] as const,
+    board: (
+      f: {
+        campaignId?: string | null;
+        status?: string | null;
+        q?: string | null;
+        limit?: number | null;
+        offset?: number | null;
+      } = {},
+    ) =>
+      [
+        'prospects',
+        'board',
+        f.campaignId ?? 'all',
+        f.status ?? 'all',
+        f.q ?? '',
+        f.limit ?? 50,
+        f.offset ?? 0,
+      ] as const,
+    detail: (id: string) => ['prospects', 'detail', id] as const,
+  },
+
+  // Growth Engine: a prospect's outreach conversation timeline.
+  outreachThread: {
+    all: ['outreach-thread'] as const,
+    byProspect: (prospectId: string) => ['outreach-thread', prospectId] as const,
+  },
+
+  // Growth Engine: the RAG reply-draft review queue.
+  replyDrafts: {
+    all: ['reply-drafts'] as const,
+    queue: (prospectId?: string | null) =>
+      ['reply-drafts', 'queue', prospectId ?? 'all'] as const,
+  },
+
+  // Growth Engine: contracts (ContractMaker output), filtered by lead/campaign/status.
+  contracts: {
+    all: ['contracts'] as const,
+    list: (
+      f: {
+        leadId?: string | null;
+        campaignId?: string | null;
+        status?: string | null;
+      } = {},
+    ) =>
+      [
+        'contracts',
+        'list',
+        f.leadId ?? 'all',
+        f.campaignId ?? 'all',
+        f.status ?? 'all',
+      ] as const,
+  },
+
+  // Growth Engine: the org's do-not-contact (suppression) list.
+  suppressions: {
+    all: ['suppressions'] as const,
+    list: () => ['suppressions', 'list'] as const,
+  },
+
+  // Notification bell: the unread feed (polled by the topbar).
+  notifications: {
+    all: ['notifications'] as const,
+    unread: () => ['notifications', 'unread'] as const,
+  },
+
   // Arsenal: ERP→n8n stage trigger runs + editable settings.
   arsenal: {
     all: ['arsenal'] as const,

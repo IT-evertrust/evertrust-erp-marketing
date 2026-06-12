@@ -5,40 +5,57 @@ import {
   Logger,
   NotFoundException,
   ServiceUnavailableException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { and, desc, eq } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
-import type {
-  CampaignFilesDto,
-  CampaignSyncResultDto,
-  CreateCampaignDto,
+import {
+  type CampaignConfigDto,
+  type CampaignFilesDto,
+  type CampaignLifecycle,
+  type CampaignMachineListItemDto,
+  type CreateCampaignDto,
 } from '@evertrust/shared';
 import { DB, type DbClient } from '../db/db.tokens';
 import { tenantScope } from '../common/tenant';
+import { driveFolderUrl } from '../common/machine-audit';
+import { NichesService } from '../niches/niches.service';
 import { AppConfigService } from '../config/app-config.service';
 
 type CampaignRow = typeof schema.campaigns.$inferSelect;
 type CampaignPatch = Partial<typeof schema.campaigns.$inferInsert>;
 
-// Shape of the AIM "deploy campaign" n8n webhook response (its Respond OK node
-// returns { success, folderId, folderUrl, fileId, fileUrl }).
+// The result of the create() launch: the persisted campaign + an optional deploy
+// error. lifecycle ACTIVE = the AIM webhook fired OK; DRAFT + deployError = the
+// webhook was unset or failed and the operator must activate/retry later. There is
+// NO FAILED lifecycle — a failed launch stays DRAFT, surfaced via deployError.
+export interface CampaignLaunchResult {
+  campaign: CampaignRow;
+  deployError: string | null;
+}
+
+// Shape of the AIM "deploy campaign" n8n webhook response. The NEW AIM workflow no
+// longer returns Drive refs at launch (the folder is created lazily by Ammo Forge),
+// so folderId/folderUrl are optional — absent is the normal case now.
 interface AimDeployResult {
   success?: boolean;
   folderId?: string;
   folderUrl?: string;
 }
 
-// One campaign folder as reported by the read-only erp-campaigns-list webhook
-// (a subfolder of the Drive "Evertrust Campaigns" folder).
-interface DriveCampaign {
-  id: string;
-  name: string | null;
-}
+// Legal campaign-lifecycle transitions (PATCH /campaigns/:id/lifecycle). DRAFT can
+// only go ACTIVE; ACTIVE↔PAUSED both ways; ARCHIVED is terminal (stamps archivedAt).
+const LIFECYCLE_TRANSITIONS: Record<CampaignLifecycle, CampaignLifecycle[]> = {
+  DRAFT: ['ACTIVE', 'ARCHIVED'],
+  ACTIVE: ['PAUSED', 'ARCHIVED'],
+  PAUSED: ['ACTIVE', 'ARCHIVED'],
+  ARCHIVED: [],
+};
 
 // Growth Engine. Persists the campaign (the AIM target) and fires the AIM n8n
-// webhook server-side (ERP-first: Workflow ← API ← DB ← Audit). The webhook call
-// is best-effort and NEVER throws out of create() — a failed deploy is recorded as
-// FAILED + deployError so the operator sees it, instead of 500-ing the launch.
+// webhook server-side (ERP-first: Workflow ← API ← DB ← Audit). The webhook call is
+// best-effort and NEVER throws out of create() — a failed deploy leaves the campaign
+// DRAFT + a surfaced deployError so the operator can retry, instead of 500-ing.
 @Injectable()
 export class CampaignsService {
   private readonly logger = new Logger(CampaignsService.name);
@@ -46,23 +63,18 @@ export class CampaignsService {
   constructor(
     @Inject(DB) private readonly db: DbClient,
     private readonly config: AppConfigService,
+    private readonly niches: NichesService,
   ) {}
 
-  // The tenant's ACTIVE campaigns, newest-first. Campaigns archived by a Drive sync
-  // (driveMissing — their Drive folder was deleted) are hidden here; the row is kept
-  // for audit/history, it just no longer clutters the list. A re-sync that finds the
-  // folder again un-archives it.
+  // The tenant's campaigns, newest-first. ARCHIVED rows are kept (attribution) but
+  // hidden from the default list.
   async list(orgId: string): Promise<CampaignRow[]> {
-    return this.db
+    const rows = await this.db
       .select()
       .from(schema.campaigns)
-      .where(
-        and(
-          tenantScope(orgId, schema.campaigns),
-          eq(schema.campaigns.driveMissing, false),
-        ),
-      )
+      .where(tenantScope(orgId, schema.campaigns))
       .orderBy(desc(schema.campaigns.createdAt));
+    return rows.filter((r) => r.lifecycle !== 'ARCHIVED');
   }
 
   // One campaign within the tenant. 404 if missing or in another org.
@@ -79,150 +91,201 @@ export class CampaignsService {
     return row;
   }
 
-  // Launch ("Lock & Load"): persist the campaign, then deploy via the AIM webhook
-  // if one is configured. Server owns organizationId, status, and the deploy
-  // result; the client only supplies the 9 AIM inputs.
+  // Launch ("Lock & Load"): find-or-create the niche, persist the campaign DRAFT,
+  // then fire the AIM webhook if configured. On a 2xx the campaign flips to ACTIVE
+  // (activatedBy/activatedAt stamped); on failure it stays DRAFT and the error is
+  // returned for the HTTP response. Server owns organizationId / lifecycle / the
+  // deploy result; the client only supplies the AIM inputs.
   async create(
     orgId: string,
     dto: CreateCampaignDto,
     userId: string,
-  ): Promise<CampaignRow> {
+  ): Promise<CampaignLaunchResult> {
+    const niche = await this.niches.findOrCreate(orgId, dto.nicheName);
+
     const inserted = await this.db
       .insert(schema.campaigns)
       .values({
         organizationId: orgId,
         name: dto.name ?? null,
-        niche: dto.niche,
-        target: dto.target,
+        nicheId: niche.id,
         country: dto.country,
-        state: dto.state,
+        region: dto.region,
         project: dto.project,
         gmailLabel: dto.gmailLabel,
         salesCalendarId: dto.salesCalendarId,
         whatsappNumber: dto.whatsappNumber,
-        status: 'DRAFT',
-        driveMissing: false,
+        sender: dto.sender ?? 'info',
+        lifecycle: 'DRAFT',
       })
       .returning();
-
     let row = inserted[0];
     if (!row) throw new Error('Failed to create campaign');
 
-    // No webhook configured → persist as DRAFT (deploy skipped). Mirrors the
-    // reference "leave blank to skip the deploy step" behavior.
-    const webhookUrl = this.config.get('N8N_AIM_WEBHOOK_URL');
-    if (!webhookUrl) return row;
+    const webhookUrl = (this.config.get('N8N_AIM_WEBHOOK_URL') ?? '').trim();
+    // No webhook configured → the campaign persists as DRAFT (safe to run before the
+    // webhook is set); the operator activates it later once AIM is wired.
+    if (!webhookUrl) {
+      return {
+        campaign: row,
+        deployError:
+          'AIM webhook is not configured (set N8N_AIM_WEBHOOK_URL); campaign saved as DRAFT.',
+      };
+    }
 
-    const patch = await this.runAimDeploy(webhookUrl, dto, userId);
+    const { patch, deployError } = await this.runAimDeploy(
+      webhookUrl,
+      row,
+      niche.name,
+      userId,
+    );
     const updated = await this.db
       .update(schema.campaigns)
       .set(patch)
       .where(eq(schema.campaigns.id, row.id))
       .returning();
     row = updated[0] ?? row;
-    return row;
+    return { campaign: row, deployError };
   }
 
-  // Reconcile the tenant's campaigns against the live Drive "Evertrust Campaigns"
-  // folder (the SOURCE OF TRUTH). The ERP can't read Drive, so it GETs the read-only
-  // erp-campaigns-list n8n webhook (which scans the folder). DEPLOYED campaigns whose
-  // folder is gone are archived (driveMissing=true → hidden from list); ones whose
-  // folder reappears are un-archived. DRAFT/FAILED rows (no folder yet) are untouched.
-  // Throws ServiceUnavailable if the webhook is unset/unreachable — a sync failure is
-  // OBSERVABLE, never a silent no-op that would wrongly leave stale rows visible.
-  async syncFromDrive(orgId: string): Promise<CampaignSyncResultDto> {
-    const url = this.campaignsListWebhookUrl();
-    if (!url) {
-      throw new ServiceUnavailableException(
-        'Campaign Drive-sync is not configured (set N8N_CAMPAIGNS_LIST_WEBHOOK_URL or N8N_API_URL).',
+  // Move a campaign through its lifecycle (PATCH /campaigns/:id/lifecycle). Rejects
+  // an illegal transition with 422 (DRAFT→ACTIVE ok; ACTIVE↔PAUSED ok; →ARCHIVED is
+  // terminal and stamps archivedAt). Returns { before, after } for the audit row.
+  async updateLifecycle(
+    orgId: string,
+    id: string,
+    next: CampaignLifecycle,
+  ): Promise<{ before: CampaignRow; after: CampaignRow }> {
+    const before = await this.get(orgId, id);
+    const allowed = LIFECYCLE_TRANSITIONS[before.lifecycle];
+    if (!allowed.includes(next)) {
+      throw new UnprocessableEntityException(
+        `Illegal campaign lifecycle transition ${before.lifecycle} → ${next}.`,
       );
     }
-    const drive = await this.fetchDriveCampaigns(url);
-    const presentIds = new Set(drive.folders.map((f) => f.id));
+    const patch: CampaignPatch = { lifecycle: next };
+    if (next === 'ARCHIVED') patch.archivedAt = new Date();
+    const updated = await this.db
+      .update(schema.campaigns)
+      .set(patch)
+      .where(eq(schema.campaigns.id, id))
+      .returning();
+    return { before, after: updated[0] ?? before };
+  }
 
+  // Machine view of a campaign (GET /campaigns/:id/config): the launch inputs + the
+  // resolved niche with its ENABLED targets. Used by the arsenal stages to build
+  // their search queries. 404 if the campaign id is unknown. NOT org-scoped (a
+  // machine caller has no tenant; the ingest token is the trust boundary).
+  async getConfig(id: string): Promise<CampaignConfigDto> {
     const rows = await this.db
       .select()
       .from(schema.campaigns)
-      .where(tenantScope(orgId, schema.campaigns));
+      .where(eq(schema.campaigns.id, id))
+      .limit(1);
+    const c = rows[0];
+    if (!c) throw new NotFoundException('Campaign not found');
 
-    const now = new Date();
-    let checked = 0;
-    let markedMissing = 0;
-    let restored = 0;
-    const trackedIds = new Set<string>();
+    const nicheRows = await this.db
+      .select()
+      .from(schema.niches)
+      .where(eq(schema.niches.id, c.nicheId))
+      .limit(1);
+    const niche = nicheRows[0];
+    if (!niche) throw new NotFoundException('Campaign niche not found');
 
-    for (const row of rows) {
-      // Only rows that actually have a Drive folder are reconcilable against Drive.
-      if (!row.driveFolderId) continue;
-      trackedIds.add(row.driveFolderId);
-      checked++;
-      const present = presentIds.has(row.driveFolderId);
-      const patch: CampaignPatch = { driveCheckedAt: now };
-      if (!present && !row.driveMissing) {
-        patch.driveMissing = true;
-        markedMissing++;
-      } else if (present && row.driveMissing) {
-        patch.driveMissing = false;
-        restored++;
-      }
-      await this.db
-        .update(schema.campaigns)
-        .set(patch)
-        .where(eq(schema.campaigns.id, row.id));
-    }
-
-    // Folders that exist in Drive but match no ERP campaign — created/managed outside
-    // the ERP. Surfaced for visibility (the ERP does not auto-import them).
-    const untracked = drive.folders
-      .filter((f) => !trackedIds.has(f.id))
-      .map((f) => ({ id: f.id, name: f.name }));
-
+    const targets = await this.niches.targets(niche.id, true);
     return {
-      driveCount: drive.folders.length,
-      checked,
-      markedMissing,
-      restored,
-      folderUrl: drive.folderUrl,
-      untracked,
+      campaignId: c.id,
+      lifecycle: c.lifecycle,
+      name: c.name,
+      country: c.country,
+      region: c.region,
+      project: c.project,
+      sender: c.sender,
+      gmailLabel: c.gmailLabel,
+      salesCalendarId: c.salesCalendarId,
+      whatsappNumber: c.whatsappNumber,
+      driveFolderId: c.driveFolderId,
+      niche: {
+        id: niche.id,
+        name: niche.name,
+        slug: niche.slug,
+        targets: targets.map((t) => ({
+          id: t.id,
+          name: t.name,
+          slug: t.slug,
+          searchHint: t.searchHint,
+        })),
+      },
     };
   }
 
-  // Delete a campaign (ERP record only — the Google Drive folder + leads are NOT
-  // touched; the ERP has no Drive write path). Detaches any arsenal_runs first
-  // (clears the FK, keeps the trigger log) so the delete can't violate the
-  // foreign key. 404 if missing or in another org. Returns the deleted row for audit.
+  // Machine campaign list filtered by lifecycle (GET /campaigns/machine/list?
+  // lifecycle=ACTIVE). NOT org-scoped — the daily scheduler in n8n needs every active
+  // campaign across orgs. Newest-first.
+  async machineList(
+    lifecycle: CampaignLifecycle,
+  ): Promise<CampaignMachineListItemDto[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.campaigns)
+      .where(eq(schema.campaigns.lifecycle, lifecycle))
+      .orderBy(desc(schema.campaigns.createdAt));
+    return rows.map((c) => ({
+      id: c.id,
+      name: c.name,
+      project: c.project,
+      country: c.country,
+      region: c.region,
+      sender: c.sender,
+      gmailLabel: c.gmailLabel,
+      driveFolderId: c.driveFolderId,
+      nicheId: c.nicheId,
+    }));
+  }
+
+  // Delete a campaign (ERP record only — the Drive folder + leads are NOT touched;
+  // the ERP has no Drive write path). Detaches any arsenal_runs first (clears the FK,
+  // keeps the trigger log) so the delete can't violate the foreign key. 404 if
+  // missing or in another org. Returns the deleted row for audit.
   async delete(orgId: string, id: string): Promise<CampaignRow> {
     const before = await this.get(orgId, id);
-
     await this.db
       .update(schema.arsenalRuns)
       .set({ campaignId: null })
       .where(eq(schema.arsenalRuns.campaignId, id));
-
-    await this.db
-      .delete(schema.campaigns)
-      .where(
-        and(tenantScope(orgId, schema.campaigns), eq(schema.campaigns.id, id)),
-      );
-
+    await this.db.delete(schema.campaigns).where(eq(schema.campaigns.id, id));
     return before;
   }
 
   // POST the AIM payload to the n8n webhook; return the column patch reflecting the
-  // outcome (DEPLOYED + Drive folder refs, or FAILED + error). Pure I/O, no throw.
+  // outcome (ACTIVE + activatedBy/At, persisting Drive refs IF the response carries
+  // them) or {} + deployError. Pure I/O, no throw.
   private async runAimDeploy(
     webhookUrl: string,
-    dto: CreateCampaignDto,
+    campaign: CampaignRow,
+    nicheName: string,
     userId: string,
-  ): Promise<CampaignPatch> {
+  ): Promise<{ patch: CampaignPatch; deployError: string | null }> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20_000);
     try {
-      // AIM's "Write config.json" node reads body.region (the location ZONE).
-      // Our form/DTO field is `state` (the zone enum), so alias it to `region`
-      // for the webhook. Without it, Lead Satellite's "Build Search Query" gets
-      // 0 cities and bails (returns []), so the funnel produces no leads.
-      const aimPayload = { ...dto, region: dto.state };
+      // The AIM "Write config.json" node reads these fields; `niche` is the resolved
+      // display name and `region` is the location zone (Lead Satellite's city seed).
+      const aimPayload = {
+        campaignId: campaign.id,
+        name: campaign.name,
+        niche: nicheName,
+        country: campaign.country,
+        region: campaign.region,
+        project: campaign.project,
+        gmailLabel: campaign.gmailLabel,
+        salesCalendarId: campaign.salesCalendarId,
+        whatsappNumber: campaign.whatsappNumber,
+        sender: campaign.sender,
+        source: 'erp',
+      };
       const res = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -230,77 +293,33 @@ export class CampaignsService {
         signal: controller.signal,
       });
       if (!res.ok) {
-        return { status: 'FAILED', deployError: `AIM webhook HTTP ${res.status}` };
+        return { patch: {}, deployError: `AIM webhook HTTP ${res.status}` };
       }
-      const data = (await res
-        .json()
-        .catch(() => ({}))) as AimDeployResult;
-      return {
-        status: 'DEPLOYED',
-        driveFolderId: data.folderId ?? null,
-        driveFolderUrl: data.folderUrl ?? null,
-        deployError: null,
-        deployedBy: userId,
-        deployedAt: new Date(),
+      const data = (await res.json().catch(() => ({}))) as AimDeployResult;
+      const patch: CampaignPatch = {
+        lifecycle: 'ACTIVE',
+        activatedBy: userId,
+        activatedAt: new Date(),
       };
+      // The new AIM won't carry Drive refs — that's fine (nullable). Persist them
+      // only if a (legacy) response does.
+      if (data.folderId) {
+        patch.driveFolderId = data.folderId;
+        patch.driveFolderUrl = data.folderUrl ?? driveFolderUrl(data.folderId);
+      }
+      return { patch, deployError: null };
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'AIM webhook call failed';
-      return { status: 'FAILED', deployError: msg };
+      return { patch: {}, deployError: msg };
     } finally {
       clearTimeout(timeout);
     }
   }
 
-  // GET the read-only erp-campaigns-list webhook and parse its
-  // { folderUrl, campaigns: [{ id, name }] } payload into the Drive folder list.
-  // Throws ServiceUnavailable on any failure (kept observable, like PersonasService).
-  private async fetchDriveCampaigns(
-    url: string,
-  ): Promise<{ folderUrl: string | null; folders: DriveCampaign[] }> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20_000);
-    try {
-      const res = await fetch(url, {
-        headers: { accept: 'application/json' },
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        throw new ServiceUnavailableException(
-          `Campaign Drive-sync returned HTTP ${res.status}.`,
-        );
-      }
-      const json = (await res.json().catch(() => ({}))) as {
-        folderUrl?: unknown;
-        campaigns?: { id?: unknown; name?: unknown }[];
-      };
-      const folders: DriveCampaign[] = Array.isArray(json?.campaigns)
-        ? json.campaigns
-            .filter((c) => c && typeof c.id === 'string' && c.id.length > 0)
-            .map((c) => ({
-              id: String(c.id),
-              name: typeof c.name === 'string' ? c.name : null,
-            }))
-        : [];
-      return {
-        folderUrl: typeof json?.folderUrl === 'string' ? json.folderUrl : null,
-        folders,
-      };
-    } catch (err) {
-      if (err instanceof HttpException) throw err;
-      this.logger.warn(
-        `campaigns Drive-sync GET ${url} failed: ${err instanceof Error ? err.message : 'error'}`,
-      );
-      throw new ServiceUnavailableException(
-        'Campaign Drive-sync call failed — check that the CAMPAIGNS LIST workflow is active.',
-      );
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  // Every file in a campaign's Drive folder, via the erp-campaign-files webhook
-  // (the ERP has no Google creds). Tenant-scoped — get() throws if the campaign
-  // isn't this org's. Degrades to an empty list if the folder/webhook isn't set.
+  // Every file in a campaign's Drive folder, via the erp-campaign-files webhook (the
+  // ERP has no Google creds). Tenant-scoped — get() throws if the campaign isn't this
+  // org's. Degrades to an empty list if the folder/webhook isn't set. (Independent of
+  // the retired Drive-reconcile sync — uses N8N_API_URL's erp-campaign-files webhook.)
   async listFiles(orgId: string, id: string): Promise<CampaignFilesDto> {
     const campaign = await this.get(orgId, id);
     const base = this.campaignFilesWebhookUrl();
@@ -342,7 +361,7 @@ export class CampaignsService {
         `campaign files GET ${url} failed: ${err instanceof Error ? err.message : 'error'}`,
       );
       throw new ServiceUnavailableException(
-        'Campaign files call failed — check that the CAMPAIGNS LIST workflow is active.',
+        'Campaign files call failed — check that the campaign-files workflow is active.',
       );
     } finally {
       clearTimeout(timeout);
@@ -352,16 +371,5 @@ export class CampaignsService {
   private campaignFilesWebhookUrl(): string {
     const base = (this.config.get('N8N_API_URL') ?? '').trim().replace(/\/+$/, '');
     return base ? `${base}/webhook/erp-campaign-files` : '';
-  }
-
-  // The erp-campaigns-list webhook URL: the explicit env override, else derived from
-  // the n8n instance base (N8N_API_URL). Blank both = sync disabled.
-  private campaignsListWebhookUrl(): string {
-    const explicit = (
-      this.config.get('N8N_CAMPAIGNS_LIST_WEBHOOK_URL') ?? ''
-    ).trim();
-    if (explicit) return explicit;
-    const base = (this.config.get('N8N_API_URL') ?? '').trim().replace(/\/+$/, '');
-    return base ? `${base}/webhook/erp-campaigns-list` : '';
   }
 }

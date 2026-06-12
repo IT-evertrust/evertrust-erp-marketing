@@ -12,6 +12,7 @@ import {
 } from '@evertrust/shared';
 import { DB, type DbClient } from '../db/db.tokens';
 import { tenantScope } from '../common/tenant';
+import { driveFolderUrl, writeMachineAudit } from '../common/machine-audit';
 import { AppConfigService } from '../config/app-config.service';
 import type { Env } from '../config/env.schema';
 
@@ -179,7 +180,7 @@ export class ArsenalService {
       }
       const campaign = await this.requireCampaign(orgId, opts.campaignId);
       campaignId = campaign.id;
-      payload = { stage, campaign: this.campaignPayload(campaign) };
+      payload = { stage, campaign: await this.campaignPayload(campaign) };
     } else {
       payload = { stage, source: 'erp' };
     }
@@ -254,6 +255,26 @@ export class ArsenalService {
       }
     }
 
+    // Persist the Ammo Forge folder when n8n discloses it for a known campaign that
+    // doesn't have one yet (the new AIM webhook no longer returns Drive refs at
+    // launch, so this is how a campaign acquires its artifact folder lazily).
+    if (
+      campaign &&
+      input.campaignId &&
+      input.driveFolderId &&
+      campaign.driveFolderId !== input.driveFolderId
+    ) {
+      const updated = await this.db
+        .update(schema.campaigns)
+        .set({
+          driveFolderId: input.driveFolderId,
+          driveFolderUrl: driveFolderUrl(input.driveFolderId),
+        })
+        .where(eq(schema.campaigns.id, campaign.id))
+        .returning();
+      campaign = updated[0] ?? campaign;
+    }
+
     const inserted = await this.db
       .insert(schema.arsenalRuns)
       .values({
@@ -270,6 +291,26 @@ export class ArsenalService {
 
     const row = inserted[0];
     if (!row) throw new Error('Failed to record arsenal callback');
+
+    // Machine writes are audited with actorType N8N (mirrors the doctrine path for
+    // n8n→ERP writebacks). Org-scoped runs only — a global stage has no org to
+    // satisfy audit_log.organization_id NOT NULL.
+    if (campaign) {
+      await writeMachineAudit(this.db, {
+        organizationId: campaign.organizationId,
+        entity: 'arsenal_runs',
+        entityId: row.id,
+        action: 'CALLBACK',
+        after: {
+          stage: input.stage,
+          status: input.status,
+          campaignId: campaign.id,
+          driveFolderId: input.driveFolderId ?? null,
+          metrics: input.metrics ?? null,
+        },
+      });
+    }
+
     return { id: row.id };
   }
 
@@ -365,7 +406,9 @@ export class ArsenalService {
       .where(tenantScope(orgId, schema.campaigns));
     const campaignsLaunched = campaignRows.filter((c) => {
       if (campaignId && c.id !== campaignId) return false;
-      const when = c.deployedAt ?? c.createdAt;
+      // "Launched" in the report = went live (activatedAt); fall back to createdAt
+      // for campaigns still DRAFT.
+      const when = c.activatedAt ?? c.createdAt;
       return when ? indexOf(new Date(when)) >= 0 : false;
     }).length;
 
@@ -485,15 +528,23 @@ export class ArsenalService {
   }
 
   // The campaign context PER_CAMPAIGN stages receive (the AIM inputs + Drive refs).
-  private campaignPayload(c: CampaignRow) {
+  // niche is resolved to its DISPLAY name from the campaign's nicheId (the old
+  // free-text niche/target columns are gone; target archetypes now live on
+  // niche_targets, which the stage fetches via GET /campaigns/:id/config).
+  private async campaignPayload(c: CampaignRow) {
+    const niche = await this.db
+      .select({ name: schema.niches.name })
+      .from(schema.niches)
+      .where(eq(schema.niches.id, c.nicheId))
+      .limit(1);
     return {
       campaignId: c.id,
       name: c.name,
-      niche: c.niche,
-      target: c.target,
+      niche: niche[0]?.name ?? null,
       country: c.country,
-      state: c.state,
+      region: c.region,
       project: c.project,
+      sender: c.sender,
       gmailLabel: c.gmailLabel,
       salesCalendarId: c.salesCalendarId,
       whatsappNumber: c.whatsappNumber,

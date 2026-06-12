@@ -59,8 +59,19 @@ export function SidebarNav() {
 }
 
 function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
-  const isActive =
+  // A link is active when the current path is under its href — but only if no
+  // OTHER nav item is a longer (more specific) prefix. This keeps a parent like
+  // "/marketing" from also lighting up when a child like "/marketing/niches" is
+  // the real match, while still highlighting "/marketing" for /marketing/<id>.
+  const matches =
     pathname === item.href || pathname.startsWith(`${item.href}/`);
+  const hasMoreSpecific = NAV_ITEMS.some(
+    (other) =>
+      other.href !== item.href &&
+      other.href.length > item.href.length &&
+      (pathname === other.href || pathname.startsWith(`${other.href}/`)),
+  );
+  const isActive = matches && !hasMoreSpecific;
   const Icon = item.icon;
   return (
     <Link
@@ -119,7 +130,7 @@ function RiskMetric() {
 
 function CampaignMetric() {
   const q = useCampaigns();
-  const live = (q.data ?? []).filter((c) => c.status === 'DEPLOYED').length;
+  const live = (q.data ?? []).filter((c) => c.lifecycle === 'ACTIVE').length;
   return (
     <SnapshotRow
       href="/marketing"

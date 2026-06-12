@@ -2,8 +2,11 @@ import {
   Contact,
   Gauge,
   Headset,
+  Inbox,
   LayoutDashboard,
   LineChart,
+  ShieldOff,
+  Target,
   Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -29,6 +32,9 @@ export type NavItem = {
 export const NAV_ITEMS: readonly NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: null },
   { href: '/marketing', label: 'Marketing', icon: LineChart, permission: 'campaigns:read', group: 'Acquisition' },
+  { href: '/marketing/niches', label: 'Niches', icon: Target, permission: 'campaigns:read', group: 'Acquisition' },
+  { href: '/marketing/drafts', label: 'Reply drafts', icon: Inbox, permission: 'campaigns:read', group: 'Acquisition' },
+  { href: '/marketing/suppressions', label: 'Suppressions', icon: ShieldOff, permission: 'campaigns:read', group: 'Acquisition' },
   { href: '/key-account', label: 'Key Account', icon: Contact, permission: 'campaigns:read', group: 'Acquisition' },
   { href: '/sales', label: 'Sales', icon: Headset, permission: 'campaigns:read', group: 'Acquisition' },
   { href: '/performance', label: 'Performance', icon: Gauge, permission: 'performance:read', group: 'Management' },

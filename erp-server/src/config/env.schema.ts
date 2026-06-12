@@ -48,14 +48,9 @@ export const EnvSchema = z.object({
   // Growth Engine: the AIM "deploy campaign" n8n webhook (the reference's
   // EVERTRUST_DEPLOY_WEBHOOK). Empty = skip the deploy step — the campaign still
   // persists as DRAFT — so the feature is safe to run before the webhook is set.
+  // On a 2xx the campaign flips to ACTIVE; a failure leaves it DRAFT (no FAILED
+  // state) with the error surfaced in the create response.
   N8N_AIM_WEBHOOK_URL: z.string().default(''),
-
-  // Drive-as-source-of-truth campaign sync. A read-only n8n webhook
-  // (EVERTRUST - CAMPAIGNS LIST workflow) that scans the Drive "Evertrust Campaigns"
-  // folder and returns its live subfolders, so POST /campaigns/sync can archive
-  // campaigns whose folder was deleted. Falls back to ${N8N_API_URL}/webhook/
-  // erp-campaigns-list when blank; blank BOTH = sync is disabled (returns 503).
-  N8N_CAMPAIGNS_LIST_WEBHOOK_URL: z.string().default(''),
 
   // Arsenal stage webhooks (the "Run now" triggers). Each blank = that stage's
   // trigger is disabled (the API rejects the run + the button hides). The

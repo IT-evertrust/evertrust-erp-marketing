@@ -12,8 +12,13 @@ import { PricingModule } from './pricing/pricing.module';
 import { RfqModule } from './rfq/rfq.module';
 import { SubmissionModule } from './submission/submission.module';
 import { ApprovalsModule } from './approvals/approvals.module';
+import { NichesModule } from './niches/niches.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
 import { ArsenalModule } from './arsenal/arsenal.module';
+import { ProspectsModule } from './prospects/prospects.module';
+import { OutreachModule } from './outreach/outreach.module';
+import { ContractsModule } from './contracts/contracts.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { LeadsModule } from './leads/leads.module';
 import { MeetingsModule } from './meetings/meetings.module';
 import { MarketingModule } from './marketing/marketing.module';
@@ -38,8 +43,13 @@ import { AuditInterceptor } from './common/audit.interceptor';
     RfqModule,
     SubmissionModule,
     ApprovalsModule,
+    NichesModule,
     CampaignsModule,
     ArsenalModule,
+    ProspectsModule,
+    OutreachModule,
+    ContractsModule,
+    NotificationsModule,
     LeadsModule,
     MeetingsModule,
     MarketingModule,
