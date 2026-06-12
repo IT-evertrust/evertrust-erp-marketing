@@ -1080,26 +1080,6 @@ export const CreateCampaignDto = z.object({
 });
 export type CreateCampaignDto = z.infer<typeof CreateCampaignDto>;
 
-// Result of POST /campaigns/sync — reconcile the ERP campaign list against the live
-// Drive "Evertrust Campaigns" folder (the source of truth). The ERP can't read Drive
-// directly, so the sync GETs a read-only n8n webhook that scans the folder. n8n
-// execution history can keep a deleted campaign around; the Drive scan can't — so
-// this is what makes a folder you delete in Drive drop out of the ERP list.
-//   driveCount    = campaign folders currently in Drive
-//   checked       = ERP campaigns with a Drive folder that were reconciled
-//   markedMissing = rows newly archived this run (folder gone)
-//   restored      = rows un-archived this run (folder reappeared)
-//   untracked     = Drive folders with no matching ERP campaign (made outside the ERP)
-export const CampaignSyncResultDto = z.object({
-  driveCount: z.number().int(),
-  checked: z.number().int(),
-  markedMissing: z.number().int(),
-  restored: z.number().int(),
-  folderUrl: z.string().nullable(),
-  untracked: z.array(z.object({ id: z.string(), name: z.string().nullable() })),
-});
-export type CampaignSyncResultDto = z.infer<typeof CampaignSyncResultDto>;
-
 // ---- Arsenal triggers (the "Run now" buttons + the daily scheduler) ----
 // The outbound stages the ERP can fire as n8n webhooks. AIM is excluded — it is
 // the campaign launch (the campaigns module). Mirrors the arsenal_stage pgEnum.
