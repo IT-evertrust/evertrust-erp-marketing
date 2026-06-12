@@ -31,13 +31,12 @@ import {
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { CAMPAIGN_LIFECYCLE_BADGE, timeAgo } from '@/lib/arsenal-sequence';
-import { SyncDriveButton } from '@/components/growth/sync-drive-button';
 import { RunStageButton } from '@/components/growth/run-stage-button';
 import { DeleteCampaignButton } from '@/components/growth/delete-campaign-button';
 
-// Marketing → "Campaigns" tab (mockup design): KPI tiles + Sync-with-Drive + the
-// launched campaigns as lifecycle-pill cards with a real per-campaign mini funnel
-// and an expandable per-stage activity log.
+// Marketing → "Campaigns" tab (mockup design): KPI tiles + the launched campaigns
+// as lifecycle-pill cards with a real per-campaign mini funnel and an expandable
+// per-stage activity log.
 export function MarketingCampaigns() {
   const campaigns = useCampaigns();
   const runs = useArsenalRuns();
@@ -90,20 +89,14 @@ export function MarketingCampaigns() {
         ))}
       </div>
 
-      {/* header + sync */}
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
-            Deployed by Growth Engine — track &amp; drill in
-          </p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            The Drive folder is the source of truth — Sync archives any whose folder
-            was deleted.
-          </p>
-        </div>
-        <Can permission="campaigns:write">
-          <SyncDriveButton />
-        </Can>
+      {/* header */}
+      <div>
+        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
+          Deployed by Growth Engine — track &amp; drill in
+        </p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          Each card shows the live funnel and stage activity — expand to drill in.
+        </p>
       </div>
 
       {/* campaign cards */}
