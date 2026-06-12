@@ -67,10 +67,21 @@ const COLUMN_TO_KEY: Record<string, string> = {
   supplier_id: 'supplierId',
   created_by: 'createdBy',
   drive_folder_id: 'driveFolderId',
+  drive_file_id: 'driveFileId',
   drive_missing: 'driveMissing',
   session_id: 'sessionId',
   lead_id: 'leadId',
   match_method: 'matchMethod',
+  // Growth-Engine v2 columns.
+  niche_id: 'nicheId',
+  niche_target_id: 'nicheTargetId',
+  activated_by: 'activatedBy',
+  source_prospect_id: 'sourceProspectId',
+  prospect_id: 'prospectId',
+  gmail_message_id: 'gmailMessageId',
+  gmail_thread_id: 'gmailThreadId',
+  message_id: 'messageId',
+  customer_id: 'customerId',
 };
 
 function rowMatches(row: Record<string, unknown>, cond: ParsedCondition): boolean {

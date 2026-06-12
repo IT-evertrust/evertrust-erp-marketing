@@ -975,42 +975,53 @@ export type SubmissionReadinessDto = z.infer<typeof SubmissionReadinessDto>;
 // runs against autonomously. Mirrors the reference Growth-Engine AIM form.
 // ============================================================================
 
-// Mirrors the campaign_status pgEnum. DRAFT = saved, AIM deploy not run (e.g. the
-// webhook URL is unset); DEPLOYED = the AIM workflow created the Drive folder;
-// FAILED = the deploy call errored (the error is captured for observability).
-export const CampaignStatus = z.enum(['DRAFT', 'DEPLOYED', 'FAILED']);
-export type CampaignStatus = z.infer<typeof CampaignStatus>;
+// Mirrors the campaign_state pgEnum. DRAFT = saved, not (yet) activated — e.g.
+// the AIM webhook is unset or its call failed; ACTIVE = live (Lead Satellite /
+// Bazooka pick it up); PAUSED = temporarily out of the send rotation; ARCHIVED =
+// the soft delete (kept for attribution; terminal).
+export const CampaignLifecycle = z.enum(['DRAFT', 'ACTIVE', 'PAUSED', 'ARCHIVED']);
+export type CampaignLifecycle = z.infer<typeof CampaignLifecycle>;
+
+// Normalise a display name into its dedup slug: lower-case, trim, collapse each
+// whitespace run into one hyphen ("  Cloud  Infrastructure " → "cloud-infrastructure").
+// SSOT for niche + niche-target find-or-create on the API AND for client-side
+// "will this match an existing niche?" previews.
+export function slugify(input: string): string {
+  return input.trim().toLowerCase().replace(/\s+/g, '-');
+}
 
 // Read shape of a campaign row over HTTP. Nullable columns are .nullable();
-// timestamps are ISO strings.
+// timestamps are ISO strings. `nicheName` is joined from the niches table for
+// the UI (the row itself only stores the nicheId FK).
 export const CampaignDto = z.object({
   id: z.string().uuid(),
   organizationId: z.string().uuid(),
   name: z.string().nullable(),
-  niche: z.string(),
-  target: z.string(),
+  nicheId: z.string().uuid(),
+  nicheName: z.string().nullable(),
   country: z.string(),
-  state: z.string(),
+  region: z.string(),
   project: z.string(),
   gmailLabel: z.string(),
   salesCalendarId: z.string(),
   whatsappNumber: z.string(),
-  status: CampaignStatus,
+  sender: z.string(),
+  lifecycle: CampaignLifecycle,
+  archivedAt: z.string().nullable(),
   driveFolderId: z.string().nullable(),
   driveFolderUrl: z.string().nullable(),
-  // Drive reconcile state. The Drive "Evertrust Campaigns" folder is the source of
-  // truth for which campaigns exist; a sync (POST /campaigns/sync) flips
-  // driveMissing=true when a DEPLOYED campaign's folder is gone (it's then archived
-  // out of the active list, not deleted — history is kept). driveCheckedAt = when
-  // the last reconcile ran.
-  driveMissing: z.boolean(),
-  driveCheckedAt: z.string().nullable(),
-  deployError: z.string().nullable(),
-  deployedBy: z.string().uuid().nullable(),
-  deployedAt: z.string().nullable(),
+  activatedBy: z.string().uuid().nullable(),
+  activatedAt: z.string().nullable(),
   createdAt: z.string(),
 });
 export type CampaignDto = z.infer<typeof CampaignDto>;
+
+// Body for PATCH /campaigns/:id/lifecycle. DRAFT is never a target (a campaign
+// can only move forward out of DRAFT); ARCHIVED is terminal.
+export const UpdateCampaignLifecycleDto = z.object({
+  lifecycle: z.enum(['ACTIVE', 'PAUSED', 'ARCHIVED']),
+});
+export type UpdateCampaignLifecycleDto = z.infer<typeof UpdateCampaignLifecycleDto>;
 
 // GET /campaigns/:id/files — every file in the campaign's Drive folder, listed
 // via the CAMPAIGNS LIST workflow's erp-campaign-files webhook (the ERP has no
@@ -1032,22 +1043,10 @@ export const CampaignFilesDto = z.object({
 });
 export type CampaignFilesDto = z.infer<typeof CampaignFilesDto>;
 
-// Body for POST /campaigns — the 9 AIM "Lock & Load" inputs. `name` is the only
-// optional one (matches the reference form). status/driveFolder*/deployed* are
-// server-owned (set from the AIM webhook result) and deliberately absent.
-// The AIM "State / City" target is one of these fixed regional zones, NOT free
-// text — so every downstream consumer (the campaign's config.json → Lead
-// Satellite, the sequence-row display, etc.) reads a known, enumerable value.
-// Single source of truth for BOTH the AIM dropdown and the request validation.
-export const CAMPAIGN_REGIONS = [
-  'Anywhere',
-  'North',
-  'South',
-  'East',
-  'West',
-  'Near Border',
-] as const;
-export type CampaignRegion = (typeof CAMPAIGN_REGIONS)[number];
+// Region is free text — a city, city list, or voivodeship/Bundesland (e.g.
+// "Warszawa, Kraków" or "Mazowieckie"). The Lead Satellite's Build Search Query
+// expands it into per-city searches, so it must NOT be constrained to a fixed
+// enum (compass zones would starve the geographic search the workflow depends on).
 
 // Outreach sender mailbox — which authorized Gmail identity REACH BAZOOKA sends a
 // campaign's cold outreach from. Pass-through to the AIM webhook → the campaign's
@@ -1062,11 +1061,13 @@ export const CAMPAIGN_SENDER_LABELS: Record<CampaignSender, string> = {
 
 export const CreateCampaignDto = z.object({
   name: z.string().max(60).optional(),
-  niche: z.string().min(1).max(120),
-  target: z.string().min(1).max(200),
+  // The campaign's niche by DISPLAY name; the API find-or-creates the niche row
+  // (by slugify(nicheName)) and stores its id. Replaces the old free-text
+  // niche/target pair — target archetypes now live on niche_targets.
+  nicheName: z.string().min(1).max(120),
   country: z.string().min(1).max(120),
-  // Location zone — constrained to the CAMPAIGN_REGIONS dropdown choices.
-  state: z.enum([...CAMPAIGN_REGIONS] as [CampaignRegion, ...CampaignRegion[]]),
+  // Geographic locality the Lead Satellite searches (see the note above).
+  region: z.string().min(1).max(120),
   project: z.string().min(1).max(200),
   gmailLabel: z.string().min(1).max(120),
   salesCalendarId: z.string().min(1).max(200),
@@ -1364,7 +1365,9 @@ export const LeadDto = z.object({
   city: z.string().nullable(),
   country: z.string().nullable(),
   tier: z.string().nullable(),
-  niche: z.string().nullable(),
+  // Niche FK (replaces the old free-text niche column). Only set on MANUAL leads;
+  // N8N leads resolve their niche via the linked campaign. null = no niche.
+  nicheId: z.string().uuid().nullable(),
   sourceCampaign: z.string().nullable(),
   campaignId: z.string().uuid().nullable(),
   hotReason: z.string().nullable(),
@@ -1798,3 +1801,565 @@ export const PerformanceBriefDto = z.object({
   summary: PerformanceBriefSummary.nullable(),
 });
 export type PerformanceBriefDto = z.infer<typeof PerformanceBriefDto>;
+
+// ============================================================================
+// GROWTH ENGINE v2 — niches, prospects, outreach, contracts, notifications
+// The cold-outreach arsenal's data plane. Niches/targets feed Lead Satellite;
+// prospects are the per-campaign leads sheet; reply_classifications project onto
+// prospect.status; suppressions are the do-not-contact gate. Read shapes over
+// HTTP: nullable columns are .nullable(), timestamps are ISO strings.
+// ============================================================================
+
+// ---- Enum mirrors (one per Growth-Engine v2 pgEnum) ----
+// Provenance of a niche_targets row.
+export const NicheTargetSource = z.enum(['AI', 'MANUAL']);
+export type NicheTargetSource = z.infer<typeof NicheTargetSource>;
+
+// AI classification of an inbound reply (Reply Glock + RAG UNSURE pass).
+export const ReplyVerdict = z.enum([
+  'INTERESTED',
+  'NOT_INTERESTED',
+  'SNOOZE',
+  'MEETING_REQUEST',
+  'UNSURE',
+  'AUTO_REPLY',
+  'BOUNCE',
+]);
+export type ReplyVerdict = z.infer<typeof ReplyVerdict>;
+
+// What kind of Drive artifact a campaign_assets row points at.
+export const AssetKind = z.enum([
+  'EMAIL_TEMPLATE',
+  'NEWS_BRIEF',
+  'NICHE_ANALYSIS',
+  'COACH_REPORT',
+  'CONTRACT_TEMPLATE',
+  'OTHER',
+]);
+export type AssetKind = z.infer<typeof AssetKind>;
+
+// ContractMaker contract lifecycle.
+export const ContractStatus = z.enum(['GENERATED', 'SENT', 'SIGNED', 'FAILED']);
+export type ContractStatus = z.infer<typeof ContractStatus>;
+
+// ---- Niches ----
+// Read shape of a niche row (the UI combobox + the machine niche list).
+export const NicheDto = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  slug: z.string(),
+});
+export type NicheDto = z.infer<typeof NicheDto>;
+
+// Read shape of a niche_target archetype row.
+export const NicheTargetDto = z.object({
+  id: z.string().uuid(),
+  nicheId: z.string().uuid(),
+  name: z.string(),
+  slug: z.string(),
+  searchHint: z.string().nullable(),
+  source: NicheTargetSource,
+  enabled: z.boolean(),
+  createdAt: z.string(),
+});
+export type NicheTargetDto = z.infer<typeof NicheTargetDto>;
+
+// Body for POST /niches/:id/targets/bulk — the NICHE ANALYTICS workflow's AI
+// targets. Upserted by (nicheId, slugify(name)); existing rows update searchHint.
+export const NicheTargetBulkDto = z.object({
+  targets: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(200),
+        searchHint: z.string().max(500).optional(),
+      }),
+    )
+    .min(1)
+    .max(100),
+});
+export type NicheTargetBulkDto = z.infer<typeof NicheTargetBulkDto>;
+
+// Result of POST /niches/:id/targets/bulk.
+export const NicheTargetBulkResultDto = z.object({
+  created: z.number().int().nonnegative(),
+  updated: z.number().int().nonnegative(),
+  targets: z.array(NicheTargetDto),
+});
+export type NicheTargetBulkResultDto = z.infer<typeof NicheTargetBulkResultDto>;
+
+// Niche row enriched with rollup counts for the UI niches-management list
+// (GET /niches, JWT). `targetCount` is every target (enabled + disabled);
+// `campaignCount` is how many campaigns reference this niche. The plain NicheDto
+// (id/name/slug) stays the combobox shape — this is a superset, so the combobox
+// keeps working if it reads the same list.
+export const NicheListItemDto = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  slug: z.string(),
+  targetCount: z.number().int().nonnegative(),
+  campaignCount: z.number().int().nonnegative(),
+});
+export type NicheListItemDto = z.infer<typeof NicheListItemDto>;
+
+// Body for POST /niches/:id/targets (JWT) — add ONE manual target archetype
+// (source MANUAL). Upserted by (nicheId, slugify(name)) like the machine bulk
+// route; an existing slug updates its searchHint instead of duplicating.
+export const CreateNicheTargetDto = z.object({
+  name: z.string().min(1).max(200),
+  searchHint: z.string().max(500).optional(),
+});
+export type CreateNicheTargetDto = z.infer<typeof CreateNicheTargetDto>;
+
+// Body for PATCH /niche-targets/:id (JWT) — the human enable/disable + edit. All
+// fields optional; at least one required. `enabled:false` archives the target
+// (kept as evidence, skipped by Lead Satellite).
+export const UpdateNicheTargetDto = z
+  .object({
+    enabled: z.boolean().optional(),
+    name: z.string().min(1).max(200).optional(),
+    searchHint: z.string().max(500).nullable().optional(),
+  })
+  .refine((o) => Object.keys(o).length > 0, 'at least one field is required');
+export type UpdateNicheTargetDto = z.infer<typeof UpdateNicheTargetDto>;
+
+// ---- Campaign config (the machine GET /campaigns/:id/config response) ----
+// The autonomous arsenal's view of a campaign: launch inputs + the resolved niche
+// with its ENABLED targets. driveFolderId is the Ammo Forge artifact root.
+export const CampaignConfigDto = z.object({
+  campaignId: z.string().uuid(),
+  lifecycle: CampaignLifecycle,
+  name: z.string().nullable(),
+  country: z.string(),
+  region: z.string(),
+  project: z.string(),
+  sender: z.string(),
+  gmailLabel: z.string(),
+  salesCalendarId: z.string(),
+  whatsappNumber: z.string(),
+  driveFolderId: z.string().nullable(),
+  niche: z.object({
+    id: z.string().uuid(),
+    name: z.string(),
+    slug: z.string(),
+    targets: z.array(
+      z.object({
+        id: z.string().uuid(),
+        name: z.string(),
+        slug: z.string(),
+        searchHint: z.string().nullable(),
+      }),
+    ),
+  }),
+});
+export type CampaignConfigDto = z.infer<typeof CampaignConfigDto>;
+
+// Machine campaign-list row (GET /campaigns/machine/list?lifecycle=ACTIVE).
+export const CampaignMachineListItemDto = z.object({
+  id: z.string().uuid(),
+  name: z.string().nullable(),
+  project: z.string(),
+  country: z.string(),
+  region: z.string(),
+  sender: z.string(),
+  gmailLabel: z.string(),
+  driveFolderId: z.string().nullable(),
+  nicheId: z.string().uuid(),
+});
+export type CampaignMachineListItemDto = z.infer<
+  typeof CampaignMachineListItemDto
+>;
+
+// ---- Prospects ----
+// Mirror of the prospect_status pgEnum. A PROJECTION of the conversation; the
+// append-only reply_classifications rows are the evidence behind it.
+export const ProspectStatus = z.enum([
+  'NEW',
+  'EMAILED',
+  'REPLIED',
+  'INTERESTED',
+  'MEETING_SCHEDULED',
+  'NOT_INTERESTED',
+  'RE_ENGAGED',
+  'DO_NOT_CONTACT',
+]);
+export type ProspectStatus = z.infer<typeof ProspectStatus>;
+
+// Read shape of a prospect row.
+export const ProspectDto = z.object({
+  id: z.string().uuid(),
+  organizationId: z.string().uuid(),
+  campaignId: z.string().uuid(),
+  nicheTargetId: z.string().uuid().nullable(),
+  email: z.string(),
+  companyName: z.string().nullable(),
+  website: z.string().nullable(),
+  city: z.string().nullable(),
+  country: z.string().nullable(),
+  sourceUrl: z.string().nullable(),
+  emailVerified: z.boolean(),
+  status: ProspectStatus,
+  snoozeUntil: z.string().nullable(),
+  followupCount: z.number().int().nonnegative(),
+  lastContactedAt: z.string().nullable(),
+  leadId: z.string().uuid().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type ProspectDto = z.infer<typeof ProspectDto>;
+
+// One incoming prospect in a bulk write (Lead Satellite scrape result). Scraped
+// fields only — status/snooze/followup are server-owned (never set by a scrape).
+export const ProspectInputDto = z.object({
+  email: z.string().email().max(320),
+  companyName: z.string().max(300).optional(),
+  website: z.string().max(500).optional(),
+  city: z.string().max(200).optional(),
+  country: z.string().max(120).optional(),
+  sourceUrl: z.string().max(1000).optional(),
+  nicheTargetId: z.string().uuid().optional(),
+  emailVerified: z.boolean().optional(),
+});
+export type ProspectInputDto = z.infer<typeof ProspectInputDto>;
+
+// Body for POST /prospects/bulk — upsert on (campaignId, email). On conflict the
+// scraped fields update but status/snooze/followupCount/leadId NEVER regress.
+export const ProspectBulkDto = z.object({
+  campaignId: z.string().uuid(),
+  prospects: z.array(ProspectInputDto).min(1).max(500),
+});
+export type ProspectBulkDto = z.infer<typeof ProspectBulkDto>;
+
+// Result of POST /prospects/bulk.
+export const ProspectBulkResultDto = z.object({
+  created: z.number().int().nonnegative(),
+  updated: z.number().int().nonnegative(),
+});
+export type ProspectBulkResultDto = z.infer<typeof ProspectBulkResultDto>;
+
+// Body for PATCH /prospects/:id — partial status/funnel update (Reach Bazooka
+// stamps lastContactedAt+followupCount; Reply Glock sets status/snoozeUntil).
+export const UpdateProspectDto = z
+  .object({
+    status: ProspectStatus.optional(),
+    snoozeUntil: z.string().datetime().nullable().optional(),
+    followupCount: z.number().int().nonnegative().optional(),
+    lastContactedAt: z.string().datetime().nullable().optional(),
+    emailVerified: z.boolean().optional(),
+    leadId: z.string().uuid().nullable().optional(),
+  })
+  .refine((o) => Object.keys(o).length > 0, 'at least one field is required');
+export type UpdateProspectDto = z.infer<typeof UpdateProspectDto>;
+
+// Org-scoped JWT list for the UI prospect board/table (GET /prospects/board).
+// `items` is the (optionally filtered + paginated) page; `total` is the count
+// AFTER filters but BEFORE the limit/offset window; `statusCounts` is the full
+// per-status tally for the campaign board columns (unaffected by the page window).
+export const ProspectListDto = z.object({
+  items: z.array(ProspectDto),
+  total: z.number().int().nonnegative(),
+  statusCounts: z.record(ProspectStatus, z.number().int().nonnegative()),
+});
+export type ProspectListDto = z.infer<typeof ProspectListDto>;
+
+// Body for PATCH /prospects/:id/status — the human manual override from the UI
+// (archive / re-open a prospect). status is required; an optional snoozeUntil
+// rides along for a manual RE_ENGAGE/snooze. Distinct from the machine PATCH which
+// the outreach stages use to stamp followup/lastContacted.
+export const UpdateProspectStatusDto = z.object({
+  status: ProspectStatus,
+  snoozeUntil: z.string().datetime().nullable().optional(),
+});
+export type UpdateProspectStatusDto = z.infer<typeof UpdateProspectStatusDto>;
+
+// ---- Reply classifications ----
+// Body for POST /reply-classifications — Reply Glock / RAG verdict. Inserted as
+// evidence AND projected onto prospects.status (INTERESTED→INTERESTED,
+// SNOOZE→NOT_INTERESTED+snoozeUntil, MEETING_REQUEST→MEETING_SCHEDULED, …).
+export const ReplyClassificationDto = z.object({
+  prospectId: z.string().uuid(),
+  messageId: z.string().uuid().optional(),
+  verdict: ReplyVerdict,
+  snoozeUntil: z.string().datetime().optional(),
+  model: z.string().max(120).optional(),
+  raw: z.unknown().optional(),
+  suggestedReply: z.string().max(8000).optional(),
+});
+export type ReplyClassificationDto = z.infer<typeof ReplyClassificationDto>;
+
+// Result of POST /reply-classifications — the recorded row id + the prospect's
+// resulting status (so the caller sees the projection without a re-fetch).
+export const ReplyClassificationResultDto = z.object({
+  id: z.string().uuid(),
+  prospectId: z.string().uuid(),
+  status: ProspectStatus,
+});
+export type ReplyClassificationResultDto = z.infer<
+  typeof ReplyClassificationResultDto
+>;
+
+// Read filters for GET /reply-classifications (the RAG agent backlog + verdict
+// pulls). `needsRag=true` is the RAG drafting queue: UNSURE rows whose prospect
+// has no sibling reply_classifications row carrying a non-null suggestedReply yet
+// (once the RAG agent POSTs a row WITH suggestedReply, the prospect drops out).
+export const ReplyClassificationQuery = z.object({
+  verdict: ReplyVerdict.optional(),
+  prospectId: z.string().uuid().optional(),
+  needsRag: z.boolean().optional(),
+  limit: z.number().int().positive().max(500).optional(),
+});
+export type ReplyClassificationQuery = z.infer<typeof ReplyClassificationQuery>;
+
+// Read shape of one reply_classifications row joined with enough prospect context
+// for the RAG agent to act (prospect email + campaignId — the verdict log itself
+// carries no campaignId; it is inherited via the prospect). Timestamps are ISO.
+export const ReplyClassificationDtoRead = z.object({
+  id: z.string().uuid(),
+  prospectId: z.string().uuid(),
+  messageId: z.string().uuid().nullable(),
+  verdict: ReplyVerdict,
+  snoozeUntil: z.string().nullable(),
+  model: z.string().nullable(),
+  suggestedReply: z.string().nullable(),
+  createdAt: z.string(),
+  // Joined from the parent prospect (the RAG agent needs these to assemble context).
+  prospectEmail: z.string(),
+  campaignId: z.string().uuid(),
+});
+export type ReplyClassificationDtoRead = z.infer<
+  typeof ReplyClassificationDtoRead
+>;
+
+// Read shape of one DRAFT-REVIEW-QUEUE row (GET /reply-classifications/queue, JWT):
+// a reply_classifications row that HAS a non-null suggestedReply (the RAG agent has
+// drafted an answer a human now reviews), joined with prospect context (email +
+// companyName + campaignId) and the prospect's LATEST verdict. `suggestedReply` is
+// non-null by construction here (the queue only surfaces drafted rows).
+export const ReplyDraftDto = z.object({
+  id: z.string().uuid(),
+  prospectId: z.string().uuid(),
+  campaignId: z.string().uuid(),
+  prospectEmail: z.string(),
+  prospectCompanyName: z.string().nullable(),
+  verdict: ReplyVerdict,
+  suggestedReply: z.string(),
+  model: z.string().nullable(),
+  createdAt: z.string(),
+  // The prospect's most recent verdict (may differ from this row's verdict if a
+  // later classification landed) — lets the reviewer see the current funnel state.
+  latestVerdict: ReplyVerdict,
+});
+export type ReplyDraftDto = z.infer<typeof ReplyDraftDto>;
+
+// ---- Outreach messages (the conversation ledger) ----
+// Mirror of the message_direction pgEnum: Bazooka sends (OUTBOUND) and the Gmail
+// poller's inbound replies (INBOUND).
+export const MessageDirection = z.enum(['OUTBOUND', 'INBOUND']);
+export type MessageDirection = z.infer<typeof MessageDirection>;
+
+// Mirror of the message_status pgEnum. Outbound: SENT/FAILED/BOUNCED; inbound:
+// RECEIVED.
+export const MessageStatus = z.enum(['SENT', 'FAILED', 'BOUNCED', 'RECEIVED']);
+export type MessageStatus = z.infer<typeof MessageStatus>;
+
+// Body for POST /outreach-messages — one conversation-ledger entry. When
+// gmailMessageId is present the row UPSERTS on it (re-polled Gmail threads must
+// not double-insert — on conflict status/subject/bodySnippet/sentAt update);
+// otherwise it is a plain insert. The prospect must exist (404). org is inherited
+// via the prospect (the ledger has no own organizationId).
+export const CreateOutreachMessageDto = z.object({
+  prospectId: z.string().uuid(),
+  direction: MessageDirection,
+  status: MessageStatus,
+  gmailMessageId: z.string().max(256).optional(),
+  gmailThreadId: z.string().max(256).optional(),
+  subject: z.string().max(2000).optional(),
+  bodySnippet: z.string().max(8000).optional(),
+  templateAssetId: z.string().uuid().optional(),
+  sentAt: z.string().datetime().optional(),
+  error: z.string().max(2000).optional(),
+});
+export type CreateOutreachMessageDto = z.infer<typeof CreateOutreachMessageDto>;
+
+// Read filters for GET /outreach-messages — the thread context pull (RAG Agent +
+// Reply Glock). Newest-first; defaults to 50 rows.
+export const OutreachMessageQuery = z.object({
+  prospectId: z.string().uuid().optional(),
+  gmailThreadId: z.string().max(256).optional(),
+  limit: z.number().int().positive().max(500).optional(),
+});
+export type OutreachMessageQuery = z.infer<typeof OutreachMessageQuery>;
+
+// Read shape of an outreach_messages row over HTTP (timestamps → ISO strings).
+export const OutreachMessageDto = z.object({
+  id: z.string().uuid(),
+  prospectId: z.string().uuid(),
+  direction: MessageDirection,
+  status: MessageStatus,
+  gmailMessageId: z.string().nullable(),
+  gmailThreadId: z.string().nullable(),
+  subject: z.string().nullable(),
+  bodySnippet: z.string().nullable(),
+  templateAssetId: z.string().uuid().nullable(),
+  sentAt: z.string().nullable(),
+  error: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type OutreachMessageDto = z.infer<typeof OutreachMessageDto>;
+
+// ---- Suppressions ----
+// Body for POST /suppressions — add an address to the org do-not-contact list.
+// org resolves from sourceProspectId's prospect, else from campaignId.
+export const SuppressionDto = z
+  .object({
+    email: z.string().email().max(320),
+    reason: z.string().max(500).optional(),
+    sourceProspectId: z.string().uuid().optional(),
+    campaignId: z.string().uuid().optional(),
+  })
+  .refine(
+    (o) => !!o.sourceProspectId || !!o.campaignId,
+    'sourceProspectId or campaignId is required to resolve the org',
+  );
+export type SuppressionDto = z.infer<typeof SuppressionDto>;
+
+export const SuppressionResultDto = z.object({
+  id: z.string().uuid(),
+  created: z.boolean(),
+});
+export type SuppressionResultDto = z.infer<typeof SuppressionResultDto>;
+
+// Read shape of one suppressions row (GET /suppressions, JWT) — the org's
+// do-not-contact list for the UI. Timestamps are ISO strings.
+export const SuppressionListItemDto = z.object({
+  id: z.string().uuid(),
+  organizationId: z.string().uuid(),
+  email: z.string(),
+  reason: z.string().nullable(),
+  sourceProspectId: z.string().uuid().nullable(),
+  createdAt: z.string(),
+});
+export type SuppressionListItemDto = z.infer<typeof SuppressionListItemDto>;
+
+// ---- Prospect graduation (INTERESTED → hot lead) ----
+// Body for POST /prospects/:id/graduate — the Reply Glock graduation that retires
+// the CRM Hot Leads workflow. All optional. IDEMPOTENT: re-graduating a prospect
+// returns its existing lead; an existing leads row for (org,email) is LINKED, not
+// duplicated (the unique key would reject a dup anyway).
+export const GraduateProspectDto = z.object({
+  stage: LeadStage.optional(),
+  hotReason: z.string().max(500).optional(),
+  note: z.string().max(2000).optional(),
+});
+export type GraduateProspectDto = z.infer<typeof GraduateProspectDto>;
+
+// Result of POST /prospects/:id/graduate — the hot lead + whether THIS call created
+// it (false when the prospect was already linked or an existing lead was reused).
+export const GraduateProspectResultDto = z.object({
+  lead: LeadDto,
+  graduated: z.boolean(),
+});
+export type GraduateProspectResultDto = z.infer<
+  typeof GraduateProspectResultDto
+>;
+
+// ---- Campaign assets ----
+// Body for POST /campaigns/:id/assets — register a Drive artifact (upsert on
+// driveFileId). kind mirrors the asset_kind pgEnum.
+export const CampaignAssetDto = z.object({
+  kind: AssetKind,
+  name: z.string().min(1).max(300),
+  driveFileId: z.string().min(1).max(256),
+  driveUrl: z.string().max(1000).optional(),
+  mimeType: z.string().max(200).optional(),
+});
+export type CampaignAssetDto = z.infer<typeof CampaignAssetDto>;
+
+export const CampaignAssetResultDto = z.object({
+  id: z.string().uuid(),
+  created: z.boolean(),
+});
+export type CampaignAssetResultDto = z.infer<typeof CampaignAssetResultDto>;
+
+// ---- Contracts ----
+// Body for POST /contracts — ContractMaker output (the PDF stays in Drive). At least
+// one of leadId/customerId/campaignId is required (the API resolves the org from it).
+export const CreateContractDto = z
+  .object({
+    leadId: z.string().uuid().optional(),
+    customerId: z.string().uuid().optional(),
+    campaignId: z.string().uuid().optional(),
+    templateAssetId: z.string().uuid().optional(),
+    signingMeetingId: z.string().uuid().optional(),
+    driveFileId: z.string().max(256).optional(),
+    driveUrl: z.string().max(1000).optional(),
+    cooperationTerm: z.string().max(500).optional(),
+  })
+  .refine(
+    (o) => !!o.leadId || !!o.customerId || !!o.campaignId,
+    'leadId, customerId, or campaignId is required to resolve the org',
+  );
+export type CreateContractDto = z.infer<typeof CreateContractDto>;
+
+// Body for PATCH /contracts/:id — status flip (signing detection → SIGNED).
+export const UpdateContractDto = z
+  .object({
+    status: ContractStatus.optional(),
+    driveFileId: z.string().max(256).nullable().optional(),
+    driveUrl: z.string().max(1000).nullable().optional(),
+    signedAt: z.string().datetime().nullable().optional(),
+    error: z.string().max(1000).nullable().optional(),
+  })
+  .refine((o) => Object.keys(o).length > 0, 'at least one field is required');
+export type UpdateContractDto = z.infer<typeof UpdateContractDto>;
+
+export const ContractDto = z.object({
+  id: z.string().uuid(),
+  organizationId: z.string().uuid(),
+  leadId: z.string().uuid().nullable(),
+  customerId: z.string().uuid().nullable(),
+  campaignId: z.string().uuid().nullable(),
+  templateAssetId: z.string().uuid().nullable(),
+  signingMeetingId: z.string().uuid().nullable(),
+  status: ContractStatus,
+  driveFileId: z.string().nullable(),
+  driveUrl: z.string().nullable(),
+  cooperationTerm: z.string().nullable(),
+  signedAt: z.string().nullable(),
+  error: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type ContractDto = z.infer<typeof ContractDto>;
+
+// Read filters for GET /contracts — ContractMaker's "did I already generate a
+// contract for this lead?" check. Newest-first; defaults to 50 rows.
+export const ContractQuery = z.object({
+  campaignId: z.string().uuid().optional(),
+  leadId: z.string().uuid().optional(),
+  status: ContractStatus.optional(),
+  limit: z.number().int().positive().max(500).optional(),
+});
+export type ContractQuery = z.infer<typeof ContractQuery>;
+
+// ---- Notifications ----
+// Body for POST /notifications — in-app feed entry. org resolves from campaignId
+// when present, else from the authenticated principal (n8n callback path).
+export const CreateNotificationDto = z.object({
+  type: z.string().min(1).max(80),
+  title: z.string().min(1).max(300),
+  body: z.string().max(2000).optional(),
+  link: z.string().max(1000).optional(),
+  campaignId: z.string().uuid().optional(),
+});
+export type CreateNotificationDto = z.infer<typeof CreateNotificationDto>;
+
+// Read shape of a notification row (the bell feed).
+export const NotificationDto = z.object({
+  id: z.string().uuid(),
+  type: z.string(),
+  title: z.string(),
+  body: z.string().nullable(),
+  link: z.string().nullable(),
+  readAt: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type NotificationDto = z.infer<typeof NotificationDto>;

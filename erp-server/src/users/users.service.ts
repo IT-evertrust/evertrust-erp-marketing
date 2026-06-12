@@ -383,7 +383,7 @@ export class UsersService {
       .where(
         and(
           tenantScope(orgId, schema.campaigns),
-          eq(schema.campaigns.deployedBy, userId),
+          eq(schema.campaigns.activatedBy, userId),
         ),
       );
 

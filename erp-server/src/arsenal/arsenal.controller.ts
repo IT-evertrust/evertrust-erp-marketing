@@ -1,4 +1,3 @@
-import { timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import {
   BadRequestException,
@@ -13,8 +12,7 @@ import {
   Put,
   Query,
   Req,
-  ServiceUnavailableException,
-  UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import {
@@ -34,6 +32,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/auth.types';
 import { OrgId } from '../common/tenant';
 import { setAuditContext } from '../common/audit-context';
+import { ArsenalTokenGuard } from '../common/guards/arsenal-token.guard';
 import { AppConfigService } from '../config/app-config.service';
 import { ArsenalService } from './arsenal.service';
 import { ArsenalScheduler } from './arsenal.scheduler';
@@ -167,18 +166,18 @@ export class ArsenalController {
   }
 
   // n8n→ERP run callback. PUBLIC (no JWT — n8n has no session); gated by the shared
-  // ARSENAL_INGEST_TOKEN in the `x-arsenal-token` header. n8n posts a stage's
-  // autonomous run outcome here so it lands in the per-campaign Live activity feed.
-  // 503 if the token isn't configured, 401 on a bad token, 404 if the named
-  // campaign / Drive folder is unknown. Returns the recorded run id.
+  // ARSENAL_INGEST_TOKEN in the `x-arsenal-token` header via ArsenalTokenGuard
+  // (503 if the token is unset, 401 on a bad token). n8n posts a stage's autonomous
+  // run outcome here so it lands in the per-campaign Live activity feed. When a
+  // campaignId + driveFolderId are sent, the Ammo Forge folder is persisted onto the
+  // campaign. 404 if the named campaign / Drive folder is unknown. Returns the run id.
   @Public()
+  @UseGuards(ArsenalTokenGuard)
   @Post('runs/callback')
   @HttpCode(HttpStatus.ACCEPTED)
   async callback(
     @Body() body: ArsenalCallbackBodyDto,
-    @Req() req: Request,
   ): Promise<ArsenalCallbackResultDto> {
-    this.assertIngestToken(req);
     const { id } = await this.arsenal.recordCallback({
       stage: body.stage,
       status: body.status,
@@ -188,23 +187,6 @@ export class ArsenalController {
       metrics: body.metrics,
     });
     return { ok: true, id };
-  }
-
-  // Constant-time check of the ingest token. Blank token = feature off (503), so
-  // the route can't be hit until an operator deliberately mints a secret.
-  private assertIngestToken(req: Request): void {
-    const expected = this.config.get('ARSENAL_INGEST_TOKEN');
-    if (!expected) {
-      throw new ServiceUnavailableException(
-        'Arsenal run callback is not configured (set ARSENAL_INGEST_TOKEN).',
-      );
-    }
-    const provided = req.header('x-arsenal-token') ?? '';
-    const a = Buffer.from(provided);
-    const b = Buffer.from(expected);
-    if (a.length !== b.length || !timingSafeEqual(a, b)) {
-      throw new UnauthorizedException('Invalid arsenal ingest token.');
-    }
   }
 
   @RequirePermissions('campaigns:write')

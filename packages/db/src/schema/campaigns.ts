@@ -1,6 +1,6 @@
 import {
-  boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -10,19 +10,22 @@ import {
 } from 'drizzle-orm/pg-core';
 import { organizations } from './org';
 import { users } from './core';
+import { aiRuns } from './observability';
+import { niches } from './niches';
 import {
   arsenalRunSourceEnum,
   arsenalRunStatusEnum,
   arsenalStageEnum,
-  campaignStatusEnum,
+  assetKindEnum,
+  campaignStateEnum,
 } from './enums';
 
 // Growth-Engine campaign — the "AIM sequence" target. One row per launched attack.
-// Org-scoped (own organizationId, like tenders/suppliers/customers). The 9 AIM
+// Org-scoped (own organizationId, like tenders/suppliers/customers). The AIM
 // fields mirror the reference Growth-Engine form; on "Lock & Load" the API fires
-// the AIM n8n webhook, which provisions the Google Drive campaign folder and
-// config.json that the rest of the arsenal (Lead Satellite / Ammo Forge / Reach
-// Bazooka / Reply Glock / Sleeper Grenade) then runs against autonomously.
+// the AIM n8n webhook and the arsenal (Lead Satellite / Ammo Forge / Reach
+// Bazooka / Reply Glock) then runs against the campaign autonomously. The ERP
+// row IS the campaign's identity — Drive only holds generated artifacts.
 export const campaigns = pgTable(
   'campaigns',
   {
@@ -33,34 +36,69 @@ export const campaigns = pgTable(
       .references(() => organizations.id),
     // Optional human label ("Name this attack"); the others are required AIM inputs.
     name: text('name'),
-    niche: text('niche').notNull(),
-    target: text('target').notNull(),
+    // The campaign's niche, find-or-created from the AIM form. Replaces the old
+    // free-text `niche`/`target` pair — targets now live on niche_targets.
+    nicheId: uuid('niche_id')
+      .notNull()
+      .references(() => niches.id),
     country: text('country').notNull(),
-    state: text('state').notNull(),
+    region: text('region').notNull(),
     project: text('project').notNull(),
     gmailLabel: text('gmail_label').notNull(),
     salesCalendarId: text('sales_calendar_id').notNull(),
     whatsappNumber: text('whatsapp_number').notNull(),
-    status: campaignStatusEnum('status').notNull().default('DRAFT'),
-    // Populated from the AIM webhook response on a successful deploy.
+    // Gmail sending alias (the AIM workflow config.json `sender`, e.g. 'info').
+    sender: text('sender').notNull().default('info'),
+    // Campaign lifecycle: DRAFT until activated; ARCHIVED is the soft delete
+    // (archivedAt = when), kept for attribution instead of hard-deleting.
+    lifecycle: campaignStateEnum('lifecycle').notNull().default('DRAFT'),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    // Drive ARTIFACT pointers — no longer the campaign's identity. Populated
+    // lazily by Ammo Forge via the n8n callback; the old Drive reconcile
+    // machinery (driveMissing/driveCheckedAt sync) is retired.
     driveFolderId: text('drive_folder_id'),
     driveFolderUrl: text('drive_folder_url'),
-    // Drive reconcile state. The Drive "Evertrust Campaigns" folder is the source of
-    // truth for which campaigns exist. A sync (POST /campaigns/sync, via the
-    // erp-campaigns-list n8n webhook) sets driveMissing=true when a DEPLOYED
-    // campaign's folder is gone — the row is then archived OUT of the active list
-    // (kept for audit, not hard-deleted). driveCheckedAt = when it was last reconciled.
-    driveMissing: boolean('drive_missing').notNull().default(false),
-    driveCheckedAt: timestamp('drive_checked_at', { withTimezone: true }),
-    // Captured when the deploy call errors (status FAILED) — observable failure.
-    deployError: text('deploy_error'),
-    deployedBy: uuid('deployed_by').references(() => users.id),
-    deployedAt: timestamp('deployed_at', { withTimezone: true }),
+    activatedBy: uuid('activated_by').references(() => users.id),
+    activatedAt: timestamp('activated_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
-  (t) => [index('campaigns_organization_id_idx').on(t.organizationId)],
+  (t) => [
+    index('campaigns_organization_id_idx').on(t.organizationId),
+    index('campaigns_niche_id_idx').on(t.nicheId),
+    index('campaigns_lifecycle_idx').on(t.lifecycle),
+  ],
+);
+
+// Registry of files the Growth-Engine workflows generate INTO Drive (email
+// templates, news briefs, niche analyses, coach reports, contract templates).
+// Binaries stay in Drive; the ERP owns the pointer (documents.storageUrl
+// philosophy). driveFileId is the dedup key, so callback re-deliveries upsert.
+// Tenancy is inherited via the parent campaign; no own organizationId column.
+export const campaignAssets = pgTable(
+  'campaign_assets',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    campaignId: uuid('campaign_id')
+      .notNull()
+      .references(() => campaigns.id),
+    kind: assetKindEnum('kind').notNull(),
+    name: text('name').notNull(),
+    driveFileId: text('drive_file_id').notNull(),
+    driveUrl: text('drive_url'),
+    mimeType: text('mime_type'),
+    version: integer('version').notNull().default(1),
+    // The AI run that produced this asset (null for hand-uploaded files).
+    aiRunId: uuid('ai_run_id').references(() => aiRuns.id),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('campaign_assets_drive_file_id_uq').on(t.driveFileId),
+    index('campaign_assets_campaign_id_idx').on(t.campaignId),
+  ],
 );
 
 // One row per ERP-initiated arsenal trigger (the "Run now" buttons + the daily
@@ -82,6 +120,10 @@ export const arsenalRuns = pgTable(
     // (e.g. { emailsSent: 40 }). Null for ERP-dispatched / pre-Phase-2 runs. The
     // Marketing report sums these per period.
     metrics: jsonb('metrics').$type<Record<string, number>>(),
+    // Immutable snapshot of the config the run used (campaign + niche targets
+    // as handed to n8n) — the submissionReceipts.fileList pattern: what the run
+    // SAW, even after the campaign is edited later.
+    configSnapshot: jsonb('config_snapshot'),
     // The n8n execution this row was imported from (backfill), for idempotent
     // re-syncs. Null for ERP-dispatched / callback-reported runs.
     n8nExecutionId: text('n8n_execution_id'),

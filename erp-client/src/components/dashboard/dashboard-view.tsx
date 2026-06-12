@@ -36,7 +36,7 @@ import {
   ROLE_LABELS,
   type TenderDto,
   type TenderStatus,
-  type CampaignStatus,
+  type CampaignLifecycle,
 } from '@evertrust/shared';
 import { useMe } from '@/hooks/use-auth';
 import { useTenders, useDeadlineRisk } from '@/hooks/use-tenders';
@@ -79,10 +79,14 @@ const TENDER_STAGES: ReadonlyArray<[TenderStatus, string, string]> = [
   ['AWARDED', 'Awarded', '#fbbf24'],
   ['LOST', 'Lost', '#f87171'],
 ];
-const CAMPAIGN_STATES: ReadonlyArray<[CampaignStatus, string, string]> = [
-  ['DEPLOYED', 'Deployed', '#34d399'],
+// Campaign lifecycle stages (label + colour) — the SAME closed set as the shared
+// CampaignLifecycle enum, so the donut can't drift. Colours match the lifecycle
+// badge palette (active emerald, paused amber, draft slate, archived gray).
+const CAMPAIGN_STATES: ReadonlyArray<[CampaignLifecycle, string, string]> = [
+  ['ACTIVE', 'Active', '#34d399'],
+  ['PAUSED', 'Paused', '#fbbf24'],
   ['DRAFT', 'Draft', '#64748b'],
-  ['FAILED', 'Failed', '#f87171'],
+  ['ARCHIVED', 'Archived', '#9ca3af'],
 ];
 
 // Dark tooltip matching the app theme.
@@ -231,8 +235,8 @@ function StatRow() {
   const atRiskCount = atRisk.data?.length ?? 0;
   const overdue =
     atRisk.data?.filter((r) => r.risk.level === 'OVERDUE').length ?? 0;
-  const deployed = (campaigns.data ?? []).filter(
-    (c) => c.status === 'DEPLOYED',
+  const live = (campaigns.data ?? []).filter(
+    (c) => c.lifecycle === 'ACTIVE',
   ).length;
 
   const num = (loading: boolean, value: number) =>
@@ -243,11 +247,11 @@ function StatRow() {
       <Can permission="campaigns:read">
         <StatTile
           label="Campaigns"
-          value={num(campaigns.isLoading, deployed)}
+          value={num(campaigns.isLoading, live)}
           hint={
             campaigns.isError
               ? 'Could not load'
-              : `${campaigns.data?.length ?? 0} total · ${deployed} live`
+              : `${campaigns.data?.length ?? 0} total · ${live} live`
           }
           accent="bg-violet-400"
           icon={<Crosshair className="size-4" />}
@@ -399,7 +403,6 @@ function NeedsAttentionCard() {
   const riskRows = atRisk.data ?? [];
   const mostUrgent = riskRows[0];
   const unattributed = (meetings.data ?? []).filter((m) => !m.campaignId);
-  const failed = (campaigns.data ?? []).filter((c) => c.status === 'FAILED');
 
   type Item = {
     icon: ReactNode;
@@ -430,16 +433,6 @@ function NeedsAttentionCard() {
       sub: 'Sales · no campaign matched',
       href: '/sales',
       cta: 'Link',
-    });
-  }
-  if (failed.length > 0) {
-    items.push({
-      icon: <AlertTriangle className="size-4" />,
-      tone: 'text-red-400',
-      title: `${failed.length} campaign${failed.length > 1 ? 's' : ''} failed`,
-      sub: 'Growth Engine · check the run log',
-      href: '/marketing',
-      cta: 'View',
     });
   }
 
@@ -576,7 +569,7 @@ function CampaignStatusCard() {
   const rows = campaigns.data ?? [];
   const data = CAMPAIGN_STATES.map(([s, label, fill]) => ({
     name: label,
-    value: rows.filter((c) => c.status === s).length,
+    value: rows.filter((c) => c.lifecycle === s).length,
     fill,
   })).filter((d) => d.value > 0);
 
@@ -586,7 +579,7 @@ function CampaignStatusCard() {
         <CardTitle className="flex items-center gap-2 text-base">
           <Briefcase className="size-4 text-muted-foreground" /> Campaigns
         </CardTitle>
-        <CardDescription>{rows.length} total · by status</CardDescription>
+        <CardDescription>{rows.length} total · by lifecycle</CardDescription>
       </CardHeader>
       <CardContent>
         {campaigns.isLoading ? (

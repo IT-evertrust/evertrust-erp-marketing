@@ -6,9 +6,14 @@ import type {
   CampaignFilesDto,
   CampaignSyncResultDto,
   CreateCampaignDto,
+  UpdateCampaignLifecycleDto,
 } from '@evertrust/shared';
 import { ApiError, api } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
+
+// Pause / resume / archive target (DRAFT is never a target — campaigns only move
+// forward out of DRAFT). Mirrors the shared UpdateCampaignLifecycleDto body.
+type LifecycleTarget = UpdateCampaignLifecycleDto['lifecycle'];
 
 // Files in a campaign's Drive folder — fetched lazily (only when the Details
 // dialog is open, via `enabled`).
@@ -35,6 +40,16 @@ export function useCampaigns() {
   });
 }
 
+// One campaign by id (the campaign detail surface). The lifecycle mutation seeds
+// this same key optimistically, so Pause/Resume/Archive flips the badge here too.
+export function useCampaign(id: string | null) {
+  return useQuery<CampaignDto, ApiError>({
+    queryKey: queryKeys.campaigns.detail(id ?? 'none'),
+    queryFn: ({ signal }) => api.campaigns.get(id as string, signal),
+    enabled: !!id,
+  });
+}
+
 // Launch a campaign. Invalidates the campaign list so the new row (with its
 // DEPLOYED / FAILED / DRAFT status) appears immediately.
 export function useCreateCampaign() {
@@ -53,6 +68,45 @@ export function useDeleteCampaign() {
   return useMutation<void, ApiError, string>({
     mutationFn: (id) => api.campaigns.delete(id),
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all });
+    },
+  });
+}
+
+// Move a campaign through its lifecycle (Pause / Resume / Archive). Optimistically
+// patches the cached list + detail so the badge flips instantly; on error we roll
+// back, and we always re-fetch on settle so the server's row is authoritative.
+export function useSetCampaignLifecycle() {
+  const queryClient = useQueryClient();
+  const listKey = queryKeys.campaigns.list();
+  return useMutation<
+    CampaignDto,
+    ApiError,
+    { id: string; lifecycle: LifecycleTarget },
+    { previousList?: CampaignDto[] }
+  >({
+    mutationFn: ({ id, lifecycle }) => api.campaigns.setLifecycle(id, lifecycle),
+    onMutate: async ({ id, lifecycle }) => {
+      await queryClient.cancelQueries({ queryKey: listKey });
+      const previousList = queryClient.getQueryData<CampaignDto[]>(listKey);
+      if (previousList) {
+        queryClient.setQueryData<CampaignDto[]>(
+          listKey,
+          previousList.map((c) => (c.id === id ? { ...c, lifecycle } : c)),
+        );
+      }
+      queryClient.setQueryData<CampaignDto>(
+        queryKeys.campaigns.detail(id),
+        (c) => (c ? { ...c, lifecycle } : c),
+      );
+      return { previousList };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousList) {
+        queryClient.setQueryData(listKey, context.previousList);
+      }
+    },
+    onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all });
     },
   });

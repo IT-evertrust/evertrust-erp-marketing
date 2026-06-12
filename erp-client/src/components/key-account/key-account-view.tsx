@@ -9,7 +9,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Tag,
   Trash2,
   User,
 } from 'lucide-react';
@@ -99,7 +98,7 @@ export function KeyAccountView() {
     return list.filter((l) => {
       if (tier !== ALL && (l.tier || '').trim().toUpperCase() !== tier) return false;
       if (needle) {
-        const hay = `${l.companyName ?? ''} ${l.email} ${l.niche ?? ''} ${l.sourceCampaign ?? ''}`.toLowerCase();
+        const hay = `${l.companyName ?? ''} ${l.email} ${l.sourceCampaign ?? ''}`.toLowerCase();
         if (!hay.includes(needle)) return false;
       }
       return true;
@@ -341,20 +340,12 @@ function LeadCard({ lead, onClick }: { lead: LeadDto; onClick: () => void }) {
       </div>
       <div className="mt-0.5 truncate text-[11px] text-muted-foreground/80">{domainOf(lead)}</div>
 
-      {lead.niche || location ? (
+      {location ? (
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {lead.niche ? (
-            <span className="inline-flex items-center gap-1 rounded-md border bg-muted px-1.5 py-0.5 text-[10.5px] text-muted-foreground">
-              <Tag className="size-3" />
-              {lead.niche}
-            </span>
-          ) : null}
-          {location ? (
-            <span className="inline-flex items-center gap-1 rounded-md border bg-muted px-1.5 py-0.5 text-[10.5px] text-muted-foreground">
-              <MapPin className="size-3" />
-              {location}
-            </span>
-          ) : null}
+          <span className="inline-flex items-center gap-1 rounded-md border bg-muted px-1.5 py-0.5 text-[10.5px] text-muted-foreground">
+            <MapPin className="size-3" />
+            {location}
+          </span>
         </div>
       ) : null}
 

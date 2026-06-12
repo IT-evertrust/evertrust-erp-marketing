@@ -15,7 +15,6 @@ import {
   type ArsenalRunStatus,
   type ArsenalStage,
   type CampaignDto,
-  type CampaignStatus,
 } from '@evertrust/shared';
 import { useCampaigns } from '@/hooks/use-campaigns';
 import { useArsenalRuns } from '@/hooks/use-arsenal';
@@ -33,6 +32,7 @@ import { cn } from '@/lib/utils';
 import { formatDateTime } from '@/lib/tender-format';
 import {
   ARSENAL_SEQUENCE,
+  CAMPAIGN_LIFECYCLE_BADGE,
   aimStatus,
   isRunning,
   latestRunFor,
@@ -42,22 +42,7 @@ import {
 import { StatusDot } from './status-dot';
 import { RunStageButton } from './run-stage-button';
 import { DeleteCampaignButton } from './delete-campaign-button';
-
-const STATUS_BADGE: Record<CampaignStatus, { label: string; className: string }> = {
-  DRAFT: {
-    label: 'Draft',
-    className: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
-  },
-  DEPLOYED: {
-    label: 'Deployed',
-    className:
-      'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
-  },
-  FAILED: {
-    label: 'Failed',
-    className: 'border-destructive/30 bg-destructive/10 text-destructive',
-  },
-};
+import { CampaignLifecycleActions } from './campaign-lifecycle-actions';
 
 const RUN_STATUS_LABEL: Record<ArsenalRunStatus, string> = {
   DISPATCHED: 'Dispatched',
@@ -175,7 +160,7 @@ function CampaignRow({
   open: boolean;
   onToggle: () => void;
 }) {
-  const badge = STATUS_BADGE[c.status];
+  const badge = CAMPAIGN_LIFECYCLE_BADGE[c.lifecycle];
   const aim = aimStatus(c);
   const ok = runs.filter((r) => isArsenalRunOk(r.status)).length;
   const errors = runs.length - ok;
@@ -212,13 +197,10 @@ function CampaignRow({
               </Badge>
             </span>
             <span className="mt-1 block text-xs text-muted-foreground">
-              {c.niche} · {c.target} · {c.state}, {c.country}
+              {[c.nicheName, `${c.region}, ${c.country}`]
+                .filter(Boolean)
+                .join(' · ')}
             </span>
-            {c.status === 'FAILED' && c.deployError ? (
-              <span className="mt-1 block text-xs text-destructive">
-                {c.deployError}
-              </span>
-            ) : null}
           </span>
         </button>
 
@@ -232,6 +214,9 @@ function CampaignRow({
               </a>
             </Button>
           ) : null}
+          <Can permission="campaigns:write">
+            <CampaignLifecycleActions campaign={c} />
+          </Can>
           <Can permission="campaigns:write">
             <DeleteCampaignButton campaign={c} />
           </Can>
@@ -443,11 +428,8 @@ function ActivityRow({ run: r }: { run: ArsenalRunDto }) {
 }
 
 function aimSub(c: CampaignDto): string {
-  if (c.status === 'DEPLOYED') {
-    return `launched ${timeAgo(c.deployedAt ?? c.createdAt)}`;
-  }
-  if (c.status === 'FAILED') return 'deploy failed';
-  return 'draft';
+  if (c.lifecycle === 'DRAFT') return 'draft';
+  return `launched ${timeAgo(c.activatedAt ?? c.createdAt)}`;
 }
 
 function StageNode({

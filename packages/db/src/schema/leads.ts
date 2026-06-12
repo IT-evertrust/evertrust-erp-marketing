@@ -9,6 +9,7 @@ import {
 import { organizations } from './org';
 import { customers, users } from './core';
 import { campaigns } from './campaigns';
+import { niches } from './niches';
 import { leadSourceEnum, leadStageEnum } from './enums';
 
 // Key Account hot-lead — the CRM entity bridging Arsenal acquisition to ERP
@@ -32,7 +33,10 @@ export const leads = pgTable(
     city: text('city'),
     country: text('country'),
     tier: text('tier'),
-    niche: text('niche'),
+    // Niche link — only set on MANUAL leads (campaignId NULL); N8N leads
+    // resolve their niche via the campaign, so the service nulls this when a
+    // campaign is linked.
+    nicheId: uuid('niche_id').references(() => niches.id),
     // The n8n "Source Campaign" (= campaign project name) + best-effort ERP link.
     sourceCampaign: text('source_campaign'),
     campaignId: uuid('campaign_id').references(() => campaigns.id),

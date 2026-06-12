@@ -1,40 +1,77 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
+  Query,
   Req,
+  UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import type {
-  CampaignDto,
-  CampaignFilesDto,
-  CampaignSyncResultDto,
+import {
+  CampaignLifecycle,
+  type CampaignAssetResultDto,
+  type CampaignConfigDto,
+  type CampaignDto,
+  type CampaignFilesDto,
+  type CampaignMachineListItemDto,
 } from '@evertrust/shared';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/auth.types';
 import { OrgId } from '../common/tenant';
 import { setAuditContext } from '../common/audit-context';
+import { ArsenalTokenGuard } from '../common/guards/arsenal-token.guard';
 import { CampaignsService } from './campaigns.service';
-import { CreateCampaignBodyDto } from './campaigns.dto';
+import { CampaignAssetsService } from './campaign-assets.service';
+import {
+  CampaignAssetBodyDto,
+  CreateCampaignBodyDto,
+  UpdateCampaignLifecycleBodyDto,
+} from './campaigns.dto';
 
-// Growth Engine (the "AIM sequence"). Tenant-scoped, permission-gated. Listing/
-// reading is campaigns:read; launching ("Lock & Load") is campaigns:write — it
-// persists the campaign AND fires the AIM n8n webhook server-side. The launch is
-// audited (entity 'campaigns'); the persisted row's status reflects the deploy
-// outcome (DEPLOYED / FAILED / DRAFT).
+// Response of POST /campaigns: the launched campaign + an optional deployError
+// (non-null when the AIM webhook was unset or failed; the campaign is then DRAFT).
+interface CampaignLaunchResponse extends CampaignDto {
+  deployError: string | null;
+}
+
+// Growth Engine (the "AIM sequence"). Tenant-scoped, permission-gated for the UI
+// routes; MACHINE routes (config + machine list) are @Public() + ArsenalTokenGuard
+// for the autonomous arsenal. Launching ("Lock & Load") and lifecycle moves are
+// campaigns:write and audited.
 @Controller('campaigns')
 export class CampaignsController {
-  constructor(private readonly campaigns: CampaignsService) {}
+  constructor(
+    private readonly campaigns: CampaignsService,
+    private readonly assets: CampaignAssetsService,
+  ) {}
 
   @RequirePermissions('campaigns:read')
   @Get()
   list(@OrgId() orgId: string): Promise<CampaignDto[]> {
     return this.campaigns.list(orgId) as unknown as Promise<CampaignDto[]>;
+  }
+
+  // Machine campaign list filtered by lifecycle (the daily scheduler). Declared
+  // BEFORE :id so "machine" isn't captured as a campaign id. @Public() + token.
+  @Public()
+  @UseGuards(ArsenalTokenGuard)
+  @Get('machine/list')
+  machineList(
+    @Query('lifecycle') lifecycleParam?: string,
+  ): Promise<CampaignMachineListItemDto[]> {
+    const parsed = CampaignLifecycle.safeParse(lifecycleParam ?? 'ACTIVE');
+    if (!parsed.success) {
+      throw new BadRequestException(`Unknown lifecycle: ${lifecycleParam}`);
+    }
+    return this.campaigns.machineList(parsed.data);
   }
 
   @RequirePermissions('campaigns:read')
@@ -46,7 +83,18 @@ export class CampaignsController {
     return this.campaigns.get(orgId, id) as unknown as Promise<CampaignDto>;
   }
 
-  // Every file in the campaign's Drive folder (via erp-campaign-files webhook).
+  // Machine config (the arsenal stages' view of a campaign + its enabled targets).
+  // @Public() + token; NOT org-scoped (the token is the trust boundary). 404 unknown.
+  @Public()
+  @UseGuards(ArsenalTokenGuard)
+  @Get(':id/config')
+  config(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<CampaignConfigDto> {
+    return this.campaigns.getConfig(id);
+  }
+
+  // Every file in the campaign's Drive folder (via the erp-campaign-files webhook).
   @RequirePermissions('campaigns:read')
   @Get(':id/files')
   files(
@@ -56,23 +104,16 @@ export class CampaignsController {
     return this.campaigns.listFiles(orgId, id);
   }
 
-  // Reconcile the campaign list against the live Drive "Evertrust Campaigns" folder
-  // (the source of truth) via the read-only erp-campaigns-list n8n webhook. Archives
-  // campaigns whose folder was deleted (driveMissing → hidden from list), un-archives
-  // ones that reappeared. Audited as a bulk UPDATE. campaigns:write — it mutates rows.
-  @RequirePermissions('campaigns:write')
-  @Post('sync')
-  async sync(
-    @OrgId() orgId: string,
-    @Req() req: Request,
-  ): Promise<CampaignSyncResultDto> {
-    const result = await this.campaigns.syncFromDrive(orgId);
-    setAuditContext(req, {
-      entity: 'campaigns',
-      action: 'UPDATE',
-      after: result,
-    });
-    return result;
+  // Register a Drive artifact the arsenal generated (upsert on driveFileId). MACHINE
+  // route: @Public() + token; org derived from the campaign. 404 unknown campaign.
+  @Public()
+  @UseGuards(ArsenalTokenGuard)
+  @Post(':id/assets')
+  registerAsset(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: CampaignAssetBodyDto,
+  ): Promise<CampaignAssetResultDto> {
+    return this.assets.upsert(id, body);
   }
 
   @RequirePermissions('campaigns:write')
@@ -82,15 +123,47 @@ export class CampaignsController {
     @Body() body: CreateCampaignBodyDto,
     @CurrentUser() user: AuthUser,
     @Req() req: Request,
-  ): Promise<CampaignDto> {
-    const campaign = await this.campaigns.create(orgId, body, user.id);
+  ): Promise<CampaignLaunchResponse> {
+    const { campaign, deployError } = await this.campaigns.create(
+      orgId,
+      body,
+      user.id,
+    );
     setAuditContext(req, {
       entity: 'campaigns',
       entityId: campaign.id,
       action: 'CREATE',
       after: campaign,
     });
-    return campaign as unknown as CampaignDto;
+    return {
+      ...(campaign as unknown as CampaignDto),
+      deployError,
+    };
+  }
+
+  // Move a campaign through its lifecycle (DRAFT→ACTIVE, ACTIVE↔PAUSED, →ARCHIVED).
+  // 422 on an illegal transition. campaigns:write + audited.
+  @RequirePermissions('campaigns:write')
+  @Patch(':id/lifecycle')
+  async updateLifecycle(
+    @OrgId() orgId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateCampaignLifecycleBodyDto,
+    @Req() req: Request,
+  ): Promise<CampaignDto> {
+    const { before, after } = await this.campaigns.updateLifecycle(
+      orgId,
+      id,
+      body.lifecycle,
+    );
+    setAuditContext(req, {
+      entity: 'campaigns',
+      entityId: id,
+      action: 'LIFECYCLE',
+      before,
+      after,
+    });
+    return after as unknown as CampaignDto;
   }
 
   // Delete a campaign (ERP record only — the Drive folder + leads are untouched).
@@ -101,12 +174,12 @@ export class CampaignsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Req() req: Request,
   ): Promise<{ id: string }> {
-    const before = await this.campaigns.delete(orgId, id);
+    const deleted = await this.campaigns.delete(orgId, id);
     setAuditContext(req, {
       entity: 'campaigns',
       entityId: id,
       action: 'DELETE',
-      before,
+      before: deleted,
     });
     return { id };
   }

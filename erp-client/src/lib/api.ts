@@ -23,6 +23,8 @@ import {
   CampaignSyncResultDto,
   CreateApprovalRequestDto,
   CreateCampaignDto,
+  NotificationDto,
+  UpdateCampaignLifecycleDto,
   CreateCustomerDto,
   CreateLineItemDto,
   CreatePriceObservationDto,
@@ -81,6 +83,21 @@ import {
   RunHotLeadsPipelineResultDto,
   ClearResultDto,
   type LeadStage,
+  // Growth Engine: prospects, niche targets, reply drafts, outreach, contracts,
+  // suppressions (the cold-outreach surface).
+  NicheListItemDto,
+  NicheTargetDto,
+  CreateNicheTargetDto,
+  UpdateNicheTargetDto,
+  ProspectDto,
+  ProspectListDto,
+  ProspectStatus,
+  UpdateProspectStatusDto,
+  ReplyDraftDto,
+  OutreachMessageDto,
+  ContractDto,
+  ContractStatus,
+  SuppressionListItemDto,
 } from '@evertrust/shared';
 import { API_URL } from './env';
 
@@ -103,6 +120,30 @@ const ApprovalListDto = z.array(ApprovalRequestDto);
 const TenderDeadlineRiskListDto = z.array(TenderDeadlineRiskDto);
 // Growth Engine: the org's campaigns.
 const CampaignListDto = z.array(CampaignDto);
+// Growth Engine: the niche management list — catalog rows enriched with rollup
+// target/campaign counts. A superset of the combobox shape (id/name/slug), so the
+// AIM pick-or-create combobox still reads from the same /niches response.
+const NicheListItemListDto = z.array(NicheListItemDto);
+// Growth Engine: a niche's targets (enabled + disabled) for the management view.
+const NicheTargetListDto = z.array(NicheTargetDto);
+// Growth Engine: the RAG reply-draft review queue.
+const ReplyDraftListDto = z.array(ReplyDraftDto);
+// Growth Engine: a prospect's conversation timeline (the outreach ledger).
+const OutreachMessageListDto = z.array(OutreachMessageDto);
+// Growth Engine: the contract list (ContractMaker output).
+const ContractListDto = z.array(ContractDto);
+// Growth Engine: the org's do-not-contact (suppression) list.
+const SuppressionListDto = z.array(SuppressionListItemDto);
+// GET /prospects/:id/detail — the prospect plus its resolved display names. The
+// API returns ProspectDto & { campaignName, nicheTargetName } (an inline shape,
+// not a named shared DTO), so the client owns this validation schema + type.
+const ProspectDetailDto = ProspectDto.extend({
+  campaignName: z.string().nullable(),
+  nicheTargetName: z.string().nullable(),
+});
+export type ProspectDetail = z.infer<typeof ProspectDetailDto>;
+// Notification bell: the unread feed.
+const NotificationListDto = z.array(NotificationDto);
 // Arsenal: recent ERP→n8n trigger runs.
 const ArsenalRunListDto = z.array(ArsenalRunDto);
 const LeadListDto = z.array(LeadDto);
@@ -497,6 +538,18 @@ export const api = {
     delete: (id: string) =>
       request<void>(`/campaigns/${id}`, { method: 'DELETE' }),
 
+    // Pause / resume / archive: move the campaign through its lifecycle. The body
+    // enum excludes DRAFT (a campaign only ever moves forward out of DRAFT).
+    setLifecycle: (
+      id: string,
+      lifecycle: z.infer<typeof UpdateCampaignLifecycleDto>['lifecycle'],
+    ) =>
+      request<CampaignDto>(`/campaigns/${id}/lifecycle`, {
+        method: 'PATCH',
+        body: UpdateCampaignLifecycleDto.parse({ lifecycle }),
+        schema: CampaignDto,
+      }),
+
     // Reconcile the list against the live Drive "Evertrust Campaigns" folder:
     // archives campaigns whose folder was deleted, un-archives ones that reappeared.
     sync: () =>
@@ -504,6 +557,177 @@ export const api = {
         method: 'POST',
         schema: CampaignSyncResultDto,
       }),
+  },
+
+  // ---- Growth Engine: niches (org-scoped; targets derive per-niche) ----
+  niches: {
+    // The management list: catalog rows enriched with target/campaign counts. A
+    // superset of the combobox shape (id/name/slug), so the AIM combobox still works.
+    list: (signal?: AbortSignal) =>
+      request<NicheListItemDto[]>('/niches', {
+        schema: NicheListItemListDto,
+        signal,
+      }),
+
+    // A niche's targets for the management view — enabled AND disabled.
+    targets: (id: string, signal?: AbortSignal) =>
+      request<NicheTargetDto[]>(`/niches/${id}/targets`, {
+        schema: NicheTargetListDto,
+        signal,
+      }),
+
+    // Add a MANUAL target to a niche (upserts by slug server-side).
+    addTarget: (id: string, input: z.infer<typeof CreateNicheTargetDto>) =>
+      request<NicheTargetDto>(`/niches/${id}/targets`, {
+        method: 'POST',
+        body: CreateNicheTargetDto.parse(input),
+        schema: NicheTargetDto,
+      }),
+  },
+
+  // ---- Growth Engine: niche targets addressed by their own id (root path) ----
+  nicheTargets: {
+    // Enable/disable, rename, or re-hint one target.
+    update: (id: string, input: z.infer<typeof UpdateNicheTargetDto>) =>
+      request<NicheTargetDto>(`/niche-targets/${id}`, {
+        method: 'PATCH',
+        body: UpdateNicheTargetDto.parse(input),
+        schema: NicheTargetDto,
+      }),
+
+    // Delete one target.
+    delete: (id: string) =>
+      request<ClearResultDto>(`/niche-targets/${id}`, {
+        method: 'DELETE',
+        schema: ClearResultDto,
+      }),
+  },
+
+  // ---- Growth Engine: prospects (the cold-outreach board) ----
+  prospects: {
+    // The campaign/board view: page + total + per-status tally. Filters are all
+    // optional; only set keys ride along on the query string.
+    board: (
+      filters: {
+        campaignId?: string;
+        status?: z.infer<typeof ProspectStatus>;
+        q?: string;
+        limit?: number;
+        offset?: number;
+      } = {},
+      signal?: AbortSignal,
+    ) => {
+      const params = new URLSearchParams();
+      if (filters.campaignId) params.set('campaignId', filters.campaignId);
+      if (filters.status) params.set('status', filters.status);
+      if (filters.q) params.set('q', filters.q);
+      if (filters.limit != null) params.set('limit', String(filters.limit));
+      if (filters.offset != null) params.set('offset', String(filters.offset));
+      const qs = params.toString();
+      return request<z.infer<typeof ProspectListDto>>(
+        `/prospects/board${qs ? `?${qs}` : ''}`,
+        { schema: ProspectListDto, signal },
+      );
+    },
+
+    // One prospect for the drawer: the row + its resolved campaign/niche-target names.
+    detail: (id: string, signal?: AbortSignal) =>
+      request<ProspectDetail>(`/prospects/${id}/detail`, {
+        schema: ProspectDetailDto,
+        signal,
+      }),
+
+    // Manual status override from the UI (archive / re-open / mark do-not-contact).
+    setStatus: (id: string, input: z.infer<typeof UpdateProspectStatusDto>) =>
+      request<ProspectDto>(`/prospects/${id}/status`, {
+        method: 'PATCH',
+        body: UpdateProspectStatusDto.parse(input),
+        schema: ProspectDto,
+      }),
+  },
+
+  // ---- Growth Engine: the RAG reply-draft review queue ----
+  replyDrafts: {
+    // reply_classifications rows WITH a suggestedReply, joined to prospect identity.
+    queue: (
+      filters: { prospectId?: string; limit?: number } = {},
+      signal?: AbortSignal,
+    ) => {
+      const params = new URLSearchParams();
+      if (filters.prospectId) params.set('prospectId', filters.prospectId);
+      if (filters.limit != null) params.set('limit', String(filters.limit));
+      const qs = params.toString();
+      return request<ReplyDraftDto[]>(
+        `/reply-classifications/queue${qs ? `?${qs}` : ''}`,
+        { schema: ReplyDraftListDto, signal },
+      );
+    },
+  },
+
+  // ---- Growth Engine: a prospect's outreach conversation timeline ----
+  outreach: {
+    // The message ledger for a prospect, newest-first.
+    thread: (prospectId: string, signal?: AbortSignal) =>
+      request<OutreachMessageDto[]>(
+        `/outreach-messages/thread?prospectId=${prospectId}`,
+        { schema: OutreachMessageListDto, signal },
+      ),
+  },
+
+  // ---- Growth Engine: contracts (ContractMaker output; read-only here) ----
+  contracts: {
+    // The contract list, newest-first. Filters are optional; defaults to 50 rows.
+    list: (
+      filters: {
+        leadId?: string;
+        campaignId?: string;
+        status?: z.infer<typeof ContractStatus>;
+      } = {},
+      signal?: AbortSignal,
+    ) => {
+      const params = new URLSearchParams();
+      if (filters.leadId) params.set('leadId', filters.leadId);
+      if (filters.campaignId) params.set('campaignId', filters.campaignId);
+      if (filters.status) params.set('status', filters.status);
+      const qs = params.toString();
+      // JWT, org-scoped route (GET /contracts is the machine/token route — a
+      // browser session would 401 on it). /contracts/list is the UI's path.
+      return request<ContractDto[]>(`/contracts/list${qs ? `?${qs}` : ''}`, {
+        schema: ContractListDto,
+        signal,
+      });
+    },
+  },
+
+  // ---- Growth Engine: suppressions (the org do-not-contact list) ----
+  suppressions: {
+    // The org's suppression list, newest-first.
+    list: (signal?: AbortSignal) =>
+      request<SuppressionListItemDto[]>('/suppressions', {
+        schema: SuppressionListDto,
+        signal,
+      }),
+
+    // Un-suppress (the human override): remove one suppression.
+    delete: (id: string) =>
+      request<ClearResultDto>(`/suppressions/${id}`, {
+        method: 'DELETE',
+        schema: ClearResultDto,
+      }),
+  },
+
+  // ---- Notifications: the topbar bell feed ----
+  notifications: {
+    // Unread only, newest first, capped — the bell shows at most one page.
+    listUnread: (signal?: AbortSignal) =>
+      request<z.infer<typeof NotificationDto>[]>(
+        '/notifications?unread=true&limit=20',
+        { schema: NotificationListDto, signal },
+      ),
+
+    // Mark one notification read (response body ignored).
+    markRead: (id: string) =>
+      request<void>(`/notifications/${id}/read`, { method: 'PATCH' }),
   },
 
   // ---- Arsenal: manual stage triggers + run history ----

@@ -13,6 +13,83 @@ Backlog items below are seeded only from verified defects in the current codebas
 
 ## Current Focus
 
+**Growth Engine: Drive/Sheets → Supabase Postgres (cloud stack: Supabase DB + Render API + Vercel web)** (design approved in-session 2026-06-12; 8 new tables + notifications, 3 modified, 7 new enums):
+
+User requirements (2026-06-12):
+1. Data must match workflows one way or the other (contract parity + reconciliation)
+2. Remove Target field from AIM — UI/UX included (state→region rename too)
+3. New workflow NICHE ANALYTICS: find targets, analyze, produce a file, auto-trigger Lead Satellite when done
+4. Lead Satellite must NOT search companies without the niche analysis existing (gate)
+5. Replace Drive/Sheets nodes with Supabase Postgres (via Render API + ARSENAL_INGEST_TOKEN) wherever replaceable
+6. Optional: n8n→ERP notification webhook with UI animation
+
+Phase 0 (repo, this session):
+- [x] packages/db: 7 new enums + niches/niche_targets/prospects/suppressions/outreach_messages/reply_classifications/campaign_assets/contracts/notifications; campaigns (nicheId NN, state→region, +sender, status→lifecycle, deployedBy/At→activatedBy/At, +archivedAt, drop niche/target/status/driveMissing/driveCheckedAt/deployError); leads (+nicheId fallback, drop niche); arsenal_runs (+configSnapshot); migration 0019 with hand-added backfills
+- [x] erp-server: machine guard reusing ARSENAL_INGEST_TOKEN on n8n-facing routes; GET /campaigns?lifecycle + GET /campaigns/:id/config + POST /prospects/bulk + GET/PATCH /prospects + GET /niches + POST /niches/:id/targets/bulk + POST /reply-classifications + POST /suppressions + POST /campaigns/:id/assets + POST /contracts + POST/GET notifications; campaigns module rework (niche find-or-create, lifecycle, sender, campaignId in AIM payload; remove /campaigns/sync reconcile)
+- [x] erp-client: AIM form (Target removed, State→Region, +sender, niche pick-or-create) + notification bell with animation
+  - [x] Reconcile: deleted src/lib/api-contracts.ts; api.ts now imports Campaign/Niche/Notification DTOs + UpdateCampaignLifecycleDto from @evertrust/shared; consumers read c.nicheName/region/lifecycle (no campaignNicheName helper needed — shared CampaignDto.nicheName is a joined field). One source of truth.
+  - [x] use-campaigns: useSetCampaignLifecycle (optimistic list+detail patch, rollback); use-niches (lazy); use-notifications: poll 30s + markRead + markAllRead (optimistic). query-keys already had campaigns/niches/notifications.
+  - [x] AIM dialog: dropped Target, State→Region (Select on CAMPAIGN_REGIONS), niche Input+datalist from /niches with new-niche hint, Sender alias Select (info/hanna default info), payload = exact CreateCampaignDto, toast on returned lifecycle
+  - [x] campaign-board + marketing-campaigns + dashboard donut/tiles + sidebar live-count: lifecycle badge (CAMPAIGN_LIFECYCLE_BADGE, 4 states) + nicheName/region; arsenal-sequence aimStatus from lifecycle; Pause/Resume/Archive dropdown on board; removed FAILED/deployError UI (no longer in contract)
+  - [x] key-account: dropped lead.niche (shared LeadDto now nicheId-only, no joined name) from search/detail/card
+  - [x] notification-bell in topbar (Bell + unread badge, one-shot shake+pop on increase, reduced-motion safe, DropdownMenu list, Mark all read, "Nothing new" empty); globals.css keyframes registered in @theme
+  - [x] typecheck GREEN (corepack pnpm --filter @evertrust/web typecheck); lint clean (only pre-existing exhaustive-deps warnings, none in touched/new files)
+- [x] pnpm typecheck + API jest green (workspace typecheck 4/4; API 38 suites / 317 tests)
+- [x] FIX: region reverted from a compass enum (agent over-reach) back to FREE TEXT to match the Lead Satellite city-expansion (req #1); sender kept as enum (info/hanna = real Gmail creds)
+Phase 1 (n8n, this session, created INACTIVE):
+- [x] NICHE ANALYTICS workflow [jgOVy4Ox9fCtpT7S, INACTIVE] (webhook → GET config → AI target expansion → POST targets → analysis doc + POST assets → POST notify → trigger Lead Satellite)
+- [x] LEAD SATELLITE copy 6 [dCGzrlpaxpxJanbJ, INACTIVE] via generator extension (gate: no targets → trigger NICHE ANALYTICS + stop; config via API; prospects bulk dual-write)
+- [x] AIM v2 (PG) [QDvotfZeo03bZy7m, INACTIVE] — 3 Drive nodes removed, {campaignId} payloads; original AIM untouched
+
+USER follow-ups before the new workflows can run (the ERP endpoints go live only after the backend deploys):
+- [ ] Create n8n Header Auth credential "ERP Ingest (x-arsenal-token)" (header x-arsenal-token = ARSENAL_INGEST_TOKEN) and select it on the UNBOUND ERP HTTP nodes — NICHE ANALYTICS (POST Bulk Targets / POST Campaign Asset / POST Notification) and LEAD SATELLITE copy 6 (Fetch Config / POST prospects-bulk / POST runs-callback)
+- [ ] copy 6: bind web_search to the SearXNG cred (Header Auth account 3) + spot-check the 6 auto-assigned Google creds
+- [ ] Set ARSENAL_INGEST_TOKEN on Render; commit + push + redeploy the API; point ERP Lock & Load at aim-deploy-campaign-v2; review + activate in cutover order (AIM v2 → NICHE ANALYTICS → copy 6)
+Phase 2 (n8n rebuilds — DONE this session, all INACTIVE, originals untouched):
+- [x] Backend gap endpoints: POST/GET /outreach-messages, GET /reply-classifications?needsRag, POST /prospects/:id/graduate, GET /contracts (API 40 suites / 329 tests green)
+- [x] RAG AGENT (PG) [ffd3c2uRgkMLFaxT] — needsRag backlog → thread → gpt-4o draft → POST reply-classifications. CAVEAT: drops Drive knowledge-doc grounding (no ERP endpoint) — grounds on the email thread only; OpenAI cred needs manual bind.
+- [x] REPLY GLOCK (PG) [gQeWiDlDRuF1r3tt] — find prospect by email → log inbound → classify → graduate on INTERESTED (RETIRES CRM HL/Customer). CAVEAT: live prompt only emits Interested/Unsure/Not-Interested (auto-reply/bounce branches dormant); model gpt-4o vs live deepseek.
+- [x] SLEEPER GRENADE (PG) [cZDGIoudM6yg17kV] — snoozeDue scan → AI re-engage → WhatsApp approve → send → RE_ENGAGED; DNC → suppression + status flip (no row delete). CAVEAT: ADDS AI/Gmail/WhatsApp-approve that the live 4GgPmoulQDgDWtej lacked (matches the workflow's described intent, but review); DNC tests a `doNotContact` flag — confirm vs real prospect signal.
+- [x] REACH BAZOOKA (PG) [W5jsrD1DFQfYYmig] — INACTIVE + DANGER sticky + send-cap 25/run. sendList → validate/personalize → Gmail (info@/hanna@ branch) → log outreach + PATCH EMAILED → runs/callback. CAVEAT: both Gmail nodes auto-bound to ONE cred — REASSIGN the Hanna/info@ split before any run.
+- [x] ContractMaker (PG) [wZWcjzx7fSbbsT7c, project ur8aLn8JmnpaN0ih] — ERP campaign match + contract idempotency + POST/PATCH contracts; KEEPS Drive/Docs PDF gen. CAVEAT: leadId/customerId not in Read.ai payload (passed through if present); Google creds need Hanna reassignment; Signal/Deal models → LiteLLM gateway.
+
+Phase 2b (JWT UI read/management layer for Growth-Engine entities — this session):
+Goal: the ERP web UI can fully operate prospects/contracts/outreach/niche-targets with a JWT.
+Today those 3 controllers are CLASS-level @Public + ArsenalTokenGuard (machine-only). Refactor to
+METHOD-level @Public on each machine route (the campaigns.controller pattern) so JWT routes coexist.
+JWT routes are ORG-SCOPED via req.user.organizationId; machine routes keep deriving org from the entity.
+Path-collision rule: keep the exact machine paths n8n already calls; add a sibling sub-path for the JWT list.
+- [x] shared DTOs: ProspectListDto, UpdateProspectStatusDto, NicheListItemDto (counts), CreateNicheTargetDto, UpdateNicheTargetDto, ReplyDraftDto (review-queue), SuppressionListItemDto. NicheTargetDto/ProspectDto/ContractDto/OutreachMessageDto reused. Exported from the barrel.
+- [x] prospects: kept machine GET /prospects (sendList/snoozeDue/email) + machine PATCH /prospects/:id (now METHOD-level @Public); add JWT GET /prospects/board (org list+statusCounts), GET /prospects/:id/detail, PATCH /prospects/:id/status
+- [x] niches: enriched JWT GET /niches → NicheListItemDto (targetCount+campaignCount, superset of combobox); add JWT GET /niches/:id/targets, POST /niches/:id/targets (MANUAL); new NicheTargetsController for PATCH+DELETE /niche-targets/:id (org via parent niche)
+- [x] contracts: kept machine GET /contracts + POST + PATCH :id (METHOD-level @Public); add JWT GET /contracts/list (org-scoped)
+- [x] outreach: kept machine GET /reply-classifications?needsRag + GET /outreach-messages + POST /suppressions (METHOD-level @Public); add JWT GET /reply-classifications/queue, GET /outreach-messages/thread, GET /suppressions, DELETE /suppressions/:id
+- [x] tests: +5 specs (board org-scoping, niche-target PATCH+cross-org 404, reply-draft queue suggestedReply-only, suppression list+delete, outreach thread org-scoping). ALL suites green.
+- [x] verify: shared typecheck GREEN; api typecheck+build GREEN; api jest 45 suites / 355 tests GREEN (was 40/329)
+
+Phase 2c (full Growth-Engine web UI — fully wired, this session):
+- [x] Plumbing: api.ts client fns + query-keys + growth-format.ts + optimistic hooks (prospects board/detail/status, niche targets CRUD, reply drafts, contracts, suppressions, outreach thread)
+- [x] Campaign detail route /marketing/[campaignId] — Overview (lifecycle + Pause/Resume/Archive, niche/region/sender) / Targets (enable-disable Switch + inline edit + add MANUAL + delete) / Prospects (board, statusCounts chips, filter/search/paginate, row status override, detail drawer) / Contracts tabs
+- [x] New pages: /marketing/niches (list w/ counts → targets mgmt), /marketing/drafts (RAG review queue + thread + copy), /marketing/suppressions (list + un-suppress); nav entries under Acquisition (campaigns:read)
+- [x] Reusable: outreach-thread, niche-targets, prospects-board, prospect-detail-drawer, contracts-card; lead-detail-dialog shows the lead's contracts
+- [x] FIX: contracts client was pointed at machine GET /contracts (would 401 in a browser session) → repointed to JWT GET /contracts/list
+- [x] verify: workspace typecheck 4/4 GREEN; web lint zero new errors; dead-button audit clean (every action → real endpoint + query invalidation; no TODO/mock/dead handler)
+
+Pre-deploy review (12-agent diff, this session) — deploy-critical = CLEAN:
+- [x] Migration 0019 audited: transaction-safe (drizzle wraps the file; mid-migration failure rolls back), backfills precede SET NOT NULL + drops, 'uncategorized' fallback covers every campaign, real RENAMEs, fresh-DB safe, vector extension untouched.
+- [x] Tenancy: all 13 JWT routes filter by req.user.organizationId (no cross-org leak); ArsenalTokenGuard constant-time + 503/401. Frontend↔backend: all 16 client URLs match routes (the /contracts→/contracts/list seam was the only mismatch — fixed).
+- [x] BLOCKER FIXED: erp-server/.env.example (working-tree ONLY, never committed — HEAD has blanks) had real ARSENAL_INGEST_TOKEN + N8N_API_KEY → blanked back to placeholders.
+- [x] M1 FIXED: niche-target rename slug-collision now returns 409 (was a raw 500). N1 SKIPPED deliberately — the bell is a GLOBAL feed; gating GET /notifications behind campaigns:read would hide it from non-marketing roles. M2 (fetch-then-filter on draft/board reads) deferred — fine at cutover volume, push to SQL when it grows.
+- [ ] **USER (security): ROTATE both secrets** — they sat in the tracked template's working tree + surfaced in this session. Mint a new ARSENAL_INGEST_TOKEN (set on Render + the n8n ERP-Ingest cred + vault) and revoke/reissue the n8n cloud API key. The repo was never pushed with them, but rotate to be safe.
+
+Phase 3 (cutover — next sessions, needs the API deployed first):
+- [ ] Bind "ERP Ingest (x-arsenal-token)" Header Auth cred on every ERP node across all 9 new workflows; apply the per-workflow cred fixes above
+- [x] One-time DATA BACKFILL workflow built [XFxlPdyRfTyO6KX9, INACTIVE]: per ACTIVE campaign → find leads sheet in its Drive folder → POST /prospects/bulk (+ /suppressions for DNC); idempotent upsert + reconciliation tally. CAVEAT: hot_leads NOT migrated (POST /leads/backfill is JWT-only/no-body — trigger the existing ERP UI import separately). Run supervised at cutover.
+- [ ] Activate in cutover order, verify, then retire originals (AIM, Lead Satellite copies, RAG, Glock, Sleeper, Bazooka, ContractMaker, CRM Hot Leads, CRM Customer, CAMPAIGNS LIST, NICHE FLAMETHROWER)
+- [ ] Migration 0020 (destructive column/enum cleanup) + remove Drive/Sheets creds + docs (08-workflow-canonical.md, lessons.md)
+
+---
+
 **ERP migration: evertrust-ERP → this repo + hosting to the Mac mini** (plan approved 2026-06-11,
 `~/.claude/plans/breezy-knitting-koala.md`; retires Render/Vercel):
 
@@ -89,6 +166,17 @@ Context: the 3 "(Web)" nodes (`Country Profiler (Web)`, `Search Companies (Web)`
 - [ ] **USER: cancel zombie executions 5421–5425** (SEAR v3, "running" since 12:31Z with zero progress) — they hold concurrency slots.
 - [ ] **USER: copy 5 credentials**: `web_search` node → `Header Auth account 3` (the verified SearXNG cred); spot-check the 6 auto-assigned Google creds.
 - [ ] **USER: deactivate copy 4's Drive trigger** (exec 5420 proves it fires) so only one variant polls Drive; test copy 5 with a small region first (e.g. "Warszawa, Kraków"), then nationwide.
+
+**WF-03 LEAD SATELLITE copy 6 (PG) — ERP-driven config + Postgres dual-write** (2026-06-12). DONE — generator `tasks/wf03-copy6-gen.py` (extends copy5-gen: replays the copy-5 surgery on `wf03-copy3.sdk.js`, then layers deltas A–G) → `tasks/wf03-copy6.sdk.js` (47 nodes); created INACTIVE as **`dCGzrlpaxpxJanbJ`** "EVERTRUST - LEAD SATELLITE copy 6 (PG)" in REACH ARSENAL (validate_workflow → valid, 47 nodes). Behaviorally tested in a sandbox: 3 targets × 3 cities → 27 segs (9/target), cap test 4 targets × 600 cities → exactly 500 segs, lead→prospect mapping + emailVerified honesty all correct.
+
+- [x] A. ENTRY: webhook path `wf03-lead-research-v2`, body `{ campaignId, source }`; manual + Drive-poll triggers kept (Drive-poll has the "legacy trigger — remove after cutover" sticky).
+- [x] B. CONFIG VIA ERP: Drive `config.json` read (Find/Download/Extract) replaced with `Fetch Campaign Config (ERP)` GET `/campaigns/{{campaignId}}/config` (httpHeaderAuth, UNBOUND) + `Normalize Config` Code (maps ERP response onto copy-5's `cfg` shape: niche.name string, region, country, defaulted maxToolCalls/maxTokens/targetTotal). Build Search Query + Has Static Profile read `$('Normalize Config')`.
+- [x] C. THE GATE: `Niche Gate (targets ready?)` IF on targetCount==0 → `Trigger NICHE ANALYTICS` POST → `Gate: No Targets (throw)` Code; non-empty → Has Static Profile → Build Search Query.
+- [x] D. TARGETS × CITIES: Build Search Query loops `cfg.targets` (phrase = searchHint||name) × the city slice, tagging each segment `nicheTargetId/Name/Slug/Phrase`. Cap MAX_PAIRS=500 (floor(500/T) cities/target) + MAX_SEGMENTS=500 backstop, console.warn on truncation. Batched fan-out mechanics byte-equivalent to copy 5.
+- [x] E. PROSPECTS → POSTGRES: Sheet append kept; `sourceURL`+`nicheTargetId` threaded through `mkRow`, stripped in Build Sheet Rows (sheet stays byte-clean) → `Build Prospect Payload` → `POST /prospects/bulk (ERP)` (UNBOUND, FAILS on 4xx/5xx). emailVerified = email non-empty AND not-placeholder AND Status ''.
+- [x] F. RUN CALLBACK: `Build Run Callback` (prospectsUpserted = created+updated) → `POST /arsenal/runs/callback (ERP)` (onError continueRegularOutput).
+- [x] G. Copy-5 mechanics preserved (SEAR dispatch `wf03-segment-worker`, parsers, Guard Results throw, Reshape runId from Build Groups, `$('…').first()` fixes). Creds: models `2YgDmy9NuLHvOgzJ`, Drive-poll `R1hfa3xjcJxi0F2E`, `web_search` `newCredential('SearXNG (mac-mini)')`; 6 Google nodes auto-assigned on import; 3 ERP HTTP nodes left UNBOUND (sticky).
+- [ ] **USER: copy 6 creds** — `web_search` → `Header Auth account 3` (SearXNG); the 3 ERP nodes (Fetch Campaign Config, POST /prospects/bulk, POST /arsenal/runs/callback) → an `ERP Ingest (x-arsenal-token)` httpHeaderAuth cred (create in REACH ARSENAL); spot-check the 6 auto-assigned Google creds. Endpoints live only after the ERP backend deploys.
 
 ## Backlog
 

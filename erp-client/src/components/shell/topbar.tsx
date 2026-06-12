@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { Building2, ChevronRight, Crosshair } from 'lucide-react';
 import type { MeDto } from '@evertrust/shared';
 import { UserMenu } from './user-menu';
+import { NotificationBell } from './notification-bell';
 import { LogoutButton } from '@/components/auth/logout-button';
 import { NAV_ITEMS } from './nav-items';
 
@@ -51,7 +52,10 @@ export function Topbar({ user }: { user?: MeDto }) {
         ) : null}
 
         {user ? (
-          <UserMenu user={user} />
+          <>
+            <NotificationBell />
+            <UserMenu user={user} />
+          </>
         ) : (
           <LogoutButton variant="ghost" size="sm" />
         )}

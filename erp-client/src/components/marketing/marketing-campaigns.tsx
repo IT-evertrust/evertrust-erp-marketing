@@ -1,13 +1,13 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ChevronDown, ExternalLink, Files } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowRight, ChevronDown, ExternalLink, Files } from 'lucide-react';
 import {
   ARSENAL_STAGE_META,
   isArsenalRunOk,
   type ArsenalRunDto,
   type CampaignDto,
-  type CampaignStatus,
 } from '@evertrust/shared';
 import { useCampaigns, useCampaignFiles } from '@/hooks/use-campaigns';
 import { useArsenalRuns, useMarketingReport } from '@/hooks/use-arsenal';
@@ -30,32 +30,14 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-import { timeAgo } from '@/lib/arsenal-sequence';
+import { CAMPAIGN_LIFECYCLE_BADGE, timeAgo } from '@/lib/arsenal-sequence';
 import { SyncDriveButton } from '@/components/growth/sync-drive-button';
 import { RunStageButton } from '@/components/growth/run-stage-button';
 import { DeleteCampaignButton } from '@/components/growth/delete-campaign-button';
 
-// Campaign status → mockup-style pill (the live statuses are DRAFT / DEPLOYED /
-// FAILED; the mockup's RUNNING/SCHEDULED were placeholders).
-const STATUS_PILL: Record<CampaignStatus, { label: string; className: string }> = {
-  DRAFT: {
-    label: 'Draft',
-    className: 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400',
-  },
-  DEPLOYED: {
-    label: 'Deployed',
-    className:
-      'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-  },
-  FAILED: {
-    label: 'Failed',
-    className: 'border-destructive/30 bg-destructive/10 text-destructive',
-  },
-};
-
 // Marketing → "Campaigns" tab (mockup design): KPI tiles + Sync-with-Drive + the
-// deployed campaigns as status-pill cards with a real per-campaign mini funnel and
-// an expandable per-stage activity log.
+// launched campaigns as lifecycle-pill cards with a real per-campaign mini funnel
+// and an expandable per-stage activity log.
 export function MarketingCampaigns() {
   const campaigns = useCampaigns();
   const runs = useArsenalRuns();
@@ -77,10 +59,10 @@ export function MarketingCampaigns() {
     return m;
   }, [runList]);
 
-  const deployed = list.filter((c) => c.status === 'DEPLOYED').length;
+  const active = list.filter((c) => c.lifecycle === 'ACTIVE').length;
   const tiles: { label: string; value: number | null }[] = [
     { label: 'Campaigns', value: list.length },
-    { label: 'Active', value: deployed },
+    { label: 'Active', value: active },
     { label: 'Leads', value: f?.leadsFound ?? null },
     { label: 'Replies', value: f?.repliesHandled ?? null },
     { label: 'Meetings', value: f?.meetingsBooked ?? null },
@@ -164,7 +146,7 @@ function CampaignCard({
   open: boolean;
   onToggle: () => void;
 }) {
-  const pill = STATUS_PILL[c.status];
+  const pill = CAMPAIGN_LIFECYCLE_BADGE[c.lifecycle];
   // Per-campaign funnel from the report endpoint (REAL; null/"—" until n8n reports).
   const cReport = useMarketingReport('week', c.id);
   const cf = cReport.data?.funnel;
@@ -238,15 +220,17 @@ function CampaignCard({
               </a>
             </Button>
           ) : null}
+          <Button asChild variant="outline" size="sm">
+            <Link href={`/marketing/${c.id}`}>
+              Manage
+              <ArrowRight />
+            </Link>
+          </Button>
           <Can permission="campaigns:write">
             <DeleteCampaignButton campaign={c} />
           </Can>
         </span>
       </div>
-
-      {c.status === 'FAILED' && c.deployError ? (
-        <p className="px-3.5 pb-2.5 text-xs text-destructive">{c.deployError}</p>
-      ) : null}
 
       {open ? (
         <div className="border-t bg-background/50 px-3.5 py-2.5">

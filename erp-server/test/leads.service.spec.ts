@@ -5,6 +5,7 @@ import {
   extractLeadRows,
   stageForRow,
 } from '../src/leads/leads.service';
+import { NichesService } from '../src/niches/niches.service';
 import type { AppConfigService } from '../src/config/app-config.service';
 import { FakeTable, makeFakeDb } from './fake-db';
 
@@ -21,14 +22,22 @@ function seed() {
     { id: C_A, organizationId: ORG_A, project: 'P1', driveFolderId: 'F1', __seq: 1 },
   ]);
   const customers = new FakeTable([]);
+  const niches = new FakeTable([]);
   const { db } = makeFakeDb(
     new Map<unknown, FakeTable>([
       [schema.leads, leads],
       [schema.campaigns, campaigns],
       [schema.customers, customers],
+      [schema.niches, niches],
     ]),
   );
-  return { service: new LeadsService(db, config), leads, customers };
+  // LeadsService resolves free-text niche → nicheId via NichesService (find-or-create).
+  const nichesService = new NichesService(db);
+  return {
+    service: new LeadsService(db, config, nichesService),
+    leads,
+    customers,
+  };
 }
 
 describe('extractLeadRows / stageForRow (n8n hot_leads mapping)', () => {
