@@ -6,6 +6,7 @@ import {
   NotFoundException,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Req,
   UseGuards,
@@ -14,6 +15,7 @@ import type { Request } from 'express';
 import { eq } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 import type {
+  NicheDto,
   NicheListItemDto,
   NicheTargetBulkResultDto,
   NicheTargetDto,
@@ -26,7 +28,11 @@ import { writeMachineAudit } from '../common/machine-audit';
 import { setAuditContext } from '../common/audit-context';
 import { OrgId } from '../common/tenant';
 import { NichesService } from './niches.service';
-import { CreateNicheTargetBodyDto, NicheTargetBulkBodyDto } from './niches.dto';
+import {
+  AssignNicheIndustryBodyDto,
+  CreateNicheTargetBodyDto,
+  NicheTargetBulkBodyDto,
+} from './niches.dto';
 
 type NicheTargetRow = typeof schema.nicheTargets.$inferSelect;
 
@@ -100,6 +106,28 @@ export class NichesController {
       after: { nicheId: row.nicheId, name: row.name, source: row.source },
     });
     return toTargetDto(row);
+  }
+
+  // Assign this niche to a grouping industry, or unassign it (industryId = null).
+  // org-scoped (404 if the niche — or the target industry — is not in the caller's
+  // org) + audited (campaigns:write). Grouping/search ONLY — does NOT touch lead
+  // research. Returns the niche read shape.
+  @RequirePermissions('campaigns:write')
+  @Patch(':id/industry')
+  async assignIndustry(
+    @OrgId() orgId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: AssignNicheIndustryBodyDto,
+    @Req() req: Request,
+  ): Promise<NicheDto> {
+    const row = await this.niches.assignIndustry(orgId, id, body.industryId);
+    setAuditContext(req, {
+      entity: 'niches',
+      entityId: row.id,
+      action: 'UPDATE',
+      after: { industryId: row.industryId },
+    });
+    return { id: row.id, name: row.name, slug: row.slug };
   }
 
   // ---- MACHINE route — @Public() + ArsenalTokenGuard ------------------------

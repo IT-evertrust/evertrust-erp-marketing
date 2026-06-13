@@ -8,6 +8,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { organizations } from './org';
+import { industries } from './industries';
 import { aiRuns } from './observability';
 import { nicheTargetSourceEnum } from './enums';
 
@@ -24,6 +25,9 @@ export const niches = pgTable(
       .references(() => organizations.id),
     name: text('name').notNull(),
     slug: text('slug').notNull(),
+    // Optional grouping parent. NULLABLE: existing niches have none and
+    // assignment is gradual. Grouping/search only — never read by lead research.
+    industryId: uuid('industry_id').references(() => industries.id),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -31,6 +35,7 @@ export const niches = pgTable(
   (t) => [
     uniqueIndex('niches_organization_id_slug_uq').on(t.organizationId, t.slug),
     index('niches_organization_id_idx').on(t.organizationId),
+    index('niches_industry_id_idx').on(t.industryId),
   ],
 );
 

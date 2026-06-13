@@ -124,12 +124,25 @@ export class NichesService {
   // ---- JWT (UI) management — org-scoped --------------------------------------
 
   // The org's niches with rollup counts (the niches-management list). Per niche:
-  // targetCount (all targets, enabled + disabled) and campaignCount (campaigns that
-  // reference the niche). ORG-SCOPED via the niche's organizationId.
+  // targetCount (all targets, enabled + disabled), campaignCount (campaigns that
+  // reference the niche), prospectCount (prospects whose campaign's niche is this
+  // niche), and the niche's optional grouping parent industryId/industryName (null
+  // when unassigned). ORG-SCOPED via the niche's organizationId. The industry is
+  // resolved in-memory from this org's industries (one tenant-scoped read), mirroring
+  // the existing count-tally style rather than a SQL join.
   async listWithCounts(
     orgId: string,
   ): Promise<
-    Array<{ id: string; name: string; slug: string; targetCount: number; campaignCount: number }>
+    Array<{
+      id: string;
+      name: string;
+      slug: string;
+      targetCount: number;
+      campaignCount: number;
+      prospectCount: number;
+      industryId: string | null;
+      industryName: string | null;
+    }>
   > {
     const niches = await this.list(orgId);
     if (niches.length === 0) return [];
@@ -147,17 +160,43 @@ export class NichesService {
       }
     }
 
-    // campaignCount: tally this org's campaigns grouped by nicheId.
+    // campaignCount: tally this org's campaigns grouped by nicheId. Also build a
+    // campaignId -> nicheId map so prospects (which reference a campaign, not a
+    // niche directly) can be rolled up to their niche below.
     const campaignRows = await this.db
-      .select({ nicheId: schema.campaigns.nicheId })
+      .select({ id: schema.campaigns.id, nicheId: schema.campaigns.nicheId })
       .from(schema.campaigns)
       .where(tenantScope(orgId, schema.campaigns));
     const campaignCounts = new Map<string, number>();
+    const campaignNiche = new Map<string, string>();
     for (const c of campaignRows) {
       if (c.nicheId) {
         campaignCounts.set(c.nicheId, (campaignCounts.get(c.nicheId) ?? 0) + 1);
+        campaignNiche.set(c.id, c.nicheId);
       }
     }
+
+    // prospectCount: tally this org's prospects to their campaign's niche (via the
+    // campaignId -> nicheId map). prospects.campaign_id is NOT NULL.
+    const prospectRows = await this.db
+      .select({ campaignId: schema.prospects.campaignId })
+      .from(schema.prospects)
+      .where(tenantScope(orgId, schema.prospects));
+    const prospectCounts = new Map<string, number>();
+    for (const p of prospectRows) {
+      const nicheId = p.campaignId ? campaignNiche.get(p.campaignId) : undefined;
+      if (nicheId) {
+        prospectCounts.set(nicheId, (prospectCounts.get(nicheId) ?? 0) + 1);
+      }
+    }
+
+    // Resolve the grouping industry name in-memory (this org's industries only).
+    const industryRows = await this.db
+      .select({ id: schema.industries.id, name: schema.industries.name })
+      .from(schema.industries)
+      .where(tenantScope(orgId, schema.industries));
+    const industryName = new Map<string, string>();
+    for (const i of industryRows) industryName.set(i.id, i.name);
 
     return niches.map((n) => ({
       id: n.id,
@@ -165,7 +204,49 @@ export class NichesService {
       slug: n.slug,
       targetCount: targetCounts.get(n.id) ?? 0,
       campaignCount: campaignCounts.get(n.id) ?? 0,
+      prospectCount: prospectCounts.get(n.id) ?? 0,
+      industryId: n.industryId ?? null,
+      industryName: n.industryId
+        ? industryName.get(n.industryId) ?? null
+        : null,
     }));
+  }
+
+  // Assign a niche to an industry, or unassign it (industryId = null). JWT, ORG-
+  // SCOPED: 404 if the niche is not in `orgId`, and (when industryId is non-null)
+  // 404 if the industry is not in `orgId`. Grouping/search ONLY — this never feeds
+  // lead research. Returns the updated niche row.
+  async assignIndustry(
+    orgId: string,
+    nicheId: string,
+    industryId: string | null,
+  ): Promise<NicheRow> {
+    await this.require(orgId, nicheId); // 404 if missing / cross-org
+
+    if (industryId !== null) {
+      // The industry must live in the same tenant — resolve it directly (a
+      // cross-org or unknown id 404s, never silently links across orgs).
+      const industry = await this.db
+        .select({ id: schema.industries.id })
+        .from(schema.industries)
+        .where(
+          and(
+            tenantScope(orgId, schema.industries),
+            eq(schema.industries.id, industryId),
+          ),
+        )
+        .limit(1);
+      if (!industry[0]) throw new NotFoundException('Industry not found');
+    }
+
+    const updated = await this.db
+      .update(schema.niches)
+      .set({ industryId })
+      .where(eq(schema.niches.id, nicheId))
+      .returning();
+    const row = updated[0];
+    if (!row) throw new NotFoundException('Niche not found');
+    return row;
   }
 
   // A niche's targets for the UI management view (enabled + disabled, BOTH). ORG-

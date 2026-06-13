@@ -1853,6 +1853,49 @@ export type AssetKind = z.infer<typeof AssetKind>;
 export const ContractStatus = z.enum(['GENERATED', 'SENT', 'SIGNED', 'FAILED']);
 export type ContractStatus = z.infer<typeof ContractStatus>;
 
+// ---- Industries ----
+// An industry groups niches (one industry → many niches), org-scoped, for
+// grouping/search ONLY. It is NOT part of lead research — the campaign config and
+// the arsenal payload never reference it.
+// Read shape of an industry row.
+export const IndustryDto = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  slug: z.string(),
+});
+export type IndustryDto = z.infer<typeof IndustryDto>;
+
+// Industry row enriched with its rollup count for the management list (GET
+// /industries, JWT). `nicheCount` is how many niches point at this industry.
+export const IndustryListItemDto = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  slug: z.string(),
+  nicheCount: z.number().int().nonnegative(),
+});
+export type IndustryListItemDto = z.infer<typeof IndustryListItemDto>;
+
+// Body for POST /industries (JWT) — create an industry. Deduped by
+// (org, slugify(name)) server-side.
+export const CreateIndustryDto = z.object({
+  name: z.string().min(1).max(120),
+});
+export type CreateIndustryDto = z.infer<typeof CreateIndustryDto>;
+
+// Body for PATCH /industries/:id (JWT) — rename an industry. A slug clash with a
+// sibling industry in the same org is a 409.
+export const UpdateIndustryDto = z.object({
+  name: z.string().min(1).max(120),
+});
+export type UpdateIndustryDto = z.infer<typeof UpdateIndustryDto>;
+
+// Body for PATCH /niches/:id/industry (JWT) — assign a niche to an industry, or
+// unassign it (industryId = null). Grouping only — does not touch lead research.
+export const AssignNicheIndustryDto = z.object({
+  industryId: z.string().uuid().nullable(),
+});
+export type AssignNicheIndustryDto = z.infer<typeof AssignNicheIndustryDto>;
+
 // ---- Niches ----
 // Read shape of a niche row (the UI combobox + the machine niche list).
 export const NicheDto = z.object({
@@ -1900,15 +1943,22 @@ export type NicheTargetBulkResultDto = z.infer<typeof NicheTargetBulkResultDto>;
 
 // Niche row enriched with rollup counts for the UI niches-management list
 // (GET /niches, JWT). `targetCount` is every target (enabled + disabled);
-// `campaignCount` is how many campaigns reference this niche. The plain NicheDto
+// `campaignCount` is how many campaigns reference this niche; `prospectCount` is
+// how many prospects sit under those campaigns. `industryId`/`industryName` are
+// the niche's optional grouping parent (null when unassigned). The plain NicheDto
 // (id/name/slug) stays the combobox shape — this is a superset, so the combobox
-// keeps working if it reads the same list.
+// keeps working if it reads the same list. The industry/prospect fields default
+// in (`.optional()` with a `.default()`) so any machine route reusing this shape
+// without populating them still validates; the JWT listWithCounts always sets them.
 export const NicheListItemDto = z.object({
   id: z.string().uuid(),
   name: z.string(),
   slug: z.string(),
   targetCount: z.number().int().nonnegative(),
   campaignCount: z.number().int().nonnegative(),
+  prospectCount: z.number().int().nonnegative().default(0),
+  industryId: z.string().uuid().nullable().default(null),
+  industryName: z.string().nullable().default(null),
 });
 export type NicheListItemDto = z.infer<typeof NicheListItemDto>;
 

@@ -77,6 +77,7 @@ const COLUMN_TO_KEY: Record<string, string> = {
   match_method: 'matchMethod',
   // Growth-Engine v2 columns.
   niche_id: 'nicheId',
+  industry_id: 'industryId',
   niche_target_id: 'nicheTargetId',
   activated_by: 'activatedBy',
   source_prospect_id: 'sourceProspectId',

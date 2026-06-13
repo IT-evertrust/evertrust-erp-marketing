@@ -13,6 +13,7 @@ import { RfqModule } from './rfq/rfq.module';
 import { SubmissionModule } from './submission/submission.module';
 import { ApprovalsModule } from './approvals/approvals.module';
 import { NichesModule } from './niches/niches.module';
+import { IndustriesModule } from './industries/industries.module';
 import { WorkflowConfigModule } from './arsenal/workflow-config.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
 import { ArsenalModule } from './arsenal/arsenal.module';
@@ -45,6 +46,7 @@ import { AuditInterceptor } from './common/audit.interceptor';
     SubmissionModule,
     ApprovalsModule,
     NichesModule,
+    IndustriesModule,
     WorkflowConfigModule,
     CampaignsModule,
     ArsenalModule,
