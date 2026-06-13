@@ -1,5 +1,6 @@
-import { NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { schema } from '@evertrust/db';
+import type { DbClient } from '../src/db/db.tokens';
 import { NichesService } from '../src/niches/niches.service';
 import { FakeTable, makeFakeDb } from './fake-db';
 
@@ -42,7 +43,14 @@ function seed() {
       [schema.nicheTargets, nicheTargets],
     ]),
   );
-  return { service: new NichesService(db), niches };
+  return {
+    service: new NichesService(db),
+    niches,
+    industries,
+    campaigns,
+    prospects,
+    nicheTargets,
+  };
 }
 
 describe('NichesService — industry grouping + prospect rollup', () => {
@@ -107,5 +115,133 @@ describe('NichesService — industry grouping + prospect rollup', () => {
       service.assignIndustry(ORG_A, NICHE_A, IND_B),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(niches.rows.find((r) => r.id === NICHE_A)!.industryId).toBe(IND_A);
+  });
+});
+
+describe('NichesService — direct CRUD (create / rename / delete, org-scoped)', () => {
+  it('createNiche inserts a new niche with the derived slug', async () => {
+    const { service, niches } = seed();
+    const created = await service.createNiche(ORG_A, '  Solar Installers ');
+    expect(created.name).toBe('Solar Installers'); // trimmed display name
+    expect(created.slug).toBe('solar-installers');
+    expect(created.organizationId).toBe(ORG_A);
+    expect(created.industryId ?? null).toBeNull(); // no industry given
+    expect(niches.rows.filter((r) => r.slug === 'solar-installers')).toHaveLength(1);
+  });
+
+  it('createNiche throws a 409 when the (org, slug) already exists', async () => {
+    const { service, niches } = seed();
+    // NICHE_A already occupies slug "roofing" in ORG_A — a same-name create is a 409
+    // (vs. findOrCreate, which would silently return it) and inserts nothing.
+    await expect(service.createNiche(ORG_A, 'Roofing')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(niches.rows.filter((r) => r.slug === 'roofing')).toHaveLength(1);
+  });
+
+  it('createNiche assigns an in-org industry on create', async () => {
+    const { service } = seed();
+    const created = await service.createNiche(ORG_A, 'Facades', IND_A);
+    expect(created.industryId).toBe(IND_A);
+  });
+
+  it('createNiche 404s when industryId is cross-org (no cross-tenant link)', async () => {
+    const { service, niches } = seed();
+    const before = niches.rows.length;
+    // IND_B belongs to ORG_B — ORG_A cannot link to it, and nothing is inserted.
+    await expect(
+      service.createNiche(ORG_A, 'Cladding', IND_B),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(niches.rows).toHaveLength(before);
+  });
+
+  it('renameNiche re-derives the slug', async () => {
+    const { service, niches } = seed();
+    const renamed = await service.renameNiche(ORG_A, NICHE_A, 'Metal Roofing');
+    expect(renamed.name).toBe('Metal Roofing');
+    expect(renamed.slug).toBe('metal-roofing');
+    expect(niches.rows.find((r) => r.id === NICHE_A)!.slug).toBe('metal-roofing');
+  });
+
+  it('renameNiche 404s a cross-org niche', async () => {
+    const { service } = seed();
+    // NICHE_B belongs to ORG_B — ORG_A must not rename it.
+    await expect(
+      service.renameNiche(ORG_A, NICHE_B, 'Whatever'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('renameNiche throws a 409 when the new slug clashes with a sibling niche', async () => {
+    // The in-memory fake-db cannot model `ne(id)` (it parses as equality), so the
+    // cross-row clash select is exercised against a focused stub whose clash query
+    // returns a sibling row — proving the guard throws BEFORE any update and never
+    // issues the UPDATE.
+    let updateCalled = false;
+    const stub = {
+      select: () => ({
+        from: () => ({
+          where: () => ({
+            // require() reads one matching niche; the clash-check reads a sibling.
+            // Both go through this builder — a non-empty row for each call makes
+            // require() find the target AND the clash select find a sibling.
+            limit: () =>
+              Promise.resolve([
+                { id: NICHE_A, organizationId: ORG_A, name: 'Roofing', slug: 'roofing' },
+              ]),
+          }),
+        }),
+      }),
+      update: () => {
+        updateCalled = true;
+        return {
+          set: () => ({ where: () => ({ returning: () => Promise.resolve([]) }) }),
+        };
+      },
+    } as unknown as DbClient;
+
+    const service = new NichesService(stub);
+    await expect(
+      service.renameNiche(ORG_A, NICHE_A, 'Freight'),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(updateCalled).toBe(false);
+  });
+
+  it('deleteNiche is BLOCKED with a 409 when the niche has campaigns / prospects', async () => {
+    const { service, niches } = seed();
+    // NICHE_A has CAMP_A (1 campaign) + p-1/p-2 (2 prospects) → 409, niche survives.
+    await expect(service.deleteNiche(ORG_A, NICHE_A)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
+    expect(niches.rows.find((r) => r.id === NICHE_A)).toBeDefined();
+  });
+
+  it('deleteNiche succeeds and cascades its targets when it has no campaigns / prospects', async () => {
+    const { service, niches, nicheTargets } = seed();
+    // Give the otherwise-clean NICHE_B (ORG_B, no campaigns/prospects) a target, then
+    // delete it: the niche row is gone AND its archetype is cascaded.
+    nicheTargets.rows.push({
+      id: 't-b1',
+      nicheId: NICHE_B,
+      name: 'Carrier',
+      slug: 'carrier',
+      searchHint: null,
+      source: 'AI',
+      enabled: true,
+      __seq: 2,
+    });
+    const deleted = await service.deleteNiche(ORG_B, NICHE_B);
+    expect(deleted.id).toBe(NICHE_B);
+    expect(niches.rows.find((r) => r.id === NICHE_B)).toBeUndefined();
+    expect(nicheTargets.rows.find((t) => t.nicheId === NICHE_B)).toBeUndefined();
+    // The unrelated NICHE_A target is untouched.
+    expect(nicheTargets.rows.find((t) => t.id === 't-a1')).toBeDefined();
+  });
+
+  it('deleteNiche 404s a cross-org niche (before the guard runs)', async () => {
+    const { service } = seed();
+    // NICHE_B belongs to ORG_B — ORG_A cannot delete it.
+    await expect(service.deleteNiche(ORG_A, NICHE_B)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });

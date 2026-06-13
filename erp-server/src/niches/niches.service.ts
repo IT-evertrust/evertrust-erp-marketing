@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, eq, ne } from 'drizzle-orm';
+import { and, asc, count, eq, ne } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 import { slugify } from '@evertrust/shared';
 import { DB, type DbClient } from '../db/db.tokens';
@@ -247,6 +247,135 @@ export class NichesService {
     const row = updated[0];
     if (!row) throw new NotFoundException('Niche not found');
     return row;
+  }
+
+  // Create a niche directly (JWT — the niches-management view). slug = slugify(name)
+  // is the per-org dedup key; a clash with an existing niche in the org is a 409
+  // (vs. findOrCreate, which the AIM launch uses to silently reuse). When industryId
+  // is given it must live in the SAME org (404 otherwise) — never link across
+  // tenants. Returns the created row.
+  async createNiche(
+    orgId: string,
+    name: string,
+    industryId?: string | null,
+  ): Promise<NicheRow> {
+    const slug = slugify(name);
+    const existing = await this.db
+      .select({ id: schema.niches.id })
+      .from(schema.niches)
+      .where(and(tenantScope(orgId, schema.niches), eq(schema.niches.slug, slug)))
+      .limit(1);
+    if (existing[0]) {
+      throw new ConflictException('A niche with that name already exists.');
+    }
+
+    if (industryId != null) {
+      // The grouping industry must be in the caller's org — an unknown / cross-org
+      // id 404s rather than silently creating an unlinked niche.
+      const industry = await this.db
+        .select({ id: schema.industries.id })
+        .from(schema.industries)
+        .where(
+          and(
+            tenantScope(orgId, schema.industries),
+            eq(schema.industries.id, industryId),
+          ),
+        )
+        .limit(1);
+      if (!industry[0]) throw new NotFoundException('Industry not found');
+    }
+
+    const inserted = await this.db
+      .insert(schema.niches)
+      .values({
+        organizationId: orgId,
+        name: name.trim(),
+        slug,
+        ...(industryId != null ? { industryId } : {}),
+      })
+      .returning();
+    const row = inserted[0];
+    if (!row) throw new Error('Failed to create niche');
+    return row;
+  }
+
+  // Rename a niche (JWT). ORG-SCOPED (404 if missing / cross-org). A rename re-derives
+  // the slug; a clash with a SIBLING niche's slug in the same org would otherwise
+  // surface the (organization_id, slug) unique index as a raw 500, so we pre-check
+  // and return a clear 409. Returns the updated row.
+  async renameNiche(orgId: string, id: string, name: string): Promise<NicheRow> {
+    await this.require(orgId, id); // 404 if missing / cross-org
+    const slug = slugify(name);
+
+    const clash = await this.db
+      .select({ id: schema.niches.id })
+      .from(schema.niches)
+      .where(
+        and(
+          tenantScope(orgId, schema.niches),
+          eq(schema.niches.slug, slug),
+          ne(schema.niches.id, id),
+        ),
+      )
+      .limit(1);
+    if (clash[0]) {
+      throw new ConflictException('A niche with that name already exists.');
+    }
+
+    const updated = await this.db
+      .update(schema.niches)
+      .set({ name: name.trim(), slug })
+      .where(eq(schema.niches.id, id))
+      .returning();
+    const row = updated[0];
+    if (!row) throw new NotFoundException('Niche not found');
+    return row;
+  }
+
+  // Delete a niche (JWT). ORG-SCOPED (404 if missing / cross-org). BLOCKED with a 409
+  // when the niche still has campaigns OR prospects: campaigns.niche_id is NOT NULL
+  // (no cascade) so a hard delete would orphan/FK-violate, and prospects sit under
+  // those campaigns (prospects.campaign_id, not a direct niche FK). When clear, the
+  // niche's own niche_targets (its archetypes) are deleted first — they reference the
+  // niche with no cascade — then the niche row. Returns the deleted row.
+  async deleteNiche(orgId: string, id: string): Promise<NicheRow> {
+    const before = await this.require(orgId, id); // 404 if missing / cross-org
+
+    // The niche's campaigns (org-scoped). Their count blocks the delete, and their
+    // ids are the bridge to prospects (which reference a campaign, not the niche).
+    const campaignRows = await this.db
+      .select({ id: schema.campaigns.id })
+      .from(schema.campaigns)
+      .where(
+        and(
+          tenantScope(orgId, schema.campaigns),
+          eq(schema.campaigns.nicheId, id),
+        ),
+      );
+
+    // Prospects under those campaigns. Counted per-campaign and summed (prospects
+    // have no niche_id — the rollup is prospect → campaign → niche).
+    let prospects = 0;
+    for (const c of campaignRows) {
+      const p = await this.db
+        .select({ value: count() })
+        .from(schema.prospects)
+        .where(eq(schema.prospects.campaignId, c.id));
+      prospects += p[0]?.value ?? 0;
+    }
+
+    if (campaignRows.length > 0 || prospects > 0) {
+      throw new ConflictException(
+        'This niche still has campaigns or prospects — reassign or archive them first.',
+      );
+    }
+
+    // No dependents: clear the niche's own archetypes, then the niche row.
+    await this.db
+      .delete(schema.nicheTargets)
+      .where(eq(schema.nicheTargets.nicheId, id));
+    await this.db.delete(schema.niches).where(eq(schema.niches.id, id));
+    return before;
   }
 
   // A niche's targets for the UI management view (enabled + disabled, BOTH). ORG-

@@ -93,6 +93,31 @@
       "deleteToast": "Industry “{name}” deleted.",
       "deleteError": "Reassign its niches first.",
       "cancel": "Cancel"
+    },
+    "niche": {
+      "new": "New niche",
+      "newToast": "Niche “{name}” created.",
+      "createError": "Could not create the niche.",
+      "createDialogTitle": "New niche",
+      "createDialogDescription": "Niches are the segments the arsenal scrapes. Assign an industry now, or leave it unassigned.",
+      "namePlaceholder": "Niche name",
+      "industryLabel": "Industry",
+      "create": "Create",
+      "creating": "Creating…",
+      "rename": "Rename",
+      "renameAriaLabel": "Rename {niche}",
+      "renameDialogTitle": "Rename niche",
+      "renameToast": "Niche renamed to “{name}”.",
+      "renameError": "Could not rename the niche.",
+      "save": "Save",
+      "saving": "Saving…",
+      "delete": "Delete",
+      "deleteAriaLabel": "Delete {niche}",
+      "deleteConfirmTitle": "Delete niche {name}?",
+      "deleteConfirmDescription": "Its targets will be removed.",
+      "deleteToast": "Niche “{name}” deleted.",
+      "deleteError": "This niche still has campaigns or prospects — reassign or archive them first.",
+      "cancel": "Cancel"
     }
   },
   "aim": {

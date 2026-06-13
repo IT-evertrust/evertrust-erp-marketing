@@ -322,3 +322,25 @@ Configuration (db + shared + api + web):
       Satellite Build Search Query (fallback when campaign has no cities).
       maxPerNiche intentionally not separate — for a per-campaign (single-niche) run it
       equals maxLeadsPerRun (already wired) + the Niche Gate already blocks empty niches.
+
+## Direct niche CRUD (create / rename / delete) [2026-06-13]
+
+Niches had only find-or-create (via AIM launch). Industries + niche_targets already
+have full CRUD; mirror the industries pattern so niches get direct management.
+
+- [x] packages/shared: added CreateNicheDto { name 1..120, industryId uuid nullable optional }
+      + UpdateNicheDto { name 1..120 } with z.infer types, right after NicheDto.
+- [x] niches.service: createNiche (slug dedup → 409; validate in-org industryId → 404),
+      renameNiche (require + sibling slug-clash → 409 via ne(id)), deleteNiche (count
+      campaigns + prospects-under-those-campaigns → 409; else delete niche_targets then
+      the niche). Added `count` to the drizzle-orm import.
+- [x] niches.dto: CreateNicheBodyDto + UpdateNicheBodyDto (createZodDto).
+- [x] niches.controller: POST /niches (CREATE), PATCH /niches/:id (UPDATE — declared
+      AFTER PATCH /niches/:id/industry so it doesn't shadow it), DELETE /niches/:id
+      (DELETE → ClearResultDto { deleted: 1 }), all campaigns:write + audited. Added
+      Delete + ClearResultDto imports.
+- [x] test/niches.service.spec: 10 new tests — create (+slug, +in-org industry) + 409 dup
+      + cross-org industry 404; rename (+slug) + 404 cross-org + 409 clash (focused stub);
+      delete blocked (campaigns+prospects) + clean delete cascades targets + 404 cross-org.
+- [x] corepack pnpm --filter @evertrust/api typecheck (tsc --noEmit clean) + test GREEN
+      (49 suites / 418 tests; niches.service.spec 17 tests). Mirrors the industries feature.

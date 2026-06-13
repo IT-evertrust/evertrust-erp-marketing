@@ -93,6 +93,31 @@
       "deleteToast": "Branche „{name}“ gelöscht.",
       "deleteError": "Weisen Sie zuerst ihre Nischen neu zu.",
       "cancel": "Abbrechen"
+    },
+    "niche": {
+      "new": "Neue Nische",
+      "newToast": "Nische „{name}“ erstellt.",
+      "createError": "Die Nische konnte nicht erstellt werden.",
+      "createDialogTitle": "Neue Nische",
+      "createDialogDescription": "Nischen sind die Segmente, die das Arsenal durchsucht. Ordnen Sie jetzt eine Branche zu oder lassen Sie sie nicht zugeordnet.",
+      "namePlaceholder": "Nischenname",
+      "industryLabel": "Branche",
+      "create": "Erstellen",
+      "creating": "Wird erstellt…",
+      "rename": "Umbenennen",
+      "renameAriaLabel": "{niche} umbenennen",
+      "renameDialogTitle": "Nische umbenennen",
+      "renameToast": "Nische in „{name}“ umbenannt.",
+      "renameError": "Die Nische konnte nicht umbenannt werden.",
+      "save": "Speichern",
+      "saving": "Speichern…",
+      "delete": "Löschen",
+      "deleteAriaLabel": "{niche} löschen",
+      "deleteConfirmTitle": "Nische {name} löschen?",
+      "deleteConfirmDescription": "Ihre Ziele werden entfernt.",
+      "deleteToast": "Nische „{name}“ gelöscht.",
+      "deleteError": "Diese Nische hat noch Kampagnen oder Interessenten — ordnen Sie sie neu zu oder archivieren Sie sie zuerst.",
+      "cancel": "Abbrechen"
     }
   },
   "aim": {
