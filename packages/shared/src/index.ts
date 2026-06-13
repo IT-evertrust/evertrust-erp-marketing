@@ -1964,6 +1964,15 @@ export const CampaignConfigDto = z.object({
       }),
     ),
   }),
+  // The GLOBAL Growth-Engine automation knobs (the effective Templates + Leads
+  // groups from workflow_config), merged into the machine route the outreach
+  // workflows already poll so they pick up the baseline copy + lead governance
+  // without a new HTTP node. `z.lazy` because WorkflowTemplatesDto / WorkflowLeadsDto
+  // are declared later in this module (after their template primitives).
+  automation: z.object({
+    templates: z.lazy(() => WorkflowTemplatesDto),
+    leads: z.lazy(() => WorkflowLeadsDto),
+  }),
 });
 export type CampaignConfigDto = z.infer<typeof CampaignConfigDto>;
 
@@ -2435,6 +2444,34 @@ export const DefaultTemplateDto = z.object({
 });
 export type DefaultTemplateDto = z.infer<typeof DefaultTemplateDto>;
 
+// Configuration > Templates — the baseline outreach copy. Every field is the raw
+// stored value (null = unset); there is no env fallback for these. Factored out of
+// WorkflowConfigDto so the same effective shape can ride along on the machine
+// campaign config (CampaignConfigDto.automation).
+export const WorkflowTemplatesDto = z.object({
+  default: DefaultTemplateDto.nullable(),
+  signature: z.string().nullable(),
+  tone: OutreachTone.nullable(),
+  language: TemplateLanguage.nullable(),
+});
+export type WorkflowTemplatesDto = z.infer<typeof WorkflowTemplatesDto>;
+
+// Configuration > Leads — lead-generation governance. The caps are raw stored
+// values (null = unset = no cap). `defaultRegions` is the stored array (never null —
+// defaults to []). The two booleans are EFFECTIVE: an unset value resolves to the
+// safe product default `true` so it can never silently read as "off". Factored out
+// of WorkflowConfigDto for reuse on CampaignConfigDto.automation.
+export const WorkflowLeadsDto = z.object({
+  maxLeadsPerRun: z.number().int().nullable(),
+  maxPerNiche: z.number().int().nullable(),
+  dailySendCap: z.number().int().nullable(),
+  defaultRegions: z.array(z.string()),
+  respectSuppressions: z.boolean(),
+  dedupDays: z.number().int().nullable(),
+  requireNicheAnalysis: z.boolean(),
+});
+export type WorkflowLeadsDto = z.infer<typeof WorkflowLeadsDto>;
+
 // GET /arsenal/config — the resolved Growth-Engine workflow config. Every webhook
 // + the n8n base URL carry the {value, overridden} envelope. The n8n API key and
 // ingest token are status-only (never returned): `n8nApiKeySet` reflects the env
@@ -2458,27 +2495,11 @@ export const WorkflowConfigDto = z.object({
   defaultSender: DefaultSender.nullable(),
   followupOffsetDays: z.number().int().nullable(),
   finalPushOffsetDays: z.number().int().nullable(),
-  // Configuration > Templates — the baseline outreach copy. Every field is the raw
-  // stored value (null = unset); there is no env fallback for these.
-  templates: z.object({
-    default: DefaultTemplateDto.nullable(),
-    signature: z.string().nullable(),
-    tone: OutreachTone.nullable(),
-    language: TemplateLanguage.nullable(),
-  }),
-  // Configuration > Leads — lead-generation governance. The caps are raw stored
-  // values (null = unset = no cap). `defaultRegions` is the stored array (never
-  // null — defaults to []). The two booleans are EFFECTIVE: an unset value resolves
-  // to the safe product default `true` so it can never silently read as "off".
-  leads: z.object({
-    maxLeadsPerRun: z.number().int().nullable(),
-    maxPerNiche: z.number().int().nullable(),
-    dailySendCap: z.number().int().nullable(),
-    defaultRegions: z.array(z.string()),
-    respectSuppressions: z.boolean(),
-    dedupDays: z.number().int().nullable(),
-    requireNicheAnalysis: z.boolean(),
-  }),
+  // Configuration > Templates / Leads — see WorkflowTemplatesDto / WorkflowLeadsDto
+  // (defined above). Referenced here so the wire shape is unchanged while the same
+  // groups can be reused on CampaignConfigDto.automation.
+  templates: WorkflowTemplatesDto,
+  leads: WorkflowLeadsDto,
 });
 export type WorkflowConfigDto = z.infer<typeof WorkflowConfigDto>;
 

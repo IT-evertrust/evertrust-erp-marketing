@@ -12,6 +12,8 @@ import type {
   TestN8nResultDto,
   UpdateWorkflowConfigDto,
   WorkflowConfigDto,
+  WorkflowLeadsDto,
+  WorkflowTemplatesDto,
 } from '@evertrust/shared';
 import { DB, type DbClient } from '../db/db.tokens';
 import { tenantScope } from '../common/tenant';
@@ -175,18 +177,32 @@ export class WorkflowConfigService {
       defaultSender: (clean(row?.defaultSender) ?? null) as DefaultSender | null,
       followupOffsetDays: row?.followupOffsetDays ?? null,
       finalPushOffsetDays: row?.finalPushOffsetDays ?? null,
-      // Templates: raw stored values, nullable (no env fallback). `defaultTemplate`
-      // is jsonb (typed unknown) → surfaced as the DTO shape or null.
+      // Templates + Leads share one resolver with getAutomation() (see below) so the
+      // /arsenal/config read and the machine campaign config never drift.
+      ...this.resolveAutomation(row),
+    };
+  }
+
+  // The effective Templates + Leads groups for a row — the single source of truth
+  // shared by getEffective() (the admin /arsenal/config read) and getAutomation()
+  // (merged into the machine GET /campaigns/:id/config). Templates are raw stored
+  // values, nullable (no env fallback); `defaultTemplate` is jsonb (typed unknown) →
+  // surfaced as the DTO shape or null. Leads caps are raw nullable (null = no cap),
+  // regions default to []; the two booleans are EFFECTIVE with a safe product
+  // default of `true` — an unset (null) value must never read as "off" (so
+  // suppressions are honoured and a niche analysis is required until an admin
+  // explicitly turns them off).
+  private resolveAutomation(row: WorkflowConfigRow | null): {
+    templates: WorkflowTemplatesDto;
+    leads: WorkflowLeadsDto;
+  } {
+    return {
       templates: {
         default: (row?.defaultTemplate ?? null) as DefaultTemplateDto | null,
         signature: clean(row?.signature) ?? null,
         tone: (clean(row?.tone) ?? null) as OutreachTone | null,
         language: (clean(row?.templateLanguage) ?? null) as TemplateLanguage | null,
       },
-      // Leads: caps are raw nullable (null = no cap); regions default to []. The two
-      // booleans are EFFECTIVE with a safe product default of `true` — an unset
-      // (null) value must never read as "off" (so suppressions are honoured and a
-      // niche analysis is required until an admin explicitly turns them off).
       leads: {
         maxLeadsPerRun: row?.maxLeadsPerRun ?? null,
         maxPerNiche: row?.maxPerNiche ?? null,
@@ -197,6 +213,19 @@ export class WorkflowConfigService {
         requireNicheAnalysis: row?.requireNicheAnalysis ?? true,
       },
     };
+  }
+
+  // The effective Templates + Leads groups (GLOBAL workflow_config), merged into the
+  // machine GET /campaigns/:id/config by CampaignsService so the outreach workflows
+  // pick up the baseline copy + lead governance without a new HTTP node. Identical
+  // resolution to getEffective()'s templates/leads (same row + the same gate
+  // defaults) via the shared resolveAutomation() helper.
+  async getAutomation(): Promise<{
+    templates: WorkflowTemplatesDto;
+    leads: WorkflowLeadsDto;
+  }> {
+    const row = await this.row();
+    return this.resolveAutomation(row);
   }
 
   // ----- lead stats (GET /arsenal/lead-stats) ------------------------------
