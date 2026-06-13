@@ -1,11 +1,9 @@
 import {
   ConflictException,
-  HttpException,
   Inject,
   Injectable,
   Logger,
   NotFoundException,
-  ServiceUnavailableException,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { and, count, desc, eq } from 'drizzle-orm';
@@ -345,60 +343,25 @@ export class CampaignsService {
     }
   }
 
-  // Every file in a campaign's Drive folder, via the erp-campaign-files webhook (the
-  // ERP has no Google creds). Tenant-scoped — get() throws if the campaign isn't this
-  // org's. Degrades to an empty list if the folder/webhook isn't set. (Independent of
-  // the retired Drive-reconcile sync — uses N8N_API_URL's erp-campaign-files webhook.)
+  // The campaign's generated files, read from the campaign_assets registry (the
+  // NICHE_ANALYSIS doc, Ammo Forge templates/news, etc.). PG-native: the ERP owns the
+  // file pointers, so no Drive/n8n round-trip and no driveFolderId dependency. Tenant-
+  // scoped via get(). Empty until the workflows register assets for this campaign.
   async listFiles(orgId: string, id: string): Promise<CampaignFilesDto> {
-    const campaign = await this.get(orgId, id);
-    const base = this.campaignFilesWebhookUrl();
-    if (!base) return { configured: false, count: 0, files: [] };
-    if (!campaign.driveFolderId) return { configured: true, count: 0, files: [] };
-    const url = `${base}?folderId=${encodeURIComponent(campaign.driveFolderId)}`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20_000);
-    try {
-      const res = await fetch(url, {
-        headers: { accept: 'application/json' },
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        throw new ServiceUnavailableException(
-          `Campaign files returned HTTP ${res.status}.`,
-        );
-      }
-      const json = (await res.json().catch(() => ({}))) as { files?: unknown };
-      const raw = Array.isArray(json?.files) ? json.files : [];
-      const s = (v: unknown) => (typeof v === 'string' && v.length ? v : null);
-      const files = raw
-        .filter(
-          (r): r is Record<string, unknown> =>
-            !!r && typeof (r as Record<string, unknown>).id === 'string',
-        )
-        .map((r) => ({
-          id: String(r.id),
-          name: typeof r.name === 'string' ? r.name : String(r.id),
-          mimeType: s(r.mimeType),
-          webViewLink: s(r.webViewLink),
-          modifiedTime: s(r.modifiedTime),
-          size: s(r.size),
-        }));
-      return { configured: true, count: files.length, files };
-    } catch (err) {
-      if (err instanceof HttpException) throw err;
-      this.logger.warn(
-        `campaign files GET ${url} failed: ${err instanceof Error ? err.message : 'error'}`,
-      );
-      throw new ServiceUnavailableException(
-        'Campaign files call failed — check that the campaign-files workflow is active.',
-      );
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  private campaignFilesWebhookUrl(): string {
-    const base = (this.config.get('N8N_API_URL') ?? '').trim().replace(/\/+$/, '');
-    return base ? `${base}/webhook/erp-campaign-files` : '';
+    await this.get(orgId, id); // 404 if the campaign isn't this org's
+    const rows = await this.db
+      .select()
+      .from(schema.campaignAssets)
+      .where(eq(schema.campaignAssets.campaignId, id))
+      .orderBy(desc(schema.campaignAssets.createdAt));
+    const files = rows.map((a) => ({
+      id: a.id,
+      name: a.name,
+      mimeType: a.mimeType ?? null,
+      webViewLink: a.driveUrl ?? null,
+      modifiedTime: a.createdAt ? a.createdAt.toISOString() : null,
+      size: null,
+    }));
+    return { configured: true, count: files.length, files };
   }
 }
