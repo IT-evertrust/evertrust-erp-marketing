@@ -20,6 +20,7 @@ import {
   type CampaignDto,
   type CampaignFilesDto,
   type CampaignMachineListItemDto,
+  type CampaignTemplatesDto,
 } from '@evertrust/shared';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Public } from '../auth/decorators/public.decorator';
@@ -30,8 +31,10 @@ import { setAuditContext } from '../common/audit-context';
 import { ArsenalTokenGuard } from '../common/guards/arsenal-token.guard';
 import { CampaignsService } from './campaigns.service';
 import { CampaignAssetsService } from './campaign-assets.service';
+import { CampaignTemplatesService } from './campaign-templates.service';
 import {
   CampaignAssetBodyDto,
+  CampaignTemplatesBodyDto,
   CreateCampaignBodyDto,
   UpdateCampaignLifecycleBodyDto,
 } from './campaigns.dto';
@@ -51,6 +54,7 @@ export class CampaignsController {
   constructor(
     private readonly campaigns: CampaignsService,
     private readonly assets: CampaignAssetsService,
+    private readonly templates: CampaignTemplatesService,
   ) {}
 
   @RequirePermissions('campaigns:read')
@@ -114,6 +118,21 @@ export class CampaignsController {
     @Body() body: CampaignAssetBodyDto,
   ): Promise<CampaignAssetResultDto> {
     return this.assets.upsert(id, body);
+  }
+
+  // Set Ammo Forge content blocks (coldEmail, slotProposal, …) the outreach
+  // workflows read instead of Drive templates. MERGES into campaigns.templates
+  // (existing keys survive; same key overwrites), so blocks can be set
+  // incrementally. MACHINE route: @Public() + token; org derived from the
+  // campaign. 404 unknown campaign. Responds the merged map.
+  @Public()
+  @UseGuards(ArsenalTokenGuard)
+  @Post(':id/templates')
+  setTemplates(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: CampaignTemplatesBodyDto,
+  ): Promise<CampaignTemplatesDto> {
+    return this.templates.merge(id, body.templates);
   }
 
   @RequirePermissions('campaigns:write')

@@ -23,7 +23,6 @@ const ERP = 'https://evertrust-api.onrender.com';
 // Bound credentials (REACH ARSENAL team project where possible).
 const CRED_GMAIL = newCredential('Gmail account: Hanna', 'iBJ8BCOqhFb5kDUg');
 const CRED_CAL = newCredential('Google Calendar account: Hanna', 'K8toWX5wjc8Oceev');
-const CRED_DRIVE = newCredential('Google Drive account: Hanna', 'R1hfa3xjcJxi0F2E');
 const CRED_WA = newCredential('WhatsApp account', 'hfg64imhwFA01Qcb');
 const CRED_OPENAI = newCredential('LiteLLM Gateway (mac-mini)', '2YgDmy9NuLHvOgzJ');
 // ERP machine routes — x-arsenal-token header auth, intentionally UNBOUND.
@@ -217,48 +216,10 @@ const collectCampaign = node({
   output: [{ campaignId: 'camp-uuid', campaignName: 'Bavaria GC', niche: 'Golf Clubs', city: 'Bavaria', project: 'Golf clubs', driveFolderId: 'drv1' }],
 });
 
-// KEEP — templates are CONTENT, stay in Drive (like Ammo Forge). The slot-proposal +
-// meeting-confirmation emails rely on them. List the campaign folder, find templates.doc, download it.
-const driveListCampaignFiles = node({
-  type: 'n8n-nodes-base.googleDrive',
-  version: 3,
-  config: {
-    name: 'Drive — List Campaign Files',
-    parameters: {
-      resource: 'fileFolder',
-      operation: 'search',
-      returnAll: true,
-      filter: { folderId: { __rl: true, mode: 'id', value: expr('{{ $json.driveFolderId }}') } },
-      options: {},
-    },
-    credentials: { googleDriveOAuth2Api: CRED_DRIVE },
-    alwaysOutputData: true,
-    position: [1680, 320],
-  },
-  output: [{ id: 'file1', name: 'templates.doc' }],
-});
-
-const findTemplatesFile = node({
-  type: 'n8n-nodes-base.code',
-  version: 2,
-  config: {
-    name: 'Code — Find Templates File',
-    parameters: {
-      jsCode:
-        "// Find templates.doc by name in the campaign Drive folder. Drive v3 list has alwaysOutputData,\n" +
-        "// so an empty folder yields a placeholder with no .name — filter those out.\n" +
-        "const campaign = $('Code — Collect Campaign').first().json;\n" +
-        "const files = items.map(i => i.json).filter(f => f && f.name);\n" +
-        "const templatesFile = files.find(f => (f.name || '').toLowerCase().includes('template'));\n" +
-        "return [{ json: { ...campaign, templatesFileId: templatesFile ? templatesFile.id : null, templatesPresent: !!templatesFile } }];",
-    },
-    position: [1904, 320],
-  },
-  output: [{ campaignId: 'camp-uuid', templatesFileId: 'file1', templatesPresent: true }],
-});
-
-// Only proceed to download when a templates file exists; otherwise notify (parity with
-// the original's missing-file alert) and continue the loop.
+// Templates now come from Postgres via GET /campaigns/:id/config (config.templates).
+// The Drive folder-list/find/download/parse chain is removed. This IF is the missing-templates
+// safety gate: proceed (continue the loop) only when config.templates.coldEmail is present;
+// otherwise alert (parity with the original's missing-file alert).
 const ifTemplatesPresent = ifElse({
   version: 2.3,
   config: {
@@ -268,7 +229,7 @@ const ifTemplatesPresent = ifElse({
         options: { caseSensitive: false, leftValue: '', typeValidation: 'loose', version: 2 },
         combinator: 'and',
         conditions: [
-          { id: 'c1', leftValue: expr('{{ $json.templatesPresent }}'), rightValue: '', operator: { type: 'boolean', operation: 'true', singleValue: true } },
+          { id: 'c1', leftValue: expr("{{ (($('ERP — Get Campaign Config').first().json.templates) || {}).coldEmail || '' }}"), rightValue: '', operator: { type: 'string', operation: 'notEmpty', singleValue: true } },
         ],
       },
       options: {},
@@ -276,62 +237,6 @@ const ifTemplatesPresent = ifElse({
     position: [2128, 320],
   },
   output: [{}],
-});
-
-const driveDownloadTemplates = node({
-  type: 'n8n-nodes-base.googleDrive',
-  version: 3,
-  config: {
-    name: 'Drive — Download templates.doc',
-    parameters: {
-      operation: 'download',
-      fileId: { __rl: true, mode: 'id', value: expr('{{ $json.templatesFileId }}') },
-      options: { googleFileConversion: { conversion: { docsToFormat: 'text/plain' } } },
-    },
-    credentials: { googleDriveOAuth2Api: CRED_DRIVE },
-    position: [2352, 224],
-  },
-  output: [{}],
-});
-
-const parseTemplateBlocks = node({
-  type: 'n8n-nodes-base.code',
-  version: 2,
-  config: {
-    name: 'Code — Parse Template Blocks',
-    parameters: {
-      mode: 'runOnceForEachItem',
-      jsCode:
-        "const campaign = $('Code — Find Templates File').first().json;\n" +
-        "const bin = $input.item.binary && $input.item.binary.data;\n" +
-        "let text = '';\n" +
-        "if (bin) {\n" +
-        "  try {\n" +
-        "    const buf = await this.helpers.getBinaryDataBuffer(0, 'data');\n" +
-        "    text = buf.toString('utf8');\n" +
-        "  } catch (e) {}\n" +
-        "  if (!text && typeof bin.data === 'string') {\n" +
-        "    text = bin.data;\n" +
-        "  }\n" +
-        "  if (text && !/\\[(COLD|FOLLOWUP|FINALPUSH)\\]/i.test(text) && /^[A-Za-z0-9+/=\\s]+$/.test(text)) {\n" +
-        "    try { text = Buffer.from(text, 'base64').toString('utf8'); } catch (e) {}\n" +
-        "  }\n" +
-        "}\n" +
-        "function extract(blockTag) {\n" +
-        "  const re = new RegExp('\\\\[' + blockTag + '\\\\]([\\\\s\\\\S]*?)(?=\\\\n\\\\[(?:COLD|FOLLOWUP|FINALPUSH)\\\\]|$)', 'i');\n" +
-        "  const m = text.match(re);\n" +
-        "  if (!m) return { subject: '', body: '' };\n" +
-        "  const raw = m[1];\n" +
-        "  const subjMatch = raw.match(/Subject:\\s*(.+)/i);\n" +
-        "  const bodyMatch = raw.match(/Body:\\s*([\\s\\S]+)/i);\n" +
-        "  return { subject: (subjMatch && subjMatch[1] || '').trim(), body: (bodyMatch && bodyMatch[1] || '').trim() };\n" +
-        "}\n" +
-        "const templates = { COLD: extract('COLD'), FOLLOWUP: extract('FOLLOWUP'), FINALPUSH: extract('FINALPUSH') };\n" +
-        "return { json: { ...campaign, templates } };",
-    },
-    position: [2576, 224],
-  },
-  output: [{ campaignId: 'camp-uuid', templates: { COLD: { subject: '', body: '' } } }],
 });
 
 // Missing-templates alert (parity with the original WA — Missing File Alert) + ERP notification.
@@ -1975,12 +1880,13 @@ export default workflow('reply-glock-pg-v2', 'EVERTRUST - REPLY GLOCK (PG) v2')
     .onDone(collectActiveLabels
       .to(getReplies.to(hydrateBody.to(enrichReplyContext)))
     )
-    // loop EACH BATCH (per campaign): resolve config + templates, then nextBatch
-    .onEachBatch(erpGetCampaignConfig.to(collectCampaign.to(driveListCampaignFiles.to(findTemplatesFile.to(
+    // loop EACH BATCH (per campaign): resolve config (templates now in Postgres), gate on
+    // config.templates.coldEmail present, then nextBatch
+    .onEachBatch(erpGetCampaignConfig.to(collectCampaign.to(
       ifTemplatesPresent
-        .onTrue(driveDownloadTemplates.to(parseTemplateBlocks.to(nextBatch(loopCampaigns))))
+        .onTrue(nextBatch(loopCampaigns))
         .onFalse(buildMissingMsg.to(waMissingFileAlert.to(nextBatch(loopCampaigns))))
-    )))))
+    )))
   )
   // second inbox (Hanna) — parallel branch from Collect Active Labels into Enrich
   .add(collectActiveLabels).to(getRepliesHanna.to(hydrateBodyHanna.to(enrichReplyContext)))

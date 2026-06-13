@@ -206,6 +206,7 @@ export class CampaignsService {
       salesCalendarId: c.salesCalendarId,
       whatsappNumber: c.whatsappNumber,
       driveFolderId: c.driveFolderId,
+      templates: c.templates ?? {},
       niche: {
         id: niche.id,
         name: niche.name,
