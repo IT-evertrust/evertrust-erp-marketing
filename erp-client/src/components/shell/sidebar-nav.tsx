@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { AlarmClock, Crosshair } from 'lucide-react';
 import { hasPermission, type Permission } from '@evertrust/shared';
 import { useMe } from '@/hooks/use-auth';
@@ -18,6 +19,7 @@ import { NAV_ITEMS, type NavItem } from './nav-items';
 export function SidebarNav() {
   const pathname = usePathname();
   const { data: user } = useMe();
+  const t = useTranslations('nav');
   const can = (p: Permission | null) =>
     p === null || (user ? hasPermission(user.role, p) : false);
 
@@ -38,7 +40,7 @@ export function SidebarNav() {
           <div key={section.label ?? `top-${i}`} className="flex flex-col gap-1.5">
             {section.label ? (
               <p className="px-3 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
-                {section.label}
+                {t(`group.${section.label}`, { default: section.label })}
               </p>
             ) : null}
             <div className="flex flex-col gap-1 rounded-xl border bg-card/30 p-1.5">
@@ -59,6 +61,7 @@ export function SidebarNav() {
 }
 
 function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
+  const t = useTranslations('nav');
   // A link is active when the current path is under its href — but only if no
   // OTHER nav item is a longer (more specific) prefix. This keeps a parent like
   // "/marketing" from also lighting up when a child like "/marketing/niches" is
@@ -85,7 +88,7 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
       )}
     >
       <Icon className="size-4 shrink-0" />
-      {item.label}
+      {t(item.i18nKey, { default: item.label })}
     </Link>
   );
 }

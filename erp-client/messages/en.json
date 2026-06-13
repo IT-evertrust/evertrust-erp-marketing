@@ -1,0 +1,149 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "marketing": "Marketing",
+    "niches": "Niches",
+    "drafts": "Reply drafts",
+    "suppressions": "Suppressions",
+    "keyAccount": "Key Account",
+    "sales": "Sales",
+    "performance": "Performance",
+    "users": "Users",
+    "general": "General",
+    "configuration": "Configuration",
+    "group": {
+      "Acquisition": "Acquisition",
+      "Management": "Management",
+      "Administration": "Administration",
+      "Settings": "Settings"
+    }
+  },
+  "common": {
+    "settings": "Settings",
+    "profile": "Profile",
+    "logOut": "Log out"
+  },
+  "settings": {
+    "general": {
+      "header": {
+        "title": "General",
+        "description": "Appearance and app preferences."
+      },
+      "appearance": {
+        "title": "Appearance",
+        "description": "Choose how the console looks. Your choice is saved on this device.",
+        "ariaLabel": "Theme",
+        "system": "System",
+        "light": "Light",
+        "dark": "Dark"
+      },
+      "display": {
+        "title": "Display",
+        "description": "Where you land after signing in, and how tightly the console is spaced. Saved on this device.",
+        "landingLabel": "Default landing page",
+        "landingHint": "The page you see right after you sign in.",
+        "landingToast": "Landing page set to {label}.",
+        "densityLabel": "Density",
+        "densityAriaLabel": "Density",
+        "comfortable": "Comfortable",
+        "compact": "Compact",
+        "densityHint": "Compact tightens spacing across the whole console.",
+        "densityToast": "Density set to {label}."
+      },
+      "language": {
+        "title": "Language",
+        "description": "The language for menus and labels. Saved in your browser.",
+        "ariaLabel": "Language",
+        "english": "English",
+        "german": "Deutsch",
+        "toast": "Language set to {label}."
+      }
+    },
+    "config": {
+      "header": {
+        "title": "Configuration",
+        "description": "Automation & integrations for your workspace."
+      },
+      "badge": {
+        "custom": "Custom",
+        "envDefault": "Env default"
+      },
+      "wiring": {
+        "title": "Workflow wiring",
+        "description": "The n8n webhook each Growth-Engine stage fires. Leave a field empty to use the environment default."
+      },
+      "n8n": {
+        "title": "n8n connection",
+        "description": "How the ERP reaches n8n to read live execution status.",
+        "apiUrlLabel": "API base URL",
+        "apiKeyLabel": "API key",
+        "apiKeySet": "Set (env)",
+        "apiKeyNotSet": "Not set",
+        "testConnection": "Test connection",
+        "testing": "Testing…",
+        "toastOk": "n8n connection OK.",
+        "toastError": "n8n: {detail}",
+        "toastNotConfigured": "n8n is not configured.",
+        "toastUnreachable": "Could not reach n8n.",
+        "workflowCount": "{count, plural, one {# workflow} other {# workflows}}"
+      },
+      "ingest": {
+        "title": "Ingest security",
+        "description": "n8n uses this token to write results back to the ERP.",
+        "tokenLabel": "Ingest token",
+        "sourceRotated": "Rotated in app",
+        "sourceEnv": "From env",
+        "sourceNone": "Not set",
+        "lastSet": "Last set {ago}.",
+        "rotate": "Rotate token",
+        "rotating": "Rotating…",
+        "revert": "Revert to env token",
+        "reverting": "Reverting…",
+        "revertConfirm": "Revert to the env ingest token? n8n must use the ARSENAL_INGEST_TOKEN value again.",
+        "revertToast": "Reverted to the env ingest token.",
+        "revertError": "Could not revert the token.",
+        "rotateError": "Could not rotate the token.",
+        "copied": "Copied",
+        "copyError": "Could not copy — select and copy it manually.",
+        "dialogTitle": "New ingest token",
+        "dialogDescription": "Copy this now — it's shown once. Paste it into n8n's “ERP Ingest” credential (header x-arsenal-token). The ERP stores only a hash.",
+        "copyAria": "Copy token",
+        "done": "Done"
+      },
+      "cadence": {
+        "title": "Cadence & sender",
+        "description": "The default sending alias and how the sequence is spaced.",
+        "senderLabel": "Default sender",
+        "senderDefault": "— Use default",
+        "senderInfo": "Info (info@)",
+        "senderHanna": "Hanna (hanna@)",
+        "followupLabel": "First follow-up — days after first email",
+        "finalPushLabel": "Final push — days"
+      },
+      "dailySend": {
+        "title": "Daily send",
+        "description": "An extra daily Reach Bazooka send fired by the ERP."
+      },
+      "catalogs": {
+        "title": "Managed catalogs",
+        "description": "Jump to the lists that drive your workspace.",
+        "nichesTitle": "Niches & targets",
+        "nichesDescription": "Define the niches and target archetypes campaigns expand.",
+        "suppressionsTitle": "Suppressions",
+        "suppressionsDescription": "Your do-not-contact list — addresses outreach skips.",
+        "usersTitle": "Users & roles",
+        "usersDescription": "Manage members, roles, and permissions."
+      },
+      "save": {
+        "unsaved": "Unsaved changes",
+        "saveChanges": "Save changes",
+        "saving": "Saving…",
+        "toastOk": "Configuration saved.",
+        "toastError": "Could not save configuration.",
+        "invalidWebhook": "{label}: enter a valid URL (or clear it to use the env default).",
+        "invalidApiUrl": "n8n API URL: enter a valid URL (or clear it to use the env default).",
+        "invalidCadence": "Cadence days must be a whole number of 0 or more."
+      }
+    }
+  }
+}

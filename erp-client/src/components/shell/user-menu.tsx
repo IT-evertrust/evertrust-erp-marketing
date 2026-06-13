@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { Building2, LogOut, Settings, UserRound } from 'lucide-react';
 import { DEPARTMENT_LABELS, ROLE_LABELS, type MeDto } from '@evertrust/shared';
 import { useLogout } from '@/hooks/use-auth';
@@ -26,6 +27,7 @@ function initials(name: string): string {
 
 export function UserMenu({ user }: { user: MeDto }) {
   const logout = useLogout();
+  const t = useTranslations('common');
 
   return (
     <DropdownMenu>
@@ -65,13 +67,13 @@ export function UserMenu({ user }: { user: MeDto }) {
           <DropdownMenuItem asChild>
             <Link href="/settings/general">
               <Settings />
-              Settings
+              {t('settings')}
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link href={`/users/${user.id}`}>
               <UserRound />
-              Profile
+              {t('profile')}
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem
@@ -83,7 +85,7 @@ export function UserMenu({ user }: { user: MeDto }) {
             }}
           >
             <LogOut />
-            Log out
+            {t('logOut')}
           </DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>

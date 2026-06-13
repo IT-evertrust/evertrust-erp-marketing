@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import { Fraunces, IBM_Plex_Mono, Inter } from 'next/font/google';
+import { NextIntlClientProvider } from 'next-intl';
+import { getLocale, getMessages } from 'next-intl/server';
 import './globals.css';
 import { Providers } from './providers';
 
@@ -25,15 +27,24 @@ export const metadata: Metadata = {
     'AI-assisted operations platform for public-tender businesses. Automate intake to submission with a full audit trail, built for German procurement.',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  // Locale + messages are resolved from the NEXT_LOCALE cookie (see
+  // src/i18n/request.ts). NextIntlClientProvider wraps OUTSIDE Providers so every
+  // client component below the tree can call useTranslations/useLocale.
+  // suppressHydrationWarning stays — next-themes toggles a class on <html>.
+  const locale = await getLocale();
+  const messages = await getMessages();
+
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang={locale} suppressHydrationWarning>
       <body
         className={`${inter.variable} ${fraunces.variable} ${plexMono.variable} font-sans antialiased`}
       >
-        <Providers>{children}</Providers>
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <Providers>{children}</Providers>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

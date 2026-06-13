@@ -2,7 +2,7 @@ import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { schema } from '@evertrust/db';
 import { ArsenalService } from '../src/arsenal/arsenal.service';
 import type { AppConfigService } from '../src/config/app-config.service';
-import { FakeTable, makeFakeDb } from './fake-db';
+import { FakeTable, makeFakeDb, makeWorkflowConfig } from './fake-db';
 
 const ORG_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const ORG_B = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
@@ -52,7 +52,11 @@ function seed(urls: Record<string, string> = {}) {
       [schema.arsenalSettings, arsenalSettings],
     ]),
   );
-  return { service: new ArsenalService(db, makeConfig(urls)), arsenalRuns };
+  const config = makeConfig(urls);
+  return {
+    service: new ArsenalService(db, makeWorkflowConfig(db, config)),
+    arsenalRuns,
+  };
 }
 
 const originalFetch = globalThis.fetch;

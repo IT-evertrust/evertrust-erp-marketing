@@ -11,6 +11,10 @@ import type {
   MarketingReportDto,
   MarketingReportPeriod,
   UpdateArsenalSettingsDto,
+  WorkflowConfigDto,
+  UpdateWorkflowConfigDto,
+  TestN8nResultDto,
+  RotateIngestTokenResultDto,
 } from '@evertrust/shared';
 import { ApiError, api } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
@@ -112,6 +116,66 @@ export function useUpdateArsenalSettings() {
     mutationFn: (input) => api.arsenal.updateSettings(input),
     onSuccess: (saved) => {
       queryClient.setQueryData(queryKeys.arsenal.settings(), saved);
+    },
+  });
+}
+
+// The resolved Growth-Engine workflow config (webhooks, n8n wiring, secret-status
+// flags, cadence/sender) — backs the editable Configuration control panel.
+export function useWorkflowConfig() {
+  return useQuery<WorkflowConfigDto, ApiError>({
+    queryKey: queryKeys.arsenal.config(),
+    queryFn: ({ signal }) => api.arsenal.getConfig(signal),
+    refetchOnWindowFocus: true,
+  });
+}
+
+// Partial-update the workflow config. Seeds the config cache with the freshly
+// resolved value (so the form reflects the saved overrides immediately) and
+// invalidates the run-state queries so the sequence/strip pick up the new wiring.
+export function useUpdateWorkflowConfig() {
+  const queryClient = useQueryClient();
+  return useMutation<WorkflowConfigDto, ApiError, UpdateWorkflowConfigDto>({
+    mutationFn: (input) => api.arsenal.updateConfig(input),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(queryKeys.arsenal.config(), saved);
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.arsenal.executions(),
+      });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.arsenal.runs() });
+    },
+  });
+}
+
+// Probe the live n8n connection. No cache write — the component renders the
+// returned result inline (the endpoint is read-only / never mutates config).
+export function useTestN8n() {
+  return useMutation<TestN8nResultDto, ApiError, void>({
+    mutationFn: () => api.arsenal.testN8n(),
+  });
+}
+
+// Rotate the machine ingest token. The plaintext token is shown once by the
+// component; we invalidate the config query so the status flips to source
+// 'rotated' after the dialog closes.
+export function useRotateIngestToken() {
+  const queryClient = useQueryClient();
+  return useMutation<RotateIngestTokenResultDto, ApiError, void>({
+    mutationFn: () => api.arsenal.rotateToken(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.arsenal.config() });
+    },
+  });
+}
+
+// Revert machine-route auth to the env token. Seeds the config cache with the
+// freshly-resolved config (status → 'env' or 'none').
+export function useClearIngestToken() {
+  const queryClient = useQueryClient();
+  return useMutation<WorkflowConfigDto, ApiError, void>({
+    mutationFn: () => api.arsenal.clearIngestToken(),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(queryKeys.arsenal.config(), saved);
     },
   });
 }

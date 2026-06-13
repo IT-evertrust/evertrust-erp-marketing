@@ -5,6 +5,7 @@ import type {
   ArsenalStage,
 } from '@evertrust/shared';
 import { AppConfigService } from '../config/app-config.service';
+import { WorkflowConfigService } from './workflow-config.service';
 
 // Stage -> n8n workflow id (the live REACH ARSENAL ids, verified by the read-only
 // audit). AIM is excluded — it's the launch, not an arsenal stage; its status comes
@@ -40,19 +41,22 @@ const REQUEST_TIMEOUT_MS = 8_000;
 export class N8nExecutionsService {
   private readonly logger = new Logger(N8nExecutionsService.name);
 
-  constructor(private readonly config: AppConfigService) {}
+  constructor(
+    private readonly config: AppConfigService,
+    private readonly workflowConfig: WorkflowConfigService,
+  ) {}
 
-  isConfigured(): boolean {
-    return (
-      this.config.get('N8N_API_URL').trim().length > 0 &&
-      this.config.get('N8N_API_KEY').trim().length > 0
-    );
+  // Configured = a resolved base URL (stored override ?? env) AND an env API key.
+  async isConfigured(): Promise<boolean> {
+    const base = await this.workflowConfig.getN8nApiUrl();
+    return !!base && this.config.get('N8N_API_KEY').trim().length > 0;
   }
 
   async getStatuses(): Promise<ArsenalExecutionsDto> {
-    if (!this.isConfigured()) return { configured: false, stages: [] };
-    const base = this.config.get('N8N_API_URL').trim().replace(/\/+$/, '');
+    const baseUrl = await this.workflowConfig.getN8nApiUrl();
     const key = this.config.get('N8N_API_KEY').trim();
+    if (!baseUrl || key.length === 0) return { configured: false, stages: [] };
+    const base = baseUrl.replace(/\/+$/, '');
 
     const entries = Object.entries(STAGE_WORKFLOW_ID) as [ArsenalStage, string][];
     const stages = await Promise.all(

@@ -7,7 +7,7 @@ import type { CreateCampaignDto } from '@evertrust/shared';
 import { CampaignsService } from '../src/campaigns/campaigns.service';
 import { NichesService } from '../src/niches/niches.service';
 import type { AppConfigService } from '../src/config/app-config.service';
-import { FakeTable, makeFakeDb } from './fake-db';
+import { FakeTable, makeFakeDb, makeWorkflowConfig } from './fake-db';
 
 const ORG_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const ORG_B = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
@@ -49,7 +49,11 @@ function seed(webhookUrl = '') {
   );
   const nichesService = new NichesService(db);
   return {
-    service: new CampaignsService(db, makeConfig(webhookUrl), nichesService),
+    service: new CampaignsService(
+      db,
+      makeWorkflowConfig(db, makeConfig(webhookUrl)),
+      nichesService,
+    ),
     nichesService,
     campaigns,
     arsenalRuns,

@@ -17,3 +17,4 @@ export * from './contracts';
 export * from './notifications';
 export * from './personas';
 export * from './performance';
+export * from './workflow-config';

@@ -1,207 +1,291 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useTheme } from 'next-themes';
+import { useLocale, useTranslations } from 'next-intl';
 import { toast } from 'sonner';
-import { Building2, LogOut } from 'lucide-react';
-import {
-  DEPARTMENT_LABELS,
-  POSITION_LABELS,
-  ROLE_LABELS,
-} from '@evertrust/shared';
-import { useLogout, useMe, useUpdateMyName } from '@/hooks/use-auth';
+import { Languages, Monitor, Moon, Sun, Rows3, Rows4 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { PageHeader } from '@/components/common/page-header';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  getDensity,
+  getLandingPath,
+  LANDING_OPTIONS,
+  setDensity,
+  setLandingPath,
+  type Density,
+} from '@/lib/preferences';
+import { cn } from '@/lib/utils';
 
-// Initials for the avatar fallback — same rule as the topbar user menu so a user's
-// monogram is consistent across the shell. "Ada Lovelace" → "AL", single name →
-// first two letters, empty → "?".
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
-  return `${parts[0]![0]}${parts[parts.length - 1]![0]}`.toUpperCase();
-}
+// The theme choices next-themes understands. "system" follows the OS; the other
+// two force a palette (globals.css defines :root = light and .dark = dark).
+// labelKey indexes settings.general.appearance.* (resolved at render).
+const THEME_OPTIONS: { value: string; labelKey: string; icon: LucideIcon }[] = [
+  { value: 'system', labelKey: 'system', icon: Monitor },
+  { value: 'light', labelKey: 'light', icon: Sun },
+  { value: 'dark', labelKey: 'dark', icon: Moon },
+];
 
-// A muted-label / foreground-value row used for the read-only profile fields.
-function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-2">
-      <span className="text-sm text-muted-foreground">{label}</span>
-      <span className="text-sm font-medium">{children}</span>
-    </div>
-  );
-}
+// Density choices. "comfortable" is the app default (--spacing 0.25rem);
+// "compact" tightens the global spacing scale to 0.2rem (see globals.css).
+// labelKey indexes settings.general.display.* (resolved at render).
+const DENSITY_OPTIONS: { value: Density; labelKey: string; icon: LucideIcon }[] = [
+  { value: 'comfortable', labelKey: 'comfortable', icon: Rows3 },
+  { value: 'compact', labelKey: 'compact', icon: Rows4 },
+];
 
-// General settings: the signed-in user's own profile + account. Open to every
-// authenticated user (no permission gate). The only editable field is the display
-// name (PATCH /users/me); everything else is read-only and managed elsewhere.
+// The two supported app locales. labelKey indexes settings.general.language.*.
+const LANGUAGE_OPTIONS: { value: 'en' | 'de'; labelKey: string }[] = [
+  { value: 'en', labelKey: 'english' },
+  { value: 'de', labelKey: 'german' },
+];
+
+const LANDING_LABELS: Record<string, string> = Object.fromEntries(
+  LANDING_OPTIONS.map((o) => [o.path, o.label]),
+);
+
+// General settings = app/website preferences for the signed-in user. NOT the user
+// profile (name/role/org/log-out) — that lives in the avatar menu → /users/[id].
+// Surfaces: Appearance (theme), Display (landing + density), and Language
+// (English / Deutsch, persisted in the NEXT_LOCALE cookie).
 export function GeneralSettings() {
-  const me = useMe();
-  const updateName = useUpdateMyName();
-  const logout = useLogout();
-
-  const savedName = me.data?.name ?? '';
-  const [name, setName] = useState('');
-
-  // Seed/refresh the input from the canonical value once the user loads (and after
-  // a successful save, since the mutation writes the fresh row back into the cache).
+  const t = useTranslations('settings');
+  const locale = useLocale();
+  const router = useRouter();
+  const { theme, setTheme } = useTheme();
+  // next-themes only resolves the active theme on the client, so the selected value
+  // is unknown during SSR / first paint. Gate the controls on `mounted` to avoid a
+  // hydration mismatch (render a skeleton until we know the real value). The same
+  // gate covers the localStorage-backed display preferences below.
+  const [mounted, setMounted] = useState(false);
+  // Display preferences live in localStorage (see @/lib/preferences). Seed them
+  // after mount so SSR and first paint render the defaults, then reconcile.
+  const [landing, setLanding] = useState(() => getLandingPath());
+  const [density, setDensityState] = useState<Density>('comfortable');
   useEffect(() => {
-    setName(savedName);
-  }, [savedName]);
+    setMounted(true);
+    setLanding(getLandingPath());
+    setDensityState(getDensity());
+  }, []);
 
-  function save() {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      toast.error('Name cannot be empty.');
-      return;
+  // Persist the chosen landing page; it takes effect on the next sign-in
+  // (useLogin redirects to getLandingPath()).
+  function handleLandingChange(path: string) {
+    setLanding(path);
+    setLandingPath(path);
+    toast.success(
+      t('general.display.landingToast', { label: LANDING_LABELS[path] ?? path }),
+    );
+  }
+
+  // Apply density immediately (so the spacing change is visible without a
+  // reload) and persist it. "comfortable" is the default → drop the attribute.
+  function handleDensityChange(value: Density) {
+    setDensityState(value);
+    setDensity(value);
+    if (value === 'comfortable') {
+      delete document.documentElement.dataset.density;
+    } else {
+      document.documentElement.dataset.density = value;
     }
-    updateName.mutate(
-      { name: trimmed },
-      {
-        onSuccess: () => toast.success('Name updated.'),
-        onError: (e) => toast.error(e.message ?? 'Could not save your name.'),
-      },
+    toast.success(
+      t('general.display.densityToast', {
+        label: t(`general.display.${value}`),
+      }),
     );
   }
 
-  if (me.isLoading) {
-    return (
-      <div className="flex flex-col gap-6">
-        <PageHeader title="General" description="Your profile and account." />
-        <Skeleton className="h-56 w-full rounded-lg" />
-        <Skeleton className="h-32 w-full rounded-lg" />
-        <Skeleton className="h-32 w-full rounded-lg" />
-      </div>
+  // Persist the chosen UI language in the NEXT_LOCALE cookie (cookie/preference
+  // mode — no locale URL segment; see src/i18n/request.ts). router.refresh()
+  // re-runs the server render so the new messages take effect immediately.
+  function handleLanguageChange(value: string) {
+    if (value === locale) return;
+    document.cookie = `NEXT_LOCALE=${value}; path=/; max-age=31536000; samesite=lax`;
+    router.refresh();
+    toast.success(
+      t('general.language.toast', {
+        label: t(`general.language.${value === 'de' ? 'german' : 'english'}`),
+      }),
     );
   }
-
-  const user = me.data;
-  if (!user) {
-    return (
-      <div className="flex flex-col gap-6">
-        <PageHeader title="General" description="Your profile and account." />
-        <p className="text-sm text-muted-foreground">
-          Could not load your profile.
-        </p>
-      </div>
-    );
-  }
-
-  // Unchanged when the trimmed input still equals the saved name (empty edits are
-  // blocked at save time too).
-  const dirty = name.trim() !== savedName && name.trim().length > 0;
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="General" description="Your profile and account." />
+      <PageHeader
+        title={t('general.header.title')}
+        description={t('general.header.description')}
+      />
 
-      {/* Profile: monogram + editable name, then read-only identity fields. */}
       <Card>
         <CardHeader>
-          <CardTitle>Profile</CardTitle>
+          <CardTitle>{t('general.appearance.title')}</CardTitle>
+          <CardDescription>
+            {t('general.appearance.description')}
+          </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-6 sm:flex-row sm:items-start">
-          <Avatar className="size-16 shrink-0">
-            <AvatarFallback className="border border-violet-500/30 bg-violet-500/10 text-lg font-medium text-violet-400">
-              {initials(user.name)}
-            </AvatarFallback>
-          </Avatar>
+        <CardContent>
+          {!mounted ? (
+            <Skeleton className="h-[68px] w-full max-w-sm rounded-lg" />
+          ) : (
+            <div
+              role="radiogroup"
+              aria-label={t('general.appearance.ariaLabel')}
+              className="grid max-w-sm grid-cols-3 gap-1.5 rounded-lg border bg-muted/40 p-1.5"
+            >
+              {THEME_OPTIONS.map((opt) => {
+                const Icon = opt.icon;
+                // Default to "dark" when no explicit choice is stored yet.
+                const active = (theme ?? 'dark') === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => setTheme(opt.value)}
+                    className={cn(
+                      'flex flex-col items-center gap-1.5 rounded-md px-3 py-2.5 text-xs font-medium transition-colors',
+                      active
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    <Icon className="size-4" />
+                    {t(`general.appearance.${opt.labelKey}`)}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-          <div className="flex min-w-0 flex-1 flex-col gap-4">
-            <div className="grid gap-1.5">
-              <Label htmlFor="profile-name" className="text-xs text-muted-foreground">
-                Display name
-              </Label>
-              <div className="flex flex-wrap items-center gap-2">
-                <Input
-                  id="profile-name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="max-w-xs"
-                  autoComplete="name"
-                />
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={save}
-                  disabled={updateName.isPending || !dirty}
-                >
-                  {updateName.isPending ? 'Saving…' : 'Save'}
-                </Button>
+      <Card>
+        <CardHeader>
+          <CardTitle>{t('general.display.title')}</CardTitle>
+          <CardDescription>
+            {t('general.display.description')}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-6">
+          {!mounted ? (
+            <Skeleton className="h-[68px] w-full max-w-sm rounded-lg" />
+          ) : (
+            <>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="landing-page">
+                  {t('general.display.landingLabel')}
+                </Label>
+                <Select value={landing} onValueChange={handleLandingChange}>
+                  <SelectTrigger id="landing-page" className="max-w-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LANDING_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.path} value={opt.path}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {t('general.display.landingHint')}
+                </p>
               </div>
-            </div>
 
-            <div className="flex flex-col gap-2 border-t pt-4">
-              <InfoRow label="Email">{user.email}</InfoRow>
-              <InfoRow label="Role">
-                <Badge variant="outline" className="font-normal">
-                  {ROLE_LABELS[user.role]}
-                </Badge>
-              </InfoRow>
-              <InfoRow label="Department">
-                {user.department ? DEPARTMENT_LABELS[user.department] : '—'}
-              </InfoRow>
-              <InfoRow label="Title">
-                {user.position ? POSITION_LABELS[user.position] : '—'}
-              </InfoRow>
-            </div>
-          </div>
+              <div className="flex flex-col gap-2">
+                <Label id="density-label">
+                  {t('general.display.densityLabel')}
+                </Label>
+                <div
+                  role="radiogroup"
+                  aria-labelledby="density-label"
+                  className="grid max-w-sm grid-cols-2 gap-1.5 rounded-lg border bg-muted/40 p-1.5"
+                >
+                  {DENSITY_OPTIONS.map((opt) => {
+                    const Icon = opt.icon;
+                    const active = density === opt.value;
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        onClick={() => handleDensityChange(opt.value)}
+                        className={cn(
+                          'flex flex-col items-center gap-1.5 rounded-md px-3 py-2.5 text-xs font-medium transition-colors',
+                          active
+                            ? 'bg-background text-foreground shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground',
+                        )}
+                      >
+                        <Icon className="size-4" />
+                        {t(`general.display.${opt.labelKey}`)}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {t('general.display.densityHint')}
+                </p>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 
-      {/* Organization: read-only — org membership is administered, not self-served. */}
       <Card>
         <CardHeader>
-          <CardTitle>Organization</CardTitle>
+          <CardTitle>{t('general.language.title')}</CardTitle>
+          <CardDescription>
+            {t('general.language.description')}
+          </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-2">
-            <Building2 className="size-4 shrink-0 text-muted-foreground" />
-            <span className="text-sm font-medium">
-              {user.organizationName ?? 'Organization'}
-            </span>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Managed by your administrator.
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Account: who you're signed in as + a self-service log out. */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Account</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="truncate text-sm">
-              Signed in as{' '}
-              <span className="font-medium">{user.email}</span>
-            </span>
-            <Badge variant="outline" className="font-normal">
-              {ROLE_LABELS[user.role]}
-            </Badge>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => logout.mutate()}
-            disabled={logout.isPending}
+        <CardContent>
+          <div
+            role="radiogroup"
+            aria-label={t('general.language.ariaLabel')}
+            className="grid max-w-sm grid-cols-2 gap-1.5 rounded-lg border bg-muted/40 p-1.5"
           >
-            <LogOut className="size-4" />
-            Log out
-          </Button>
+            {LANGUAGE_OPTIONS.map((opt) => {
+              const active = locale === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  onClick={() => handleLanguageChange(opt.value)}
+                  className={cn(
+                    'flex items-center justify-center gap-1.5 rounded-md px-3 py-2.5 text-xs font-medium transition-colors',
+                    active
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  <Languages className="size-4" />
+                  {t(`general.language.${opt.labelKey}`)}
+                </button>
+              );
+            })}
+          </div>
         </CardContent>
       </Card>
     </div>

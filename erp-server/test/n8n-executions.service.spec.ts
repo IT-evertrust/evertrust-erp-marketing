@@ -1,5 +1,6 @@
 import { N8nExecutionsService } from '../src/arsenal/n8n-executions.service';
 import type { AppConfigService } from '../src/config/app-config.service';
+import { FakeTable, makeFakeDb, makeWorkflowConfig } from './fake-db';
 
 // The poller reads n8n's public executions API and maps the latest execution to
 // RUNNING / SUCCESS / ERROR / IDLE for the Growth Engine strip. These tests pin the
@@ -11,6 +12,15 @@ function makeConfig(url: string, key: string): AppConfigService {
     get: (k: string) =>
       k === 'N8N_API_URL' ? url : k === 'N8N_API_KEY' ? key : '',
   } as unknown as AppConfigService;
+}
+
+// The base URL now resolves via WorkflowConfigService (stored override ?? env). With
+// no seeded workflow_config row it falls back to env (the config stub) — so the
+// mapping tests behave exactly as before. The API key stays env-only.
+function makeExecSvc(url: string, key: string): N8nExecutionsService {
+  const config = makeConfig(url, key);
+  const { db } = makeFakeDb(new Map<unknown, FakeTable>());
+  return new N8nExecutionsService(config, makeWorkflowConfig(db, config));
 }
 
 const originalFetch = globalThis.fetch;
@@ -29,7 +39,7 @@ function mockExecutions(data: unknown[], ok = true, httpStatus = 200) {
 
 async function bazookaStatus(data: unknown[]) {
   mockExecutions(data);
-  const svc = new N8nExecutionsService(makeConfig('https://n8n.test', 'k'));
+  const svc = makeExecSvc('https://n8n.test', 'k');
   const res = await svc.getStatuses();
   expect(res.configured).toBe(true);
   return res.stages.find((s) => s.stage === 'REACH_BAZOOKA')!;
@@ -37,7 +47,7 @@ async function bazookaStatus(data: unknown[]) {
 
 describe('N8nExecutionsService.getStatuses — status mapping', () => {
   it('returns { configured:false } when the API is not wired up', async () => {
-    const svc = new N8nExecutionsService(makeConfig('', ''));
+    const svc = makeExecSvc('', '');
     expect(await svc.getStatuses()).toEqual({ configured: false, stages: [] });
   });
 
@@ -120,7 +130,7 @@ describe('N8nExecutionsService.getStatuses — status mapping', () => {
 
   it('degrades a stage to IDLE on a non-2xx n8n response (never throws)', async () => {
     mockExecutions([], false, 401);
-    const svc = new N8nExecutionsService(makeConfig('https://n8n.test', 'k'));
+    const svc = makeExecSvc('https://n8n.test', 'k');
     const res = await svc.getStatuses();
     expect(res.configured).toBe(true);
     expect(res.stages.every((s) => s.status === 'IDLE')).toBe(true);
