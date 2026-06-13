@@ -162,6 +162,13 @@
       "when": 1780570000000,
       "tag": "0022_workflow_config_templates_leads",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1780571000000,
+      "tag": "0023_industries",
+      "breakpoints": true
     }
   ]
 }

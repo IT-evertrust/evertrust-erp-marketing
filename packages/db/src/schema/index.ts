@@ -7,6 +7,7 @@ export * from './auth';
 export * from './pricing';
 export * from './process';
 export * from './observability';
+export * from './industries';
 export * from './niches';
 export * from './campaigns';
 export * from './leads';
