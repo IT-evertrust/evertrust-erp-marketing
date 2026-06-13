@@ -4,7 +4,7 @@ import { ProspectsService } from '../src/prospects/prospects.service';
 import { LeadsService } from '../src/leads/leads.service';
 import { NichesService } from '../src/niches/niches.service';
 import type { AppConfigService } from '../src/config/app-config.service';
-import { FakeTable, makeFakeDb } from './fake-db';
+import { FakeTable, makeFakeDb, makeWorkflowConfig } from './fake-db';
 
 const ORG_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const CAMP = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
@@ -40,7 +40,11 @@ function seed(prospectRows: Record<string, unknown>[] = [], leadRows: Record<str
     ]),
   );
   const leadsService = new LeadsService(db, config, new NichesService(db));
-  const service = new ProspectsService(db, leadsService);
+  const service = new ProspectsService(
+    db,
+    leadsService,
+    makeWorkflowConfig(db, config),
+  );
   return { service, prospects, leads };
 }
 

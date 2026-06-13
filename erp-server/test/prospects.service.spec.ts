@@ -4,7 +4,7 @@ import { ProspectsService } from '../src/prospects/prospects.service';
 import { LeadsService } from '../src/leads/leads.service';
 import { NichesService } from '../src/niches/niches.service';
 import type { AppConfigService } from '../src/config/app-config.service';
-import { FakeTable, makeFakeDb } from './fake-db';
+import { FakeTable, makeFakeDb, makeWorkflowConfig } from './fake-db';
 
 const ORG_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const CAMP = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
@@ -24,6 +24,10 @@ function seed() {
   const leads = new FakeTable([]);
   const niches = new FakeTable([]);
   const auditLog = new FakeTable([]);
+  // GLOBAL workflow_config: left empty here so getAutomation() falls back to the
+  // safe defaults (dedupDays null → 3-day cooldown, respectSuppressions true).
+  // Tests that exercise the knobs push a row onto this table.
+  const workflowConfig = new FakeTable([]);
   const { db } = makeFakeDb(
     new Map<unknown, FakeTable>([
       [schema.campaigns, campaigns],
@@ -32,13 +36,19 @@ function seed() {
       [schema.leads, leads],
       [schema.niches, niches],
       [schema.auditLog, auditLog],
+      [schema.workflowConfig, workflowConfig],
     ]),
   );
   const leadsService = new LeadsService(db, config, new NichesService(db));
   return {
-    service: new ProspectsService(db, leadsService),
+    service: new ProspectsService(
+      db,
+      leadsService,
+      makeWorkflowConfig(db, config),
+    ),
     prospects,
     suppressions,
+    workflowConfig,
   };
 }
 
@@ -134,6 +144,52 @@ describe('ProspectsService — send-list + snooze filters', () => {
 
     const list = await service.list({ sendList: true });
     expect(list.map((r) => r.id)).toEqual(['p-new']);
+  });
+
+  it('sendList honours a custom automation.leads.dedupDays cooldown', async () => {
+    // A prospect last contacted 4 days ago: eligible under the default 3-day
+    // cooldown, but a dedupDays=7 override must now exclude it (the knob bites).
+    const { service, prospects, workflowConfig } = seed();
+    workflowConfig.rows.push({ id: 'wc1', dedupDays: 7, __seq: 1 });
+    const fourDaysAgo = new Date(Date.now() - 4 * 86_400_000);
+    const base = { organizationId: ORG_A, campaignId: CAMP, followupCount: 0 };
+    prospects.rows.push(
+      { ...base, id: 'p-fresh', email: 'fresh@co.com', status: 'NEW', __seq: 1 },
+      {
+        ...base,
+        id: 'p-4d',
+        email: 'fourdays@co.com',
+        status: 'EMAILED',
+        lastContactedAt: fourDaysAgo,
+        __seq: 2,
+      },
+    );
+
+    const list = await service.list({ sendList: true });
+    // p-4d excluded by the 7-day window; only the never-contacted prospect remains.
+    expect(list.map((r) => r.id)).toEqual(['p-fresh']);
+  });
+
+  it('sendList stops excluding suppressed prospects when respectSuppressions is false', async () => {
+    const { service, prospects, suppressions, workflowConfig } = seed();
+    workflowConfig.rows.push({ id: 'wc1', respectSuppressions: false, __seq: 1 });
+    const base = { organizationId: ORG_A, campaignId: CAMP, followupCount: 0 };
+    // list() orders by createdAt desc, which the fake emulates via __seq desc — so
+    // the newer __seq lands first. p-new (seq 2) precedes p-supp (seq 1).
+    prospects.rows.push(
+      { ...base, id: 'p-supp', email: 'supp@co.com', status: 'NEW', __seq: 1 },
+      { ...base, id: 'p-new', email: 'new@co.com', status: 'NEW', __seq: 2 },
+    );
+    suppressions.rows.push({
+      id: 's1',
+      organizationId: ORG_A,
+      email: 'supp@co.com',
+      __seq: 1,
+    });
+
+    const list = await service.list({ sendList: true });
+    // The suppression gate is off → the suppressed prospect is included.
+    expect(list.map((r) => r.id)).toEqual(['p-new', 'p-supp']);
   });
 
   it('snoozeDue includes only NOT_INTERESTED prospects whose snooze has elapsed', async () => {

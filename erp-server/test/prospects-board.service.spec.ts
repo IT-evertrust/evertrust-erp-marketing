@@ -4,7 +4,7 @@ import { ProspectsService } from '../src/prospects/prospects.service';
 import { LeadsService } from '../src/leads/leads.service';
 import { NichesService } from '../src/niches/niches.service';
 import type { AppConfigService } from '../src/config/app-config.service';
-import { FakeTable, makeFakeDb } from './fake-db';
+import { FakeTable, makeFakeDb, makeWorkflowConfig } from './fake-db';
 
 const ORG_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const ORG_B = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
@@ -43,7 +43,14 @@ function seed() {
     ]),
   );
   const leadsService = new LeadsService(db, config, new NichesService(db));
-  return { service: new ProspectsService(db, leadsService), prospects };
+  return {
+    service: new ProspectsService(
+      db,
+      leadsService,
+      makeWorkflowConfig(db, config),
+    ),
+    prospects,
+  };
 }
 
 describe('ProspectsService.boardList — org scoping', () => {

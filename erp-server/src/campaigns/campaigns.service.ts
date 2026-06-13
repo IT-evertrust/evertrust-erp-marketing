@@ -254,6 +254,9 @@ export class CampaignsService {
           searchHint: t.searchHint,
         })),
       },
+      // GLOBAL Growth-Engine automation knobs (effective Templates + Leads from
+      // workflow_config) merged into the route the outreach workflows already poll.
+      automation: await this.workflowConfig.getAutomation(),
     };
   }
 

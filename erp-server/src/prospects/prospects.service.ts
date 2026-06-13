@@ -11,6 +11,7 @@ import type {
 import { DB, type DbClient } from '../db/db.tokens';
 import { writeMachineAudit } from '../common/machine-audit';
 import { LeadsService } from '../leads/leads.service';
+import { WorkflowConfigService } from '../arsenal/workflow-config.service';
 
 type ProspectRow = typeof schema.prospects.$inferSelect;
 type CampaignRow = typeof schema.campaigns.$inferSelect;
@@ -61,7 +62,10 @@ export interface ProspectBoardResult {
 
 const SEND_LIST_STATUSES: ProspectStatus[] = ['NEW', 'EMAILED'];
 const FOLLOWUP_CAP = 3;
-const FOLLOWUP_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000; // 3 days
+// Default follow-up cooldown (days) when automation.leads.dedupDays is unset (null).
+// Preserves the pre-config 3-day window; the send-list predicate multiplies it by
+// 86_400_000 to get the cooldown in ms.
+const FOLLOWUP_COOLDOWN_DEFAULT_DAYS = 3;
 
 // Map a leads row to its HTTP DTO (timestamps → ISO strings). Local to the
 // graduation response so prospects need not depend on the leads controller.
@@ -101,6 +105,7 @@ export class ProspectsService {
   constructor(
     @Inject(DB) private readonly db: DbClient,
     private readonly leads: LeadsService,
+    private readonly workflowConfig: WorkflowConfigService,
   ) {}
 
   // Upsert prospects on (campaignId, email). On conflict the SCRAPED fields update
@@ -175,7 +180,12 @@ export class ProspectsService {
   // The machine prospect list. campaignId/status/email are SQL-filtered; snoozeDue
   // and sendList are the derived gates (computed in-process so the rules stay one
   // readable predicate). sendList enforces: campaign ACTIVE, status NEW|EMAILED,
-  // followupCount<3, last contact null or >3d ago, and NOT suppressed (org,email).
+  // followupCount<3, last contact null or older than the cooldown, and NOT
+  // suppressed (org,email). The cooldown + suppression gate are config-driven via
+  // automation.leads (WorkflowConfigService): dedupDays sets the cooldown window
+  // (falling back to FOLLOWUP_COOLDOWN_DEFAULT_DAYS when null), and
+  // respectSuppressions toggles the do-not-contact gate. Both default to today's
+  // behaviour (3-day cooldown, suppressions honoured) until an admin overrides them.
   async list(filters: ProspectListFilters): Promise<ProspectRow[]> {
     const conds = [];
     if (filters.campaignId) {
@@ -205,10 +215,18 @@ export class ProspectsService {
     }
 
     if (filters.sendList) {
+      // Admin-tunable lead governance (GLOBAL workflow_config). dedupDays null →
+      // the built-in default cooldown; respectSuppressions defaults true.
+      const { leads } = await this.workflowConfig.getAutomation();
+      const cooldownMs =
+        (leads.dedupDays ?? FOLLOWUP_COOLDOWN_DEFAULT_DAYS) * 86_400_000;
       // Active campaigns only.
       const activeCampaignIds = await this.activeCampaignIdSet();
-      // Suppressed (org,email) pairs — the do-not-contact gate.
-      const suppressed = await this.suppressedKeySet();
+      // Suppressed (org,email) pairs — the do-not-contact gate. Only built when the
+      // gate is on (respectSuppressions); skipped entirely when an admin disables it.
+      const suppressed = leads.respectSuppressions
+        ? await this.suppressedKeySet()
+        : null;
       rows = rows.filter((r) => {
         if (!activeCampaignIds.has(r.campaignId)) return false;
         if (!SEND_LIST_STATUSES.includes(r.status)) return false;
@@ -216,8 +234,9 @@ export class ProspectsService {
         const lastMs = r.lastContactedAt
           ? new Date(r.lastContactedAt).getTime()
           : null;
-        if (lastMs !== null && now - lastMs < FOLLOWUP_COOLDOWN_MS) return false;
-        if (suppressed.has(`${r.organizationId}::${r.email}`)) return false;
+        if (lastMs !== null && now - lastMs < cooldownMs) return false;
+        if (suppressed && suppressed.has(`${r.organizationId}::${r.email}`))
+          return false;
         return true;
       });
     }

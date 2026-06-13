@@ -282,5 +282,16 @@ Configuration (db + shared + api + web):
       getEffective/update extended (gate booleans default true); GET /arsenal/lead-stats. 388 tests.
 - [x] Web: Templates + Leads cards on Configuration (one Save flow) + live lead-stats
       metric strip; EN/DE i18n. typecheck+lint+build green.
-- [ ] n8n read-side: Lead Satellite (caps/regions/dedup/gate), Ammo Forge (template/
-      signature/tone/language), Bazooka (dailySendCap) must consume the new fields
+- [x] ERP delivery: GET /campaigns/:id/config now carries an `automation:{templates,leads}`
+      block (WorkflowConfigService.getAutomation, single source of truth). 388 tests green.
+- [x] n8n read-side (surgical, null-tolerant — fall back to current behaviour when unset):
+      Ammo Forge rDLhY3sqi6U9xK6t "Forge Templates" prompt → automation.templates.{default/
+      signature/tone/language}; Bazooka zyCTVLpZj3YyR2qV "Send Cap Guard" → automation.leads.
+      dailySendCap (fallback 25); Lead Satellite dCGzrlpaxpxJanbJ "Build Search Query"
+      MAX_SEGMENTS → automation.leads.maxLeadsPerRun (fallback 500). Workflows still INACTIVE.
+- [x] Remaining leads knobs: dedupDays + respectSuppressions wired ERP-side in the
+      prospects sendList predicate (cooldown = dedupDays ?? 3d; suppression gate =
+      respectSuppressions, default true) — 390 tests; defaultRegions wired in Lead
+      Satellite Build Search Query (fallback when campaign has no cities).
+      maxPerNiche intentionally not separate — for a per-campaign (single-niche) run it
+      equals maxLeadsPerRun (already wired) + the Niche Gate already blocks empty niches.

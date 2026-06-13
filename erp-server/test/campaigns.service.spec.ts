@@ -242,6 +242,26 @@ describe('CampaignsService — machine config + list', () => {
     expect(cfg.niche.name).toBe('LED');
     expect(cfg.niche.targets.map((t) => t.id)).toEqual(['t-on']);
     expect(cfg.niche.targets[0]!.searchHint).toBe('cloud provider');
+
+    // The GLOBAL workflow_config automation knobs ride along on the machine config.
+    // With no seeded workflow_config row (the fake table auto-vivifies to empty) the
+    // templates are all unset (null) and the leads gate booleans resolve to their
+    // safe `true` default; defaultRegions falls back to [].
+    expect(cfg.automation.templates).toEqual({
+      default: null,
+      signature: null,
+      tone: null,
+      language: null,
+    });
+    expect(cfg.automation.leads).toEqual({
+      maxLeadsPerRun: null,
+      maxPerNiche: null,
+      dailySendCap: null,
+      defaultRegions: [],
+      respectSuppressions: true,
+      dedupDays: null,
+      requireNicheAnalysis: true,
+    });
   });
 
   it('getConfig 404s for an unknown campaign id', async () => {
