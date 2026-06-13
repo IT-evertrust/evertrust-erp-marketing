@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   HttpException,
   Inject,
   Injectable,
@@ -7,7 +8,7 @@ import {
   ServiceUnavailableException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, count, desc, eq } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 import {
   type CampaignConfigDto,
@@ -245,12 +246,40 @@ export class CampaignsService {
     }));
   }
 
-  // Delete a campaign (ERP record only — the Drive folder + leads are NOT touched;
-  // the ERP has no Drive write path). Detaches any arsenal_runs first (clears the FK,
-  // keeps the trigger log) so the delete can't violate the foreign key. 404 if
-  // missing or in another org. Returns the deleted row for audit.
+  // Delete a campaign — ALLOWED ONLY when it holds no data. prospects.campaign_id
+  // is NOT NULL and leads/contracts/campaign_assets also reference the campaign with
+  // no cascade, so a hard delete on a populated campaign would FK-violate (500).
+  // Instead we count those dependents and return a clear 409 steering to Archive
+  // (lifecycle = ARCHIVED is the soft-delete). Empty campaigns delete cleanly after
+  // detaching arsenal_runs (kept as a trigger log). 404 if missing / another org.
   async delete(orgId: string, id: string): Promise<CampaignRow> {
     const before = await this.get(orgId, id);
+    const [p, l, a, ct] = await Promise.all([
+      this.db
+        .select({ value: count() })
+        .from(schema.prospects)
+        .where(eq(schema.prospects.campaignId, id)),
+      this.db
+        .select({ value: count() })
+        .from(schema.leads)
+        .where(eq(schema.leads.campaignId, id)),
+      this.db
+        .select({ value: count() })
+        .from(schema.campaignAssets)
+        .where(eq(schema.campaignAssets.campaignId, id)),
+      this.db
+        .select({ value: count() })
+        .from(schema.contracts)
+        .where(eq(schema.contracts.campaignId, id)),
+    ]);
+    const prospects = p[0]?.value ?? 0;
+    const leads = l[0]?.value ?? 0;
+    const blocking = prospects + leads + (a[0]?.value ?? 0) + (ct[0]?.value ?? 0);
+    if (blocking > 0) {
+      throw new ConflictException(
+        `Cannot delete this campaign — it has ${prospects} prospect(s) and ${leads} lead(s). Archive it instead (set its lifecycle to ARCHIVED).`,
+      );
+    }
     await this.db
       .update(schema.arsenalRuns)
       .set({ campaignId: null })

@@ -120,8 +120,14 @@ export function makeFakeDb(
     opts.idFactory ?? (() => `00000000-0000-0000-0000-${String(++idCounter).padStart(12, '0')}`);
 
   const tableFor = (t: unknown): FakeTable => {
-    const ft = tables.get(t);
-    if (!ft) throw new Error('fake-db: unknown table passed to query');
+    let ft = tables.get(t);
+    if (!ft) {
+      // An unseeded table is simply empty — e.g. delete's dependent-count guard
+      // queries prospects/leads/campaign_assets/contracts that a campaigns-only
+      // test never populated. Auto-vivify so those reads return [] (count 0).
+      ft = new FakeTable();
+      tables.set(t, ft);
+    }
     return ft;
   };
 
