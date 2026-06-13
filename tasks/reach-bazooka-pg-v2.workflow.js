@@ -7,7 +7,6 @@ const liteLlm = newCredential('LiteLLM Gateway (mac-mini)', '2YgDmy9NuLHvOgzJ');
 const gmailInfo = newCredential('Gmail account', '4oGndbIXYKoqNask');             // gmailOAuth2 (info@)  -> Send Outreach
 const gmailHanna = newCredential('Gmail account: Hanna', 'iBJ8BCOqhFb5kDUg');     // gmailOAuth2 (Hanna)  -> Send Outreach (Hanna)
 const waCred = newCredential('WhatsApp account', 'hfg64imhwFA01Qcb');             // whatsAppApi (all WA notify nodes)
-const driveHanna = newCredential('Google Drive account: Hanna', 'R1hfa3xjcJxi0F2E'); // googleDriveOAuth2Api (templates.doc + news-info)
 // ERP HTTP nodes are intentionally UNBOUND (httpHeaderAuth, genericCredentialType) — user binds "ERP Ingest (x-arsenal-token)".
 
 // ============================ HAMMER — triggers + globals ============================
@@ -238,24 +237,9 @@ const codeMergeConfig = node({
   output: [{ campaignId: 'camp_1', campaignName: 'Container Poland', sender: 'info', niche: 'Container', city: 'Gdynia', templatesFileId: 'drv_tpl_1', newsFileId: 'drv_news_1', templateAssetId: 'asset_1' }]
 });
 
-// C. KEEP — Drive content reads (templates.doc + news-info stay in Drive, like Ammo Forge)
-const driveDownloadTemplates = node({
-  type: 'n8n-nodes-base.googleDrive',
-  version: 3,
-  config: {
-    name: 'Drive — Download templates.doc',
-    parameters: {
-      operation: 'download',
-      fileId: { __rl: true, mode: 'id', value: expr('{{ $json.templatesFileId }}') },
-      options: { googleFileConversion: { conversion: { docsToFormat: 'text/plain' } } }
-    },
-    credentials: { googleDriveOAuth2Api: driveHanna },
-    onError: 'continueRegularOutput',
-    position: [2464, 304]
-  },
-  output: [{ name: 'templates.doc' }]
-});
-
+// C. Templates + news now come from Postgres via GET /campaigns/:id/config
+// (config.templates.coldEmail + config.templates.newsBrief). The Drive downloads are removed;
+// these Code nodes read the config node's templates object instead of a Drive binary.
 const codeParseTemplates = node({
   type: 'n8n-nodes-base.code',
   version: 2,
@@ -265,15 +249,8 @@ const codeParseTemplates = node({
       mode: 'runOnceForEachItem',
       jsCode:
         "const campaign = $('Code — Merge Campaign Config').first().json;\n" +
-        "const bin = $input.item.binary && $input.item.binary.data;\n" +
-        "let text = '';\n" +
-        "if (bin) {\n" +
-        "  try { const buf = await this.helpers.getBinaryDataBuffer(0, 'data'); text = buf.toString('utf8'); } catch (e) {}\n" +
-        "  if (!text && typeof bin.data === 'string') { text = bin.data; }\n" +
-        "  if (text && !/\\[(COLD|FOLLOWUP|FINALPUSH)\\]/i.test(text) && /^[A-Za-z0-9+/=\\s]+$/.test(text)) {\n" +
-        "    try { text = Buffer.from(text, 'base64').toString('utf8'); } catch (e) {}\n" +
-        "  }\n" +
-        "}\n" +
+        "const cfgTemplates = ($('ERP — Get Campaign Config').first()?.json?.templates) || {};\n" +
+        "let text = String(cfgTemplates.coldEmail || '').trim();\n" +
         "function extract(blockTag) {\n" +
         "  const re = new RegExp('\\\\[' + blockTag + '\\\\]([\\\\s\\\\S]*?)(?=\\\\n\\\\[(?:COLD-AGG|COLD|FOLLOWUP|FINALPUSH)\\\\]|$)', 'i');\n" +
         "  const m = text.match(re);\n" +
@@ -284,31 +261,16 @@ const codeParseTemplates = node({
         "  return { subject: (subjMatch && subjMatch[1] || '').trim(), body: (bodyMatch && bodyMatch[1] || '').trim() };\n" +
         "}\n" +
         "const parsed = { COLD: extract('COLD'), 'COLD-AGG': extract('COLD-AGG'), FOLLOWUP: extract('FOLLOWUP'), FINALPUSH: extract('FINALPUSH') };\n" +
-        "// Fall back to the ERP config's single template when the Drive doc is absent/empty.\n" +
+        "// If config.templates.coldEmail is authored with [BLOCK] tags, use the parsed blocks;\n" +
+        "// otherwise treat coldEmail as the single COLD body and fall back for the other blocks.\n" +
         "const hasAny = ['COLD','COLD-AGG','FOLLOWUP','FINALPUSH'].some(k => (parsed[k].subject || parsed[k].body));\n" +
-        "const templates = hasAny ? parsed : { COLD: { subject: campaign.templateSubject || '', body: campaign.templateBody || '' }, 'COLD-AGG': { subject: '', body: '' }, FOLLOWUP: { subject: campaign.templateSubject || '', body: campaign.templateBody || '' }, FINALPUSH: { subject: campaign.templateSubject || '', body: campaign.templateBody || '' } };\n" +
+        "const coldBody = text;\n" +
+        "const templates = hasAny ? parsed : { COLD: { subject: campaign.templateSubject || '', body: coldBody || campaign.templateBody || '' }, 'COLD-AGG': { subject: '', body: '' }, FOLLOWUP: { subject: campaign.templateSubject || '', body: coldBody || campaign.templateBody || '' }, FINALPUSH: { subject: campaign.templateSubject || '', body: coldBody || campaign.templateBody || '' } };\n" +
         "return { json: { ...campaign, templates } };"
     },
     position: [2688, 304]
   },
   output: [{ campaignId: 'camp_1', templates: { COLD: { subject: 'Hi {{Company Name}}', body: '...' } } }]
-});
-
-const driveDownloadNews = node({
-  type: 'n8n-nodes-base.googleDrive',
-  version: 3,
-  config: {
-    name: 'Drive — Download news-info',
-    parameters: {
-      operation: 'download',
-      fileId: { __rl: true, mode: 'id', value: expr("{{ $('Code — Merge Campaign Config').first().json.newsFileId }}") },
-      options: { googleFileConversion: { conversion: { docsToFormat: 'text/plain' } } }
-    },
-    credentials: { googleDriveOAuth2Api: driveHanna },
-    onError: 'continueRegularOutput',
-    position: [2912, 304]
-  },
-  output: [{ name: 'news-info.doc' }]
 });
 
 const codeParseNews = node({
@@ -320,16 +282,9 @@ const codeParseNews = node({
       mode: 'runOnceForEachItem',
       jsCode:
         "const campaign = $('Code — Parse Template Blocks').first().json;\n" +
-        "const bin = $input.item.binary && $input.item.binary.data;\n" +
-        "let text = '';\n" +
-        "if (bin) {\n" +
-        "  try { const buf = await this.helpers.getBinaryDataBuffer(0, 'data'); text = buf.toString('utf8'); } catch (e) {}\n" +
-        "  if (!text && typeof bin.data === 'string') { text = bin.data; }\n" +
-        "  if (text && !/NEWS INTEL/i.test(text) && /^[A-Za-z0-9+/=\\s]+$/.test(text)) {\n" +
-        "    try { text = Buffer.from(text, 'base64').toString('utf8'); } catch (e) {}\n" +
-        "  }\n" +
-        "}\n" +
-        "return { json: { ...campaign, newsText: (text || '').trim() } };"
+        "const cfgTemplates = ($('ERP — Get Campaign Config').first()?.json?.templates) || {};\n" +
+        "const text = String(cfgTemplates.newsBrief || '').trim();\n" +
+        "return { json: { ...campaign, newsText: text } };"
     },
     position: [3136, 304]
   },
@@ -1140,7 +1095,7 @@ const stickyErp = sticky(
 );
 
 const stickyBarrel = sticky(
-  '## BARREL\n\nOutbound pipeline. Loop Campaigns -> ERP config -> KEEP Drive templates.doc + news-info (content stays in Drive) -> ERP send list (server applies campaign-ACTIVE + status + followupCount<3 + lastContactedAt + suppression) -> send-cap guard -> Loop Prospects -> Compute Action -> LLM validate/personalize -> IF Valid -> IF Sender (Hanna/info@) -> Gmail send -> ERP log SENT + patch EMAILED. Per-item send failure -> ERP log FAILED + continue.',
+  '## BARREL\n\nOutbound pipeline. Loop Campaigns -> ERP config -> templates from Postgres (config.templates.coldEmail + newsBrief via Parse Template Blocks / Parse News) -> ERP send list (server applies campaign-ACTIVE + status + followupCount<3 + lastContactedAt + suppression) -> send-cap guard -> Loop Prospects -> Compute Action -> LLM validate/personalize -> IF Valid -> IF Sender (Hanna/info@) -> Gmail send -> ERP log SENT + patch EMAILED. Per-item send failure -> ERP log FAILED + continue.',
   [],
   { color: 7 }
 );
@@ -1198,9 +1153,7 @@ export default workflow('reach-bazooka-pg-v2', 'EVERTRUST - REACH BAZOOKA (PG) v
         .to(codeCheckConfig)
         .to(ifAllFilesPresent
           .onTrue(
-            driveDownloadTemplates
-              .to(codeParseTemplates)
-              .to(driveDownloadNews)
+            codeParseTemplates
               .to(codeParseNews)
               .to(ifOutboundActivate
                 .onTrue(

@@ -990,6 +990,14 @@ export function slugify(input: string): string {
   return input.trim().toLowerCase().replace(/\s+/g, '-');
 }
 
+// Named email/content blocks Ammo Forge generates for a campaign (keys like
+// coldEmail, slotProposal, meetingConfirmation, newsBrief). A free-form string
+// map so the outreach workflows read templates from the ERP instead of Drive and
+// can add new blocks without a contract change. POST /campaigns/:id/templates
+// merges incrementally; GET /config and the campaign read shape expose the map.
+export const CampaignTemplatesDto = z.record(z.string(), z.string());
+export type CampaignTemplatesDto = z.infer<typeof CampaignTemplatesDto>;
+
 // Read shape of a campaign row over HTTP. Nullable columns are .nullable();
 // timestamps are ISO strings. `nicheName` is joined from the niches table for
 // the UI (the row itself only stores the nicheId FK).
@@ -1010,6 +1018,9 @@ export const CampaignDto = z.object({
   archivedAt: z.string().nullable(),
   driveFolderId: z.string().nullable(),
   driveFolderUrl: z.string().nullable(),
+  // Ammo Forge content blocks (see CampaignTemplatesDto). Nullable — the column
+  // is empty until a workflow POSTs the first block; a future UI can show/edit it.
+  templates: CampaignTemplatesDto.nullable(),
   activatedBy: z.string().uuid().nullable(),
   activatedAt: z.string().nullable(),
   createdAt: z.string(),
@@ -1917,6 +1928,9 @@ export const CampaignConfigDto = z.object({
   salesCalendarId: z.string(),
   whatsappNumber: z.string(),
   driveFolderId: z.string().nullable(),
+  // Ammo Forge content blocks the outreach workflows fetch (coldEmail, etc.).
+  // Defaults to {} so a machine caller always gets a map, never null/undefined.
+  templates: CampaignTemplatesDto.default({}),
   niche: z.object({
     id: z.string().uuid(),
     name: z.string(),
@@ -2259,6 +2273,15 @@ export const CampaignAssetResultDto = z.object({
   created: z.boolean(),
 });
 export type CampaignAssetResultDto = z.infer<typeof CampaignAssetResultDto>;
+
+// Body for POST /campaigns/:id/templates — the blocks Ammo Forge writes for a
+// campaign. MERGED into campaigns.templates (existing keys survive unless the
+// same key is re-sent, then it's overwritten), so a workflow can set blocks
+// incrementally. The merged map is returned.
+export const CampaignTemplatesBodyDto = z.object({
+  templates: CampaignTemplatesDto,
+});
+export type CampaignTemplatesBodyDto = z.infer<typeof CampaignTemplatesBodyDto>;
 
 // ---- Contracts ----
 // Body for POST /contracts — ContractMaker output (the PDF stays in Drive). At least

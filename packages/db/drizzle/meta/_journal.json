@@ -141,6 +141,13 @@
       "when": 1780567000000,
       "tag": "0019_growth_engine",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1780568000000,
+      "tag": "0020_campaign_templates",
+      "breakpoints": true
     }
   ]
 }

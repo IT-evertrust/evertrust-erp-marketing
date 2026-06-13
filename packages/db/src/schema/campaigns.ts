@@ -58,6 +58,13 @@ export const campaigns = pgTable(
     // machinery (driveMissing/driveCheckedAt sync) is retired.
     driveFolderId: text('drive_folder_id'),
     driveFolderUrl: text('drive_folder_url'),
+    // Named email/content blocks Ammo Forge generates (keys like coldEmail,
+    // slotProposal, meetingConfirmation, newsBrief) — a free-form map so the
+    // outreach workflows can read templates straight from the ERP instead of
+    // Drive, and add new blocks without a schema change. Nullable: empty until a
+    // workflow POSTs the first block. Merged incrementally (POST spreads, never
+    // clobbers existing keys).
+    templates: jsonb('templates').$type<Record<string, string>>(),
     activatedBy: uuid('activated_by').references(() => users.id),
     activatedAt: timestamp('activated_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })

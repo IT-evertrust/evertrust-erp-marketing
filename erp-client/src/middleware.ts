@@ -15,6 +15,7 @@ const PROTECTED_PREFIXES = [
   '/key-account',
   '/sales',
   '/users',
+  '/settings',
 ];
 
 // Demo/no-login mode. When NEXT_PUBLIC_AUTH_DISABLED=true the edge stops bouncing

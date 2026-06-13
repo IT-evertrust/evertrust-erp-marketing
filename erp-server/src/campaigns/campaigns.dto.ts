@@ -1,6 +1,7 @@
 import { createZodDto } from 'nestjs-zod';
 import {
   CampaignAssetDto as CampaignAssetSchema,
+  CampaignTemplatesBodyDto as CampaignTemplatesSchema,
   CreateCampaignDto as CreateCampaignSchema,
   UpdateCampaignLifecycleDto as UpdateCampaignLifecycleSchema,
 } from '@evertrust/shared';
@@ -13,3 +14,6 @@ export class UpdateCampaignLifecycleBodyDto extends createZodDto(
   UpdateCampaignLifecycleSchema,
 ) {}
 export class CampaignAssetBodyDto extends createZodDto(CampaignAssetSchema) {}
+export class CampaignTemplatesBodyDto extends createZodDto(
+  CampaignTemplatesSchema,
+) {}
