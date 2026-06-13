@@ -1,0 +1,19 @@
+{
+  "dashboard": "Dashboard",
+  "marketing": "Marketing",
+  "niches": "Niches",
+  "drafts": "Reply drafts",
+  "suppressions": "Suppressions",
+  "keyAccount": "Key Account",
+  "sales": "Sales",
+  "performance": "Performance",
+  "users": "Users",
+  "general": "General",
+  "configuration": "Configuration",
+  "group": {
+    "Acquisition": "Acquisition",
+    "Management": "Management",
+    "Administration": "Administration",
+    "Settings": "Settings"
+  }
+}

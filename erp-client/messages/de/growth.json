@@ -1,0 +1,137 @@
+{
+  "engine": {
+    "title": "Growth Engine",
+    "status": {
+      "active": "{count, plural, =0 {Keine aktiven Kampagnen} one {# aktiv} other {# aktiv}}",
+      "nextSend": "nächster Versand",
+      "manual": "manuell"
+    },
+    "sync": "Synchronisieren",
+    "syncing": "Synchronisiere…",
+    "syncHint": "Aktuelle Läufe + Zählungen aus dem n8n-Ausführungsverlauf importieren.",
+    "funnel": {
+      "title": "Ergebnis-Funnel",
+      "description": "Was die Engine diese Woche erzeugt hat — von Leads bis zu gebuchten Terminen.",
+      "leads": "Leads gefunden",
+      "emails": "E-Mails gesendet",
+      "replies": "Antworten",
+      "meetings": "Termine"
+    },
+    "pipeline": {
+      "heading": "Pipeline — die Arsenal-Sequenz",
+      "running": "läuft…",
+      "last": "zuletzt {ago}",
+      "noRuns": "noch keine Läufe",
+      "run": "Ausführen"
+    },
+    "phase": {
+      "target": "Zielen",
+      "arm": "Laden",
+      "fire": "Feuern",
+      "catch": "Fangen",
+      "revive": "Wiederbeleben"
+    },
+    "niches": {
+      "title": "Top-Nischen nach Branche",
+      "description": "Die Nischen mit den meisten aktiven Interessenten im Moment.",
+      "unassigned": "Nicht zugeordnet",
+      "empty": "Noch keine Interessenten"
+    }
+  },
+  "niches": {
+    "header": {
+      "title": "Nischen",
+      "description": "Das gemeinsame Nischen-Vokabular — Segmente, die die Growth Engine durchsucht, nach Branche gruppiert. Verwalten Sie die Ziele jeder Nische."
+    },
+    "stat": {
+      "industries": "Branchen",
+      "niches": "Nischen",
+      "targets": "Ziele",
+      "campaigns": "Kampagnen",
+      "prospects": "Interessenten"
+    },
+    "column": {
+      "niche": "Nische",
+      "slug": "Slug",
+      "industry": "Branche",
+      "targets": "Ziele",
+      "campaigns": "Kampagnen",
+      "prospects": "Interessenten"
+    },
+    "unassigned": "Nicht zugeordnet",
+    "nicheCount": "{count, plural, one {# Nische} other {# Nischen}}",
+    "assignAriaLabel": "Branche für {niche}",
+    "assignToast": "{niche} zu {industry} verschoben.",
+    "unassignToast": "{niche} nicht mehr zugeordnet.",
+    "assignError": "Die Branche konnte nicht geändert werden.",
+    "empty": {
+      "title": "Noch keine Nischen",
+      "description": "Nischen werden erstellt, wenn Sie eine Kampagne über die Growth Engine (AIM) starten."
+    },
+    "loadError": "Nischen konnten nicht geladen werden: {message}",
+    "manage": {
+      "description": "Verwalten Sie die Ziele, die das Arsenal für diese Nische durchsucht."
+    },
+    "industry": {
+      "new": "Neue Branche",
+      "newToast": "Branche „{name}“ erstellt.",
+      "createError": "Die Branche konnte nicht erstellt werden.",
+      "createDialogTitle": "Neue Branche",
+      "createDialogDescription": "Branchen gruppieren Nischen nur für Suche und Auswertung — sie beeinflussen die Lead-Recherche nicht.",
+      "namePlaceholder": "Branchenname",
+      "create": "Erstellen",
+      "creating": "Wird erstellt…",
+      "rename": "Umbenennen",
+      "renameAriaLabel": "{industry} umbenennen",
+      "renameDialogTitle": "Branche umbenennen",
+      "renameToast": "Branche in „{name}“ umbenannt.",
+      "renameError": "Die Branche konnte nicht umbenannt werden.",
+      "save": "Speichern",
+      "saving": "Speichern…",
+      "delete": "Löschen",
+      "deleteAriaLabel": "{industry} löschen",
+      "deleteToast": "Branche „{name}“ gelöscht.",
+      "deleteError": "Weisen Sie zuerst ihre Nischen neu zu.",
+      "cancel": "Abbrechen"
+    }
+  },
+  "aim": {
+    "trigger": "AIM",
+    "dialogTitle": "AIM — Ziel festlegen",
+    "dialogDescription": "Lock & Load startet die Kampagne: Das ERP richtet den Drive-Ordner über n8n ein, dann läuft das Arsenal autonom.",
+    "nameLabel": "Name",
+    "nameOptional": " (optional)",
+    "namePlaceholder": "Diesen Angriff benennen (optional)",
+    "nicheLabel": "Nische",
+    "nichePlaceholder": "LED",
+    "nicheHintNew": "Neue Nische — sie wird beim Start für Ihre Organisation angelegt.",
+    "nicheHintExisting": "Wählen Sie eine bestehende Nische oder geben Sie einen neuen Namen ein.",
+    "nicheUnassignedGroup": "Nicht zugeordnet",
+    "countryLabel": "Land",
+    "countryPlaceholder": "Deutschland",
+    "regionLabel": "Region",
+    "regionPlaceholder": "Warschau, Krakau",
+    "projectLabel": "Projekt",
+    "projectPlaceholder": "LED-Nachrüstung Berlin 2026",
+    "gmailLabel": "Gmail-Label",
+    "gmailPlaceholder": "LED-Berlin-2026",
+    "gmailHint": "Automatisch erzeugt aus Nische · Land · Zone · Jahr — zum Überschreiben bearbeiten.",
+    "whatsappLabel": "WhatsApp-Nummer",
+    "whatsappPlaceholder": "+49…",
+    "senderLabel": "Absenderalias",
+    "senderHint": "Gmail-Alias, der als Absenderidentität verwendet wird.",
+    "validationMissing": "Bitte ausfüllen: {fields}.",
+    "fieldNiche": "Nische",
+    "fieldCountry": "Land",
+    "fieldRegion": "Region",
+    "fieldProject": "Projekt",
+    "fieldGmailLabel": "Gmail-Label",
+    "fieldWhatsapp": "WhatsApp-Nummer",
+    "toastDraft": "Als Entwurf gespeichert ({project}) — der AIM-Webhook ist noch nicht konfiguriert.",
+    "toastLaunched": "Lock & Load — Kampagne gestartet ({project}).",
+    "toastError": "Start fehlgeschlagen.",
+    "cancel": "Abbrechen",
+    "submit": "Lock & Load",
+    "submitting": "Wird gestartet…"
+  }
+}
