@@ -20,7 +20,6 @@ import {
   AssignTenderDto,
   CampaignDto,
   CampaignFilesDto,
-  CampaignSyncResultDto,
   CreateApprovalRequestDto,
   CreateCampaignDto,
   NotificationDto,
@@ -564,14 +563,6 @@ export const api = {
         method: 'PATCH',
         body: UpdateCampaignLifecycleDto.parse({ lifecycle }),
         schema: CampaignDto,
-      }),
-
-    // Reconcile the list against the live Drive "Evertrust Campaigns" folder:
-    // archives campaigns whose folder was deleted, un-archives ones that reappeared.
-    sync: () =>
-      request<CampaignSyncResultDto>('/campaigns/sync', {
-        method: 'POST',
-        schema: CampaignSyncResultDto,
       }),
   },
 

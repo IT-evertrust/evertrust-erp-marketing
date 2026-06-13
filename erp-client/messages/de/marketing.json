@@ -89,7 +89,7 @@
       "meetings": "Term."
     },
     "deployedLabel": "Von der Growth Engine ausgerollt — verfolgen & vertiefen",
-    "deployedHint": "Der Drive-Ordner ist die Quelle der Wahrheit — Sync archiviert alle, deren Ordner gelöscht wurde.",
+    "deployedHint": "Jede Karte zeigt den Live-Funnel und die Phasenaktivität — zum Vertiefen aufklappen.",
     "loadError": "Kampagnen konnten nicht geladen werden: {message}",
     "empty": "Noch keine Kampagnen — öffnen Sie den Tab <b>Growth Engine</b> und klicken Sie auf AIM, um eine zu starten.",
     "runStage": "Phase ausführen",

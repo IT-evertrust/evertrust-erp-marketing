@@ -89,7 +89,7 @@
       "meetings": "Mtg"
     },
     "deployedLabel": "Deployed by Growth Engine — track & drill in",
-    "deployedHint": "The Drive folder is the source of truth — Sync archives any whose folder was deleted.",
+    "deployedHint": "Each card shows the live funnel and stage activity — expand to drill in.",
     "loadError": "Could not load campaigns: {message}",
     "empty": "No campaigns yet — open the <b>Growth Engine</b> tab and click AIM to launch one.",
     "runStage": "Run stage",

@@ -31,13 +31,12 @@ import {
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { CAMPAIGN_LIFECYCLE_BADGE, timeAgo } from '@/lib/arsenal-sequence';
-import { SyncDriveButton } from '@/components/growth/sync-drive-button';
 import { RunStageButton } from '@/components/growth/run-stage-button';
 import { DeleteCampaignButton } from '@/components/growth/delete-campaign-button';
 
-// Marketing → "Campaigns" tab (mockup design): KPI tiles + Sync-with-Drive + the
-// launched campaigns as lifecycle-pill cards with a real per-campaign mini funnel
-// and an expandable per-stage activity log.
+// Marketing → "Campaigns" tab (mockup design): KPI tiles + the launched campaigns
+// as lifecycle-pill cards with a real per-campaign mini funnel and an expandable
+// per-stage activity log.
 export function MarketingCampaigns() {
   const t = useTranslations('marketing');
   const campaigns = useCampaigns();
@@ -91,19 +90,14 @@ export function MarketingCampaigns() {
         ))}
       </div>
 
-      {/* header + sync */}
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
-            {t('campaigns.deployedLabel')}
-          </p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {t('campaigns.deployedHint')}
-          </p>
-        </div>
-        <Can permission="campaigns:write">
-          <SyncDriveButton />
-        </Can>
+      {/* header */}
+      <div>
+        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
+          {t('campaigns.deployedLabel')}
+        </p>
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          {t('campaigns.deployedHint')}
+        </p>
       </div>
 
       {/* campaign cards */}

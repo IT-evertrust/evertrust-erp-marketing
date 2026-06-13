@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   CampaignDto,
   CampaignFilesDto,
-  CampaignSyncResultDto,
   CreateCampaignDto,
   UpdateCampaignLifecycleDto,
 } from '@evertrust/shared';
@@ -107,19 +106,6 @@ export function useSetCampaignLifecycle() {
       }
     },
     onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all });
-    },
-  });
-}
-
-// Sync the campaign list with the Drive "Evertrust Campaigns" folder (the source of
-// truth): archives campaigns whose folder was deleted, un-archives ones that came
-// back. Invalidates the list so archived rows drop out immediately.
-export function useSyncCampaigns() {
-  const queryClient = useQueryClient();
-  return useMutation<CampaignSyncResultDto, ApiError, void>({
-    mutationFn: () => api.campaigns.sync(),
-    onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.campaigns.all });
     },
   });
