@@ -1,3 +1,4 @@
+import { SQL } from 'drizzle-orm';
 import type { DbClient } from '../src/db/db.tokens';
 import type { AppConfigService } from '../src/config/app-config.service';
 import { WorkflowConfigService } from '../src/arsenal/workflow-config.service';
@@ -93,6 +94,19 @@ function rowMatches(row: Record<string, unknown>, cond: ParsedCondition): boolea
   });
 }
 
+// Detect a COUNT aggregate projection: db.select({ value: count() }). It is a
+// single-key object whose value is a Drizzle `SQL` expression (count() returns one).
+// Returns that key (so the fake can answer { [key]: rowCount }), or null when the
+// projection is absent or a plain column map (which must still yield full rows).
+function aggregateCountKey(proj: unknown): string | null {
+  if (!proj || typeof proj !== 'object') return null;
+  const entries = Object.entries(proj as Record<string, unknown>);
+  const entry = entries.length === 1 ? entries[0] : undefined;
+  if (!entry) return null;
+  const [key, value] = entry;
+  return value instanceof SQL ? key : null;
+}
+
 type Row = Record<string, unknown>;
 
 // A single backing table keyed by the Drizzle table object identity.
@@ -135,7 +149,13 @@ export function makeFakeDb(
 
   const db = {
     // SELECT: db.select(...).from(table).where(cond?).orderBy(...)?.limit(n)?
-    select(_proj?: unknown) {
+    select(proj?: unknown) {
+      // A COUNT aggregate projection — db.select({ value: count() }) — is a
+      // single-key object whose value is a Drizzle `SQL` expression. (A plain
+      // column projection passes Column objects, not SQL, so it is NOT matched
+      // and keeps returning full rows.) When matched, the query resolves to one
+      // row { [key]: matchedRowCount } AFTER the .where() filter is applied.
+      const countKey = aggregateCountKey(proj);
       return {
         from(table: unknown) {
           const ft = tableFor(table);
@@ -143,7 +163,10 @@ export function makeFakeDb(
           // Reads return CLONES so callers hold immutable snapshots — a later
           // in-place update must not retro-mutate a previously returned row
           // (this is what makes `before` in update/transition correct).
-          const snapshot = (rows: Row[]): Row[] => rows.map((r) => ({ ...r }));
+          const snapshot = (rows: Row[]): Row[] =>
+            countKey !== null
+              ? [{ [countKey]: rows.length }]
+              : rows.map((r) => ({ ...r }));
           const builder = {
             where(cond: unknown) {
               const parsed = parseCondition(cond);
@@ -159,7 +182,11 @@ export function makeFakeDb(
               return builder;
             },
             limit(n: number) {
-              return Promise.resolve(snapshot(result.slice(0, n)));
+              // For a count aggregate the result is the single tally row (limit is
+              // a no-op on it); otherwise page the rows as before.
+              return Promise.resolve(
+                countKey !== null ? snapshot(result) : snapshot(result.slice(0, n)),
+              );
             },
             then(onF: (v: Row[]) => unknown, onR?: (e: unknown) => unknown) {
               return Promise.resolve(snapshot(result)).then(onF, onR);

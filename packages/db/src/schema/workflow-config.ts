@@ -1,6 +1,7 @@
 import {
   boolean,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -55,6 +56,39 @@ export const workflowConfig = pgTable(
     // push (product default 4). Null = use the env / product default.
     followupOffsetDays: integer('followup_offset_days'),
     finalPushOffsetDays: integer('final_push_offset_days'),
+    // --- Configuration > Templates (global outreach defaults) ---
+    // Override semantics unchanged: null = fall back to the product default,
+    // resolved in the service layer.
+    //
+    // Baseline 3-block outreach sequence. JSON shape:
+    //   {
+    //     cold:      { subject: string, body: string },
+    //     followup:  { subject: string, body: string },
+    //     finalPush: { subject: string, body: string }
+    //   }
+    defaultTemplate: jsonb('default_template'),
+    // Sign-off block appended to outgoing messages.
+    signature: text('signature'),
+    // Outreach tone: 'friendly' | 'formal' | 'direct'. Plain text, NOT a pgEnum
+    // (the project forbids new enums; altering enums on a live DB is avoided).
+    tone: text('tone'),
+    // Template language: 'en' | 'de'. Plain text, not an enum.
+    templateLanguage: text('template_language'),
+    // --- Configuration > Leads (lead-generation governance) ---
+    // Max leads pulled per generation run.
+    maxLeadsPerRun: integer('max_leads_per_run'),
+    // Max leads per niche within a run.
+    maxPerNiche: integer('max_per_niche'),
+    // Hard cap on emails sent per day.
+    dailySendCap: integer('daily_send_cap'),
+    // Default target regions. Empty array = no region constraint.
+    defaultRegions: text('default_regions').array().default([]),
+    // Whether to honor the suppression list when generating leads.
+    respectSuppressions: boolean('respect_suppressions'),
+    // Dedup window (days): re-contact suppression horizon.
+    dedupDays: integer('dedup_days'),
+    // Whether a niche analysis is required before a run proceeds.
+    requireNicheAnalysis: boolean('require_niche_analysis'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

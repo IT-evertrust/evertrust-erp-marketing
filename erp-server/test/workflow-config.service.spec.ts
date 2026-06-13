@@ -102,6 +102,158 @@ describe('WorkflowConfigService — stored override wins', () => {
   });
 });
 
+describe('WorkflowConfigService — templates + leads groups', () => {
+  it('getEffective: unset row → booleans default to true, caps null, regions []', async () => {
+    const { service } = make(ENV); // no stored row
+    const eff = await service.getEffective();
+
+    expect(eff.templates).toEqual({
+      default: null,
+      signature: null,
+      tone: null,
+      language: null,
+    });
+    expect(eff.leads).toEqual({
+      maxLeadsPerRun: null,
+      maxPerNiche: null,
+      dailySendCap: null,
+      defaultRegions: [],
+      // EFFECTIVE safe defaults — an unset value must never read as "off".
+      respectSuppressions: true,
+      dedupDays: null,
+      requireNicheAnalysis: true,
+    });
+  });
+
+  it('getEffective: stored values surface verbatim (incl. a false boolean)', async () => {
+    const template = {
+      cold: { subject: 'Hi', body: 'Cold body' },
+      followup: { subject: 'Re: Hi', body: 'Followup body' },
+      finalPush: { subject: 'Last call', body: 'Final body' },
+    };
+    const { service } = make(ENV, {
+      defaultTemplate: template,
+      signature: 'Best, EverTrust',
+      tone: 'formal',
+      templateLanguage: 'de',
+      maxLeadsPerRun: 200,
+      maxPerNiche: 50,
+      dailySendCap: 30,
+      defaultRegions: ['Bayern', 'Hessen'],
+      respectSuppressions: false,
+      dedupDays: 14,
+      requireNicheAnalysis: false,
+    });
+    const eff = await service.getEffective();
+
+    expect(eff.templates).toEqual({
+      default: template,
+      signature: 'Best, EverTrust',
+      tone: 'formal',
+      language: 'de',
+    });
+    expect(eff.leads).toEqual({
+      maxLeadsPerRun: 200,
+      maxPerNiche: 50,
+      dailySendCap: 30,
+      defaultRegions: ['Bayern', 'Hessen'],
+      respectSuppressions: false,
+      dedupDays: 14,
+      requireNicheAnalysis: false,
+    });
+  });
+
+  it('update: round-trips a defaultTemplate + caps + a boolean set to false', async () => {
+    const { service, workflowConfig } = make(ENV);
+    const template = {
+      cold: { subject: 'Subject A', body: 'Body A' },
+      followup: { subject: 'Subject B', body: 'Body B' },
+      finalPush: { subject: 'Subject C', body: 'Body C' },
+    };
+    const eff = await service.update({
+      templates: { default: template, tone: 'direct', language: 'en' },
+      leads: {
+        maxLeadsPerRun: 120,
+        dedupDays: 7,
+        defaultRegions: ['NRW'],
+        respectSuppressions: false,
+      },
+    });
+
+    expect(workflowConfig.rows).toHaveLength(1);
+    expect(eff.templates.default).toEqual(template);
+    expect(eff.templates.tone).toBe('direct');
+    expect(eff.templates.language).toBe('en');
+    expect(eff.leads.maxLeadsPerRun).toBe(120);
+    expect(eff.leads.dedupDays).toBe(7);
+    expect(eff.leads.defaultRegions).toEqual(['NRW']);
+    // A boolean explicitly set to false must persist as false (not the true default).
+    expect(eff.leads.respectSuppressions).toBe(false);
+    // An untouched boolean still resolves to its effective default.
+    expect(eff.leads.requireNicheAnalysis).toBe(true);
+  });
+
+  it('update: null clears the defaultTemplate back to unset', async () => {
+    const { service } = make(ENV, {
+      defaultTemplate: {
+        cold: { subject: 's', body: 'b' },
+        followup: { subject: 's', body: 'b' },
+        finalPush: { subject: 's', body: 'b' },
+      },
+    });
+    const eff = await service.update({ templates: { default: null } });
+    expect(eff.templates.default).toBeNull();
+  });
+});
+
+describe('WorkflowConfigService.getLeadStats', () => {
+  const ORG = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  const OTHER = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+
+  // Seed leads/prospects/suppressions across two orgs; the count must be confined to
+  // ORG (mirrors how the list endpoints scope via tenantScope/organizationId).
+  function makeStats() {
+    const leads = new FakeTable([
+      { id: 'l1', organizationId: ORG, email: 'a@x.com' },
+      { id: 'l2', organizationId: ORG, email: 'b@x.com' },
+      { id: 'l3', organizationId: OTHER, email: 'c@x.com' }, // other org — excluded
+    ]);
+    const prospects = new FakeTable([
+      { id: 'p1', organizationId: ORG, email: 'd@x.com' },
+      { id: 'p2', organizationId: ORG, email: 'e@x.com' },
+      { id: 'p3', organizationId: ORG, email: 'f@x.com' },
+    ]);
+    const suppressions = new FakeTable([
+      { id: 's1', organizationId: ORG, email: 'g@x.com' },
+      { id: 's2', organizationId: OTHER, email: 'h@x.com' }, // other org — excluded
+    ]);
+    const workflowConfig = new FakeTable([]);
+    const { db } = makeFakeDb(
+      new Map<unknown, FakeTable>([
+        [schema.leads, leads],
+        [schema.prospects, prospects],
+        [schema.suppressions, suppressions],
+        [schema.workflowConfig, workflowConfig],
+      ]),
+    );
+    return new WorkflowConfigService(db, makeConfig(ENV));
+  }
+
+  it('counts leads/prospects/suppressions scoped to the org', async () => {
+    const service = makeStats();
+    const stats = await service.getLeadStats(ORG);
+    expect(stats).toEqual({ leads: 2, prospects: 3, suppressed: 1 });
+  });
+
+  it('returns zeros for an org with no rows', async () => {
+    const service = makeStats();
+    const stats = await service.getLeadStats(
+      'cccccccc-cccc-cccc-cccc-cccccccccccc',
+    );
+    expect(stats).toEqual({ leads: 0, prospects: 0, suppressed: 0 });
+  });
+});
+
 describe('WorkflowConfigService — update (singleton upsert)', () => {
   it('creates the singleton when none exists and applies the override', async () => {
     const { service, workflowConfig } = make(ENV);

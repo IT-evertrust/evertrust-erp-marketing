@@ -5,14 +5,18 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import type { LucideIcon } from 'lucide-react';
-import { ArrowRight, Copy, ShieldOff, Target, Users } from 'lucide-react';
+import { ArrowRight, Copy, ShieldOff, Target, Users, X } from 'lucide-react';
 import type {
+  DefaultTemplateDto,
+  OutreachTone,
+  TemplateLanguage,
   TestN8nResultDto,
   UpdateWorkflowConfigDto,
   WorkflowConfigDto,
 } from '@evertrust/shared';
 import {
   useClearIngestToken,
+  useLeadStats,
   useRotateIngestToken,
   useTestN8n,
   useUpdateWorkflowConfig,
@@ -49,6 +53,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 
 // The six Growth-Engine webhook stages, in pipeline order, with their friendly
@@ -68,16 +73,69 @@ const WEBHOOK_STAGES = [
 
 type WebhookKey = (typeof WEBHOOK_STAGES)[number]['key'];
 
+// The three blocks of the default outreach sequence, in send order. The key
+// matches DefaultTemplateDto; the label is i18n-resolved at render via these keys.
+const TEMPLATE_BLOCKS = ['cold', 'followup', 'finalPush'] as const satisfies
+  ReadonlyArray<keyof DefaultTemplateDto>;
+type TemplateBlockKey = (typeof TEMPLATE_BLOCKS)[number];
+
+// Read-only merge tokens admins can drop into a template (shown as chips).
+const TEMPLATE_TOKENS = [
+  '{{Company Name}}',
+  '{{Company Type}}',
+  '{{city}}',
+  '{{project}}',
+] as const;
+
+// Product defaults surfaced as placeholder hints on the lead-cap inputs (these
+// are what the backend assumes when a cap is unset — never persisted by the form).
+const LEAD_HINTS = {
+  maxLeadsPerRun: '25',
+  maxPerNiche: '100',
+  dailySendCap: '40',
+  dedupDays: '30',
+} as const;
+
+// One template block flattened to strings (subject + body), per block key.
+type TemplateBlockForm = { subject: string; body: string };
+
 // The editable subset of the config, flattened into a form. Every value is a
 // string so an empty field reads as "clear the override → fall back to env":
 // webhooks/url empty → null, offsets empty → null, sender '' → "use default".
+// Templates + leads ride the same form: caps are strings ('' = clear), regions an
+// array, and the two lead booleans are real booleans (always sent on change).
 type FormState = {
   webhooks: Record<WebhookKey, string>;
   n8nApiUrl: string;
   defaultSender: '' | 'info' | 'hanna';
   followupOffsetDays: string;
   finalPushOffsetDays: string;
+  templates: {
+    blocks: Record<TemplateBlockKey, TemplateBlockForm>;
+    signature: string;
+    tone: '' | OutreachTone;
+    language: '' | TemplateLanguage;
+  };
+  leads: {
+    maxLeadsPerRun: string;
+    maxPerNiche: string;
+    dailySendCap: string;
+    defaultRegions: string[];
+    respectSuppressions: boolean;
+    dedupDays: string;
+    requireNicheAnalysis: boolean;
+  };
 };
+
+const EMPTY_BLOCK: TemplateBlockForm = { subject: '', body: '' };
+
+// True when no template field carries any content — that's the signal to send
+// `templates.default: null` (clear the baseline) rather than three empty blocks.
+function allBlocksEmpty(blocks: Record<TemplateBlockKey, TemplateBlockForm>) {
+  return TEMPLATE_BLOCKS.every(
+    (k) => blocks[k].subject.trim() === '' && blocks[k].body.trim() === '',
+  );
+}
 
 // Project the GET response onto the form. The {value, overridden} envelope only
 // contributes `value` here (the badge reads `overridden` straight from the data);
@@ -98,6 +156,27 @@ function toForm(c: WorkflowConfigDto): FormState {
       c.followupOffsetDays == null ? '' : String(c.followupOffsetDays),
     finalPushOffsetDays:
       c.finalPushOffsetDays == null ? '' : String(c.finalPushOffsetDays),
+    templates: {
+      blocks: {
+        cold: c.templates.default?.cold ?? EMPTY_BLOCK,
+        followup: c.templates.default?.followup ?? EMPTY_BLOCK,
+        finalPush: c.templates.default?.finalPush ?? EMPTY_BLOCK,
+      },
+      signature: c.templates.signature ?? '',
+      tone: c.templates.tone ?? '',
+      language: c.templates.language ?? '',
+    },
+    leads: {
+      maxLeadsPerRun:
+        c.leads.maxLeadsPerRun == null ? '' : String(c.leads.maxLeadsPerRun),
+      maxPerNiche: c.leads.maxPerNiche == null ? '' : String(c.leads.maxPerNiche),
+      dailySendCap:
+        c.leads.dailySendCap == null ? '' : String(c.leads.dailySendCap),
+      defaultRegions: [...c.leads.defaultRegions],
+      respectSuppressions: c.leads.respectSuppressions,
+      dedupDays: c.leads.dedupDays == null ? '' : String(c.leads.dedupDays),
+      requireNicheAnalysis: c.leads.requireNicheAnalysis,
+    },
   };
 }
 
@@ -184,6 +263,147 @@ function CatalogLink({
   );
 }
 
+// A small accessible toggle (no Switch primitive exists in this kit). An ARIA
+// switch button with a sliding thumb; emerald when on, muted when off.
+function Toggle({
+  checked,
+  onChange,
+  label,
+  description,
+  id,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  label: string;
+  description?: string;
+  id: string;
+}) {
+  const labelId = `${id}-label`;
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="min-w-0 flex-1">
+        <p id={labelId} className="text-sm font-medium">
+          {label}
+        </p>
+        {description ? (
+          <p className="text-xs text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
+      <button
+        type="button"
+        role="switch"
+        id={id}
+        aria-checked={checked}
+        aria-labelledby={labelId}
+        onClick={() => onChange(!checked)}
+        className={cn(
+          'inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border border-transparent transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
+          checked ? 'bg-emerald-500' : 'bg-input',
+        )}
+      >
+        <span
+          className={cn(
+            'pointer-events-none size-5 rounded-full bg-background shadow-xs transition-transform',
+            checked ? 'translate-x-5' : 'translate-x-0.5',
+          )}
+        />
+      </button>
+    </div>
+  );
+}
+
+// An editable chip list bound to a string[]. Each region is a removable chip; the
+// trailing input appends a trimmed, non-empty, non-duplicate value on Enter / Add.
+function RegionChips({
+  regions,
+  onChange,
+  addLabel,
+  placeholder,
+  removeAria,
+}: {
+  regions: string[];
+  onChange: (next: string[]) => void;
+  addLabel: string;
+  placeholder: string;
+  removeAria: (region: string) => string;
+}) {
+  const [draft, setDraft] = useState('');
+
+  function add() {
+    const value = draft.trim();
+    if (value === '' || regions.includes(value)) {
+      setDraft('');
+      return;
+    }
+    onChange([...regions, value]);
+    setDraft('');
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {regions.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {regions.map((region) => (
+            <span
+              key={region}
+              className="inline-flex items-center gap-1 rounded-md border bg-muted px-2 py-1 text-xs"
+            >
+              {region}
+              <button
+                type="button"
+                onClick={() => onChange(regions.filter((r) => r !== region))}
+                className="text-muted-foreground hover:text-foreground"
+                aria-label={removeAria(region)}
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <div className="flex max-w-sm items-center gap-2">
+        <Input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              add();
+            }
+          }}
+          placeholder={placeholder}
+        />
+        <Button type="button" variant="outline" onClick={add} disabled={draft.trim() === ''}>
+          {addLabel}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// One tile in the lead metric strip: a big tabular number over a muted label, or a
+// Skeleton while the count loads.
+function StatTile({
+  label,
+  value,
+  loading,
+}: {
+  label: string;
+  value: number | undefined;
+  loading: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-1 rounded-lg border p-3">
+      {loading || value == null ? (
+        <Skeleton className="h-7 w-12" />
+      ) : (
+        <span className="text-2xl font-semibold tabular-nums">{value}</span>
+      )}
+      <span className="text-xs text-muted-foreground">{label}</span>
+    </div>
+  );
+}
+
 // Loose URL check (mirrors the server's NullableUrlOverride) so a bad URL fails
 // with a friendly toast instead of a raw ZodError from the client-side parse.
 function isValidUrl(value: string): boolean {
@@ -201,6 +421,7 @@ function isValidUrl(value: string): boolean {
 export function ConfigurationSettings() {
   const t = useTranslations('settings');
   const config = useWorkflowConfig();
+  const leadStats = useLeadStats();
   const update = useUpdateWorkflowConfig();
   const testN8n = useTestN8n();
   const rotate = useRotateIngestToken();
@@ -242,6 +463,43 @@ export function ConfigurationSettings() {
     setForm((f) => (f ? { ...f, [key]: value } : f));
   }
 
+  function setTemplate<K extends keyof FormState['templates']>(
+    key: K,
+    value: FormState['templates'][K],
+  ) {
+    setForm((f) =>
+      f ? { ...f, templates: { ...f.templates, [key]: value } } : f,
+    );
+  }
+
+  function setBlock(
+    block: TemplateBlockKey,
+    field: keyof TemplateBlockForm,
+    value: string,
+  ) {
+    setForm((f) =>
+      f
+        ? {
+            ...f,
+            templates: {
+              ...f.templates,
+              blocks: {
+                ...f.templates.blocks,
+                [block]: { ...f.templates.blocks[block], [field]: value },
+              },
+            },
+          }
+        : f,
+    );
+  }
+
+  function setLead<K extends keyof FormState['leads']>(
+    key: K,
+    value: FormState['leads'][K],
+  ) {
+    setForm((f) => (f ? { ...f, leads: { ...f.leads, [key]: value } } : f));
+  }
+
   // Build the partial PUT body: only changed fields, with empty strings coerced to
   // null (clear the override → env). Offsets parse to int-or-null; sender '' → null.
   function buildPatch(f: FormState, base: FormState): UpdateWorkflowConfigDto {
@@ -273,6 +531,56 @@ export function ConfigurationSettings() {
           ? null
           : Number(f.finalPushOffsetDays);
     }
+
+    // Templates — send only the changed sub-fields. `default` goes out as the full
+    // 3-block object, or null when every block is blank (clear the baseline).
+    const templates: NonNullable<UpdateWorkflowConfigDto['templates']> = {};
+    if (
+      JSON.stringify(f.templates.blocks) !== JSON.stringify(base.templates.blocks)
+    ) {
+      templates.default = allBlocksEmpty(f.templates.blocks)
+        ? null
+        : {
+            cold: f.templates.blocks.cold,
+            followup: f.templates.blocks.followup,
+            finalPush: f.templates.blocks.finalPush,
+          };
+    }
+    if (f.templates.signature !== base.templates.signature) {
+      templates.signature =
+        f.templates.signature.trim() === '' ? null : f.templates.signature;
+    }
+    if (f.templates.tone !== base.templates.tone) {
+      templates.tone = f.templates.tone === '' ? null : f.templates.tone;
+    }
+    if (f.templates.language !== base.templates.language) {
+      templates.language =
+        f.templates.language === '' ? null : f.templates.language;
+    }
+    if (Object.keys(templates).length > 0) patch.templates = templates;
+
+    // Leads — caps coerce '' → null (no cap); regions/booleans send wholesale.
+    const leads: NonNullable<UpdateWorkflowConfigDto['leads']> = {};
+    const capKeys = ['maxLeadsPerRun', 'maxPerNiche', 'dailySendCap', 'dedupDays'] as const;
+    for (const key of capKeys) {
+      if (f.leads[key] !== base.leads[key]) {
+        leads[key] = f.leads[key].trim() === '' ? null : Number(f.leads[key]);
+      }
+    }
+    if (
+      JSON.stringify(f.leads.defaultRegions) !==
+      JSON.stringify(base.leads.defaultRegions)
+    ) {
+      leads.defaultRegions = f.leads.defaultRegions;
+    }
+    if (f.leads.respectSuppressions !== base.leads.respectSuppressions) {
+      leads.respectSuppressions = f.leads.respectSuppressions;
+    }
+    if (f.leads.requireNicheAnalysis !== base.leads.requireNicheAnalysis) {
+      leads.requireNicheAnalysis = f.leads.requireNicheAnalysis;
+    }
+    if (Object.keys(leads).length > 0) patch.leads = leads;
+
     return patch;
   }
 
@@ -295,6 +603,17 @@ export function ConfigurationSettings() {
     for (const days of [patch.followupOffsetDays, patch.finalPushOffsetDays]) {
       if (typeof days === 'number' && (!Number.isInteger(days) || days < 0)) {
         toast.error(t('config.save.invalidCadence'));
+        return;
+      }
+    }
+    for (const cap of [
+      patch.leads?.maxLeadsPerRun,
+      patch.leads?.maxPerNiche,
+      patch.leads?.dailySendCap,
+      patch.leads?.dedupDays,
+    ]) {
+      if (typeof cap === 'number' && (!Number.isInteger(cap) || cap < 0)) {
+        toast.error(t('config.save.invalidLeadCap'));
         return;
       }
     }
@@ -611,6 +930,259 @@ export function ConfigurationSettings() {
             </CardHeader>
             <CardContent>
               <BazookaSchedule />
+            </CardContent>
+          </Card>
+
+          {/* Templates — the baseline 3-block outreach sequence + signature/tone. */}
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('config.templates.title')}</CardTitle>
+              <CardDescription>
+                {t('config.templates.description')}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-6">
+              {TEMPLATE_BLOCKS.map((block) => (
+                <div key={block} className="flex flex-col gap-2">
+                  <Label className="text-sm font-medium">
+                    {t(`config.templates.block.${block}`)}
+                  </Label>
+                  <Input
+                    id={`tpl-${block}-subject`}
+                    value={form.templates.blocks[block].subject}
+                    onChange={(e) => setBlock(block, 'subject', e.target.value)}
+                    placeholder={t('config.templates.subjectPlaceholder')}
+                    aria-label={t('config.templates.subjectLabel')}
+                  />
+                  <Textarea
+                    id={`tpl-${block}-body`}
+                    rows={4}
+                    value={form.templates.blocks[block].body}
+                    onChange={(e) => setBlock(block, 'body', e.target.value)}
+                    placeholder={t('config.templates.bodyPlaceholder')}
+                    aria-label={t('config.templates.bodyLabel')}
+                  />
+                </div>
+              ))}
+
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs text-muted-foreground">
+                  {t('config.templates.tokensLabel')}
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {TEMPLATE_TOKENS.map((token) => (
+                    <code
+                      key={token}
+                      className="rounded-md border bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground"
+                    >
+                      {token}
+                    </code>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="tpl-signature">
+                  {t('config.templates.signatureLabel')}
+                </Label>
+                <Input
+                  id="tpl-signature"
+                  value={form.templates.signature}
+                  onChange={(e) => setTemplate('signature', e.target.value)}
+                  placeholder={t('config.templates.signaturePlaceholder')}
+                />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="tpl-tone">
+                    {t('config.templates.toneLabel')}
+                  </Label>
+                  <Select
+                    value={form.templates.tone === '' ? 'unset' : form.templates.tone}
+                    onValueChange={(v) =>
+                      setTemplate('tone', v === 'unset' ? '' : (v as OutreachTone))
+                    }
+                  >
+                    <SelectTrigger id="tpl-tone">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unset">
+                        {t('config.templates.unset')}
+                      </SelectItem>
+                      <SelectItem value="friendly">
+                        {t('config.templates.toneFriendly')}
+                      </SelectItem>
+                      <SelectItem value="formal">
+                        {t('config.templates.toneFormal')}
+                      </SelectItem>
+                      <SelectItem value="direct">
+                        {t('config.templates.toneDirect')}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="tpl-language">
+                    {t('config.templates.languageLabel')}
+                  </Label>
+                  <Select
+                    value={
+                      form.templates.language === '' ? 'unset' : form.templates.language
+                    }
+                    onValueChange={(v) =>
+                      setTemplate(
+                        'language',
+                        v === 'unset' ? '' : (v as TemplateLanguage),
+                      )
+                    }
+                  >
+                    <SelectTrigger id="tpl-language">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unset">
+                        {t('config.templates.unset')}
+                      </SelectItem>
+                      <SelectItem value="en">
+                        {t('config.templates.languageEn')}
+                      </SelectItem>
+                      <SelectItem value="de">
+                        {t('config.templates.languageDe')}
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Leads — lead-gen governance (caps, regions, gates) + a live metric strip. */}
+          <Card>
+            <CardHeader>
+              <CardTitle>{t('config.leads.title')}</CardTitle>
+              <CardDescription>{t('config.leads.description')}</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-6">
+              <div className="grid grid-cols-3 gap-3">
+                <StatTile
+                  label={t('config.leads.statLeads')}
+                  value={leadStats.data?.leads}
+                  loading={leadStats.isLoading}
+                />
+                <StatTile
+                  label={t('config.leads.statProspects')}
+                  value={leadStats.data?.prospects}
+                  loading={leadStats.isLoading}
+                />
+                <StatTile
+                  label={t('config.leads.statSuppressed')}
+                  value={leadStats.data?.suppressed}
+                  loading={leadStats.isLoading}
+                />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="lead-max-run">
+                    {t('config.leads.maxLeadsPerRunLabel')}
+                  </Label>
+                  <Input
+                    id="lead-max-run"
+                    type="number"
+                    min={0}
+                    step={1}
+                    inputMode="numeric"
+                    className="tabular-nums"
+                    placeholder={LEAD_HINTS.maxLeadsPerRun}
+                    value={form.leads.maxLeadsPerRun}
+                    onChange={(e) => setLead('maxLeadsPerRun', e.target.value)}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="lead-max-niche">
+                    {t('config.leads.maxPerNicheLabel')}
+                  </Label>
+                  <Input
+                    id="lead-max-niche"
+                    type="number"
+                    min={0}
+                    step={1}
+                    inputMode="numeric"
+                    className="tabular-nums"
+                    placeholder={LEAD_HINTS.maxPerNiche}
+                    value={form.leads.maxPerNiche}
+                    onChange={(e) => setLead('maxPerNiche', e.target.value)}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="lead-daily-cap">
+                    {t('config.leads.dailySendCapLabel')}
+                  </Label>
+                  <Input
+                    id="lead-daily-cap"
+                    type="number"
+                    min={0}
+                    step={1}
+                    inputMode="numeric"
+                    className="tabular-nums"
+                    placeholder={LEAD_HINTS.dailySendCap}
+                    value={form.leads.dailySendCap}
+                    onChange={(e) => setLead('dailySendCap', e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label>{t('config.leads.regionsLabel')}</Label>
+                <p className="text-xs text-muted-foreground">
+                  {t('config.leads.regionsHelper')}
+                </p>
+                <RegionChips
+                  regions={form.leads.defaultRegions}
+                  onChange={(next) => setLead('defaultRegions', next)}
+                  addLabel={t('config.leads.regionsAdd')}
+                  placeholder={t('config.leads.regionsPlaceholder')}
+                  removeAria={(region) =>
+                    t('config.leads.regionsRemove', { region })
+                  }
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="lead-dedup">
+                  {t('config.leads.dedupLabel')}
+                </Label>
+                <Input
+                  id="lead-dedup"
+                  type="number"
+                  min={0}
+                  step={1}
+                  inputMode="numeric"
+                  className="max-w-[12rem] tabular-nums"
+                  placeholder={LEAD_HINTS.dedupDays}
+                  value={form.leads.dedupDays}
+                  onChange={(e) => setLead('dedupDays', e.target.value)}
+                />
+              </div>
+
+              <div className="flex flex-col gap-4 border-t pt-4">
+                <Toggle
+                  id="lead-respect-suppressions"
+                  checked={form.leads.respectSuppressions}
+                  onChange={(next) => setLead('respectSuppressions', next)}
+                  label={t('config.leads.respectSuppressionsLabel')}
+                  description={t('config.leads.respectSuppressionsHelper')}
+                />
+                <Toggle
+                  id="lead-require-niche"
+                  checked={form.leads.requireNicheAnalysis}
+                  onChange={(next) => setLead('requireNicheAnalysis', next)}
+                  label={t('config.leads.requireNicheAnalysisLabel')}
+                  description={t('config.leads.requireNicheAnalysisHelper')}
+                />
+              </div>
             </CardContent>
           </Card>
 

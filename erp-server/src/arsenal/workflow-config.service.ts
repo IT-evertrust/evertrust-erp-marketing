@@ -1,15 +1,20 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { count, eq } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 import type {
   ArsenalStage,
   DefaultSender,
+  DefaultTemplateDto,
+  LeadStatsDto,
+  OutreachTone,
+  TemplateLanguage,
   TestN8nResultDto,
   UpdateWorkflowConfigDto,
   WorkflowConfigDto,
 } from '@evertrust/shared';
 import { DB, type DbClient } from '../db/db.tokens';
+import { tenantScope } from '../common/tenant';
 import { AppConfigService } from '../config/app-config.service';
 import type { Env } from '../config/env.schema';
 
@@ -170,7 +175,56 @@ export class WorkflowConfigService {
       defaultSender: (clean(row?.defaultSender) ?? null) as DefaultSender | null,
       followupOffsetDays: row?.followupOffsetDays ?? null,
       finalPushOffsetDays: row?.finalPushOffsetDays ?? null,
+      // Templates: raw stored values, nullable (no env fallback). `defaultTemplate`
+      // is jsonb (typed unknown) → surfaced as the DTO shape or null.
+      templates: {
+        default: (row?.defaultTemplate ?? null) as DefaultTemplateDto | null,
+        signature: clean(row?.signature) ?? null,
+        tone: (clean(row?.tone) ?? null) as OutreachTone | null,
+        language: (clean(row?.templateLanguage) ?? null) as TemplateLanguage | null,
+      },
+      // Leads: caps are raw nullable (null = no cap); regions default to []. The two
+      // booleans are EFFECTIVE with a safe product default of `true` — an unset
+      // (null) value must never read as "off" (so suppressions are honoured and a
+      // niche analysis is required until an admin explicitly turns them off).
+      leads: {
+        maxLeadsPerRun: row?.maxLeadsPerRun ?? null,
+        maxPerNiche: row?.maxPerNiche ?? null,
+        dailySendCap: row?.dailySendCap ?? null,
+        defaultRegions: row?.defaultRegions ?? [],
+        respectSuppressions: row?.respectSuppressions ?? true,
+        dedupDays: row?.dedupDays ?? null,
+        requireNicheAnalysis: row?.requireNicheAnalysis ?? true,
+      },
     };
+  }
+
+  // ----- lead stats (GET /arsenal/lead-stats) ------------------------------
+
+  // Org-scoped counts for the Configuration page's metric strip: total leads,
+  // prospects, and suppression-list entries for the caller's tenant. Each is a
+  // single COUNT scoped via tenantScope (the same org confinement the list
+  // endpoints use). NOT memoized — it's an admin page read, not a hot path.
+  async getLeadStats(orgId: string): Promise<LeadStatsDto> {
+    const [leads, prospects, suppressed] = await Promise.all([
+      this.countFor(schema.leads, orgId),
+      this.countFor(schema.prospects, orgId),
+      this.countFor(schema.suppressions, orgId),
+    ]);
+    return { leads, prospects, suppressed };
+  }
+
+  // COUNT(*) of an org-scoped table confined to one tenant. `count()` returns one
+  // row { value: number }; default to 0 if the driver returns nothing.
+  private async countFor(
+    table: typeof schema.leads | typeof schema.prospects | typeof schema.suppressions,
+    orgId: string,
+  ): Promise<number> {
+    const rows = await this.db
+      .select({ value: count() })
+      .from(table)
+      .where(tenantScope(orgId, table));
+    return rows[0]?.value ?? 0;
   }
 
   // ----- writes ------------------------------------------------------------
@@ -200,6 +254,36 @@ export class WorkflowConfigService {
     }
     if ('finalPushOffsetDays' in patch) {
       set.finalPushOffsetDays = patch.finalPushOffsetDays ?? null;
+    }
+
+    // Templates group — each sub-field independent: a value sets it, null clears it,
+    // an omitted key is left unchanged. `default` is stored as the jsonb object (or
+    // null to clear the baseline).
+    if (patch.templates) {
+      const t = patch.templates;
+      if ('default' in t) set.defaultTemplate = t.default ?? null;
+      if ('signature' in t) set.signature = t.signature ?? null;
+      if ('tone' in t) set.tone = t.tone ?? null;
+      if ('language' in t) set.templateLanguage = t.language ?? null;
+    }
+
+    // Leads group — caps: value sets / null clears; defaultRegions replaces the
+    // stored array wholesale when provided; the two booleans set directly.
+    if (patch.leads) {
+      const l = patch.leads;
+      if ('maxLeadsPerRun' in l) set.maxLeadsPerRun = l.maxLeadsPerRun ?? null;
+      if ('maxPerNiche' in l) set.maxPerNiche = l.maxPerNiche ?? null;
+      if ('dailySendCap' in l) set.dailySendCap = l.dailySendCap ?? null;
+      if ('defaultRegions' in l && l.defaultRegions !== undefined) {
+        set.defaultRegions = l.defaultRegions;
+      }
+      if ('respectSuppressions' in l && l.respectSuppressions !== undefined) {
+        set.respectSuppressions = l.respectSuppressions;
+      }
+      if ('dedupDays' in l) set.dedupDays = l.dedupDays ?? null;
+      if ('requireNicheAnalysis' in l && l.requireNicheAnalysis !== undefined) {
+        set.requireNicheAnalysis = l.requireNicheAnalysis;
+      }
     }
 
     await this.persist(set);

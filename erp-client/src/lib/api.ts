@@ -68,6 +68,7 @@ import {
   UpdateArsenalSettingsDto,
   WorkflowConfigDto,
   UpdateWorkflowConfigDto,
+  LeadStatsDto,
   TestN8nResultDto,
   RotateIngestTokenResultDto,
   UpdateCustomerDto,
@@ -815,6 +816,14 @@ export const api = {
         method: 'PUT',
         body: UpdateWorkflowConfigDto.parse(input),
         schema: WorkflowConfigDto,
+      }),
+
+    // Org-scoped tallies (leads / prospects / suppressions) behind the
+    // Configuration > Leads metric strip. Pure counts — no override semantics.
+    leadStats: (signal?: AbortSignal) =>
+      request<z.infer<typeof LeadStatsDto>>('/arsenal/lead-stats', {
+        schema: LeadStatsDto,
+        signal,
       }),
 
     // Probe the n8n public API with the resolved base URL + env key. Never throws

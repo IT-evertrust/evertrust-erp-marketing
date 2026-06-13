@@ -120,6 +120,50 @@
         "followupLabel": "First follow-up — days after first email",
         "finalPushLabel": "Final push — days"
       },
+      "templates": {
+        "title": "Templates",
+        "description": "The baseline outreach copy the sequence sends. Leave blank to send nothing.",
+        "block": {
+          "cold": "Cold — first email",
+          "followup": "Follow-up",
+          "finalPush": "Final push"
+        },
+        "subjectLabel": "Subject",
+        "subjectPlaceholder": "Subject line…",
+        "bodyLabel": "Body",
+        "bodyPlaceholder": "Email body…",
+        "tokensLabel": "Available placeholders (inserted automatically):",
+        "signatureLabel": "Signature",
+        "signaturePlaceholder": "Best regards, …",
+        "toneLabel": "Tone",
+        "toneFriendly": "Friendly",
+        "toneFormal": "Formal",
+        "toneDirect": "Direct",
+        "languageLabel": "Language",
+        "languageEn": "English",
+        "languageDe": "Deutsch",
+        "unset": "— Not set"
+      },
+      "leads": {
+        "title": "Leads",
+        "description": "How Lead Satellite hunts and how outreach is paced.",
+        "statLeads": "Leads",
+        "statProspects": "Prospects",
+        "statSuppressed": "Suppressed",
+        "maxLeadsPerRunLabel": "Max leads per run",
+        "maxPerNicheLabel": "Max per niche",
+        "dailySendCapLabel": "Daily send cap",
+        "regionsLabel": "Default regions",
+        "regionsHelper": "Regions Lead Satellite targets by default.",
+        "regionsPlaceholder": "Add a region…",
+        "regionsAdd": "Add",
+        "regionsRemove": "Remove {region}",
+        "dedupLabel": "Skip duplicates within … days",
+        "respectSuppressionsLabel": "Respect the suppression list",
+        "respectSuppressionsHelper": "Skip addresses on your do-not-contact list.",
+        "requireNicheAnalysisLabel": "Require a niche analysis",
+        "requireNicheAnalysisHelper": "Require a niche analysis before Lead Satellite hunts."
+      },
       "dailySend": {
         "title": "Daily send",
         "description": "An extra daily Reach Bazooka send fired by the ERP."
@@ -142,7 +186,8 @@
         "toastError": "Could not save configuration.",
         "invalidWebhook": "{label}: enter a valid URL (or clear it to use the env default).",
         "invalidApiUrl": "n8n API URL: enter a valid URL (or clear it to use the env default).",
-        "invalidCadence": "Cadence days must be a whole number of 0 or more."
+        "invalidCadence": "Cadence days must be a whole number of 0 or more.",
+        "invalidLeadCap": "Lead limits must be a whole number of 0 or more."
       }
     }
   }

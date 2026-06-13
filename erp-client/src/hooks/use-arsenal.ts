@@ -13,6 +13,7 @@ import type {
   UpdateArsenalSettingsDto,
   WorkflowConfigDto,
   UpdateWorkflowConfigDto,
+  LeadStatsDto,
   TestN8nResultDto,
   RotateIngestTokenResultDto,
 } from '@evertrust/shared';
@@ -126,6 +127,16 @@ export function useWorkflowConfig() {
   return useQuery<WorkflowConfigDto, ApiError>({
     queryKey: queryKeys.arsenal.config(),
     queryFn: ({ signal }) => api.arsenal.getConfig(signal),
+    refetchOnWindowFocus: true,
+  });
+}
+
+// Org-scoped lead/prospect/suppression tallies for the Configuration > Leads
+// metric strip. Refetches on focus so the counts stay roughly fresh.
+export function useLeadStats() {
+  return useQuery<LeadStatsDto, ApiError>({
+    queryKey: queryKeys.arsenal.leadStats(),
+    queryFn: ({ signal }) => api.arsenal.leadStats(signal),
     refetchOnWindowFocus: true,
   });
 }
