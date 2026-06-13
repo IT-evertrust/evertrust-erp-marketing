@@ -366,5 +366,38 @@
     "turnedOff": "Täglicher Bazooka-Versand ausgeschaltet.",
     "saveError": "Konnte nicht gespeichert werden.",
     "serverTime": "Serverzeit"
+  },
+  "funnel": {
+    "leads": "Leads",
+    "emails": "E-Mails",
+    "replies": "Antworten",
+    "meetings": "Termine",
+    "draftsToReview": "Zu prüfende Entwürfe"
+  },
+  "draftReview": {
+    "heading": "RAG-Entwurfsprüfung",
+    "sync": "Aus Leads synchronisieren",
+    "syncing": "Wird durchsucht…",
+    "loadError": "Entwürfe konnten nicht geladen werden: {message}",
+    "notConnected": "Die Entwurfsprüfung ist noch nicht verbunden — setzen Sie <code>N8N_API_URL</code> auf der API, damit sie den RAG-Agent-Workflow lesen kann.",
+    "empty": "Keine Entwürfe zur Prüfung. Klicken Sie auf <strong>Aus Leads synchronisieren</strong>, um das Leads-Sheet jeder Kampagne nach unklaren Antworten zu durchsuchen, oder warten Sie auf den stündlichen Lauf des RAG-Agenten.",
+    "noDraftId": "Dieser Entwurf hat keine Gmail-Entwurfs-ID — er kann von hier aus nicht gesendet werden.",
+    "sent": "An {target} gesendet.",
+    "sendFailed": "Senden fehlgeschlagen.",
+    "awaitingReview": "Wartet auf Prüfung",
+    "unknown": "Unbekannt",
+    "notSendable": "nicht sendbar",
+    "gmailDraftBadge": "✉ Gmail-Entwurf · nicht gesendet",
+    "unsureAreaLabel": "Unsicherheitsbereich",
+    "contextHeading": "Kontext — warum dies eine Antwort erfordert",
+    "unsureAbout": "Unsicher bei",
+    "why": "Warum",
+    "draftedReply": "Entworfene Antwort — vor dem Senden bearbeiten",
+    "subjectPlaceholder": "Betreff",
+    "bodyPlaceholder": "Antworttext",
+    "notSendableWarning": "⚠ Dieser Entwurf stammt aus der Zeit vor der Entwurfs-ID-Erfassung und kann daher nicht aus dem ERP gesendet werden. Neuere Entwürfe tragen eine Gmail-Entwurfs-ID und sind sendbar.",
+    "sending": "Wird gesendet…",
+    "approveSend": "✓ Freigeben & senden",
+    "sendHint": "n8n sendet den finalen Text bei Freigabe · und löscht dann den Entwurf"
   }
 }

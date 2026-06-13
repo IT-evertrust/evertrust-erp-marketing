@@ -366,5 +366,38 @@
     "turnedOff": "Daily Bazooka send turned off.",
     "saveError": "Could not save.",
     "serverTime": "server time"
+  },
+  "funnel": {
+    "leads": "Leads",
+    "emails": "Emails",
+    "replies": "Replies",
+    "meetings": "Meetings",
+    "draftsToReview": "Drafts to review"
+  },
+  "draftReview": {
+    "heading": "RAG draft review",
+    "sync": "Sync from leads",
+    "syncing": "Scanning…",
+    "loadError": "Could not load drafts: {message}",
+    "notConnected": "Draft Review isn’t connected yet — set <code>N8N_API_URL</code> on the API so it can read the RAG Agent workflow.",
+    "empty": "No drafts awaiting review. Hit <strong>Sync from leads</strong> to scan every campaign’s leads sheet for unsure replies, or wait for the RAG Agent’s hourly run.",
+    "noDraftId": "This draft has no Gmail draft id — it can’t be sent from here.",
+    "sent": "Sent to {target}.",
+    "sendFailed": "Send failed.",
+    "awaitingReview": "Awaiting review",
+    "unknown": "Unknown",
+    "notSendable": "not sendable",
+    "gmailDraftBadge": "✉ Gmail draft · not sent",
+    "unsureAreaLabel": "unsure area",
+    "contextHeading": "Context — why this needs a reply",
+    "unsureAbout": "Unsure about",
+    "why": "Why",
+    "draftedReply": "Drafted reply — edit before sending",
+    "subjectPlaceholder": "Subject",
+    "bodyPlaceholder": "Reply body",
+    "notSendableWarning": "⚠ This draft predates draft-id capture, so it can’t be sent from the ERP. Newer drafts carry a Gmail draft id and are sendable.",
+    "sending": "Sending…",
+    "approveSend": "✓ Approve & send",
+    "sendHint": "n8n sends the final text on approve · then deletes the draft"
   }
 }

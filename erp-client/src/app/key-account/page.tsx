@@ -2,12 +2,14 @@
 
 // Render on demand, never prerendered: protected per-tenant data fetched in the
 // browser. Middleware guards the route; useRequirePermission is the second layer.
+import { useTranslations } from 'next-intl';
 import { useRequirePermission } from '@/lib/permissions';
 import { AppShell } from '@/components/shell/app-shell';
 import { KeyAccountView } from '@/components/key-account/key-account-view';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function KeyAccountPage() {
+  const t = useTranslations('common');
   const { allowed, isLoading } = useRequirePermission('campaigns:read');
 
   return (
@@ -17,7 +19,7 @@ export default function KeyAccountPage() {
       ) : allowed ? (
         <KeyAccountView />
       ) : (
-        <p className="text-sm text-muted-foreground">Redirecting…</p>
+        <p className="text-sm text-muted-foreground">{t('redirecting')}</p>
       )}
     </AppShell>
   );

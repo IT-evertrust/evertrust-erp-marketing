@@ -5,6 +5,7 @@
 // the defence-in-depth second layer. Viewing a profile is users:manage, the same
 // gate as the Users directory it's reached from.
 import { use } from 'react';
+import { useTranslations } from 'next-intl';
 import { useRequirePermission } from '@/lib/permissions';
 import { AppShell } from '@/components/shell/app-shell';
 import { ProfileView } from '@/components/users/profile-view';
@@ -17,6 +18,7 @@ export default function UserProfilePage({
 }) {
   // Next 15: route params arrive as a Promise; unwrap with React.use().
   const { id } = use(params);
+  const t = useTranslations('common');
   const { allowed, isLoading } = useRequirePermission('users:manage');
 
   return (
@@ -26,7 +28,7 @@ export default function UserProfilePage({
       ) : allowed ? (
         <ProfileView userId={id} />
       ) : (
-        <p className="text-sm text-muted-foreground">Redirecting…</p>
+        <p className="text-sm text-muted-foreground">{t('redirecting')}</p>
       )}
     </AppShell>
   );

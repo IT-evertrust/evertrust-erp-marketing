@@ -1,5 +1,8 @@
 {
   "settings": "Settings",
   "profile": "Profile",
-  "logOut": "Log out"
+  "logOut": "Log out",
+  "redirecting": "Redirecting…",
+  "cancel": "Cancel",
+  "confirm": "Confirm"
 }

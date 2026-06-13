@@ -1,5 +1,8 @@
 {
   "settings": "Einstellungen",
   "profile": "Profil",
-  "logOut": "Abmelden"
+  "logOut": "Abmelden",
+  "redirecting": "Wird weitergeleitet…",
+  "cancel": "Abbrechen",
+  "confirm": "Bestätigen"
 }
