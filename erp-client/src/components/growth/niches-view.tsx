@@ -615,15 +615,15 @@ function IndustrySection({
         </p>
       ) : (
         <div className="overflow-hidden rounded-lg border">
-          <Table>
+          <Table className="table-fixed">
             <TableHeader>
               <TableRow>
                 <TableHead>{t('column.niche')}</TableHead>
-                <TableHead>{t('column.slug')}</TableHead>
+                <TableHead className="w-44">{t('column.slug')}</TableHead>
                 <TableHead className="w-48">{t('column.industry')}</TableHead>
-                <TableHead className="text-right">{t('column.prospects')}</TableHead>
-                <TableHead className="text-right">{t('column.targets')}</TableHead>
-                <TableHead className="text-right">{t('column.campaigns')}</TableHead>
+                <TableHead className="w-24 text-right">{t('column.prospects')}</TableHead>
+                <TableHead className="w-24 text-right">{t('column.targets')}</TableHead>
+                <TableHead className="w-28 text-right">{t('column.campaigns')}</TableHead>
                 <TableHead className="w-20" />
               </TableRow>
             </TableHeader>
