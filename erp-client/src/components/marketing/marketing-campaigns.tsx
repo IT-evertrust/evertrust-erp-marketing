@@ -199,12 +199,10 @@ function CampaignCard({
               size="sm"
             />
           </Can>
-          {c.driveFolderId ? (
-            <Button variant="outline" size="sm" onClick={() => setFilesOpen(true)}>
-              <Files />
-              Details
-            </Button>
-          ) : null}
+          <Button variant="outline" size="sm" onClick={() => setFilesOpen(true)}>
+            <Files />
+            Details
+          </Button>
           {c.driveFolderUrl ? (
             <Button asChild variant="outline" size="sm">
               <a href={c.driveFolderUrl} target="_blank" rel="noreferrer">
@@ -297,8 +295,8 @@ function CampaignFilesDialog({
         <DialogHeader>
           <DialogTitle>{campaign.name || campaign.project} — files</DialogTitle>
           <DialogDescription>
-            Everything in this campaign&rsquo;s Drive folder. Click a row to open
-            the file.
+            Files generated for this campaign (niche analysis, templates, …). Click
+            a row to open it.
           </DialogDescription>
         </DialogHeader>
         {q.isLoading ? (
@@ -314,7 +312,8 @@ function CampaignFilesDialog({
           </p>
         ) : files.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No files in this campaign&rsquo;s folder yet.
+            No files generated for this campaign yet — the niche analysis and
+            templates appear here once the workflows run.
           </p>
         ) : (
           <div className="max-h-[60vh] overflow-auto">

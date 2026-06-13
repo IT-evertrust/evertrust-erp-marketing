@@ -1,13 +1,12 @@
 import {
-  HttpException,
+  ConflictException,
   Inject,
   Injectable,
   Logger,
   NotFoundException,
-  ServiceUnavailableException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, count, desc, eq } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 import {
   type CampaignConfigDto,
@@ -281,12 +280,40 @@ export class CampaignsService {
     }));
   }
 
-  // Delete a campaign (ERP record only — the Drive folder + leads are NOT touched;
-  // the ERP has no Drive write path). Detaches any arsenal_runs first (clears the FK,
-  // keeps the trigger log) so the delete can't violate the foreign key. 404 if
-  // missing or in another org. Returns the deleted row for audit.
+  // Delete a campaign — ALLOWED ONLY when it holds no data. prospects.campaign_id
+  // is NOT NULL and leads/contracts/campaign_assets also reference the campaign with
+  // no cascade, so a hard delete on a populated campaign would FK-violate (500).
+  // Instead we count those dependents and return a clear 409 steering to Archive
+  // (lifecycle = ARCHIVED is the soft-delete). Empty campaigns delete cleanly after
+  // detaching arsenal_runs (kept as a trigger log). 404 if missing / another org.
   async delete(orgId: string, id: string): Promise<CampaignRow> {
     const before = await this.get(orgId, id);
+    const [p, l, a, ct] = await Promise.all([
+      this.db
+        .select({ value: count() })
+        .from(schema.prospects)
+        .where(eq(schema.prospects.campaignId, id)),
+      this.db
+        .select({ value: count() })
+        .from(schema.leads)
+        .where(eq(schema.leads.campaignId, id)),
+      this.db
+        .select({ value: count() })
+        .from(schema.campaignAssets)
+        .where(eq(schema.campaignAssets.campaignId, id)),
+      this.db
+        .select({ value: count() })
+        .from(schema.contracts)
+        .where(eq(schema.contracts.campaignId, id)),
+    ]);
+    const prospects = p[0]?.value ?? 0;
+    const leads = l[0]?.value ?? 0;
+    const blocking = prospects + leads + (a[0]?.value ?? 0) + (ct[0]?.value ?? 0);
+    if (blocking > 0) {
+      throw new ConflictException(
+        `Cannot delete this campaign — it has ${prospects} prospect(s) and ${leads} lead(s). Archive it instead (set its lifecycle to ARCHIVED).`,
+      );
+    }
     await this.db
       .update(schema.arsenalRuns)
       .set({ campaignId: null })
@@ -352,60 +379,25 @@ export class CampaignsService {
     }
   }
 
-  // Every file in a campaign's Drive folder, via the erp-campaign-files webhook (the
-  // ERP has no Google creds). Tenant-scoped — get() throws if the campaign isn't this
-  // org's. Degrades to an empty list if the folder/webhook isn't set. (Independent of
-  // the retired Drive-reconcile sync — uses N8N_API_URL's erp-campaign-files webhook.)
+  // The campaign's generated files, read from the campaign_assets registry (the
+  // NICHE_ANALYSIS doc, Ammo Forge templates/news, etc.). PG-native: the ERP owns the
+  // file pointers, so no Drive/n8n round-trip and no driveFolderId dependency. Tenant-
+  // scoped via get(). Empty until the workflows register assets for this campaign.
   async listFiles(orgId: string, id: string): Promise<CampaignFilesDto> {
-    const campaign = await this.get(orgId, id);
-    const base = this.campaignFilesWebhookUrl();
-    if (!base) return { configured: false, count: 0, files: [] };
-    if (!campaign.driveFolderId) return { configured: true, count: 0, files: [] };
-    const url = `${base}?folderId=${encodeURIComponent(campaign.driveFolderId)}`;
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20_000);
-    try {
-      const res = await fetch(url, {
-        headers: { accept: 'application/json' },
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        throw new ServiceUnavailableException(
-          `Campaign files returned HTTP ${res.status}.`,
-        );
-      }
-      const json = (await res.json().catch(() => ({}))) as { files?: unknown };
-      const raw = Array.isArray(json?.files) ? json.files : [];
-      const s = (v: unknown) => (typeof v === 'string' && v.length ? v : null);
-      const files = raw
-        .filter(
-          (r): r is Record<string, unknown> =>
-            !!r && typeof (r as Record<string, unknown>).id === 'string',
-        )
-        .map((r) => ({
-          id: String(r.id),
-          name: typeof r.name === 'string' ? r.name : String(r.id),
-          mimeType: s(r.mimeType),
-          webViewLink: s(r.webViewLink),
-          modifiedTime: s(r.modifiedTime),
-          size: s(r.size),
-        }));
-      return { configured: true, count: files.length, files };
-    } catch (err) {
-      if (err instanceof HttpException) throw err;
-      this.logger.warn(
-        `campaign files GET ${url} failed: ${err instanceof Error ? err.message : 'error'}`,
-      );
-      throw new ServiceUnavailableException(
-        'Campaign files call failed — check that the campaign-files workflow is active.',
-      );
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-
-  private campaignFilesWebhookUrl(): string {
-    const base = (this.config.get('N8N_API_URL') ?? '').trim().replace(/\/+$/, '');
-    return base ? `${base}/webhook/erp-campaign-files` : '';
+    await this.get(orgId, id); // 404 if the campaign isn't this org's
+    const rows = await this.db
+      .select()
+      .from(schema.campaignAssets)
+      .where(eq(schema.campaignAssets.campaignId, id))
+      .orderBy(desc(schema.campaignAssets.createdAt));
+    const files = rows.map((a) => ({
+      id: a.id,
+      name: a.name,
+      mimeType: a.mimeType ?? null,
+      webViewLink: a.driveUrl ?? null,
+      modifiedTime: a.createdAt ? a.createdAt.toISOString() : null,
+      size: null,
+    }));
+    return { configured: true, count: files.length, files };
   }
 }
