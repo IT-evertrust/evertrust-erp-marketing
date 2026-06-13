@@ -1,8 +1,9 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { Loader2, Play } from 'lucide-react';
-import { ARSENAL_STAGE_META, type ArsenalStage } from '@evertrust/shared';
+import { type ArsenalStage } from '@evertrust/shared';
 import { useRunArsenalStage } from '@/hooks/use-arsenal';
 import { Button } from '@/components/ui/button';
 
@@ -22,8 +23,9 @@ export function RunStageButton({
   variant?: 'outline' | 'ghost' | 'default';
   size?: 'sm' | 'default';
 }) {
+  const t = useTranslations('marketing');
   const run = useRunArsenalStage();
-  const meta = ARSENAL_STAGE_META[stage];
+  const stageLabel = t(`stage.${stage}`);
 
   return (
     <Button
@@ -36,16 +38,23 @@ export function RunStageButton({
           {
             onSuccess: (r) =>
               r.status === 'DISPATCHED'
-                ? toast.success(`${meta.label} dispatched.`)
-                : toast.error(`${meta.label} failed: ${r.detail ?? 'unknown'}`),
+                ? toast.success(t('actions.dispatched', { stage: stageLabel }))
+                : toast.error(
+                    t('actions.runFailed', {
+                      stage: stageLabel,
+                      detail: r.detail ?? t('actions.unknown'),
+                    }),
+                  ),
             onError: (e) =>
-              toast.error(e.message ?? `Could not run ${meta.label}.`),
+              toast.error(e.message ?? t('actions.runError', { stage: stageLabel })),
           },
         )
       }
     >
       {run.isPending ? <Loader2 className="animate-spin" /> : <Play />}
-      {run.isPending ? 'Dispatching…' : (label ?? `Run ${meta.label}`)}
+      {run.isPending
+        ? t('actions.dispatching')
+        : (label ?? t('actions.run', { stage: stageLabel }))}
     </Button>
   );
 }

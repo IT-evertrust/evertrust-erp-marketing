@@ -185,6 +185,33 @@ Context: the 3 "(Web)" nodes (`Country Profiler (Web)`, `Search Companies (Web)`
 - [x] G. Copy-5 mechanics preserved (SEAR dispatch `wf03-segment-worker`, parsers, Guard Results throw, Reshape runId from Build Groups, `$('…').first()` fixes). Creds: models `2YgDmy9NuLHvOgzJ`, Drive-poll `R1hfa3xjcJxi0F2E`, `web_search` `newCredential('SearXNG (mac-mini)')`; 6 Google nodes auto-assigned on import; 3 ERP HTTP nodes left UNBOUND (sticky).
 - [ ] **USER: copy 6 creds** — `web_search` → `Header Auth account 3` (SearXNG); the 3 ERP nodes (Fetch Campaign Config, POST /prospects/bulk, POST /arsenal/runs/callback) → an `ERP Ingest (x-arsenal-token)` httpHeaderAuth cred (create in REACH ARSENAL); spot-check the 6 auto-assigned Google creds. Endpoints live only after the ERP backend deploys.
 
+## i18n — Sales + Key Account screens (EN/DE, next-intl) — this session
+
+Scope: `sales` + `keyAccount` namespaces only; sales/* + key-account/* components only.
+Do NOT touch request.ts, other namespaces, or shared `@evertrust/shared` maps.
+- [x] sales-view.tsx → `useTranslations('sales')`: header, sync button/toasts, filters
+      (search/campaign/AE/persona/time placeholders + option labels), list (count, empty,
+      Unattributed badge, score), detail (open doc, delete/confirm, attribution link/change,
+      signals, persona/analyze, analysis section labels, findings rows). ICU for counts/scores.
+      PERF/CLIENT score dims → key-only consts, labels via detail.perf.*/detail.client.*.
+- [x] key-account-view.tsx → `useTranslations('keyAccount')`: header, KPI labels, tier filter
+      (All tiers), search, campaign select, sync/run-pipeline/add/clear-leads buttons + statuses,
+      error + backfill result + pipeline-not-configured lines (ICU plurals), board column subs,
+      "+ add lead", LeadCard source labels. Column titles via `stage.*` (NOT shared LeadStageLabel).
+- [x] add-lead-dialog.tsx → `keyAccount` add-lead form (title/desc, labels, placeholders, buttons,
+      "Email *" etc.).
+- [x] lead-detail-dialog.tsx → `keyAccount` detail (field labels, Stage label, convert button states);
+      stage Select/badge via `stage.*` at call site (shared LeadStageLabel import dropped).
+- [x] messages/{en,de}/sales.json (82 keys ea) + keyAccount.json (61 keys ea) — full EN/DE parity.
+- [x] Self-verify (sandbox script): JSON valid ×4; parity exact (sales 82/82, keyAccount 61/61);
+      every referenced t() key (incl. dynamic stage.*/columns.*/detail.perf.*/detail.client.*)
+      resolves in both locales; zero unused keys; no residual hardcoded JSX/attr strings (only
+      locale-neutral '—' empty-value glyphs remain). build/typecheck deferred (concurrent agents).
+- NOTE (left untranslated, by design): page.tsx "Redirecting…" (boilerplate in ~17 pages, none
+      translated yet — belongs to a future cross-page/common pass, not these 2 namespaces);
+      shared `LeadStageLabel` map + ConfirmButton's internal "Cancel"/default "Confirm"
+      (shared `src/lib`/`components/common` — translated at call site where I pass props).
+
 ## Backlog
 
 - [x] ~~Fix Prisma config~~ / ~~Pick ONE ORM~~ / ~~port collision~~ / ~~add tests~~ — all RESOLVED by the 2026-06-11 migration: the boilerplate was replaced by the real ERP (Drizzle ORM, PORT env default 3001, 35 jest suites). Prisma/TypeORM are gone from the repo.

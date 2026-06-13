@@ -1,14 +1,12 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { ArrowLeft, KeyRound } from 'lucide-react';
 import {
-  DEPARTMENT_LABELS,
   PERMISSIONS,
-  POSITION_LABELS,
-  ROLE_LABELS,
   effectivePermissions,
 } from '@evertrust/shared';
 import {
@@ -68,6 +66,7 @@ function groupPermissions(perms: readonly string[]): [string, string[]][] {
 // position, status, joined, effective permissions). Contribution metrics +
 // activity history aren't tracked per-user yet — we say so rather than invent.
 export function ProfileView({ userId }: { userId: string }) {
+  const t = useTranslations('users');
   const users = useAdminUsers();
   const stats = useUserStats(userId);
   const setPw = useSetPassword();
@@ -81,7 +80,7 @@ export function ProfileView({ userId }: { userId: string }) {
   if (users.isError) {
     return (
       <p className="text-sm text-destructive">
-        Could not load this profile: {users.error.message}
+        {t('profile.loadError', { message: users.error.message })}
       </p>
     );
   }
@@ -92,11 +91,11 @@ export function ProfileView({ userId }: { userId: string }) {
       <div className="flex flex-col gap-3">
         <Button asChild variant="outline" size="sm" className="self-start">
           <Link href="/users">
-            <ArrowLeft className="mr-1 size-3.5" /> Users
+            <ArrowLeft className="mr-1 size-3.5" /> {t('profile.back')}
           </Link>
         </Button>
         <p className="text-sm text-muted-foreground">
-          User not found. They may have been removed, or this is a stale link.
+          {t('profile.notFound')}
         </p>
       </div>
     );
@@ -113,7 +112,7 @@ export function ProfileView({ userId }: { userId: string }) {
         href="/users"
         className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
-        <ArrowLeft className="size-3.5" /> Users
+        <ArrowLeft className="size-3.5" /> {t('profile.back')}
       </Link>
 
       {/* header card */}
@@ -138,13 +137,13 @@ export function ProfileView({ userId }: { userId: string }) {
                   )}
                 >
                   <span className={cn('size-1.5 rounded-full', styles.dot)} />
-                  {ROLE_LABELS[user.role]}
+                  {t(`role.${user.role}`)}
                 </Badge>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
                 {[
-                  user.position ? POSITION_LABELS[user.position] : null,
-                  user.department ? DEPARTMENT_LABELS[user.department] : null,
+                  user.position ? t(`position.${user.position}`) : null,
+                  user.department ? t(`department.${user.department}`) : null,
                   user.email,
                 ]
                   .filter(Boolean)
@@ -163,9 +162,9 @@ export function ProfileView({ userId }: { userId: string }) {
                       user.active ? 'bg-emerald-500' : 'bg-muted-foreground',
                     )}
                   />
-                  {user.active ? 'Active' : 'Inactive'}
+                  {user.active ? t('profile.active') : t('profile.inactive')}
                 </span>
-                <span>Member since {formatDateTime(user.createdAt)}</span>
+                <span>{t('profile.memberSince', { date: formatDateTime(user.createdAt) })}</span>
               </div>
             </div>
             <Button
@@ -175,7 +174,7 @@ export function ProfileView({ userId }: { userId: string }) {
               className="mb-1"
               onClick={() => setEditOpen(true)}
             >
-              Edit profile
+              {t('profile.editProfile')}
             </Button>
           </div>
         </CardContent>
@@ -185,32 +184,32 @@ export function ProfileView({ userId }: { userId: string }) {
           triggered, audited actions) */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile
-          label="Campaigns launched"
+          label={t('profile.tiles.campaignsLaunched')}
           value={stats.data ? stats.data.campaignsLaunched : '—'}
           accent="bg-sky-400"
         />
         <StatTile
-          label="Stages run"
+          label={t('profile.tiles.stagesRun')}
           value={stats.data ? stats.data.stagesRun : '—'}
           accent="bg-violet-400"
         />
         <StatTile
-          label="Actions logged"
+          label={t('profile.tiles.actionsLogged')}
           value={stats.data ? stats.data.actionsLogged : '—'}
           accent="bg-emerald-400"
         />
         <StatTile
-          label="Permissions"
+          label={t('profile.tiles.permissions')}
           value={`${perms.length} / ${PERMISSIONS.length}`}
-          hint="granted"
+          hint={t('profile.tiles.granted')}
         />
       </div>
 
       <Tabs defaultValue="access">
         <TabsList>
-          <TabsTrigger value="access">Access</TabsTrigger>
-          <TabsTrigger value="account">Account</TabsTrigger>
-          <TabsTrigger value="activity">Activity</TabsTrigger>
+          <TabsTrigger value="access">{t('profile.tabs.access')}</TabsTrigger>
+          <TabsTrigger value="account">{t('profile.tabs.account')}</TabsTrigger>
+          <TabsTrigger value="activity">{t('profile.tabs.activity')}</TabsTrigger>
         </TabsList>
 
         {/* Access */}
@@ -219,32 +218,32 @@ export function ProfileView({ userId }: { userId: string }) {
             <CardContent className="flex flex-col gap-5 pt-6">
               <div>
                 <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Role &amp; placement
+                  {t('profile.rolePlacement')}
                 </p>
                 <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
                   <div>
-                    <dt className="text-xs text-muted-foreground">Role</dt>
+                    <dt className="text-xs text-muted-foreground">{t('profile.role')}</dt>
                     <dd className="font-medium">
-                      {ROLE_LABELS[user.role]}
+                      {t(`role.${user.role}`)}
                       {isSuperAdmin ? (
                         <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">
-                          🔒 locked
+                          {t('profile.locked')}
                         </span>
                       ) : null}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs text-muted-foreground">Department</dt>
+                    <dt className="text-xs text-muted-foreground">{t('profile.department')}</dt>
                     <dd className="font-medium">
                       {user.department
-                        ? DEPARTMENT_LABELS[user.department]
+                        ? t(`department.${user.department}`)
                         : '—'}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-xs text-muted-foreground">Position</dt>
+                    <dt className="text-xs text-muted-foreground">{t('profile.position')}</dt>
                     <dd className="font-medium">
-                      {user.position ? POSITION_LABELS[user.position] : '—'}
+                      {user.position ? t(`position.${user.position}`) : '—'}
                     </dd>
                   </div>
                 </dl>
@@ -253,7 +252,7 @@ export function ProfileView({ userId }: { userId: string }) {
               <div>
                 <div className="mb-2 flex items-center justify-between">
                   <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    Effective permissions ({perms.length})
+                    {t('profile.effectivePermissions', { count: perms.length })}
                   </p>
                   <Button
                     asChild
@@ -261,7 +260,7 @@ export function ProfileView({ userId }: { userId: string }) {
                     size="sm"
                     className="h-7 text-xs"
                   >
-                    <Link href="/users">Edit access</Link>
+                    <Link href="/users">{t('profile.editAccess')}</Link>
                   </Button>
                 </div>
                 <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3">
@@ -297,13 +296,13 @@ export function ProfileView({ userId }: { userId: string }) {
           <Card>
             <CardContent className="pt-6">
               <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Account
+                {t('profile.account')}
               </p>
               <div className="flex flex-col divide-y">
-                <AccountRow k="Email" v={user.email} />
-                <AccountRow k="Phone" v={user.phone ?? '—'} />
+                <AccountRow k={t('profile.accountRow.email')} v={user.email} />
+                <AccountRow k={t('profile.accountRow.phone')} v={user.phone ?? '—'} />
                 <div className="flex items-center justify-between gap-4 py-2.5 text-sm">
-                  <span className="text-muted-foreground">Password</span>
+                  <span className="text-muted-foreground">{t('profile.accountRow.password')}</span>
                   <div className="flex items-center gap-3">
                     <span className="font-medium tracking-widest">••••••••</span>
                     <Button
@@ -315,21 +314,20 @@ export function ProfileView({ userId }: { userId: string }) {
                         setPwOpen(true);
                       }}
                     >
-                      <KeyRound className="mr-1 size-3.5" /> Change
+                      <KeyRound className="mr-1 size-3.5" /> {t('profile.change')}
                     </Button>
                   </div>
                 </div>
-                <AccountRow k="Status" v={user.active ? 'Active' : 'Inactive'} />
-                <AccountRow k="Role" v={ROLE_LABELS[user.role]} />
+                <AccountRow k={t('profile.accountRow.status')} v={user.active ? t('profile.active') : t('profile.inactive')} />
+                <AccountRow k={t('profile.accountRow.role')} v={t(`role.${user.role}`)} />
                 <AccountRow
-                  k="Member since"
+                  k={t('profile.accountRow.memberSince')}
                   v={formatDateTime(user.createdAt)}
                 />
-                <AccountRow k="User ID" v={user.id} mono />
+                <AccountRow k={t('profile.accountRow.userId')} v={user.id} mono />
               </div>
               <p className="mt-4 text-xs text-muted-foreground">
-                Changing the password sets a new one immediately — there&apos;s no
-                email reset flow, so share it securely.
+                {t('profile.passwordNote')}
               </p>
             </CardContent>
           </Card>
@@ -343,7 +341,7 @@ export function ProfileView({ userId }: { userId: string }) {
                 <Skeleton className="h-24 w-full" />
               ) : !stats.data || stats.data.recentActivity.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No recorded activity yet.
+                  {t('profile.noActivity')}
                 </p>
               ) : (
                 <div className="flex flex-col divide-y">
@@ -376,29 +374,29 @@ export function ProfileView({ userId }: { userId: string }) {
       <Dialog open={pwOpen} onOpenChange={setPwOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Set a new password</DialogTitle>
+            <DialogTitle>{t('profile.passwordDialog.title')}</DialogTitle>
             <DialogDescription>
               {user.name} · {user.email}
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="new-pw">New password</Label>
+            <Label htmlFor="new-pw">{t('profile.passwordDialog.newPassword')}</Label>
             <Input
               id="new-pw"
               type="password"
               value={newPw}
-              placeholder="At least 8 characters"
+              placeholder={t('profile.passwordDialog.placeholder')}
               onChange={(e) => setNewPw(e.target.value)}
             />
             {newPw && newPw.length < 8 ? (
               <p className="text-xs text-amber-600 dark:text-amber-400">
-                Use at least 8 characters.
+                {t('profile.passwordDialog.hint')}
               </p>
             ) : null}
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setPwOpen(false)}>
-              Cancel
+              {t('profile.passwordDialog.cancel')}
             </Button>
             <Button
               type="button"
@@ -408,16 +406,16 @@ export function ProfileView({ userId }: { userId: string }) {
                   { id: user.id, password: newPw },
                   {
                     onSuccess: () => {
-                      toast.success(`Password updated for ${user.name}.`);
+                      toast.success(t('profile.passwordDialog.updatedToast', { name: user.name }));
                       setPwOpen(false);
                     },
                     onError: (e) =>
-                      toast.error(e.message ?? 'Could not set the password.'),
+                      toast.error(e.message ?? t('profile.passwordDialog.error')),
                   },
                 )
               }
             >
-              {setPw.isPending ? 'Saving…' : 'Set password'}
+              {setPw.isPending ? t('profile.passwordDialog.saving') : t('profile.passwordDialog.submit')}
             </Button>
           </DialogFooter>
         </DialogContent>

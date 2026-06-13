@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { Loader2, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useSyncCampaigns } from '@/hooks/use-campaigns';
@@ -11,23 +12,23 @@ import { Button } from '@/components/ui/button';
 // This is what stops a deleted folder from lingering: n8n execution history keeps the
 // old run forever, but the Drive scan reflects the current folder set.
 export function SyncDriveButton() {
+  const t = useTranslations('marketing');
   const sync = useSyncCampaigns();
 
   function run() {
     sync.mutate(undefined, {
       onSuccess: (r) => {
-        const parts = [`${r.driveCount} in Drive`];
+        const parts = [t('actions.syncInDrive', { count: r.driveCount })];
         if (r.markedMissing > 0)
-          parts.push(`${r.markedMissing} archived (folder deleted)`);
-        if (r.restored > 0) parts.push(`${r.restored} restored`);
+          parts.push(t('actions.syncArchived', { count: r.markedMissing }));
+        if (r.restored > 0) parts.push(t('actions.syncRestored', { count: r.restored }));
         if (r.untracked.length > 0)
-          parts.push(`${r.untracked.length} untracked in Drive`);
-        toast.success('Synced with Drive', { description: parts.join(' · ') });
+          parts.push(t('actions.syncUntracked', { count: r.untracked.length }));
+        toast.success(t('actions.syncOk'), { description: parts.join(' · ') });
       },
       onError: (e) =>
-        toast.error('Drive sync failed', {
-          description:
-            e.message ?? 'Check that the CAMPAIGNS LIST workflow is active.',
+        toast.error(t('actions.syncFailed'), {
+          description: e.message ?? t('actions.syncFailedHint'),
         }),
     });
   }
@@ -35,7 +36,7 @@ export function SyncDriveButton() {
   return (
     <Button type="button" variant="outline" onClick={run} disabled={sync.isPending}>
       {sync.isPending ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-      {sync.isPending ? 'Syncing…' : 'Sync with Drive'}
+      {sync.isPending ? t('actions.syncing') : t('actions.syncWithDrive')}
     </Button>
   );
 }

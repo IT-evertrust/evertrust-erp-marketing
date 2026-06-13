@@ -1,8 +1,9 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
-import { KPI_CATEGORY_LABELS, type ScorecardDto } from '@evertrust/shared';
+import { type ScorecardDto } from '@evertrust/shared';
 import { useCreateKpiValue, useKpiDefinitions } from '@/hooks/use-performance';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,6 +39,7 @@ export function RecordKpiDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
 }) {
+  const t = useTranslations('performance');
   const defs = useKpiDefinitions();
   const create = useCreateKpiValue();
   const [userId, setUserId] = useState('');
@@ -55,7 +57,7 @@ export function RecordKpiDialog({
   const submit = () => {
     const def = options.find((d) => d.key === kpiKey);
     if (!userId || !def) {
-      toast.error('Pick an employee and a KPI.');
+      toast.error(t('recordDialog.pickError'));
       return;
     }
     const num = value.trim() === '' ? null : Number(value.replace(/[^0-9.-]/g, ''));
@@ -71,7 +73,12 @@ export function RecordKpiDialog({
       },
       {
         onSuccess: () => {
-          toast.success(`Recorded ${def.label} for ${selectedUser?.userName}`);
+          toast.success(
+            t('recordDialog.recordedToast', {
+              label: def.label,
+              name: selectedUser?.userName ?? '',
+            }),
+          );
           setValue('');
           onOpenChange(false);
         },
@@ -84,16 +91,15 @@ export function RecordKpiDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Record a KPI value</DialogTitle>
+          <DialogTitle>{t('recordDialog.title')}</DialogTitle>
           <DialogDescription>
-            For KPIs with no automatic source (manager-entered). Auto-collected KPIs aren’t listed —
-            they come from real ERP data.
+            {t('recordDialog.description')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
           <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-            Employee
+            {t('recordDialog.employee')}
             <select
               value={userId}
               onChange={(e) => {
@@ -102,7 +108,7 @@ export function RecordKpiDialog({
               }}
               className="h-9 rounded-md border bg-card px-2 text-sm text-foreground"
             >
-              <option value="">Select…</option>
+              <option value="">{t('recordDialog.select')}</option>
               {cards.map((c) => (
                 <option key={c.userId} value={c.userId}>
                   {c.userName}
@@ -112,29 +118,29 @@ export function RecordKpiDialog({
           </label>
 
           <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-            KPI
+            {t('recordDialog.kpi')}
             <select
               value={kpiKey}
               onChange={(e) => setKpiKey(e.target.value)}
               disabled={!userId}
               className="h-9 rounded-md border bg-card px-2 text-sm text-foreground disabled:opacity-50"
             >
-              <option value="">{userId ? 'Select…' : 'Pick an employee first'}</option>
+              <option value="">{userId ? t('recordDialog.select') : t('recordDialog.pickEmployeeFirst')}</option>
               {options.map((d) => (
                 <option key={d.key} value={d.key}>
-                  {d.label} · {KPI_CATEGORY_LABELS[d.category]}
-                  {d.target ? ` (target ${d.target})` : ''}
+                  {d.label} · {t(`category.${d.category}`)}
+                  {d.target ? t('recordDialog.kpiOptionTarget', { target: d.target }) : ''}
                 </option>
               ))}
             </select>
           </label>
 
           <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-            Value
+            {t('recordDialog.value')}
             <Input
               value={value}
               onChange={(e) => setValue(e.target.value)}
-              placeholder="e.g. 92%  ·  8  ·  €1.2M"
+              placeholder={t('recordDialog.valuePlaceholder')}
               className="h-9"
             />
           </label>
@@ -142,10 +148,10 @@ export function RecordKpiDialog({
 
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('recordDialog.cancel')}
           </Button>
           <Button onClick={submit} disabled={create.isPending}>
-            {create.isPending ? 'Saving…' : 'Record value'}
+            {create.isPending ? t('recordDialog.saving') : t('recordDialog.submit')}
           </Button>
         </DialogFooter>
       </DialogContent>

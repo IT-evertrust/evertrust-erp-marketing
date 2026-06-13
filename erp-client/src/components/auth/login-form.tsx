@@ -3,6 +3,7 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
+import { useTranslations } from 'next-intl';
 import { LoginDto } from '@evertrust/shared';
 import { ApiError } from '@/lib/api';
 import { useLogin } from '@/hooks/use-auth';
@@ -25,6 +26,7 @@ import {
 import { Input } from '@/components/ui/input';
 
 export function LoginForm() {
+  const t = useTranslations('login');
   const login = useLogin();
   const form = useForm<LoginDto>({
     resolver: zodResolver(LoginDto),
@@ -37,8 +39,8 @@ export function LoginForm() {
         // 401 is the expected "wrong credentials" case; everything else is a real fault.
         const message =
           error instanceof ApiError && error.status === 401
-            ? 'Invalid email or password.'
-            : (error.message ?? 'Sign in failed. Please try again.');
+            ? t('form.errors.invalidCredentials')
+            : (error.message ?? t('form.errors.generic'));
         toast.error(message);
       },
     });
@@ -47,8 +49,8 @@ export function LoginForm() {
   return (
     <Card className="w-full max-w-sm border-border/80 shadow-lg">
       <CardHeader className="text-center">
-        <CardTitle className="text-xl">Sign in</CardTitle>
-        <CardDescription>Access the Evertrust operations console.</CardDescription>
+        <CardTitle className="text-xl">{t('form.title')}</CardTitle>
+        <CardDescription>{t('form.description')}</CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>
@@ -58,7 +60,7 @@ export function LoginForm() {
               name="email"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Email</FormLabel>
+                  <FormLabel>{t('form.emailLabel')}</FormLabel>
                   <FormControl>
                     <Input
                       type="email"
@@ -76,7 +78,7 @@ export function LoginForm() {
               name="password"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Password</FormLabel>
+                  <FormLabel>{t('form.passwordLabel')}</FormLabel>
                   <FormControl>
                     <Input type="password" autoComplete="current-password" {...field} />
                   </FormControl>
@@ -85,7 +87,7 @@ export function LoginForm() {
               )}
             />
             <Button type="submit" className="w-full" disabled={login.isPending}>
-              {login.isPending ? 'Signing in…' : 'Sign in'}
+              {login.isPending ? t('form.submitting') : t('form.submit')}
             </Button>
           </form>
         </Form>

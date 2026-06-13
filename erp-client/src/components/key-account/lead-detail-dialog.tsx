@@ -1,12 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Loader2 } from 'lucide-react';
-import {
-  LeadStageLabel,
-  type LeadDto,
-  type LeadStage,
-} from '@evertrust/shared';
+import { type LeadDto, type LeadStage } from '@evertrust/shared';
 import { useConvertLead, useUpdateLead } from '@/hooks/use-leads';
 import { Can } from '@/components/auth/can';
 import {
@@ -46,6 +43,7 @@ export function LeadDetailDialog({
   lead: LeadDto | null;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useTranslations('keyAccount');
   const update = useUpdateLead();
   const convert = useConvertLead();
   const [stage, setStage] = useState<LeadStage>('INTERESTED');
@@ -81,21 +79,21 @@ export function LeadDetailDialog({
             </DialogHeader>
 
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-              <Field label="Hot reason" value={lead.hotReason} />
-              <Field label="Lead status" value={lead.leadStatus} />
-              <Field label="Company type" value={lead.companyType} />
-              <Field label="Country" value={lead.country} />
-              <Field label="City" value={lead.city} />
-              <Field label="Source campaign" value={lead.sourceCampaign} />
-              <Field label="Meeting date" value={lead.meetingDate} />
+              <Field label={t('detail.hotReason')} value={lead.hotReason} />
+              <Field label={t('detail.leadStatus')} value={lead.leadStatus} />
+              <Field label={t('detail.companyType')} value={lead.companyType} />
+              <Field label={t('detail.country')} value={lead.country} />
+              <Field label={t('detail.city')} value={lead.city} />
               <Field
-                label="Detected"
+                label={t('detail.sourceCampaign')}
+                value={lead.sourceCampaign}
+              />
+              <Field label={t('detail.meetingDate')} value={lead.meetingDate} />
+              <Field
+                label={t('detail.detected')}
                 value={lead.detectedAt ? formatDateTime(lead.detectedAt) : null}
               />
-              <Field
-                label="Website"
-                value={lead.website}
-              />
+              <Field label={t('detail.website')} value={lead.website} />
             </dl>
 
             {lead.note ? (
@@ -106,12 +104,17 @@ export function LeadDetailDialog({
 
             <ContractsCard
               filters={{ leadId: lead.id }}
-              emptyHint="No contracts generated for this lead yet."
+              emptyHint={t('detail.noContracts')}
             />
 
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">Stage</span>
-              <Can permission="campaigns:write" fallback={<Badge>{LeadStageLabel[stage]}</Badge>}>
+              <span className="text-sm text-muted-foreground">
+                {t('detail.stage')}
+              </span>
+              <Can
+                permission="campaigns:write"
+                fallback={<Badge>{t(`stage.${stage}`)}</Badge>}
+              >
                 <Select value={stage} onValueChange={onStageChange}>
                   <SelectTrigger className="w-[200px]">
                     <SelectValue />
@@ -119,7 +122,7 @@ export function LeadDetailDialog({
                   <SelectContent>
                     {STAGES.map((s) => (
                       <SelectItem key={s} value={s}>
-                        {LeadStageLabel[s]}
+                        {t(`stage.${s}`)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -148,7 +151,9 @@ export function LeadDetailDialog({
                   {convert.isPending ? (
                     <Loader2 className="animate-spin" />
                   ) : null}
-                  {isCustomer ? 'Already a customer' : 'Convert to customer'}
+                  {isCustomer
+                    ? t('detail.alreadyCustomer')
+                    : t('detail.convert')}
                 </Button>
               </Can>
             </DialogFooter>

@@ -1,1 +1,88 @@
-{}
+{
+  "redirecting": "Redirecting…",
+  "header": {
+    "title": "Suppliers",
+    "description": "Your supplier registry for matching and sourcing."
+  },
+  "actions": {
+    "new": "New supplier",
+    "edit": "Edit supplier"
+  },
+  "stats": {
+    "suppliers": {
+      "label": "Suppliers",
+      "hint": "In the registry"
+    },
+    "niches": {
+      "label": "Niches covered",
+      "hint": "Distinct sourcing areas"
+    },
+    "fit": {
+      "label": "Scored for fit",
+      "hintScored": "{count} not yet scored",
+      "hintReady": "Ready for matching"
+    },
+    "reachable": {
+      "label": "Reachable",
+      "hintMissing": "{count} missing contact",
+      "hintReady": "With a contact on file"
+    }
+  },
+  "registry": {
+    "title": "Registry",
+    "description": "Suppliers available for tender matching and sourcing."
+  },
+  "table": {
+    "supplier": "Supplier",
+    "niches": "Niches",
+    "capabilities": "Capabilities",
+    "fit": "Fit",
+    "contact": "Contact"
+  },
+  "errorState": {
+    "title": "Could not load suppliers"
+  },
+  "emptyState": {
+    "title": "No suppliers yet",
+    "description": "Add your first supplier to start matching them against incoming tenders."
+  },
+  "dialog": {
+    "titleEdit": "Edit supplier",
+    "titleNew": "New supplier",
+    "descriptionEdit": "Update this supplier in the registry.",
+    "descriptionNew": "Add a supplier to the registry.",
+    "fields": {
+      "name": {
+        "label": "Name",
+        "placeholder": "Supplier name"
+      },
+      "niches": {
+        "label": "Niches",
+        "placeholder": "HVAC, road works"
+      },
+      "capabilities": {
+        "label": "Capabilities",
+        "placeholder": "installation, maintenance"
+      },
+      "fitScore": {
+        "label": "Fit score",
+        "placeholder": "0.00–1.00"
+      },
+      "contact": {
+        "label": "Contact",
+        "placeholder": "name@supplier.example"
+      }
+    },
+    "commaSeparated": "Comma-separated.",
+    "nameRequired": "Name is required.",
+    "cancel": "Cancel",
+    "saving": "Saving…",
+    "saveChanges": "Save changes",
+    "create": "Create supplier"
+  },
+  "toast": {
+    "updated": "Supplier updated.",
+    "created": "Supplier created.",
+    "saveError": "Could not save supplier."
+  }
+}

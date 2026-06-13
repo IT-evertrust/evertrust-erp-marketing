@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { PageHeader } from '@/components/common/page-header';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { MarketingFunnelBar } from './marketing-funnel-bar';
@@ -14,19 +15,20 @@ import { MarketingCampaigns } from './marketing-campaigns';
 // "Draft review" (RAG reply drafts awaiting human approval) and "Report" (live
 // Growth-Engine arsenal_runs report). Growth Engine is the default tab.
 export function MarketingView() {
+  const t = useTranslations('marketing');
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="Marketing"
-        description="Run the Growth Engine, track what's deployed, review RAG drafts, and read the report."
+        title={t('header.title')}
+        description={t('header.description')}
       />
       <MarketingFunnelBar />
       <Tabs defaultValue="growth" className="w-full">
         <TabsList>
-          <TabsTrigger value="growth">Growth Engine</TabsTrigger>
-          <TabsTrigger value="campaigns">Campaigns</TabsTrigger>
-          <TabsTrigger value="drafts">Draft review</TabsTrigger>
-          <TabsTrigger value="report">Report</TabsTrigger>
+          <TabsTrigger value="growth">{t('tabs.growth')}</TabsTrigger>
+          <TabsTrigger value="campaigns">{t('tabs.campaigns')}</TabsTrigger>
+          <TabsTrigger value="drafts">{t('tabs.drafts')}</TabsTrigger>
+          <TabsTrigger value="report">{t('tabs.report')}</TabsTrigger>
         </TabsList>
         <TabsContent value="growth" className="mt-4">
           <MarketingGrowthEngine />

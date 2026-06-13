@@ -1,1 +1,110 @@
-{}
+{
+  "header": {
+    "title": "Dashboard",
+    "description": "Ihr Evertrust-Arbeitsbereich.",
+    "welcome": "Willkommen zurück, {name}",
+    "subtitle": "Akquise → Pipeline → gewonnen, auf einen Blick",
+    "refresh": "Aktualisieren"
+  },
+  "loadError": {
+    "title": "Konto konnte nicht geladen werden",
+    "body": "Ihre Sitzung ist möglicherweise abgelaufen oder das Konto ist nicht mehr verfügbar. Melden Sie sich ab und erneut an.",
+    "signOut": "Abmelden"
+  },
+  "common": {
+    "couldNotLoad": "Konnte nicht geladen werden"
+  },
+  "stats": {
+    "campaigns": {
+      "label": "Kampagnen",
+      "hint": "{total} gesamt · {live} aktiv"
+    },
+    "hotLeads": {
+      "label": "Heiße Leads",
+      "hint": "Interesse an Pipeline"
+    },
+    "meetings": {
+      "label": "Meetings",
+      "hint": "Ausgewertete Gespräche"
+    },
+    "customers": {
+      "label": "Kunden",
+      "hint": "Gewonnene Accounts"
+    },
+    "openTenders": {
+      "label": "Offene Ausschreibungen",
+      "hint": "{total} gesamt"
+    },
+    "atRisk": {
+      "label": "Frist gefährdet",
+      "overdue": "{count} überfällig",
+      "withinWindow": "Innerhalb des T-2-Fensters",
+      "onTrack": "Alles im Plan"
+    }
+  },
+  "acquisition": {
+    "title": "Akquise-Trichter",
+    "description": "Heiße Leads → Meetings → gewonnene Kunden",
+    "empty": "Noch keine Akquisedaten",
+    "stages": {
+      "hotLeads": "Heiße Leads",
+      "meetings": "Meetings",
+      "customersWon": "Gewonnene Kunden"
+    }
+  },
+  "needsAttention": {
+    "title": "Erfordert Aufmerksamkeit",
+    "checking": "Wird geprüft…",
+    "none": "Nichts erfordert Aufmerksamkeit",
+    "count": "{count, plural, one {# offener Punkt} other {# offene Punkte}}",
+    "allClear": "Alles erledigt — keine gefährdeten Fristen, jedes Meeting zugeordnet.",
+    "risk": {
+      "title": "{count, plural, one {# Ausschreibung mit gefährdeter Frist} other {# Ausschreibungen mit gefährdeter Frist}}",
+      "mostUrgent": "Am dringendsten: {title}",
+      "fallback": "Innerhalb des T-2-Fensters",
+      "cta": "Öffnen"
+    },
+    "unattributed": {
+      "title": "{count, plural, one {# nicht zugeordnetes Meeting} other {# nicht zugeordnete Meetings}}",
+      "sub": "Vertrieb · keine Kampagne zugeordnet",
+      "cta": "Zuordnen"
+    }
+  },
+  "tenderPipeline": {
+    "title": "Ausschreibungs-Pipeline",
+    "description": "{count} offen · nach Phase",
+    "empty": "Noch keine Ausschreibungen",
+    "series": "Ausschreibungen",
+    "stages": {
+      "NOT_STARTED": "Nicht begonnen",
+      "PIC_PRICING": "PIC-Kalkulation",
+      "CUSTOMER_PRICING": "Kundenkalk.",
+      "DOCUMENTS": "Dokumente",
+      "SUBMITTED": "Eingereicht",
+      "AWARDED": "Bezuschlagt",
+      "LOST": "Verloren"
+    }
+  },
+  "campaignStatus": {
+    "title": "Kampagnen",
+    "description": "{count} gesamt · nach Lebenszyklus",
+    "empty": "Noch keine Kampagnen",
+    "states": {
+      "ACTIVE": "Aktiv",
+      "PAUSED": "Pausiert",
+      "DRAFT": "Entwurf",
+      "ARCHIVED": "Archiviert"
+    }
+  },
+  "footnote": "Jede Kennzahl oben wird live aus den operativen Daten gelesen. Panels, die eine historische Auswertung benötigen — Akquise im Zeitverlauf, Antwortthemen und Trends von Woche zu Woche — erscheinen hier, sobald das Arsenal tägliche Metriken an das ERP meldet; sie werden bewusst nicht angezeigt, statt erfunden zu werden.",
+  "profile": {
+    "title": "Profil",
+    "description": "Aktualisieren Sie Ihren Anzeigenamen. Diese Aktion wird protokolliert.",
+    "nameLabel": "Anzeigename",
+    "save": "Änderungen speichern",
+    "saving": "Wird gespeichert…",
+    "unchanged": "Name ist unverändert.",
+    "updated": "Name geändert in „{name}“.",
+    "updateError": "Ihr Name konnte nicht aktualisiert werden."
+  }
+}

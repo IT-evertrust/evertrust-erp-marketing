@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { Trash2 } from 'lucide-react';
 import type { CampaignDto } from '@evertrust/shared';
@@ -20,6 +21,7 @@ import {
 // ERP record only — the Google Drive folder and its leads are NOT touched (the
 // ERP has no Drive write path), which the dialog states plainly.
 export function DeleteCampaignButton({ campaign }: { campaign: CampaignDto }) {
+  const t = useTranslations('marketing');
   const [open, setOpen] = useState(false);
   const del = useDeleteCampaign();
   const label = campaign.name || campaign.project;
@@ -27,10 +29,10 @@ export function DeleteCampaignButton({ campaign }: { campaign: CampaignDto }) {
   function confirm() {
     del.mutate(campaign.id, {
       onSuccess: () => {
-        toast.success(`Deleted "${label}".`);
+        toast.success(t('actions.deleted', { name: label }));
         setOpen(false);
       },
-      onError: (e) => toast.error(e.message ?? 'Could not delete the campaign.'),
+      onError: (e) => toast.error(e.message ?? t('actions.deleteFailed')),
     });
   }
 
@@ -41,23 +43,25 @@ export function DeleteCampaignButton({ campaign }: { campaign: CampaignDto }) {
           variant="ghost"
           size="icon"
           className="shrink-0 text-muted-foreground hover:text-destructive"
-          aria-label={`Delete ${label}`}
+          aria-label={t('actions.deleteAria', { name: label })}
         >
           <Trash2 />
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Delete campaign?</DialogTitle>
+          <DialogTitle>{t('actions.deleteTitle')}</DialogTitle>
           <DialogDescription>
-            Removes <span className="font-medium">{label}</span> from the ERP. The
-            Google Drive folder and its leads are <strong>not</strong> deleted —
-            only this record and its run history link.
+            {t.rich('actions.deleteDescription', {
+              name: label,
+              b: (chunks) => <span className="font-medium">{chunks}</span>,
+              strong: (chunks) => <strong>{chunks}</strong>,
+            })}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             type="button"
@@ -65,7 +69,7 @@ export function DeleteCampaignButton({ campaign }: { campaign: CampaignDto }) {
             onClick={confirm}
             disabled={del.isPending}
           >
-            {del.isPending ? 'Deleting…' : 'Delete'}
+            {del.isPending ? t('actions.deleting') : t('actions.delete')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,1 +1,104 @@
-{}
+{
+  "header": {
+    "title": "Vertrieb",
+    "description": "Analysen von Vertriebsgesprächen, gespiegelt aus dem Drive-Ordner. Synchronisieren Sie, um den Ordner abzugleichen; analysieren Sie mit einer Persona, um einen neuen Bericht hinzuzufügen."
+  },
+  "sync": "Aus Drive synchronisieren",
+  "syncing": "Wird synchronisiert…",
+  "syncToast": "Aus Drive synchronisiert ✓ · {imported} neu · {updated} aktualisiert · {pruned} entfernt (Ordner enthält {scanned})",
+  "syncNotConfigured": "Drive-Synchronisierung nicht konfiguriert (N8N_API_URL setzen).",
+  "syncError": "Synchronisierung fehlgeschlagen.",
+  "linkedToast": "Mit Kampagne verknüpft.",
+  "clearedToast": "Zurückgesetzt.",
+  "linkError": "Verknüpfung nicht möglich.",
+  "filters": {
+    "searchPlaceholder": "Unternehmen, AE, E-Mail suchen…",
+    "campaignPlaceholder": "Kampagne",
+    "allCampaigns": "Alle Kampagnen",
+    "unattributed": "Nicht zugeordnet",
+    "aePlaceholder": "AE",
+    "allAes": "Alle AEs",
+    "personaPlaceholder": "Persona",
+    "allPersonas": "Alle Personas",
+    "anyTime": "Beliebiger Zeitraum",
+    "week": "Woche",
+    "month": "Monat"
+  },
+  "list": {
+    "heading": "Termine · {count}",
+    "loadError": "Termine konnten nicht geladen werden: {message}",
+    "empty": "Keine passenden Termine.",
+    "emptyNoData": "Noch keine Termine — auf „Aus Drive synchronisieren“ klicken.",
+    "unknownCompany": "Unbekannt",
+    "campaignFallback": "Kampagne",
+    "unattributed": "Nicht zugeordnet",
+    "score": "{score}/100"
+  },
+  "detail": {
+    "none": "Kein Termin ausgewählt.",
+    "unknownCompany": "Unbekannt",
+    "openDoc": "Dokument öffnen",
+    "delete": "Löschen",
+    "confirmDelete": "Löschen bestätigen",
+    "deleteTitle": "Diesen Termin löschen",
+    "deleteToast": "Termin gelöscht.",
+    "deleteError": "Termin konnte nicht gelöscht werden.",
+    "attribution": {
+      "changeCampaign": "Kampagne ändern:",
+      "unattributedNoEmail": "Nicht zugeordnet.",
+      "unattributedNoMatch": "Nicht zugeordnet — kein Lead passte zu {email}.",
+      "choosePlaceholder": "Kampagne auswählen…",
+      "campaignFallback": "(Kampagne)",
+      "link": "Verknüpfen",
+      "cancel": "Abbrechen",
+      "campaign": "Kampagne",
+      "campaignName": "Kampagne",
+      "matchedBy": "zugeordnet über {method}",
+      "change": "Ändern"
+    },
+    "signals": {
+      "ae": "AE",
+      "clientContact": "Kundenkontakt",
+      "prospectEmail": "Interessenten-E-Mail",
+      "overallScore": "Gesamtbewertung",
+      "scoreValue": "{score}/100"
+    },
+    "coaching": {
+      "persona": "Persona",
+      "loadingPersona": "Wird geladen…",
+      "choosePersona": "Persona auswählen",
+      "refreshPersonas": "Personas aus dem Drive-Ordner aktualisieren",
+      "openFolder": "Den KI-Personas-Ordner in Drive öffnen",
+      "folder": "Ordner",
+      "analyze": "Analysieren",
+      "reanalyze": "Erneut analysieren",
+      "analyzeToast": "Analysiert ✓",
+      "analyzeError": "Analyse fehlgeschlagen.",
+      "noTranscript": "Kein Transkript gespeichert — aus n8n synchronisieren, um die Analyse zu aktivieren."
+    },
+    "analysis": {
+      "none": "Für diesen Termin liegt noch keine Analyse vor.",
+      "summary": "Zusammenfassung",
+      "aePerformance": "AE-Leistung",
+      "clientAnalysis": "Kundenanalyse",
+      "whatWorked": "Was funktioniert hat",
+      "whatToImprove": "Was zu verbessern ist",
+      "scoreOutOf": "/100",
+      "whyItWorked": "Warum es funktioniert hat",
+      "observed": "Beobachtet",
+      "try": "Versuchen",
+      "untitled": "—"
+    },
+    "perf": {
+      "understanding_client_needs": "Verständnis der Kundenbedürfnisse",
+      "communication": "Kommunikation",
+      "technical_explanation": "Technische Erläuterung",
+      "aggressiveness": "Durchsetzungsstärke"
+    },
+    "client": {
+      "buying_intent": "Kaufabsicht",
+      "interest": "Interesse",
+      "communication": "Kommunikation"
+    }
+  }
+}

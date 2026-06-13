@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { useTranslations } from 'next-intl';
 import { CheckCircle2, Gavel, Send, ShieldAlert, ShieldCheck } from 'lucide-react';
 import type {
   ApprovalRequestDto,
@@ -52,6 +53,7 @@ import { formatDateTime } from '@/lib/tender-format';
 // SUBMITTED tender always has a logged receipt. Readiness is computed server-side
 // (the SAME predicates submit() enforces), so this card cannot drift from the gate.
 export function TenderSubmissionCard({ tenderId }: { tenderId: string }) {
+  const t = useTranslations('tenders');
   const submission = useSubmission(tenderId);
   const r = submission.data;
   const submitted = !!r && (r.status === 'SUBMITTED' || r.receipts.length > 0);
@@ -59,10 +61,9 @@ export function TenderSubmissionCard({ tenderId }: { tenderId: string }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Submission</CardTitle>
+        <CardTitle className="text-base">{t('submission.title')}</CardTitle>
         <CardDescription>
-          Submit on the portal (human), then record the proof here. The gate —
-          customer approval + conditional QC — is enforced before submission.
+          {t('submission.description')}
         </CardDescription>
         {r && r.canSubmit && !submitted ? (
           <Can permission="tenders:transition">
@@ -80,24 +81,25 @@ export function TenderSubmissionCard({ tenderId }: { tenderId: string }) {
             {submitted ? (
               <Alert className="border-emerald-500/30 text-emerald-700 dark:text-emerald-400">
                 <CheckCircle2 />
-                <AlertTitle>Submitted</AlertTitle>
+                <AlertTitle>{t('submission.submittedTitle')}</AlertTitle>
                 <AlertDescription className="text-emerald-700/90 dark:text-emerald-400/90">
-                  Submission proof is on record below.
+                  {t('submission.submittedBody')}
                 </AlertDescription>
               </Alert>
             ) : r.canSubmit ? (
               <Alert className="border-emerald-500/30 text-emerald-700 dark:text-emerald-400">
                 <ShieldCheck />
-                <AlertTitle>Ready to submit</AlertTitle>
+                <AlertTitle>{t('submission.readyTitle')}</AlertTitle>
                 <AlertDescription className="text-emerald-700/90 dark:text-emerald-400/90">
-                  All gates cleared. Record the portal proof to complete submission.
+                  {t('submission.readyBody')}
                 </AlertDescription>
               </Alert>
             ) : (
               <Alert variant="destructive">
                 <ShieldAlert />
-                <AlertTitle>Not ready to submit</AlertTitle>
+                <AlertTitle>{t('submission.notReadyTitle')}</AlertTitle>
                 <AlertDescription>
+                  {/* Blocker reasons are produced server-side and rendered verbatim. */}
                   <ul className="mt-1 list-disc pl-5">
                     {r.blockers.map((b) => (
                       <li key={b}>{b}</li>
@@ -114,7 +116,7 @@ export function TenderSubmissionCard({ tenderId }: { tenderId: string }) {
             {r.receipts.length > 0 ? (
               <div>
                 <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Submission receipts
+                  {t('submission.receiptsTitle')}
                 </p>
                 <ul className="divide-y divide-border rounded-lg border">
                   {r.receipts.map((rc) => (
@@ -125,8 +127,7 @@ export function TenderSubmissionCard({ tenderId }: { tenderId: string }) {
                           {rc.proofUrl}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {(rc.fileList?.length ?? 0)} file
-                          {(rc.fileList?.length ?? 0) === 1 ? '' : 's'}
+                          {t('submission.receiptFiles', { count: rc.fileList?.length ?? 0 })}
                         </div>
                       </div>
                       <span className="ml-auto shrink-0 whitespace-nowrap text-xs text-muted-foreground">
@@ -153,6 +154,7 @@ function QcSection({
   tenderId: string;
   readiness: SubmissionReadinessDto;
 }) {
+  const t = useTranslations('tenders');
   const approvals = useTenderApprovals(tenderId);
   const qcRows = (approvals.data ?? []).filter((a) => a.type === 'QC');
   const pendingQc = qcRows.find((a) => a.status === 'PENDING');
@@ -162,23 +164,24 @@ function QcSection({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Quality check (QC)</span>
+            <span className="text-sm font-medium">{t('submission.qcTitle')}</span>
             {readiness.hasApprovedQc ? (
               <Badge
                 variant="outline"
                 className="border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
               >
-                Approved
+                {t('submission.qcApproved')}
               </Badge>
             ) : (
               <Badge
                 variant="outline"
                 className="border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400"
               >
-                Required
+                {t('submission.qcRequired')}
               </Badge>
             )}
           </div>
+          {/* QC reasons are produced server-side and rendered verbatim. */}
           {!readiness.hasApprovedQc && readiness.qcReasons.length > 0 ? (
             <ul className="mt-1 list-disc pl-5 text-xs text-muted-foreground">
               {readiness.qcReasons.map((reason) => (
@@ -205,6 +208,7 @@ function QcSection({
 
 // Open a PENDING QC review (approval_type 'QC').
 function QcRequestDialog({ tenderId }: { tenderId: string }) {
+  const t = useTranslations('tenders');
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState('');
   const request = useRequestApproval(tenderId);
@@ -214,11 +218,11 @@ function QcRequestDialog({ tenderId }: { tenderId: string }) {
       { type: 'QC', evidenceUrl: note.trim() || undefined },
       {
         onSuccess: () => {
-          toast.success('QC review opened.');
+          toast.success(t('submission.qcOpened'));
           setOpen(false);
           setNote('');
         },
-        onError: (e) => toast.error(e.message ?? 'Could not open the QC review.'),
+        onError: (e) => toast.error(e.message ?? t('submission.qcOpenError')),
       },
     );
   }
@@ -228,33 +232,32 @@ function QcRequestDialog({ tenderId }: { tenderId: string }) {
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <Send />
-          Request QC
+          {t('submission.requestQc')}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Request QC review</DialogTitle>
+          <DialogTitle>{t('submission.qcRequestTitle')}</DialogTitle>
           <DialogDescription>
-            Open a quality-check review for this tender. A senior reviewer records
-            the decision; submission stays blocked until QC is approved.
+            {t('submission.qcRequestDescription')}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-2">
-          <Label htmlFor="qc-note">Note (optional)</Label>
+          <Label htmlFor="qc-note">{t('submission.qcNoteLabel')}</Label>
           <Textarea
             id="qc-note"
             value={note}
             maxLength={2000}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="What should the reviewer focus on?"
+            placeholder={t('submission.qcNotePlaceholder')}
           />
         </div>
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button type="button" onClick={submit} disabled={request.isPending}>
-            {request.isPending ? 'Opening…' : 'Open QC review'}
+            {request.isPending ? t('submission.opening') : t('submission.qcOpenReview')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -270,6 +273,7 @@ function QcDecideDialog({
   tenderId: string;
   approval: ApprovalRequestDto;
 }) {
+  const t = useTranslations('tenders');
   const [open, setOpen] = useState(false);
   const [decision, setDecision] = useState<'APPROVED' | 'REJECTED' | undefined>(
     undefined,
@@ -279,7 +283,7 @@ function QcDecideDialog({
 
   function submit() {
     if (!decision) {
-      toast.error('Choose approve or reject.');
+      toast.error(t('submission.chooseError'));
       return;
     }
     decide.mutate(
@@ -288,12 +292,12 @@ function QcDecideDialog({
         onSuccess: (a) => {
           toast.success(
             a.status === 'APPROVED'
-              ? 'QC approved — submission unblocked (if other gates pass).'
-              : 'QC recorded as rejected.',
+              ? t('submission.qcApprovedToast')
+              : t('submission.qcRejectedToast'),
           );
           setOpen(false);
         },
-        onError: (e) => toast.error(e.message ?? 'Could not record the QC decision.'),
+        onError: (e) => toast.error(e.message ?? t('submission.qcDecideError')),
       },
     );
   }
@@ -303,49 +307,49 @@ function QcDecideDialog({
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <Gavel />
-          Record QC
+          {t('submission.recordQc')}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Record QC decision</DialogTitle>
+          <DialogTitle>{t('submission.qcDecideTitle')}</DialogTitle>
           <DialogDescription>
-            Approve or reject the quality check. Attach a note or link as evidence.
+            {t('submission.qcDecideDescription')}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="qc-decision">Decision</Label>
+            <Label htmlFor="qc-decision">{t('submission.decisionLabel')}</Label>
             <Select
               value={decision}
               onValueChange={(v) => setDecision(v as 'APPROVED' | 'REJECTED')}
             >
               <SelectTrigger id="qc-decision" className="w-full">
-                <SelectValue placeholder="Approve or reject" />
+                <SelectValue placeholder={t('submission.decisionPlaceholder')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="APPROVED">Approved</SelectItem>
-                <SelectItem value="REJECTED">Rejected</SelectItem>
+                <SelectItem value="APPROVED">{t('submission.approved')}</SelectItem>
+                <SelectItem value="REJECTED">{t('submission.rejected')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="qc-evidence">Evidence (optional)</Label>
+            <Label htmlFor="qc-evidence">{t('submission.qcEvidenceLabel')}</Label>
             <Textarea
               id="qc-evidence"
               value={evidence}
               maxLength={2000}
               onChange={(e) => setEvidence(e.target.value)}
-              placeholder="QC notes, checklist link, reviewer name…"
+              placeholder={t('submission.qcEvidencePlaceholder')}
             />
           </div>
         </div>
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button type="button" onClick={submit} disabled={decide.isPending}>
-            {decide.isPending ? 'Saving…' : 'Save decision'}
+            {decide.isPending ? t('submission.saving') : t('submission.saveDecision')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -362,6 +366,7 @@ function SubmitDialog({
   tenderId: string;
   documents: string[];
 }) {
+  const t = useTranslations('tenders');
   const [open, setOpen] = useState(false);
   const [proofUrl, setProofUrl] = useState('');
   const submit = useSubmitTender(tenderId);
@@ -369,18 +374,18 @@ function SubmitDialog({
   function go() {
     const trimmed = proofUrl.trim();
     if (!trimmed) {
-      toast.error('Enter the submission proof (a portal receipt link or note).');
+      toast.error(t('submission.proofError'));
       return;
     }
     submit.mutate(
       { proofUrl: trimmed },
       {
         onSuccess: () => {
-          toast.success('Submission recorded — tender moved to Submitted.');
+          toast.success(t('submission.recordedToast'));
           setOpen(false);
           setProofUrl('');
         },
-        onError: (e) => toast.error(e.message ?? 'Could not record the submission.'),
+        onError: (e) => toast.error(e.message ?? t('submission.recordError')),
       },
     );
   }
@@ -390,46 +395,44 @@ function SubmitDialog({
       <DialogTrigger asChild>
         <Button size="sm">
           <Send />
-          Record submission
+          {t('submission.recordSubmission')}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Record submission proof</DialogTitle>
+          <DialogTitle>{t('submission.recordSubmissionTitle')}</DialogTitle>
           <DialogDescription>
-            Paste the portal confirmation (receipt id, link, or a note). This logs
-            the immutable evidence and moves the tender to Submitted.
+            {t('submission.recordSubmissionDescription')}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="submit-proof">Submission proof</Label>
+            <Label htmlFor="submit-proof">{t('submission.proofLabel')}</Label>
             <Textarea
               id="submit-proof"
               value={proofUrl}
               maxLength={2000}
               onChange={(e) => setProofUrl(e.target.value)}
-              placeholder="e.g. DTVP receipt #A1B2C3, or 'submitted via Service-Bund 2026-05-31 09:12'"
+              placeholder={t('submission.proofPlaceholder')}
             />
           </div>
           <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
             {documents.length > 0 ? (
-              <>
-                Recording {documents.length} file
-                {documents.length === 1 ? '' : 's'}:{' '}
-                <span className="text-foreground">{documents.join(', ')}</span>
-              </>
+              t('submission.recordingFiles', {
+                count: documents.length,
+                files: documents.join(', '),
+              })
             ) : (
-              'No documents attached — the receipt will record an empty file list.'
+              t('submission.noDocuments')
             )}
           </div>
         </div>
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button type="button" onClick={go} disabled={submit.isPending}>
-            {submit.isPending ? 'Recording…' : 'Record submission'}
+            {submit.isPending ? t('submission.recording') : t('submission.recordSubmission')}
           </Button>
         </DialogFooter>
       </DialogContent>

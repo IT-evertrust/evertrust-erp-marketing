@@ -1,1 +1,96 @@
-{}
+{
+  "title": "Leistung",
+  "description": "KPI-Scorecards aus echten ERP-Daten — 0–100, farblich nach Zonen. KPIs ohne Datenquelle zeigen „—“, niemals geschätzt.",
+  "loadError": "Scorecards konnten nicht geladen werden: {message}",
+  "tabs": {
+    "scorecards": "Scorecards",
+    "executive": "Geschäftsleitung"
+  },
+  "recordKpi": "KPI erfassen",
+  "table": {
+    "rank": "#",
+    "employee": "Mitarbeiter",
+    "team": "Team",
+    "score": "Score",
+    "zone": "Zone",
+    "categories": "Kategorien",
+    "bonus": "Bonus"
+  },
+  "unassigned": "Nicht zugewiesen",
+  "callouts": {
+    "topPerformers": "Top-Performer",
+    "needsReview": "Prüfung erforderlich"
+  },
+  "scorecardDialog": {
+    "kpiCategories": "KPI-Kategorien",
+    "kpisHeading": "KPIs · diese Woche vs. Ziel",
+    "noData": "KEINE DATEN",
+    "target": "Ziel {value}"
+  },
+  "executive": {
+    "companyAvg": "Durchschnitt Unternehmen",
+    "membersScored": "Bewertete Mitglieder",
+    "highPerformers": "High-Performer",
+    "needAttention": "Aufmerksamkeit nötig",
+    "departmentHealth": "Abteilungsgesundheit",
+    "needsAttention": "Aufmerksamkeit erforderlich",
+    "deptMeta": "Ø · {count} · Top {top}"
+  },
+  "brief": {
+    "title": "KI-Management-Briefing",
+    "generatedAt": "erstellt {date}",
+    "enableTooltip": "ANTHROPIC_API_KEY setzen, um zu aktivieren",
+    "regenerate": "Neu erstellen",
+    "generate": "Briefing erstellen",
+    "notConfigured": "Das KI-Briefing ist nicht konfiguriert — setzen Sie <code>ANTHROPIC_API_KEY</code> in der API, um die von Claude generierte Zusammenfassung zu aktivieren (Top-Bewegungen, Abweichungen, verpasste Fristen, Umsatzchancen, empfohlene Maßnahme). Bis dahin ist die berechnete Übersicht oben die maßgebliche Quelle — keine erfundene Zusammenfassung.",
+    "topAction": "Wichtigste Maßnahme",
+    "empty": "Noch kein Briefing — klicken Sie auf „Briefing erstellen“, um die aktuellen Scorecards via Claude zusammenzufassen."
+  },
+  "emptyState": {
+    "title": "Noch keine Scorecards für diesen Zeitraum.",
+    "description": "Scorecards erscheinen, sobald KPI-Werte für die Woche erfasst sind (automatisch aus ERP-Daten erhoben oder von einer Führungskraft eingegeben)."
+  },
+  "recordDialog": {
+    "title": "KPI-Wert erfassen",
+    "description": "Für KPIs ohne automatische Quelle (von einer Führungskraft eingegeben). Automatisch erhobene KPIs werden nicht aufgeführt — sie stammen aus echten ERP-Daten.",
+    "employee": "Mitarbeiter",
+    "select": "Auswählen…",
+    "kpi": "KPI",
+    "pickEmployeeFirst": "Zuerst einen Mitarbeiter wählen",
+    "kpiOptionTarget": " (Ziel {target})",
+    "value": "Wert",
+    "valuePlaceholder": "z. B. 92 %  ·  8  ·  1,2 Mio. €",
+    "pickError": "Wählen Sie einen Mitarbeiter und einen KPI.",
+    "recordedToast": "{label} für {name} erfasst",
+    "cancel": "Abbrechen",
+    "saving": "Wird gespeichert…",
+    "submit": "Wert erfassen"
+  },
+  "zone": {
+    "GREEN": "High-Performer",
+    "YELLOW": "Erfüllt Erwartungen",
+    "ORANGE": "Verbesserung nötig",
+    "RED": "Sofortige Prüfung"
+  },
+  "bonus": {
+    "full": "Voller Bonus",
+    "pct75": "75 % Bonus",
+    "pct50": "50 % Bonus",
+    "none": "Kein Bonus"
+  },
+  "category": {
+    "OUTPUT": "Output",
+    "QUALITY": "Qualität",
+    "SPEED": "Geschwindigkeit",
+    "COMPLIANCE": "Compliance",
+    "REVENUE": "Umsatz"
+  },
+  "department": {
+    "OPERATIONS": "Betrieb",
+    "IT": "IT",
+    "CONSULTING": "Beratung",
+    "MARKETING": "Marketing",
+    "BUSINESS": "Business",
+    "HR": "Personal"
+  }
+}

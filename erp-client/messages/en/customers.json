@@ -1,1 +1,73 @@
-{}
+{
+  "redirecting": "Redirecting…",
+  "header": {
+    "title": "Customers",
+    "description": "Your customer registry for tender attribution."
+  },
+  "actions": {
+    "new": "New customer",
+    "edit": "Edit customer"
+  },
+  "stats": {
+    "customers": {
+      "label": "Customers",
+      "hint": "In the registry"
+    },
+    "withContact": {
+      "label": "With a contact",
+      "hint": "{count} missing one"
+    },
+    "niches": {
+      "label": "Niches covered",
+      "hint": "Distinct across all customers"
+    }
+  },
+  "registry": {
+    "title": "Registry",
+    "description": "Every customer you can attribute a tender to. Add or edit entries with the right permissions."
+  },
+  "table": {
+    "customer": "Customer",
+    "niches": "Niches",
+    "added": "Added"
+  },
+  "noContact": "No contact",
+  "errorState": {
+    "message": "Could not load customers: {error}"
+  },
+  "emptyState": {
+    "title": "No customers yet",
+    "description": "Add the organizations you bid on behalf of so tenders can be attributed to them."
+  },
+  "dialog": {
+    "titleEdit": "Edit customer",
+    "titleNew": "New customer",
+    "descriptionEdit": "Update this customer in the registry.",
+    "descriptionNew": "Add a customer to the registry.",
+    "fields": {
+      "name": {
+        "label": "Name",
+        "placeholder": "Customer name"
+      },
+      "contact": {
+        "label": "Contact",
+        "placeholder": "name@customer.example"
+      },
+      "niches": {
+        "label": "Niches",
+        "placeholder": "public works, utilities"
+      }
+    },
+    "commaSeparated": "Comma-separated.",
+    "nameRequired": "Name is required.",
+    "cancel": "Cancel",
+    "saving": "Saving…",
+    "saveChanges": "Save changes",
+    "create": "Create customer"
+  },
+  "toast": {
+    "updated": "Customer updated.",
+    "created": "Customer created.",
+    "saveError": "Could not save customer."
+  }
+}

@@ -1,3 +1,6 @@
+'use client';
+
+import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
 import { OUTCOME_DOT, type RunOutcome } from '@/lib/arsenal-sequence';
 
@@ -13,9 +16,10 @@ export function StatusDot({
   running?: boolean;
   className?: string;
 }) {
+  const t = useTranslations('marketing');
   if (running) {
     return (
-      <span className={cn('relative flex size-2.5', className)} aria-label="running">
+      <span className={cn('relative flex size-2.5', className)} aria-label={t('actions.running')}>
         <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400/70" />
         <span className="relative inline-flex size-2.5 rounded-full bg-emerald-500" />
       </span>

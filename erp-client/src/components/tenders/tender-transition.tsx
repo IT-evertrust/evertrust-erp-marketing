@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { ArrowRight } from 'lucide-react';
 import {
   nextStates,
@@ -10,7 +11,6 @@ import { toast } from 'sonner';
 import { useTransitionTender } from '@/hooks/use-tenders';
 import { Can } from '@/components/auth/can';
 import { Button } from '@/components/ui/button';
-import { STATUS_LABEL } from '@/lib/tender-format';
 import { StatusBadge } from './status-badge';
 
 // Lifecycle transition control. Offers the legal next states from the shared state
@@ -19,8 +19,9 @@ import { StatusBadge } from './status-badge';
 // which enforces the customer-approval + QC gate AND logs the proof — so SUBMITTED is
 // never a bare status flip. Terminal states render a "no further transitions" note.
 export function TenderTransition({ tender }: { tender: TenderDto }) {
+  const t = useTranslations('tenders');
   // SUBMITTED is handled by the Submission card, not as a generic transition.
-  const targets = nextStates(tender.status).filter((t) => t !== 'SUBMITTED');
+  const targets = nextStates(tender.status).filter((s) => s !== 'SUBMITTED');
   const submitIsNext = nextStates(tender.status).includes('SUBMITTED');
   const transition = useTransitionTender(tender.id);
 
@@ -29,8 +30,8 @@ export function TenderTransition({ tender }: { tender: TenderDto }) {
       { to },
       {
         onSuccess: (updated) =>
-          toast.success(`Moved to ${STATUS_LABEL[updated.status]}.`),
-        onError: (error) => toast.error(error.message ?? 'Transition failed.'),
+          toast.success(t('transition.moved', { status: t(`status.${updated.status}`) })),
+        onError: (error) => toast.error(error.message ?? t('transition.failed')),
       },
     );
   }
@@ -38,8 +39,9 @@ export function TenderTransition({ tender }: { tender: TenderDto }) {
   if (targets.length === 0 && !submitIsNext) {
     return (
       <p className="text-sm text-muted-foreground">
-        <StatusBadge status={tender.status} /> is terminal — no further
-        transitions.
+        {t.rich('transition.terminal', {
+          status: () => <StatusBadge status={tender.status} />,
+        })}
       </p>
     );
   }
@@ -49,7 +51,7 @@ export function TenderTransition({ tender }: { tender: TenderDto }) {
       permission="tenders:transition"
       fallback={
         <p className="text-sm text-muted-foreground">
-          You don&apos;t have permission to move this tender.
+          {t('transition.noPermission')}
         </p>
       }
     >
@@ -63,14 +65,15 @@ export function TenderTransition({ tender }: { tender: TenderDto }) {
             onClick={() => go(to)}
           >
             <ArrowRight />
-            {STATUS_LABEL[to]}
+            {t(`status.${to}`)}
           </Button>
         ))}
       </div>
       {submitIsNext ? (
         <p className="mt-2 text-xs text-muted-foreground">
-          Ready to submit? Use the <strong>Submission</strong> card below — it
-          enforces the approval + QC gate and records the proof.
+          {t.rich('transition.submitHint', {
+            strong: (chunks) => <strong>{chunks}</strong>,
+          })}
         </p>
       ) : null}
     </Can>

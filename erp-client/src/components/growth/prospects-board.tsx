@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { Archive, Ban, Loader2, Search } from 'lucide-react';
 import type { ProspectDto, ProspectStatus } from '@evertrust/shared';
@@ -39,7 +40,6 @@ import { cn } from '@/lib/utils';
 import { formatDateTime } from '@/lib/tender-format';
 import {
   PROSPECT_STATUS_CLASS,
-  PROSPECT_STATUS_LABEL,
   PROSPECT_STATUS_ORDER,
 } from '@/lib/growth-format';
 import { ProspectDetailDrawer } from './prospect-detail-drawer';
@@ -51,6 +51,7 @@ const ALL = '__all__';
 // a search box, pagination, a per-row status override, and a click-to-open drawer
 // with the conversation timeline. All data is real (GET /prospects/board).
 export function ProspectsBoard({ campaignId }: { campaignId: string }) {
+  const t = useTranslations('marketing');
   const [status, setStatus] = useState<ProspectStatus | null>(null);
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
@@ -100,7 +101,7 @@ export function ProspectsBoard({ campaignId }: { campaignId: string }) {
               : 'border-border text-muted-foreground hover:bg-accent/50',
           )}
         >
-          All <span className="tabular-nums">{totalAll}</span>
+          {t('prospects.all')} <span className="tabular-nums">{totalAll}</span>
         </button>
         {PROSPECT_STATUS_ORDER.map((s) => {
           const n = counts[s] ?? 0;
@@ -116,7 +117,7 @@ export function ProspectsBoard({ campaignId }: { campaignId: string }) {
                   : 'border-border text-muted-foreground hover:bg-accent/50',
               )}
             >
-              {PROSPECT_STATUS_LABEL[s]}{' '}
+              {t(`status.${s}`)}{' '}
               <span className="tabular-nums">{n}</span>
             </button>
           );
@@ -130,7 +131,7 @@ export function ProspectsBoard({ campaignId }: { campaignId: string }) {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search email or company…"
+            placeholder={t('prospects.searchPlaceholder')}
             className="w-64 pl-8"
           />
         </form>
@@ -139,13 +140,13 @@ export function ProspectsBoard({ campaignId }: { campaignId: string }) {
           onValueChange={(v) => pickStatus(v === ALL ? null : (v as ProspectStatus))}
         >
           <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="All statuses" />
+            <SelectValue placeholder={t('prospects.allStatuses')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ALL}>All statuses</SelectItem>
+            <SelectItem value={ALL}>{t('prospects.allStatuses')}</SelectItem>
             {PROSPECT_STATUS_ORDER.map((s) => (
               <SelectItem key={s} value={s}>
-                {PROSPECT_STATUS_LABEL[s]}
+                {t(`status.${s}`)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -160,24 +161,24 @@ export function ProspectsBoard({ campaignId }: { campaignId: string }) {
         <Skeleton className="h-64 w-full rounded-lg" />
       ) : q.isError ? (
         <p className="text-sm text-destructive">
-          Could not load prospects: {q.error.message}
+          {t('prospects.loadError', { message: q.error.message })}
         </p>
       ) : items.length === 0 ? (
         <p className="rounded-lg border border-dashed px-6 py-12 text-center text-sm text-muted-foreground">
           {search || status
-            ? 'No prospects match these filters.'
-            : 'No prospects yet — the Lead Satellite populates this board as it scrapes.'}
+            ? t('prospects.emptyFiltered')
+            : t('prospects.empty')}
         </p>
       ) : (
         <div className="overflow-hidden rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Company</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Last contacted</TableHead>
+                <TableHead>{t('prospects.colCompany')}</TableHead>
+                <TableHead>{t('prospects.colEmail')}</TableHead>
+                <TableHead>{t('prospects.colLocation')}</TableHead>
+                <TableHead>{t('prospects.colStatus')}</TableHead>
+                <TableHead>{t('prospects.colLastContacted')}</TableHead>
                 <TableHead className="w-px" />
               </TableRow>
             </TableHeader>
@@ -198,8 +199,11 @@ export function ProspectsBoard({ campaignId }: { campaignId: string }) {
       {total > PAGE_SIZE ? (
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span className="tabular-nums">
-            {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of{' '}
-            {total}
+            {t('prospects.pageRange', {
+              from: page * PAGE_SIZE + 1,
+              to: Math.min((page + 1) * PAGE_SIZE, total),
+              total,
+            })}
           </span>
           <div className="flex items-center gap-2">
             <Button
@@ -208,7 +212,7 @@ export function ProspectsBoard({ campaignId }: { campaignId: string }) {
               onClick={() => setPage((p) => Math.max(0, p - 1))}
               disabled={page === 0}
             >
-              Previous
+              {t('prospects.previous')}
             </Button>
             <span className="tabular-nums">
               {page + 1} / {pageCount}
@@ -219,7 +223,7 @@ export function ProspectsBoard({ campaignId }: { campaignId: string }) {
               onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
               disabled={page >= pageCount - 1}
             >
-              Next
+              {t('prospects.next')}
             </Button>
           </div>
         </div>
@@ -242,14 +246,21 @@ function ProspectRow({
   prospect: ProspectDto;
   onOpen: () => void;
 }) {
+  const t = useTranslations('marketing');
   const setStatus = useUpdateProspectStatus();
 
-  function override(status: ProspectStatus, label: string) {
+  function override(
+    status: ProspectStatus,
+    toastKey: 'archivedToast' | 'suppressedToast',
+  ) {
     setStatus.mutate(
       { id: p.id, patch: { status } },
       {
-        onSuccess: () => toast.success(`${label} “${p.companyName || p.email}”.`),
-        onError: (e) => toast.error(e.message ?? 'Could not update the status.'),
+        onSuccess: () =>
+          toast.success(
+            t(`prospects.${toastKey}`, { name: p.companyName || p.email }),
+          ),
+        onError: (e) => toast.error(e.message ?? t('prospects.statusError')),
       },
     );
   }
@@ -270,7 +281,7 @@ function ProspectRow({
       </TableCell>
       <TableCell>
         <Badge variant="outline" className={PROSPECT_STATUS_CLASS[p.status]}>
-          {PROSPECT_STATUS_LABEL[p.status]}
+          {t(`status.${p.status}`)}
         </Badge>
       </TableCell>
       <TableCell className="tabular-nums text-muted-foreground">
@@ -284,7 +295,7 @@ function ProspectRow({
                 variant="ghost"
                 size="icon"
                 className="size-8 text-muted-foreground"
-                aria-label={`Actions for ${p.companyName || p.email}`}
+                aria-label={t('prospects.rowActions', { name: p.companyName || p.email })}
                 disabled={setStatus.isPending}
               >
                 <MoreHorizontal />
@@ -293,18 +304,18 @@ function ProspectRow({
             <DropdownMenuContent align="end">
               <DropdownMenuItem
                 disabled={p.status === 'NOT_INTERESTED'}
-                onSelect={() => override('NOT_INTERESTED', 'Archived')}
+                onSelect={() => override('NOT_INTERESTED', 'archivedToast')}
               >
                 <Archive />
-                Mark not interested
+                {t('prospects.markNotInterested')}
               </DropdownMenuItem>
               <DropdownMenuItem
                 variant="destructive"
                 disabled={p.status === 'DO_NOT_CONTACT'}
-                onSelect={() => override('DO_NOT_CONTACT', 'Suppressed')}
+                onSelect={() => override('DO_NOT_CONTACT', 'suppressedToast')}
               >
                 <Ban />
-                Do not contact
+                {t('prospects.doNotContact')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

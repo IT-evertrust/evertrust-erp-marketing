@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import type { CreateCustomerDto, CustomerDto } from '@evertrust/shared';
 import { useCreateCustomer, useUpdateCustomer } from '@/hooks/use-customers';
@@ -58,6 +59,7 @@ export function CustomerDialog({
   customer?: CustomerDto;
   trigger: ReactNode;
 }) {
+  const t = useTranslations('customers');
   const [open, setOpen] = useState(false);
   const isEdit = Boolean(customer);
   const create = useCreateCustomer();
@@ -69,11 +71,11 @@ export function CustomerDialog({
   function onSubmit(values: CustomerFormValues) {
     const payload = toPayload(values);
     const onSuccess = () => {
-      toast.success(isEdit ? 'Customer updated.' : 'Customer created.');
+      toast.success(isEdit ? t('toast.updated') : t('toast.created'));
       setOpen(false);
     };
     const onError = (error: Error) =>
-      toast.error(error.message ?? 'Could not save customer.');
+      toast.error(error.message ?? t('toast.saveError'));
 
     if (customer) update.mutate(payload, { onSuccess, onError });
     else create.mutate(payload, { onSuccess, onError });
@@ -84,11 +86,11 @@ export function CustomerDialog({
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isEdit ? 'Edit customer' : 'New customer'}</DialogTitle>
+          <DialogTitle>{isEdit ? t('dialog.titleEdit') : t('dialog.titleNew')}</DialogTitle>
           <DialogDescription>
             {isEdit
-              ? 'Update this customer in the registry.'
-              : 'Add a customer to the registry.'}
+              ? t('dialog.descriptionEdit')
+              : t('dialog.descriptionNew')}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -99,12 +101,12 @@ export function CustomerDialog({
             <FormField
               control={form.control}
               name="name"
-              rules={{ required: 'Name is required.' }}
+              rules={{ required: t('dialog.nameRequired') }}
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Name</FormLabel>
+                  <FormLabel>{t('dialog.fields.name.label')}</FormLabel>
                   <FormControl>
-                    <Input placeholder="Customer name" {...field} />
+                    <Input placeholder={t('dialog.fields.name.placeholder')} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -115,9 +117,9 @@ export function CustomerDialog({
               name="contact"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Contact</FormLabel>
+                  <FormLabel>{t('dialog.fields.contact.label')}</FormLabel>
                   <FormControl>
-                    <Input placeholder="name@customer.example" {...field} />
+                    <Input placeholder={t('dialog.fields.contact.placeholder')} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -128,21 +130,21 @@ export function CustomerDialog({
               name="niches"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Niches</FormLabel>
+                  <FormLabel>{t('dialog.fields.niches.label')}</FormLabel>
                   <FormControl>
-                    <Input placeholder="public works, utilities" {...field} />
+                    <Input placeholder={t('dialog.fields.niches.placeholder')} {...field} />
                   </FormControl>
-                  <FormDescription>Comma-separated.</FormDescription>
+                  <FormDescription>{t('dialog.commaSeparated')}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-                Cancel
+                {t('dialog.cancel')}
               </Button>
               <Button type="submit" disabled={pending}>
-                {pending ? 'Saving…' : isEdit ? 'Save changes' : 'Create customer'}
+                {pending ? t('dialog.saving') : isEdit ? t('dialog.saveChanges') : t('dialog.create')}
               </Button>
             </DialogFooter>
           </form>

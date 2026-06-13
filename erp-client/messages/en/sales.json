@@ -1,1 +1,104 @@
-{}
+{
+  "header": {
+    "title": "Sales",
+    "description": "Sales-call analyses mirrored from the Drive folder. Sync to match the folder; analyze with a persona to add a new report."
+  },
+  "sync": "Sync from Drive",
+  "syncing": "Syncing…",
+  "syncToast": "Synced from Drive ✓ · {imported} new · {updated} updated · {pruned} removed (folder has {scanned})",
+  "syncNotConfigured": "Drive sync not configured (set N8N_API_URL).",
+  "syncError": "Sync failed.",
+  "linkedToast": "Linked to campaign.",
+  "clearedToast": "Cleared.",
+  "linkError": "Could not link.",
+  "filters": {
+    "searchPlaceholder": "Search company, AE, email…",
+    "campaignPlaceholder": "Campaign",
+    "allCampaigns": "All campaigns",
+    "unattributed": "Unattributed",
+    "aePlaceholder": "AE",
+    "allAes": "All AEs",
+    "personaPlaceholder": "Persona",
+    "allPersonas": "All personas",
+    "anyTime": "Any time",
+    "week": "Week",
+    "month": "Month"
+  },
+  "list": {
+    "heading": "Meetings · {count}",
+    "loadError": "Could not load meetings: {message}",
+    "empty": "No meetings match.",
+    "emptyNoData": "No meetings yet — press “Sync from Drive”.",
+    "unknownCompany": "Unknown",
+    "campaignFallback": "Campaign",
+    "unattributed": "Unattributed",
+    "score": "{score}/100"
+  },
+  "detail": {
+    "none": "No meeting selected.",
+    "unknownCompany": "Unknown",
+    "openDoc": "Open doc",
+    "delete": "Delete",
+    "confirmDelete": "Confirm delete",
+    "deleteTitle": "Delete this meeting",
+    "deleteToast": "Meeting deleted.",
+    "deleteError": "Could not delete meeting.",
+    "attribution": {
+      "changeCampaign": "Change campaign:",
+      "unattributedNoEmail": "Unattributed.",
+      "unattributedNoMatch": "Unattributed — no lead matched {email}.",
+      "choosePlaceholder": "Choose a campaign…",
+      "campaignFallback": "(campaign)",
+      "link": "Link",
+      "cancel": "Cancel",
+      "campaign": "Campaign",
+      "campaignName": "Campaign",
+      "matchedBy": "matched by {method}",
+      "change": "Change"
+    },
+    "signals": {
+      "ae": "AE",
+      "clientContact": "Client contact",
+      "prospectEmail": "Prospect email",
+      "overallScore": "Overall score",
+      "scoreValue": "{score}/100"
+    },
+    "coaching": {
+      "persona": "Persona",
+      "loadingPersona": "Loading…",
+      "choosePersona": "Choose a persona",
+      "refreshPersonas": "Refresh personas from the Drive folder",
+      "openFolder": "Open the AI Personas folder in Drive",
+      "folder": "Folder",
+      "analyze": "Analyze",
+      "reanalyze": "Re-analyze",
+      "analyzeToast": "Analyzed ✓",
+      "analyzeError": "Analysis failed.",
+      "noTranscript": "No transcript stored — sync from n8n to enable analysis."
+    },
+    "analysis": {
+      "none": "No analysis on this meeting yet.",
+      "summary": "Summary",
+      "aePerformance": "AE performance",
+      "clientAnalysis": "Client analysis",
+      "whatWorked": "What worked",
+      "whatToImprove": "What to improve",
+      "scoreOutOf": "/100",
+      "whyItWorked": "Why it worked",
+      "observed": "Observed",
+      "try": "Try",
+      "untitled": "—"
+    },
+    "perf": {
+      "understanding_client_needs": "Understanding client needs",
+      "communication": "Communication",
+      "technical_explanation": "Technical explanation",
+      "aggressiveness": "Aggressiveness"
+    },
+    "client": {
+      "buying_intent": "Buying intent",
+      "interest": "Interest",
+      "communication": "Communication"
+    }
+  }
+}

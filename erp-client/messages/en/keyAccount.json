@@ -1,1 +1,81 @@
-{}
+{
+  "header": {
+    "title": "Key Account",
+    "description": "Move hot leads through the pipeline — review, book, and graduate them to customers."
+  },
+  "kpi": {
+    "hotLeads": "Hot leads",
+    "meetingsBooked": "Meetings booked",
+    "customers": "Customers",
+    "leadToCustomer": "Lead → customer",
+    "liveCampaigns": "Live campaigns"
+  },
+  "toolbar": {
+    "allTiers": "All tiers",
+    "searchPlaceholder": "Search company, email, niche…",
+    "allCampaigns": "All campaigns",
+    "sync": "Sync from n8n",
+    "syncing": "Syncing…",
+    "syncTitle": "Import hot leads + graduated customers from n8n",
+    "runPipeline": "Run pipeline",
+    "runPipelineTitle": "Trigger the Hot Leads Pipeline in n8n",
+    "addLead": "Add lead",
+    "clearLeads": "Clear leads",
+    "clearTitle": "Clear all leads?",
+    "clearDescription": "Deletes every hot lead in this CRM (linked customers are kept). Test-data reset — this can't be undone.",
+    "clearConfirm": "Clear leads"
+  },
+  "status": {
+    "loadError": "Could not load leads: {message}",
+    "syncFailed": "Sync failed: {message}",
+    "syncResult": "Synced from n8n — {imported, plural, one {# lead} other {# leads}}, {customers, plural, one {# new customer} other {# new customers}} (scanned {scanned}).",
+    "syncNotConfigured": "n8n API not configured — set N8N_API_URL / N8N_API_KEY to sync.",
+    "pipelineNotConfigured": "Hot Leads Pipeline webhook not configured (set N8N_HOT_LEADS_PIPELINE_WEBHOOK_URL)."
+  },
+  "stage": {
+    "INTERESTED": "Interested",
+    "MEETING_SCHEDULED": "Meeting Scheduled",
+    "ONGOING": "Ongoing",
+    "CUSTOMER": "Customer",
+    "ARCHIVED": "Archived"
+  },
+  "columns": {
+    "INTERESTED": "New + warming replies",
+    "MEETING_SCHEDULED": "Calls on the calendar",
+    "ONGOING": "Deals in progress",
+    "CUSTOMER": "Graduated to the CRM",
+    "addLead": "+ add lead"
+  },
+  "card": {
+    "sourceN8n": "n8n",
+    "sourceManual": "manual"
+  },
+  "add": {
+    "title": "Add hot lead",
+    "description": "Add a lead by hand. It lands in the Interested column.",
+    "emailLabel": "Email *",
+    "emailPlaceholder": "contact@company.com",
+    "companyLabel": "Company",
+    "nicheLabel": "Niche",
+    "tierLabel": "Tier",
+    "tierPlaceholder": "AAA",
+    "noteLabel": "Note",
+    "cancel": "Cancel",
+    "submit": "Add lead"
+  },
+  "detail": {
+    "hotReason": "Hot reason",
+    "leadStatus": "Lead status",
+    "companyType": "Company type",
+    "country": "Country",
+    "city": "City",
+    "sourceCampaign": "Source campaign",
+    "meetingDate": "Meeting date",
+    "detected": "Detected",
+    "website": "Website",
+    "noContracts": "No contracts generated for this lead yet.",
+    "stage": "Stage",
+    "alreadyCustomer": "Already a customer",
+    "convert": "Convert to customer"
+  }
+}

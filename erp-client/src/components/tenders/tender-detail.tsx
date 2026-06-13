@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { ChevronLeft, Calculator } from 'lucide-react';
 import { computeDeadlineRisk, type TenderDto } from '@evertrust/shared';
 import { useTender } from '@/hooks/use-tenders';
@@ -16,7 +17,6 @@ import {
 } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  REGIME_LABEL,
   formatDate,
   formatDateTime,
   formatValue,
@@ -36,6 +36,7 @@ import { TenderDocumentsCard } from './tender-documents-card';
 // transition-gated). Refresh on transition/edit is handled by the mutation hooks
 // seeding the detail cache.
 export function TenderDetail({ id }: { id: string }) {
+  const t = useTranslations('tenders');
   const { data: tender, isLoading, isError, error } = useTender(id);
 
   return (
@@ -45,7 +46,7 @@ export function TenderDetail({ id }: { id: string }) {
         className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft className="size-4" />
-        Back to tenders
+        {t('detail.back')}
       </Link>
 
       {isLoading ? (
@@ -53,11 +54,9 @@ export function TenderDetail({ id }: { id: string }) {
       ) : isError ? (
         <Card className="border-destructive/30">
           <CardHeader>
-            <CardTitle>Could not load tender</CardTitle>
+            <CardTitle>{t('detail.loadError')}</CardTitle>
             <CardDescription>
-              {error.status === 404
-                ? 'This tender does not exist or is not in your organization.'
-                : error.message}
+              {error.status === 404 ? t('detail.notFound') : error.message}
             </CardDescription>
           </CardHeader>
         </Card>
@@ -69,6 +68,7 @@ export function TenderDetail({ id }: { id: string }) {
 }
 
 function TenderDetailBody({ tender }: { tender: TenderDto }) {
+  const t = useTranslations('tenders');
   // Resolve the linked customer's name (best-effort; the field falls back to the
   // raw id if the lookup is unavailable).
   const customer = useCustomer(tender.customerId ?? undefined);
@@ -98,7 +98,7 @@ function TenderDetailBody({ tender }: { tender: TenderDto }) {
             <Button asChild variant="outline" size="sm">
               <Link href={`/tenders/${tender.id}/pricing`}>
                 <Calculator />
-                Pricing workbench
+                {t('detail.pricingWorkbench')}
               </Link>
             </Button>
           </Can>
@@ -110,10 +110,9 @@ function TenderDetailBody({ tender }: { tender: TenderDto }) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Lifecycle</CardTitle>
+          <CardTitle className="text-base">{t('detail.lifecycle.title')}</CardTitle>
           <CardDescription>
-            Move this tender to its next valid state. Transitions are enforced by
-            the shared state machine and audited.
+            {t('detail.lifecycle.description')}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -131,13 +130,13 @@ function TenderDetailBody({ tender }: { tender: TenderDto }) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Details</CardTitle>
+          <CardTitle className="text-base">{t('detail.detailsTitle')}</CardTitle>
         </CardHeader>
         <CardContent>
           <dl className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
-            <Field label="Buyer" value={tender.buyer ?? '—'} />
+            <Field label={t('detail.field.buyer')} value={tender.buyer ?? '—'} />
             <Field
-              label="Customer"
+              label={t('detail.field.customer')}
               value={
                 tender.customerId
                   ? (customer.data?.name ?? tender.customerId)
@@ -145,30 +144,30 @@ function TenderDetailBody({ tender }: { tender: TenderDto }) {
               }
             />
             <Field
-              label="Regime"
-              value={tender.regime ? REGIME_LABEL[tender.regime] : '—'}
+              label={t('detail.field.regime')}
+              value={tender.regime ? t(`regime.${tender.regime}`) : '—'}
             />
-            <Field label="Niche" value={tender.niche ?? '—'} />
+            <Field label={t('detail.field.niche')} value={tender.niche ?? '—'} />
             <Field
-              label="Estimated value"
+              label={t('detail.field.estimatedValue')}
               value={formatValue(tender.estimatedValue, tender.currency)}
             />
             <Field
-              label="Above EU threshold"
-              value={tender.isAboveThreshold ? 'Yes' : 'No'}
+              label={t('detail.field.aboveThreshold')}
+              value={tender.isAboveThreshold ? t('common.yes') : t('common.no')}
             />
-            <Field label="Location" value={tender.location ?? '—'} />
-            <Field label="Currency" value={tender.currency} />
+            <Field label={t('detail.field.location')} value={tender.location ?? '—'} />
+            <Field label={t('detail.field.currency')} value={tender.currency} />
             <Field
-              label="Questions deadline"
+              label={t('detail.field.questionsDeadline')}
               value={formatDate(tender.questionsDeadlineAt)}
             />
             <Field
-              label="Submission deadline"
+              label={t('detail.field.submissionDeadline')}
               value={formatDate(tender.submissionDeadlineAt)}
             />
-            <Field label="Created" value={formatDateTime(tender.createdAt)} />
-            <Field label="Updated" value={formatDateTime(tender.updatedAt)} />
+            <Field label={t('detail.field.created')} value={formatDateTime(tender.createdAt)} />
+            <Field label={t('detail.field.updated')} value={formatDateTime(tender.updatedAt)} />
           </dl>
         </CardContent>
       </Card>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Loader2 } from 'lucide-react';
 import { useCreateLead } from '@/hooks/use-leads';
 import {
@@ -24,6 +25,7 @@ export function AddLeadDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useTranslations('keyAccount');
   const create = useCreateLead();
   const [email, setEmail] = useState('');
   const [companyName, setCompanyName] = useState('');
@@ -63,26 +65,24 @@ export function AddLeadDialog({
       <DialogContent className="max-w-md">
         <form onSubmit={submit}>
           <DialogHeader>
-            <DialogTitle>Add hot lead</DialogTitle>
-            <DialogDescription>
-              Add a lead by hand. It lands in the Interested column.
-            </DialogDescription>
+            <DialogTitle>{t('add.title')}</DialogTitle>
+            <DialogDescription>{t('add.description')}</DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-3 py-3">
             <div className="grid gap-1.5">
-              <Label htmlFor="lead-email">Email *</Label>
+              <Label htmlFor="lead-email">{t('add.emailLabel')}</Label>
               <Input
                 id="lead-email"
                 type="email"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="contact@company.com"
+                placeholder={t('add.emailPlaceholder')}
               />
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="lead-company">Company</Label>
+              <Label htmlFor="lead-company">{t('add.companyLabel')}</Label>
               <Input
                 id="lead-company"
                 value={companyName}
@@ -91,7 +91,7 @@ export function AddLeadDialog({
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-1.5">
-                <Label htmlFor="lead-niche">Niche</Label>
+                <Label htmlFor="lead-niche">{t('add.nicheLabel')}</Label>
                 <Input
                   id="lead-niche"
                   value={niche}
@@ -99,17 +99,17 @@ export function AddLeadDialog({
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="lead-tier">Tier</Label>
+                <Label htmlFor="lead-tier">{t('add.tierLabel')}</Label>
                 <Input
                   id="lead-tier"
                   value={tier}
                   onChange={(e) => setTier(e.target.value)}
-                  placeholder="AAA"
+                  placeholder={t('add.tierPlaceholder')}
                 />
               </div>
             </div>
             <div className="grid gap-1.5">
-              <Label htmlFor="lead-note">Note</Label>
+              <Label htmlFor="lead-note">{t('add.noteLabel')}</Label>
               <Textarea
                 id="lead-note"
                 value={note}
@@ -129,11 +129,11 @@ export function AddLeadDialog({
               variant="outline"
               onClick={() => onOpenChange(false)}
             >
-              Cancel
+              {t('add.cancel')}
             </Button>
             <Button type="submit" disabled={create.isPending || !email.trim()}>
               {create.isPending ? <Loader2 className="animate-spin" /> : null}
-              Add lead
+              {t('add.submit')}
             </Button>
           </DialogFooter>
         </form>

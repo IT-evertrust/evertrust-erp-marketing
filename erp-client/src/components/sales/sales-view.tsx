@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import {
   ChevronRight,
@@ -68,17 +69,15 @@ interface Analysis {
   weaknesses_text?: string;
 }
 
-const PERF: [string, string][] = [
-  ['understanding_client_needs', 'Understanding client needs'],
-  ['communication', 'Communication'],
-  ['technical_explanation', 'Technical explanation'],
-  ['aggressiveness', 'Aggressiveness'],
-];
-const CLIENT: [string, string][] = [
-  ['buying_intent', 'Buying intent'],
-  ['interest', 'Interest'],
-  ['communication', 'Communication'],
-];
+// Score dimensions, keyed by the analysis-schema field. Labels are resolved at
+// render time via the `sales` namespace (detail.perf.* / detail.client.*).
+const PERF = [
+  'understanding_client_needs',
+  'communication',
+  'technical_explanation',
+  'aggressiveness',
+] as const;
+const CLIENT = ['buying_intent', 'interest', 'communication'] as const;
 
 const scoreClass = (s: number) =>
   s >= 70
@@ -88,14 +87,17 @@ const scoreClass = (s: number) =>
       : 'text-red-600 dark:text-red-400';
 const barClass = (s: number) =>
   s >= 70 ? 'bg-emerald-500' : s >= 50 ? 'bg-amber-500' : 'bg-red-500';
-const campName = (c: { name?: string | null; project?: string | null }) =>
-  c.name || c.project || '(campaign)';
+const campName = (
+  c: { name?: string | null; project?: string | null },
+  fallback: string,
+) => c.name || c.project || fallback;
 
 // Sales page: meetings synced from the EVERTRUST - SALES AGENT n8n workflow,
 // each attributed to its campaign (prospect email → lead). Search + Campaign /
 // AE / Persona / Date filters; detail shows the Hormozi analysis + lets you
 // manually link an unattributed meeting.
 export function SalesView() {
+  const t = useTranslations('sales');
   const meetings = useMeetings();
   const sync = useSyncMeetings();
   const link = useLinkMeeting();
@@ -164,10 +166,15 @@ export function SalesView() {
       onSuccess: (r) =>
         r.configured
           ? toast.success(
-              `Synced from Drive ✓ · ${r.imported} new · ${r.updated} updated · ${r.pruned} removed (folder has ${r.scanned})`,
+              t('syncToast', {
+                imported: r.imported,
+                updated: r.updated,
+                pruned: r.pruned,
+                scanned: r.scanned,
+              }),
             )
-          : toast.error('Drive sync not configured (set N8N_API_URL).'),
-      onError: (e) => toast.error(e.message ?? 'Sync failed.'),
+          : toast.error(t('syncNotConfigured')),
+      onError: (e) => toast.error(e.message ?? t('syncError')),
     });
   }
   function doLink(mtg: MeetingDto, campaignId: string | null) {
@@ -175,10 +182,12 @@ export function SalesView() {
       { id: mtg.id, campaignId },
       {
         onSuccess: () => {
-          toast.success(campaignId ? 'Linked to campaign.' : 'Cleared.');
+          toast.success(
+            campaignId ? t('linkedToast') : t('clearedToast'),
+          );
           setChanging(false);
         },
-        onError: (e) => toast.error(e.message ?? 'Could not link.'),
+        onError: (e) => toast.error(e.message ?? t('linkError')),
       },
     );
   }
@@ -186,8 +195,8 @@ export function SalesView() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="Sales"
-        description="Sales-call analyses mirrored from the Drive folder. Sync to match the folder; analyze with a persona to add a new report."
+        title={t('header.title')}
+        description={t('header.description')}
         actions={
           <Can permission="campaigns:write">
             <Button
@@ -201,7 +210,7 @@ export function SalesView() {
               ) : (
                 <RefreshCw />
               )}
-              {sync.isPending ? 'Syncing…' : 'Sync from Drive'}
+              {sync.isPending ? t('syncing') : t('sync')}
             </Button>
           </Can>
         }
@@ -210,31 +219,31 @@ export function SalesView() {
       {/* filters */}
       <div className="flex flex-wrap items-center gap-2">
         <Input
-          placeholder="Search company, AE, email…"
+          placeholder={t('filters.searchPlaceholder')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="h-9 w-full sm:w-60"
         />
         <Select value={fCampaign} onValueChange={setFCampaign}>
           <SelectTrigger className="h-9 w-[190px]">
-            <SelectValue placeholder="Campaign" />
+            <SelectValue placeholder={t('filters.campaignPlaceholder')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ALL}>All campaigns</SelectItem>
+            <SelectItem value={ALL}>{t('filters.allCampaigns')}</SelectItem>
             {campList.map((c) => (
               <SelectItem key={c.id} value={c.id}>
-                {campName(c)}
+                {campName(c, t('list.campaignFallback'))}
               </SelectItem>
             ))}
-            <SelectItem value={NONE}>Unattributed</SelectItem>
+            <SelectItem value={NONE}>{t('filters.unattributed')}</SelectItem>
           </SelectContent>
         </Select>
         <Select value={fAe} onValueChange={setFAe}>
           <SelectTrigger className="h-9 w-[150px]">
-            <SelectValue placeholder="AE" />
+            <SelectValue placeholder={t('filters.aePlaceholder')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ALL}>All AEs</SelectItem>
+            <SelectItem value={ALL}>{t('filters.allAes')}</SelectItem>
             {aes.map((a) => (
               <SelectItem key={a} value={a}>
                 {a}
@@ -244,10 +253,10 @@ export function SalesView() {
         </Select>
         <Select value={fPersona} onValueChange={setFPersona}>
           <SelectTrigger className="h-9 w-[160px]">
-            <SelectValue placeholder="Persona" />
+            <SelectValue placeholder={t('filters.personaPlaceholder')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ALL}>All personas</SelectItem>
+            <SelectItem value={ALL}>{t('filters.allPersonas')}</SelectItem>
             {personas.map((p) => (
               <SelectItem key={p} value={p}>
                 {p}
@@ -258,9 +267,9 @@ export function SalesView() {
         <div className="inline-flex rounded-lg border bg-card p-0.5">
           {(
             [
-              [ALL, 'Any time'],
-              ['week', 'Week'],
-              ['month', 'Month'],
+              [ALL, t('filters.anyTime')],
+              ['week', t('filters.week')],
+              ['month', t('filters.month')],
             ] as const
           ).map(([k, label]) => (
             <button
@@ -282,14 +291,14 @@ export function SalesView() {
 
       {meetings.isError ? (
         <p className="text-sm text-destructive">
-          Could not load meetings: {meetings.error.message}
+          {t('list.loadError', { message: meetings.error.message })}
         </p>
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[340px_1fr]">
           {/* list */}
           <Card className="self-start overflow-hidden">
             <div className="border-b p-3 text-xs uppercase tracking-wider text-muted-foreground">
-              Meetings · {filtered.length}
+              {t('list.heading', { count: filtered.length })}
             </div>
             <div className="max-h-[72vh] overflow-y-auto">
               {meetings.isLoading ? (
@@ -300,9 +309,7 @@ export function SalesView() {
                 </div>
               ) : filtered.length === 0 ? (
                 <p className="p-6 text-center text-sm text-muted-foreground">
-                  {all.length === 0
-                    ? 'No meetings yet — press “Sync from Drive”.'
-                    : 'No meetings match.'}
+                  {all.length === 0 ? t('list.emptyNoData') : t('list.empty')}
                 </p>
               ) : (
                 filtered.map((m) => (
@@ -316,7 +323,7 @@ export function SalesView() {
                     )}
                   >
                     <span className="truncate text-sm font-semibold">
-                      {m.clientCompany ?? 'Unknown'}
+                      {m.clientCompany ?? t('list.unknownCompany')}
                     </span>
                     <span className="truncate text-xs text-muted-foreground">
                       {m.aeName ?? '—'} → {m.clientContact ?? '—'} ·{' '}
@@ -325,11 +332,11 @@ export function SalesView() {
                     <span className="flex flex-wrap items-center gap-1.5">
                       {m.campaignId ? (
                         <Badge className="gap-1 border-transparent bg-sky-500/10 text-[10px] font-medium text-sky-600 dark:text-sky-400">
-                          {m.campaignName ?? 'Campaign'}
+                          {m.campaignName ?? t('list.campaignFallback')}
                         </Badge>
                       ) : (
                         <Badge className="gap-1 border-transparent bg-amber-500/10 text-[10px] font-medium text-amber-600 dark:text-amber-400">
-                          Unattributed
+                          {t('list.unattributed')}
                         </Badge>
                       )}
                       {typeof m.score === 'number' ? (
@@ -337,7 +344,7 @@ export function SalesView() {
                           variant="outline"
                           className={cn('text-[10px]', scoreClass(m.score))}
                         >
-                          {m.score}/100
+                          {t('list.score', { score: m.score })}
                         </Badge>
                       ) : null}
                     </span>
@@ -354,7 +361,7 @@ export function SalesView() {
                 <Skeleton className="h-80 w-full" />
               ) : !selected ? (
                 <p className="text-sm text-muted-foreground">
-                  No meeting selected.
+                  {t('detail.none')}
                 </p>
               ) : (
                 <MeetingDetail
@@ -399,6 +406,7 @@ function MeetingDetail({
   linking: boolean;
   onDeleted: () => void;
 }) {
+  const t = useTranslations('sales');
   const a = (m.analysis ?? null) as Analysis | null;
   const showPicker = !m.campaignId || changing;
 
@@ -423,7 +431,7 @@ function MeetingDetail({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">
-            {m.clientCompany ?? 'Unknown'}
+            {m.clientCompany ?? t('detail.unknownCompany')}
           </h2>
           <p className="text-sm text-muted-foreground">
             {m.aeName ?? '—'} → {m.clientContact ?? '—'} ·{' '}
@@ -435,7 +443,8 @@ function MeetingDetail({
           {m.docUrl ? (
             <Button asChild variant="outline" size="sm">
               <a href={m.docUrl} target="_blank" rel="noopener noreferrer">
-                Open doc <ExternalLink className="ml-1 size-3.5" />
+                {t('detail.openDoc')}{' '}
+                <ExternalLink className="ml-1 size-3.5" />
               </a>
             </Button>
           ) : null}
@@ -451,22 +460,22 @@ function MeetingDetail({
                 }
                 del.mutate(m.id, {
                   onSuccess: () => {
-                    toast.success('Meeting deleted.');
+                    toast.success(t('detail.deleteToast'));
                     onDeleted();
                   },
                   onError: (e) =>
-                    toast.error(e.message ?? 'Could not delete meeting.'),
+                    toast.error(e.message ?? t('detail.deleteError')),
                 });
               }}
               onMouseLeave={() => setConfirmDel(false)}
-              title="Delete this meeting"
+              title={t('detail.deleteTitle')}
             >
               {del.isPending ? (
                 <Loader2 className="animate-spin" />
               ) : (
                 <Trash2 className="size-3.5" />
               )}
-              {confirmDel ? 'Confirm delete' : 'Delete'}
+              {confirmDel ? t('detail.confirmDelete') : t('detail.delete')}
             </Button>
           </Can>
         </div>
@@ -485,19 +494,25 @@ function MeetingDetail({
           <>
             <span className="text-muted-foreground">
               {m.campaignId
-                ? 'Change campaign:'
-                : `Unattributed${
-                    m.clientEmail ? ` — no lead matched ${m.clientEmail}.` : '.'
-                  }`}
+                ? t('detail.attribution.changeCampaign')
+                : m.clientEmail
+                  ? t('detail.attribution.unattributedNoMatch', {
+                      email: m.clientEmail,
+                    })
+                  : t('detail.attribution.unattributedNoEmail')}
             </span>
             <Select value={linkValue} onValueChange={setLinkValue}>
               <SelectTrigger className="h-8 w-[200px]">
-                <SelectValue placeholder="Choose a campaign…" />
+                <SelectValue
+                  placeholder={t('detail.attribution.choosePlaceholder')}
+                />
               </SelectTrigger>
               <SelectContent>
                 {campList.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
-                    {c.name || c.project || '(campaign)'}
+                    {c.name ||
+                      c.project ||
+                      t('detail.attribution.campaignFallback')}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -507,24 +522,28 @@ function MeetingDetail({
               disabled={!linkValue || linking}
               onClick={() => onLink(m, linkValue)}
             >
-              Link
+              {t('detail.attribution.link')}
             </Button>
             {m.campaignId ? (
               <Button size="sm" variant="ghost" onClick={() => setChanging(false)}>
-                Cancel
+                {t('detail.attribution.cancel')}
               </Button>
             ) : null}
           </>
         ) : (
           <>
-            <span className="text-muted-foreground">Campaign</span>
-            <span className="font-medium">{m.campaignName ?? 'Campaign'}</span>
+            <span className="text-muted-foreground">
+              {t('detail.attribution.campaign')}
+            </span>
+            <span className="font-medium">
+              {m.campaignName ?? t('detail.attribution.campaignName')}
+            </span>
             {m.matchMethod ? (
               <Badge
                 variant="outline"
                 className="text-[10px] text-muted-foreground"
               >
-                matched by {m.matchMethod}
+                {t('detail.attribution.matchedBy', { method: m.matchMethod })}
               </Badge>
             ) : null}
             <Button
@@ -536,7 +555,7 @@ function MeetingDetail({
                 setChanging(true);
               }}
             >
-              Change
+              {t('detail.attribution.change')}
             </Button>
           </>
         )}
@@ -544,24 +563,38 @@ function MeetingDetail({
 
       {/* signals */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Signal k="AE" v={m.aeName ?? '—'} />
-        <Signal k="Client contact" v={m.clientContact ?? '—'} />
-        <Signal k="Prospect email" v={m.clientEmail ?? '—'} />
+        <Signal k={t('detail.signals.ae')} v={m.aeName ?? '—'} />
         <Signal
-          k="Overall score"
-          v={typeof m.score === 'number' ? `${m.score}/100` : '—'}
+          k={t('detail.signals.clientContact')}
+          v={m.clientContact ?? '—'}
+        />
+        <Signal
+          k={t('detail.signals.prospectEmail')}
+          v={m.clientEmail ?? '—'}
+        />
+        <Signal
+          k={t('detail.signals.overallScore')}
+          v={
+            typeof m.score === 'number'
+              ? t('detail.signals.scoreValue', { score: m.score })
+              : '—'
+          }
         />
       </div>
 
       {/* coaching: persona + analyze */}
       <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/20 p-3">
         <span className="text-xs uppercase tracking-wider text-muted-foreground">
-          Persona
+          {t('detail.coaching.persona')}
         </span>
         <Select value={personaName} onValueChange={setPersonaSel}>
           <SelectTrigger className="h-8 w-[200px]">
             <SelectValue
-              placeholder={personas.isLoading ? 'Loading…' : 'Choose a persona'}
+              placeholder={
+                personas.isLoading
+                  ? t('detail.coaching.loadingPersona')
+                  : t('detail.coaching.choosePersona')
+              }
             />
           </SelectTrigger>
           <SelectContent>
@@ -576,7 +609,7 @@ function MeetingDetail({
           size="icon"
           variant="ghost"
           className="size-8"
-          title="Refresh personas from the Drive folder"
+          title={t('detail.coaching.refreshPersonas')}
           disabled={personas.isFetching}
           onClick={() => void personas.refetch()}
         >
@@ -589,10 +622,10 @@ function MeetingDetail({
             asChild
             size="sm"
             variant="ghost"
-            title="Open the AI Personas folder in Drive"
+            title={t('detail.coaching.openFolder')}
           >
             <a href={folderUrl} target="_blank" rel="noopener noreferrer">
-              <FolderOpen className="size-3.5" /> Folder
+              <FolderOpen className="size-3.5" /> {t('detail.coaching.folder')}
             </a>
           </Button>
         ) : null}
@@ -604,19 +637,22 @@ function MeetingDetail({
               analyze.mutate(
                 { id: m.id, persona: personaName },
                 {
-                  onSuccess: () => toast.success('Analyzed ✓'),
-                  onError: (e) => toast.error(e.message ?? 'Analysis failed.'),
+                  onSuccess: () => toast.success(t('detail.coaching.analyzeToast')),
+                  onError: (e) =>
+                    toast.error(e.message ?? t('detail.coaching.analyzeError')),
                 },
               )
             }
           >
             {analyze.isPending ? <Loader2 className="animate-spin" /> : <Sparkles />}
-            {m.analysis ? 'Re-analyze' : 'Analyze'}
+            {m.analysis
+              ? t('detail.coaching.reanalyze')
+              : t('detail.coaching.analyze')}
           </Button>
         </Can>
         {!m.hasTranscript ? (
           <span className="text-xs text-muted-foreground">
-            No transcript stored — sync from n8n to enable analysis.
+            {t('detail.coaching.noTranscript')}
           </span>
         ) : null}
       </div>
@@ -624,13 +660,13 @@ function MeetingDetail({
       {/* analysis */}
       {!a ? (
         <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-          No analysis on this meeting yet.
+          {t('detail.analysis.none')}
         </p>
       ) : (
         <>
           {a.overall_summary ? (
             <div>
-              <SectionLabel>Summary</SectionLabel>
+              <SectionLabel>{t('detail.analysis.summary')}</SectionLabel>
               <p className="border-l-2 border-sky-500 pl-3 text-sm text-foreground/90">
                 {a.overall_summary}
               </p>
@@ -639,30 +675,30 @@ function MeetingDetail({
 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <ScoreBlock
-              title="AE performance"
+              title={t('detail.analysis.aePerformance')}
               overall={a.performance_score?.overall}
-              dims={PERF}
+              dims={PERF.map((k) => [k, t(`detail.perf.${k}`)])}
               src={a.performance_score}
             />
             <ScoreBlock
-              title="Client analysis"
+              title={t('detail.analysis.clientAnalysis')}
               overall={a.client_analysis?.overall}
-              dims={CLIENT}
+              dims={CLIENT.map((k) => [k, t(`detail.client.${k}`)])}
               src={a.client_analysis}
             />
           </div>
 
           {a.strengths?.length ? (
             <div>
-              <SectionLabel>What worked</SectionLabel>
+              <SectionLabel>{t('detail.analysis.whatWorked')}</SectionLabel>
               {a.strengths.map((s, i) => (
                 <Finding
                   key={i}
-                  title={s.moment ?? '—'}
+                  title={s.moment ?? t('detail.analysis.untitled')}
                   timestamp={s.timestamp}
                   pattern={s.methodology?.pattern}
                   edge="good"
-                  rows={[['Why it worked', s.why_effective]]}
+                  rows={[[t('detail.analysis.whyItWorked'), s.why_effective]]}
                   quote={s.moment}
                 />
               ))}
@@ -671,17 +707,17 @@ function MeetingDetail({
 
           {a.weaknesses?.length ? (
             <div>
-              <SectionLabel>What to improve</SectionLabel>
+              <SectionLabel>{t('detail.analysis.whatToImprove')}</SectionLabel>
               {a.weaknesses.map((w, i) => (
                 <Finding
                   key={i}
-                  title={w.area ?? '—'}
+                  title={w.area ?? t('detail.analysis.untitled')}
                   timestamp={w.timestamp}
                   pattern={w.methodology?.pattern}
                   edge="improve"
                   rows={[
-                    ['Observed', w.observation],
-                    ['Try', w.suggestion],
+                    [t('detail.analysis.observed'), w.observation],
+                    [t('detail.analysis.try'), w.suggestion],
                   ]}
                   quote={w.evidence_quote}
                 />
@@ -693,7 +729,7 @@ function MeetingDetail({
               arrays — render it as-is so nothing is lost. */}
           {!a.strengths?.length && a.strengths_text ? (
             <div>
-              <SectionLabel>What worked</SectionLabel>
+              <SectionLabel>{t('detail.analysis.whatWorked')}</SectionLabel>
               <pre className="whitespace-pre-wrap border-l-2 border-emerald-500 pl-3 font-sans text-sm text-foreground/90">
                 {a.strengths_text}
               </pre>
@@ -701,7 +737,7 @@ function MeetingDetail({
           ) : null}
           {!a.weaknesses?.length && a.weaknesses_text ? (
             <div>
-              <SectionLabel>What to improve</SectionLabel>
+              <SectionLabel>{t('detail.analysis.whatToImprove')}</SectionLabel>
               <pre className="whitespace-pre-wrap border-l-2 border-amber-500 pl-3 font-sans text-sm text-foreground/90">
                 {a.weaknesses_text}
               </pre>
@@ -743,6 +779,7 @@ function ScoreBlock({
   dims: [string, string][];
   src?: Record<string, { score?: number | null; rationale?: string | null }>;
 }) {
+  const t = useTranslations('sales');
   const ov = typeof overall?.score === 'number' ? overall.score : null;
   return (
     <div>
@@ -751,7 +788,9 @@ function ScoreBlock({
         {ov !== null ? (
           <span className={cn('text-xl font-bold', scoreClass(ov))}>
             {ov}
-            <span className="text-xs text-muted-foreground">/100</span>
+            <span className="text-xs text-muted-foreground">
+              {t('detail.analysis.scoreOutOf')}
+            </span>
           </span>
         ) : null}
       </div>

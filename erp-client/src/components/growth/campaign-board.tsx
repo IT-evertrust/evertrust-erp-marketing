@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   CheckCircle2,
   ChevronDown,
@@ -9,10 +10,8 @@ import {
   XCircle,
 } from 'lucide-react';
 import {
-  ARSENAL_STAGE_META,
   isArsenalRunOk,
   type ArsenalRunDto,
-  type ArsenalRunStatus,
   type ArsenalStage,
   type CampaignDto,
 } from '@evertrust/shared';
@@ -44,13 +43,6 @@ import { RunStageButton } from './run-stage-button';
 import { DeleteCampaignButton } from './delete-campaign-button';
 import { CampaignLifecycleActions } from './campaign-lifecycle-actions';
 
-const RUN_STATUS_LABEL: Record<ArsenalRunStatus, string> = {
-  DISPATCHED: 'Dispatched',
-  SUCCESS: 'Success',
-  FAILED: 'Failed',
-  ERROR: 'Error',
-};
-
 const MAX_ACTIVITY = 10;
 const GLOBAL_KEY = '__global__';
 
@@ -64,6 +56,7 @@ const PREP_STAGES: ArsenalStage[] =
 // down that campaign's run activity. A trailing "Global stages" row holds runs not
 // tied to a campaign (Bazooka / Glock / Sleeper). Polls ~15s via the run feed.
 export function CampaignBoard() {
+  const t = useTranslations('marketing');
   const campaigns = useCampaigns();
   const runs = useArsenalRuns();
   const [openId, setOpenId] = useState<string | null>(null);
@@ -99,14 +92,14 @@ export function CampaignBoard() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center justify-between gap-2 text-base">
-          <span>Campaigns</span>
+          <span>{t('board.title')}</span>
           {synced ? (
             <span className="flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
               <span className="relative flex size-2">
                 <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400/60" />
                 <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
               </span>
-              synced {synced}
+              {t('board.synced', { time: synced })}
             </span>
           ) : null}
         </CardTitle>
@@ -116,13 +109,11 @@ export function CampaignBoard() {
           <Skeleton className="h-28 w-full" />
         ) : campaigns.isError ? (
           <p className="text-sm text-destructive">
-            Could not load campaigns: {campaigns.error.message}
+            {t('board.loadError', { message: campaigns.error.message })}
           </p>
         ) : campaignList.length === 0 && globalRuns.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            You haven&apos;t aimed yet — click{' '}
-            <span className="font-medium">AIM</span> to launch your first
-            campaign.
+            {t.rich('board.empty', { b: (chunks) => <span className="font-medium">{chunks}</span> })}
           </p>
         ) : (
           <ul className="flex flex-col gap-2">
@@ -160,6 +151,7 @@ function CampaignRow({
   open: boolean;
   onToggle: () => void;
 }) {
+  const t = useTranslations('marketing');
   const badge = CAMPAIGN_LIFECYCLE_BADGE[c.lifecycle];
   const aim = aimStatus(c);
   const ok = runs.filter((r) => isArsenalRunOk(r.status)).length;
@@ -193,7 +185,7 @@ function CampaignRow({
                 {c.name || c.project}
               </span>
               <Badge variant="outline" className={cn('font-medium', badge.className)}>
-                {badge.label}
+                {t(`lifecycle.${c.lifecycle}`)}
               </Badge>
             </span>
             <span className="mt-1 block text-xs text-muted-foreground">
@@ -225,7 +217,7 @@ function CampaignRow({
 
       {/* This campaign's sequence: AIM → Lead → Ammo (always visible). */}
       <div className="flex items-stretch gap-1.5 overflow-x-auto px-3 pb-3">
-        <StageNode label="AIM" status={aim} sub={aimSub(c)} />
+        <StageNode label="AIM" status={aim} sub={aimSub(c, t)} />
         {PREP_STAGES.map((stage) => {
           const st = latestRunFor(runs, stage, c.id);
           return (
@@ -239,7 +231,7 @@ function CampaignRow({
                 )}
               />
               <StageNode
-                label={ARSENAL_STAGE_META[stage].label}
+                label={t(`stage.${stage}`)}
                 status={st}
                 running={isRunning(st)}
                 action={
@@ -247,7 +239,7 @@ function CampaignRow({
                     <RunStageButton
                       stage={stage}
                       campaignId={c.id}
-                      label={st.outcome === 'failed' ? 'Retry' : 'Run now'}
+                      label={st.outcome === 'failed' ? t('actions.retry') : t('actions.runNow')}
                       variant="ghost"
                       size="sm"
                     />
@@ -263,7 +255,7 @@ function CampaignRow({
         <ActivityList
           runs={shown}
           hidden={hidden}
-          empty="No activity yet — this campaign's prep stages (Lead Satellite, Ammo Forge) will appear here once they run."
+          empty={t('board.activityEmpty')}
         />
       ) : null}
     </li>
@@ -279,6 +271,7 @@ function GlobalRow({
   open: boolean;
   onToggle: () => void;
 }) {
+  const t = useTranslations('marketing');
   const ok = runs.filter((r) => isArsenalRunOk(r.status)).length;
   const errors = runs.length - ok;
   const shown = runs.slice(0, MAX_ACTIVITY);
@@ -307,10 +300,10 @@ function GlobalRow({
           )}
         />
         <span className="truncate text-sm font-medium">
-          Global stages · all campaigns
+          {t('board.globalStages')}
         </span>
         <Badge variant="secondary" className="font-normal">
-          global
+          {t('board.global')}
         </Badge>
         <span className="ml-auto">
           <ActivitySummary ok={ok} errors={errors} lastAt={runs[0]?.createdAt} />
@@ -320,7 +313,7 @@ function GlobalRow({
         <ActivityList
           runs={shown}
           hidden={hidden}
-          empty="Nothing yet — Reach Bazooka / Reply Glock / Sleeper runs show here."
+          empty={t('board.globalActivityEmpty')}
         />
       ) : null}
     </li>
@@ -336,8 +329,9 @@ function ActivitySummary({
   errors: number;
   lastAt?: string;
 }) {
+  const t = useTranslations('marketing');
   if (ok === 0 && errors === 0) {
-    return <span className="text-xs text-muted-foreground">no activity</span>;
+    return <span className="text-xs text-muted-foreground">{t('board.noActivity')}</span>;
   }
   return (
     <span className="flex items-center gap-3 text-xs text-muted-foreground">
@@ -367,6 +361,7 @@ function ActivityList({
   hidden: number;
   empty: string;
 }) {
+  const t = useTranslations('marketing');
   return (
     <div className="border-t bg-background/60 px-3 py-2">
       {runs.length === 0 ? (
@@ -380,7 +375,7 @@ function ActivityList({
           </ul>
           {hidden > 0 ? (
             <p className="pt-2 text-[11px] text-muted-foreground">
-              +{hidden} older activit{hidden === 1 ? 'y' : 'ies'}
+              {t('board.olderActivity', { count: hidden })}
             </p>
           ) : null}
         </>
@@ -390,6 +385,7 @@ function ActivityList({
 }
 
 function ActivityRow({ run: r }: { run: ArsenalRunDto }) {
+  const t = useTranslations('marketing');
   const ok = isArsenalRunOk(r.status);
   return (
     <li className="flex items-start gap-2 py-2 first:pt-1 last:pb-1">
@@ -401,7 +397,7 @@ function ActivityRow({ run: r }: { run: ArsenalRunDto }) {
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">
-            {ARSENAL_STAGE_META[r.stage].label}
+            {t(`stage.${r.stage}`)}
           </span>
           <Badge
             variant="outline"
@@ -412,7 +408,7 @@ function ActivityRow({ run: r }: { run: ArsenalRunDto }) {
                 : 'border-destructive/30 bg-destructive/10 text-destructive',
             )}
           >
-            {RUN_STATUS_LABEL[r.status]}
+            {t(`runStatus.${r.status}`)}
           </Badge>
           <Badge variant="secondary" className="text-[10px]">
             {r.source}
@@ -427,9 +423,9 @@ function ActivityRow({ run: r }: { run: ArsenalRunDto }) {
   );
 }
 
-function aimSub(c: CampaignDto): string {
-  if (c.lifecycle === 'DRAFT') return 'draft';
-  return `launched ${timeAgo(c.activatedAt ?? c.createdAt)}`;
+function aimSub(c: CampaignDto, t: ReturnType<typeof useTranslations>): string {
+  if (c.lifecycle === 'DRAFT') return t('board.draft');
+  return t('board.launched', { time: timeAgo(c.activatedAt ?? c.createdAt) });
 }
 
 function StageNode({
@@ -445,6 +441,7 @@ function StageNode({
   running?: boolean;
   action?: React.ReactNode;
 }) {
+  const t = useTranslations('marketing');
   return (
     <div
       className={cn(
@@ -464,7 +461,7 @@ function StageNode({
             : 'text-muted-foreground',
         )}
       >
-        {running ? 'running in n8n…' : (sub ?? (status.at ? timeAgo(status.at) : 'idle'))}
+        {running ? t('board.runningInN8n') : (sub ?? (status.at ? timeAgo(status.at) : t('board.idle')))}
       </div>
       {action ?? null}
     </div>

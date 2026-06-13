@@ -2,6 +2,7 @@
 
 import { Fragment, useState } from 'react';
 import { toast } from 'sonner';
+import { useTranslations } from 'next-intl';
 import { ChevronDown, ChevronRight, Trash2, Wand2 } from 'lucide-react';
 import type { LinePricingDto } from '@evertrust/shared';
 import { useDeleteLineItem, useUpdateLineItem } from '@/hooks/use-pricing';
@@ -17,7 +18,6 @@ import {
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import {
-  SIGNAL_LABEL,
   SIGNAL_TEXT_CLASS,
   formatConfidence,
   formatMoney,
@@ -42,12 +42,13 @@ export function LineItemsTable({
   lines: LinePricingDto[];
   currency: string;
 }) {
+  const t = useTranslations('tenders');
   const [expanded, setExpanded] = useState<string | null>(null);
 
   if (lines.length === 0) {
     return (
       <p className="px-2 py-8 text-center text-sm text-muted-foreground">
-        No line items yet. Add the first LV position to begin pricing.
+        {t('pricing.lines.empty')}
       </p>
     );
   }
@@ -57,13 +58,13 @@ export function LineItemsTable({
       <TableHeader>
         <TableRow>
           <TableHead className="w-8" />
-          <TableHead className="w-16">Pos.</TableHead>
-          <TableHead className="min-w-48">Description</TableHead>
-          <TableHead className="text-right">Qty</TableHead>
-          <TableHead>Unit</TableHead>
-          <TableHead className="text-right">Unit price</TableHead>
-          <TableHead className="text-right">Line total</TableHead>
-          <TableHead className="min-w-56">Engine suggestion</TableHead>
+          <TableHead className="w-16">{t('pricing.lines.header.position')}</TableHead>
+          <TableHead className="min-w-48">{t('pricing.lines.header.description')}</TableHead>
+          <TableHead className="text-right">{t('pricing.lines.header.qty')}</TableHead>
+          <TableHead>{t('pricing.lines.header.unit')}</TableHead>
+          <TableHead className="text-right">{t('pricing.lines.header.unitPrice')}</TableHead>
+          <TableHead className="text-right">{t('pricing.lines.header.lineTotal')}</TableHead>
+          <TableHead className="min-w-56">{t('pricing.lines.header.engineSuggestion')}</TableHead>
           <TableHead className="w-8" />
         </TableRow>
       </TableHeader>
@@ -100,14 +101,15 @@ function LineRow({
   isExpanded: boolean;
   onToggle: () => void;
 }) {
+  const t = useTranslations('tenders');
   const { lineItem: li } = line;
   const del = useDeleteLineItem(tenderId);
   const update = useUpdateLineItem(tenderId);
 
   function remove() {
     del.mutate(li.id, {
-      onSuccess: () => toast.success('Line removed.'),
-      onError: (error) => toast.error(error.message ?? 'Could not remove line.'),
+      onSuccess: () => toast.success(t('pricing.lines.removedToast')),
+      onError: (error) => toast.error(error.message ?? t('pricing.lines.removeError')),
     });
   }
 
@@ -117,9 +119,9 @@ function LineRow({
     update.mutate(
       { lineId: li.id, input: { bidEp: String(line.suggestedPrice) } },
       {
-        onSuccess: () => toast.success('Applied suggested price.'),
+        onSuccess: () => toast.success(t('pricing.lines.appliedToast')),
         onError: (error) =>
-          toast.error(error.message ?? 'Could not apply suggestion.'),
+          toast.error(error.message ?? t('pricing.lines.applyError')),
       },
     );
   }
@@ -132,7 +134,7 @@ function LineRow({
             type="button"
             onClick={onToggle}
             className="text-muted-foreground hover:text-foreground"
-            aria-label={isExpanded ? 'Collapse evidence' : 'Expand evidence'}
+            aria-label={isExpanded ? t('pricing.lines.collapseEvidence') : t('pricing.lines.expandEvidence')}
           >
             {isExpanded ? (
               <ChevronDown className="size-4" />
@@ -171,15 +173,15 @@ function LineRow({
                   {formatSuggested(line.suggestedPrice, currency)}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {formatConfidence(line.confidence)} conf
+                  {t('pricing.lines.confidence', { value: formatConfidence(line.confidence) })}
                 </span>
               </div>
               <div className="text-xs text-muted-foreground">
                 <span className={SIGNAL_TEXT_CLASS[line.signal]}>
-                  {SIGNAL_LABEL[line.signal]}
+                  {t(`pricing.signal.${line.signal}`)}
                 </span>
                 {' · '}
-                {line.observationCount} obs
+                {t('pricing.lines.obs', { count: line.observationCount })}
               </div>
             </div>
             {line.suggestedPrice !== null ? (
@@ -190,11 +192,11 @@ function LineRow({
                   size="xs"
                   onClick={useSuggested}
                   disabled={update.isPending}
-                  title="Set unit price to the suggested price"
+                  title={t('pricing.lines.useSuggestedTitle')}
                   className="ml-auto"
                 >
                   <Wand2 />
-                  Use {formatSuggested(line.suggestedPrice, currency)}
+                  {t('pricing.lines.useSuggested', { price: formatSuggested(line.suggestedPrice, currency) })}
                 </Button>
               </Can>
             ) : null}
@@ -219,8 +221,8 @@ function LineRow({
               size="icon-sm"
               onClick={remove}
               disabled={del.isPending}
-              aria-label="Remove line"
-              title="Remove line"
+              aria-label={t('pricing.lines.removeLine')}
+              title={t('pricing.lines.removeLine')}
             >
               <Trash2 />
             </Button>

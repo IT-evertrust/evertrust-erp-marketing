@@ -1,1 +1,370 @@
-{}
+{
+  "header": {
+    "title": "Marketing",
+    "description": "Die Growth Engine betreiben, das Ausgerollte verfolgen, RAG-Entwürfe prüfen und den Bericht lesen."
+  },
+  "tabs": {
+    "growth": "Growth Engine",
+    "campaigns": "Kampagnen",
+    "drafts": "Entwurfsprüfung",
+    "report": "Bericht"
+  },
+  "lifecycle": {
+    "DRAFT": "Entwurf",
+    "ACTIVE": "Aktiv",
+    "PAUSED": "Pausiert",
+    "ARCHIVED": "Archiviert"
+  },
+  "stage": {
+    "LEAD_SATELLITE": "Lead Satellite",
+    "AMMO_FORGE": "Ammo Forge",
+    "REACH_BAZOOKA": "Reach Bazooka",
+    "REPLY_GLOCK": "Reply Glock",
+    "SLEEPER_GRENADE": "Sleeper Grenade"
+  },
+  "stageWhat": {
+    "LEAD_SATELLITE": "Leads aus öffentlichen Quellen in die Kampagne ziehen",
+    "AMMO_FORGE": "Die Outreach-Dokumente / E-Mails verfassen",
+    "REACH_BAZOOKA": "Den ausgehenden Stapel senden, Antworten verfolgen (der tägliche Versand)",
+    "REPLY_GLOCK": "Antworten sortieren & beantworten, Termine buchen",
+    "SLEEPER_GRENADE": "Kein-Interesse → Schlummern → erneut anschreiben"
+  },
+  "metric": {
+    "leadsFound": "Gefundene Leads",
+    "templatesForged": "Erstellte Vorlagen",
+    "emailsSent": "Gesendete E-Mails",
+    "repliesHandled": "Antworten",
+    "meetingsBooked": "Gebuchte Termine",
+    "leadsSwept": "Erfasste Leads"
+  },
+  "runStatus": {
+    "DISPATCHED": "Ausgelöst",
+    "SUCCESS": "Erfolg",
+    "FAILED": "Fehlgeschlagen",
+    "ERROR": "Fehler"
+  },
+  "status": {
+    "NEW": "Neu",
+    "EMAILED": "Angeschrieben",
+    "REPLIED": "Geantwortet",
+    "INTERESTED": "Interessiert",
+    "MEETING_SCHEDULED": "Termin geplant",
+    "NOT_INTERESTED": "Kein Interesse",
+    "RE_ENGAGED": "Reaktiviert",
+    "DO_NOT_CONTACT": "Nicht kontaktieren"
+  },
+  "verdict": {
+    "INTERESTED": "Interessiert",
+    "NOT_INTERESTED": "Kein Interesse",
+    "SNOOZE": "Schlummern",
+    "MEETING_REQUEST": "Terminanfrage",
+    "UNSURE": "Unklar",
+    "AUTO_REPLY": "Automatische Antwort",
+    "BOUNCE": "Unzustellbar"
+  },
+  "contract": {
+    "GENERATED": "Erstellt",
+    "SENT": "Gesendet",
+    "SIGNED": "Unterzeichnet",
+    "FAILED": "Fehlgeschlagen"
+  },
+  "common": {
+    "cancel": "Abbrechen",
+    "open": "Öffnen",
+    "details": "Details",
+    "manage": "Verwalten"
+  },
+  "campaigns": {
+    "tiles": {
+      "campaigns": "Kampagnen",
+      "active": "Aktiv",
+      "leads": "Leads",
+      "replies": "Antworten",
+      "meetings": "Termine"
+    },
+    "mini": {
+      "leads": "Leads",
+      "emails": "E-Mails",
+      "replies": "Antworten",
+      "meetings": "Term."
+    },
+    "deployedLabel": "Von der Growth Engine ausgerollt — verfolgen & vertiefen",
+    "deployedHint": "Der Drive-Ordner ist die Quelle der Wahrheit — Sync archiviert alle, deren Ordner gelöscht wurde.",
+    "loadError": "Kampagnen konnten nicht geladen werden: {message}",
+    "empty": "Noch keine Kampagnen — öffnen Sie den Tab <b>Growth Engine</b> und klicken Sie auf AIM, um eine zu starten.",
+    "runStage": "Phase ausführen",
+    "activityEmpty": "Noch keine Phasenaktivität — die Vorbereitungsphasen dieser Kampagne (Lead Satellite, Ammo Forge) erscheinen hier, sobald sie laufen.",
+    "files": {
+      "title": "{name} — Dateien",
+      "description": "Für diese Kampagne erstellte Dateien (Nischenanalyse, Vorlagen, …). Klicken Sie auf eine Zeile, um sie zu öffnen.",
+      "loadError": "Dateien konnten nicht geladen werden: {message}",
+      "notConnected": "Die Dateiauflistung ist noch nicht verbunden (setzen Sie <code>N8N_API_URL</code> auf der API).",
+      "empty": "Für diese Kampagne wurden noch keine Dateien erstellt — die Nischenanalyse und Vorlagen erscheinen hier, sobald die Workflows laufen.",
+      "colName": "Name",
+      "colType": "Typ",
+      "colModified": "Geändert"
+    },
+    "fileType": {
+      "file": "Datei",
+      "sheet": "Tabelle",
+      "doc": "Dokument",
+      "slides": "Präsentation",
+      "folder": "Ordner",
+      "pdf": "PDF",
+      "text": "Text",
+      "image": "Bild"
+    }
+  },
+  "report": {
+    "period": {
+      "day": "Tag",
+      "week": "Woche",
+      "month": "Monat"
+    },
+    "window": {
+      "day": "Letzte 24 Stunden",
+      "week": "Letzte 7 Tage",
+      "month": "Letzte 30 Tage"
+    },
+    "allCampaigns": "Alle Kampagnen",
+    "syncTitle": "Aktuelle Läufe + Zählwerte aus dem Ausführungsverlauf von n8n importieren",
+    "syncing": "Wird synchronisiert…",
+    "syncFromN8n": "Aus n8n synchronisieren",
+    "clearRuns": "Läufe löschen",
+    "clearTitle": "Alle Laufaktivitäten löschen?",
+    "clearDescription": "Löscht jeden Arsenal-Lauf (Live-Aktivität + diesen Bericht). Zurücksetzen von Testdaten — dies kann nicht rückgängig gemacht werden.",
+    "loadError": "Der Bericht konnte nicht geladen werden: {message}",
+    "syncError": "Synchronisierung fehlgeschlagen: {message}",
+    "synced": "Aus n8n synchronisiert — {count, plural, one {# Lauf} other {# Läufe}} importiert ({scanned} durchsucht).",
+    "syncNotConfigured": "n8n-API nicht konfiguriert — setzen Sie N8N_API_URL / N8N_API_KEY zum Synchronisieren.",
+    "section": {
+      "funnel": "Funnel",
+      "ragFunnel": "RAG-Entwurfs-Funnel",
+      "draftOutcomes": "Entwurfsergebnisse & Antwortzeiten",
+      "tenderAttribution": "Ausschreibungs-Zuordnung — was diese Aktivität vorantreibt",
+      "perStage": "Pro Phase · dieser Zeitraum"
+    },
+    "funnel": {
+      "leadsFound": "Gefundene Leads",
+      "emailsSent": "Gesendete E-Mails",
+      "replies": "Antworten",
+      "meetings": "Termine",
+      "hint": "Bernstein = wartet auf n8n. Jeder leuchtet auf, sobald die Phase über den Lauf-Callback einen <code>metrics</code>-Wert meldet.",
+      "awaiting": "wartet auf n8n"
+    },
+    "ragSteps": {
+      "unsure": "Unklar",
+      "drafted": "Entworfen",
+      "approved": "Genehmigt",
+      "sent": "Gesendet",
+      "replied": "Geantwortet"
+    },
+    "ragHint": "Leuchtet auf, sobald der RAG-Agent-Workflow Zählwerte für entworfen / genehmigt / gesendet meldet.",
+    "outcomes": {
+      "title": "Ergebnisse (30 T.)",
+      "rowSent": "Gesendet",
+      "rowEditedSent": "Bearbeitet → gesendet",
+      "rowDiscarded": "Verworfen",
+      "rowApprovalRate": "Genehmigungsrate",
+      "rowAvgEdits": "Ø Bearbeitungen / Entwurf"
+    },
+    "timing": {
+      "title": "Antwortzeiten",
+      "rowUnsureReady": "Unklar → Entwurf bereit",
+      "rowDraftSent": "Entwurf → gesendet",
+      "rowStale": "Veraltete Entwürfe (>24 Std.)",
+      "rowFastest": "Schnellster Versand"
+    },
+    "draftOutcomesHint": "Wird befüllt, sobald RAG-Entwurfsergebnisse durchgängig erfasst werden.",
+    "tenderAttributionText": "Noch keine Kampagne → Ausschreibung-Verknüpfungen. Sobald ausgehende Leads zu Ausschreibungen werden, zeigt dies, welche Ausschreibungen jede Kampagne vorantreibt, und deren €-Wert.",
+    "stageRuns": "{runs} Läufe · {pct} ok",
+    "stageErrors": "{count, plural, one {# Fehler} other {# Fehler}}",
+    "metricAwaiting": "— wartet auf n8n"
+  },
+  "drafts": {
+    "title": "Antwortentwürfe",
+    "description": "RAG-vorgeschlagene Antworten, die auf einen Menschen warten. Kopieren Sie den Entwurf in Ihre Antwort oder öffnen Sie den Interessenten für den vollständigen Verlauf.",
+    "loadError": "Antwortentwürfe konnten nicht geladen werden: {message}",
+    "emptyTitle": "Keine Entwürfe zur Prüfung",
+    "emptyDescription": "Wenn der Antwort-Klassifizierer eine vorgeschlagene Antwort entwirft, erscheint sie hier zur Genehmigung.",
+    "now": "jetzt {verdict}",
+    "nowTitle": "Das aktuelle Urteil des Interessenten hat sich inzwischen geändert",
+    "copied": "Entwurf in die Zwischenablage kopiert.",
+    "copyError": "Kopieren nicht möglich — Ihr Browser hat den Zugriff auf die Zwischenablage blockiert.",
+    "copyDraft": "Entwurf kopieren",
+    "openProspect": "Interessent öffnen",
+    "showConversation": "Konversation anzeigen",
+    "hideConversation": "Konversation ausblenden"
+  },
+  "suppressions": {
+    "title": "Sperrliste",
+    "description": "Die organisationsweite Nicht-kontaktieren-Liste. Das Arsenal sendet niemals E-Mails an eine gesperrte Adresse. Heben Sie die Sperrung auf, um den Kontakt wieder zu erlauben.",
+    "loadError": "Sperrliste konnte nicht geladen werden: {message}",
+    "emptyTitle": "Keine Sperrungen",
+    "emptyDescription": "Adressen landen hier, wenn ein Interessent sich abmeldet, eine E-Mail unzustellbar ist oder er als nicht zu kontaktieren markiert wird.",
+    "colEmail": "E-Mail",
+    "colReason": "Grund",
+    "colAdded": "Hinzugefügt",
+    "colAction": "Aktion",
+    "unsuppress": "Sperrung aufheben",
+    "unsuppressed": "Sperrung für {email} aufgehoben.",
+    "unsuppressError": "Sperrung konnte nicht aufgehoben werden.",
+    "confirmTitle": "Sperrung für {email} aufheben?",
+    "confirmDescription": "Das Arsenal darf diese Adresse wieder kontaktieren. Dies kann von hier aus nicht rückgängig gemacht werden."
+  },
+  "detail": {
+    "back": "Zurück zum Marketing",
+    "loadErrorTitle": "Kampagne konnte nicht geladen werden",
+    "notFound": "Diese Kampagne existiert nicht oder gehört nicht zu Ihrer Organisation.",
+    "nicheCampaign": "Nischenkampagne",
+    "tabs": {
+      "overview": "Übersicht",
+      "targets": "Ziele",
+      "prospects": "Interessenten",
+      "contracts": "Verträge"
+    },
+    "field": {
+      "project": "Projekt",
+      "niche": "Nische",
+      "region": "Region",
+      "country": "Land",
+      "sender": "Absender",
+      "gmailLabel": "Gmail-Label",
+      "whatsapp": "WhatsApp",
+      "activated": "Aktiviert",
+      "created": "Erstellt"
+    },
+    "openDriveFolder": "Drive-Ordner öffnen",
+    "targetsTitle": "Nischenziele",
+    "targetsDescription": "Die Segmente, die das Arsenal für die Nische dieser Kampagne scrapt. Umschalten, bearbeiten oder manuelle Ziele hinzufügen.",
+    "prospectsTitle": "Interessenten",
+    "prospectsDescription": "Das Kaltakquise-Board für diese Kampagne. Klicken Sie auf eine Zeile für den Konversationsverlauf.",
+    "contractsTitle": "Kampagnenverträge",
+    "contractsEmpty": "Für diese Kampagne wurden noch keine Verträge erstellt."
+  },
+  "prospects": {
+    "all": "Alle",
+    "searchPlaceholder": "E-Mail oder Firma suchen…",
+    "allStatuses": "Alle Status",
+    "loadError": "Interessenten konnten nicht geladen werden: {message}",
+    "emptyFiltered": "Keine Interessenten entsprechen diesen Filtern.",
+    "empty": "Noch keine Interessenten — der Lead Satellite befüllt dieses Board beim Scrapen.",
+    "colCompany": "Firma",
+    "colEmail": "E-Mail",
+    "colLocation": "Standort",
+    "colStatus": "Status",
+    "colLastContacted": "Zuletzt kontaktiert",
+    "previous": "Zurück",
+    "next": "Weiter",
+    "pageRange": "{from}–{to} von {total}",
+    "rowActions": "Aktionen für {name}",
+    "markNotInterested": "Als kein Interesse markieren",
+    "doNotContact": "Nicht kontaktieren",
+    "archivedToast": "„{name}“ archiviert.",
+    "suppressedToast": "„{name}“ gesperrt.",
+    "statusError": "Status konnte nicht aktualisiert werden.",
+    "statusSet": "Status auf {status} gesetzt.",
+    "verified": "verifiziert",
+    "field": {
+      "campaign": "Kampagne",
+      "nicheTarget": "Nischenziel",
+      "website": "Website",
+      "location": "Standort",
+      "followups": "Nachfassungen",
+      "lastContacted": "Zuletzt kontaktiert",
+      "snoozeUntil": "Schlummern bis",
+      "detected": "Erkannt"
+    },
+    "sourcePage": "Quellseite",
+    "statusLabel": "Status",
+    "conversation": "Konversation",
+    "loadErrorTitle": "Interessent konnte nicht geladen werden",
+    "notFound": "Dieser Interessent existiert nicht oder gehört nicht zu Ihrer Organisation."
+  },
+  "contracts": {
+    "title": "Verträge",
+    "emptyHint": "Noch keine Verträge erstellt.",
+    "loadError": "Verträge konnten nicht geladen werden: {message}",
+    "colStatus": "Status",
+    "colTerm": "Laufzeit",
+    "colCreated": "Erstellt",
+    "colSigned": "Unterzeichnet",
+    "colDrive": "Drive"
+  },
+  "thread": {
+    "loadError": "Die Konversation konnte nicht geladen werden: {message}",
+    "empty": "Noch keine Nachrichten — das Outreach-Protokoll für diesen Interessenten ist leer.",
+    "sent": "Gesendet",
+    "received": "Empfangen"
+  },
+  "actions": {
+    "pause": "Pausieren",
+    "resume": "Fortsetzen",
+    "archive": "Archivieren",
+    "campaignActions": "Kampagnenaktionen für {name}",
+    "pausedToast": "„{name}“ pausiert.",
+    "resumedToast": "„{name}“ fortgesetzt.",
+    "archivedToast": "„{name}“ archiviert.",
+    "pauseError": "Die Kampagne konnte nicht pausiert werden.",
+    "resumeError": "Die Kampagne konnte nicht fortgesetzt werden.",
+    "archiveError": "Die Kampagne konnte nicht archiviert werden.",
+    "deleteAria": "{name} löschen",
+    "deleteTitle": "Kampagne löschen?",
+    "deleteDescription": "Entfernt <b>{name}</b> aus dem ERP. Der Google-Drive-Ordner und seine Leads werden <strong>nicht</strong> gelöscht — nur dieser Datensatz und seine Laufverlaufs-Verknüpfung.",
+    "delete": "Löschen",
+    "deleting": "Wird gelöscht…",
+    "deleted": "„{name}“ gelöscht.",
+    "deleteFailed": "Die Kampagne konnte nicht gelöscht werden.",
+    "runNow": "Jetzt ausführen",
+    "retry": "Wiederholen",
+    "run": "{stage} ausführen",
+    "dispatching": "Wird ausgelöst…",
+    "dispatched": "{stage} ausgelöst.",
+    "runFailed": "{stage} fehlgeschlagen: {detail}",
+    "runError": "{stage} konnte nicht ausgeführt werden.",
+    "unknown": "unbekannt",
+    "syncWithDrive": "Mit Drive synchronisieren",
+    "syncing": "Wird synchronisiert…",
+    "syncOk": "Mit Drive synchronisiert",
+    "syncInDrive": "{count} in Drive",
+    "syncArchived": "{count} archiviert (Ordner gelöscht)",
+    "syncRestored": "{count} wiederhergestellt",
+    "syncUntracked": "{count} in Drive nicht erfasst",
+    "syncFailed": "Drive-Synchronisierung fehlgeschlagen",
+    "syncFailedHint": "Prüfen Sie, ob der Workflow CAMPAIGNS LIST aktiv ist.",
+    "running": "läuft"
+  },
+  "board": {
+    "title": "Kampagnen",
+    "synced": "synchronisiert {time}",
+    "loadError": "Kampagnen konnten nicht geladen werden: {message}",
+    "empty": "Sie haben noch nicht gezielt — klicken Sie auf <b>AIM</b>, um Ihre erste Kampagne zu starten.",
+    "globalStages": "Globale Phasen · alle Kampagnen",
+    "global": "global",
+    "noActivity": "keine Aktivität",
+    "activityEmpty": "Noch keine Aktivität — die Vorbereitungsphasen dieser Kampagne (Lead Satellite, Ammo Forge) erscheinen hier, sobald sie laufen.",
+    "globalActivityEmpty": "Noch nichts — Läufe von Reach Bazooka / Reply Glock / Sleeper erscheinen hier.",
+    "olderActivity": "+{count, plural, one {# ältere Aktivität} other {# ältere Aktivitäten}}",
+    "draft": "Entwurf",
+    "launched": "gestartet {time}",
+    "runningInN8n": "läuft in n8n…",
+    "idle": "inaktiv"
+  },
+  "bazooka": {
+    "title": "Täglicher Reach-Bazooka-Versand",
+    "onBadge": "An · {time} · {city}",
+    "off": "Aus",
+    "extraNote": "Ein <em>zusätzlicher</em> täglicher Versand, ausgelöst vom ERP, unabhängig von n8n.",
+    "warning": "Reach Bazooka sendet bereits <strong>täglich um 08:00</strong> nach dem eigenen Zeitplan von n8n. Wird dies aktiviert, wird ein <strong>zweiter</strong> Stapel gesendet — lassen Sie es auf <strong>Aus</strong>, sofern Sie nicht den Zeitplan von n8n deaktiviert haben.",
+    "time": "Uhrzeit",
+    "timezone": "Zeitzone",
+    "save": "Speichern",
+    "saving": "Wird gespeichert…",
+    "turnOff": "Ausschalten",
+    "pickTime": "Wählen Sie eine Uhrzeit (oder verwenden Sie Ausschalten).",
+    "saved": "Täglicher Bazooka-Versand auf {time} ({timezone}) gesetzt.",
+    "turnedOff": "Täglicher Bazooka-Versand ausgeschaltet.",
+    "saveError": "Konnte nicht gespeichert werden.",
+    "serverTime": "Serverzeit"
+  }
+}

@@ -9,6 +9,7 @@ import {
   Plus,
   Target,
 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import { useSuppliers } from '@/hooks/use-suppliers';
 import { Can } from '@/components/auth/can';
 import { Button } from '@/components/ui/button';
@@ -65,6 +66,7 @@ function fitTint(value: number | null): string {
 // glance), then the editable registry table. Empty/error → EmptyState; loading →
 // Skeleton.
 export function SuppliersView() {
+  const t = useTranslations('suppliers');
   const { data, isLoading, isError, error } = useSuppliers();
   const suppliers = data ?? [];
   const ready = !isLoading && !isError;
@@ -78,15 +80,15 @@ export function SuppliersView() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="Suppliers"
-        description="Your supplier registry for matching and sourcing."
+        title={t('header.title')}
+        description={t('header.description')}
         actions={
           <Can permission="suppliers:write">
             <SupplierDialog
               trigger={
                 <Button>
                   <Plus />
-                  New supplier
+                  {t('actions.new')}
                 </Button>
               }
             />
@@ -97,37 +99,37 @@ export function SuppliersView() {
       {/* Live registry KPIs. */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile
-          label="Suppliers"
+          label={t('stats.suppliers.label')}
           value={ready ? total : <Skeleton className="h-6 w-10" />}
-          hint="In the registry"
+          hint={t('stats.suppliers.hint')}
           accent="bg-sky-400"
           icon={<Factory className="size-4" />}
         />
         <StatTile
-          label="Niches covered"
+          label={t('stats.niches.label')}
           value={ready ? niches : <Skeleton className="h-6 w-10" />}
-          hint="Distinct sourcing areas"
+          hint={t('stats.niches.hint')}
           accent="bg-violet-400"
           icon={<Layers className="size-4" />}
         />
         <StatTile
-          label="Scored for fit"
+          label={t('stats.fit.label')}
           value={ready ? withFit : <Skeleton className="h-6 w-10" />}
           hint={
             ready && total > 0
-              ? `${total - withFit} not yet scored`
-              : 'Ready for matching'
+              ? t('stats.fit.hintScored', { count: total - withFit })
+              : t('stats.fit.hintReady')
           }
           accent="bg-emerald-400"
           icon={<Target className="size-4" />}
         />
         <StatTile
-          label="Reachable"
+          label={t('stats.reachable.label')}
           value={ready ? reachable : <Skeleton className="h-6 w-10" />}
           hint={
             ready && total > 0
-              ? `${total - reachable} missing contact`
-              : 'With a contact on file'
+              ? t('stats.reachable.hintMissing', { count: total - reachable })
+              : t('stats.reachable.hintReady')
           }
           accent={ready && total > 0 && reachable < total ? 'bg-amber-400' : 'bg-emerald-400'}
           icon={<Mail className="size-4" />}
@@ -137,9 +139,9 @@ export function SuppliersView() {
       {/* Registry table. */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Registry</CardTitle>
+          <CardTitle className="text-base">{t('registry.title')}</CardTitle>
           <CardDescription>
-            Suppliers available for tender matching and sourcing.
+            {t('registry.description')}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -148,21 +150,21 @@ export function SuppliersView() {
           ) : isError ? (
             <EmptyState
               icon={<MailX />}
-              title="Could not load suppliers"
+              title={t('errorState.title')}
               description={error.message}
             />
           ) : suppliers.length === 0 ? (
             <EmptyState
               icon={<Factory />}
-              title="No suppliers yet"
-              description="Add your first supplier to start matching them against incoming tenders."
+              title={t('emptyState.title')}
+              description={t('emptyState.description')}
               action={
                 <Can permission="suppliers:write">
                   <SupplierDialog
                     trigger={
                       <Button>
                         <Plus />
-                        New supplier
+                        {t('actions.new')}
                       </Button>
                     }
                   />
@@ -174,11 +176,11 @@ export function SuppliersView() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Supplier</TableHead>
-                    <TableHead>Niches</TableHead>
-                    <TableHead>Capabilities</TableHead>
-                    <TableHead className="text-right">Fit</TableHead>
-                    <TableHead>Contact</TableHead>
+                    <TableHead>{t('table.supplier')}</TableHead>
+                    <TableHead>{t('table.niches')}</TableHead>
+                    <TableHead>{t('table.capabilities')}</TableHead>
+                    <TableHead className="text-right">{t('table.fit')}</TableHead>
+                    <TableHead>{t('table.contact')}</TableHead>
                     <TableHead className="w-0" />
                   </TableRow>
                 </TableHeader>
@@ -224,7 +226,7 @@ export function SuppliersView() {
                                 <Button
                                   variant="ghost"
                                   size="icon-sm"
-                                  aria-label="Edit supplier"
+                                  aria-label={t('actions.edit')}
                                 >
                                   <Pencil />
                                 </Button>

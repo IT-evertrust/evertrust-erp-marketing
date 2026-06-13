@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { ChevronLeft, ExternalLink, FolderOpen } from 'lucide-react';
 import type { CampaignDto } from '@evertrust/shared';
 import { useCampaign } from '@/hooks/use-campaigns';
@@ -26,6 +27,7 @@ import { ContractsCard } from './contracts-card';
 // /tenders/[id]). Overview + Targets (the niche's targets) + Prospects (the board)
 // + Contracts. Lifecycle actions reuse the shared dropdown (optimistic).
 export function CampaignDetail({ id }: { id: string }) {
+  const t = useTranslations('marketing');
   const { data: campaign, isLoading, isError, error } = useCampaign(id);
 
   return (
@@ -35,7 +37,7 @@ export function CampaignDetail({ id }: { id: string }) {
         className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft className="size-4" />
-        Back to Marketing
+        {t('detail.back')}
       </Link>
 
       {isLoading ? (
@@ -43,10 +45,10 @@ export function CampaignDetail({ id }: { id: string }) {
       ) : isError ? (
         <Card className="border-destructive/30">
           <CardHeader>
-            <CardTitle>Could not load campaign</CardTitle>
+            <CardTitle>{t('detail.loadErrorTitle')}</CardTitle>
             <CardDescription>
               {error.status === 404
-                ? 'This campaign does not exist or is not in your organization.'
+                ? t('detail.notFound')
                 : error.message}
             </CardDescription>
           </CardHeader>
@@ -59,6 +61,7 @@ export function CampaignDetail({ id }: { id: string }) {
 }
 
 function CampaignDetailBody({ campaign: c }: { campaign: CampaignDto }) {
+  const t = useTranslations('marketing');
   const badge = CAMPAIGN_LIFECYCLE_BADGE[c.lifecycle];
   const title = c.name || c.project;
 
@@ -70,11 +73,11 @@ function CampaignDetailBody({ campaign: c }: { campaign: CampaignDto }) {
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
             <Badge variant="outline" className={badge.className}>
-              {badge.label}
+              {t(`lifecycle.${c.lifecycle}`)}
             </Badge>
           </div>
           <p className="mt-0.5 text-sm text-muted-foreground">
-            {c.nicheName ?? 'Niche campaign'} · {c.region}, {c.country}
+            {c.nicheName ?? t('detail.nicheCampaign')} · {c.region}, {c.country}
           </p>
         </div>
         <CampaignLifecycleActions campaign={c} />
@@ -82,28 +85,28 @@ function CampaignDetailBody({ campaign: c }: { campaign: CampaignDto }) {
 
       <Tabs defaultValue="overview" className="w-full">
         <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="targets">Targets</TabsTrigger>
-          <TabsTrigger value="prospects">Prospects</TabsTrigger>
-          <TabsTrigger value="contracts">Contracts</TabsTrigger>
+          <TabsTrigger value="overview">{t('detail.tabs.overview')}</TabsTrigger>
+          <TabsTrigger value="targets">{t('detail.tabs.targets')}</TabsTrigger>
+          <TabsTrigger value="prospects">{t('detail.tabs.prospects')}</TabsTrigger>
+          <TabsTrigger value="contracts">{t('detail.tabs.contracts')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
           <Card>
             <CardContent className="pt-6">
               <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-3">
-                <Field label="Project" value={c.project} />
-                <Field label="Niche" value={c.nicheName} />
-                <Field label="Region" value={c.region} />
-                <Field label="Country" value={c.country} />
-                <Field label="Sender" value={c.sender} />
-                <Field label="Gmail label" value={c.gmailLabel} />
-                <Field label="WhatsApp" value={c.whatsappNumber} />
+                <Field label={t('detail.field.project')} value={c.project} />
+                <Field label={t('detail.field.niche')} value={c.nicheName} />
+                <Field label={t('detail.field.region')} value={c.region} />
+                <Field label={t('detail.field.country')} value={c.country} />
+                <Field label={t('detail.field.sender')} value={c.sender} />
+                <Field label={t('detail.field.gmailLabel')} value={c.gmailLabel} />
+                <Field label={t('detail.field.whatsapp')} value={c.whatsappNumber} />
                 <Field
-                  label="Activated"
+                  label={t('detail.field.activated')}
                   value={c.activatedAt ? formatDateTime(c.activatedAt) : null}
                 />
-                <Field label="Created" value={formatDateTime(c.createdAt)} />
+                <Field label={t('detail.field.created')} value={formatDateTime(c.createdAt)} />
               </dl>
 
               {c.driveFolderUrl || c.driveFolderId ? (
@@ -117,7 +120,7 @@ function CampaignDetailBody({ campaign: c }: { campaign: CampaignDto }) {
                   className="mt-4 inline-flex items-center gap-1.5 text-sm text-sky-400 hover:underline"
                 >
                   <FolderOpen className="size-4" />
-                  Open Drive folder
+                  {t('detail.openDriveFolder')}
                   <ExternalLink className="size-3.5" />
                 </a>
               ) : null}
@@ -128,10 +131,9 @@ function CampaignDetailBody({ campaign: c }: { campaign: CampaignDto }) {
         <TabsContent value="targets" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Niche targets</CardTitle>
+              <CardTitle className="text-base">{t('detail.targetsTitle')}</CardTitle>
               <CardDescription>
-                The segments the arsenal scrapes for this campaign&rsquo;s niche.
-                Toggle, edit, or add manual targets.
+                {t('detail.targetsDescription')}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -143,10 +145,9 @@ function CampaignDetailBody({ campaign: c }: { campaign: CampaignDto }) {
         <TabsContent value="prospects" className="mt-4">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Prospects</CardTitle>
+              <CardTitle className="text-base">{t('detail.prospectsTitle')}</CardTitle>
               <CardDescription>
-                The cold-outreach board for this campaign. Click a row for the
-                conversation timeline.
+                {t('detail.prospectsDescription')}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -160,8 +161,8 @@ function CampaignDetailBody({ campaign: c }: { campaign: CampaignDto }) {
             <CardContent className="pt-6">
               <ContractsCard
                 filters={{ campaignId: c.id }}
-                title="Campaign contracts"
-                emptyHint="No contracts generated for this campaign yet."
+                title={t('detail.contractsTitle')}
+                emptyHint={t('detail.contractsEmpty')}
               />
             </CardContent>
           </Card>

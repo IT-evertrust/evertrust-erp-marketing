@@ -1,6 +1,7 @@
 'use client';
 
 import { Building2, Mail, Pencil, Plus, Tags, Users } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 import type { CustomerDto } from '@evertrust/shared';
 import { useCustomers } from '@/hooks/use-customers';
 import { Can } from '@/components/auth/can';
@@ -43,6 +44,7 @@ function initials(name: string): string {
 // avatar rows, niche badges, join date, write-gated per-row Edit. Empty →
 // EmptyState, loading → Skeleton. All create/edit behaviour is unchanged.
 export function CustomersView() {
+  const t = useTranslations('customers');
   const { data, isLoading, isError, error } = useCustomers();
   const customers = data ?? [];
   const ready = !isLoading && !isError;
@@ -56,7 +58,7 @@ export function CustomersView() {
         trigger={
           <Button>
             <Plus />
-            New customer
+            {t('actions.new')}
           </Button>
         }
       />
@@ -66,35 +68,35 @@ export function CustomersView() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="Customers"
-        description="Your customer registry for tender attribution."
+        title={t('header.title')}
+        description={t('header.description')}
         actions={newCustomerAction}
       />
 
       {/* Summary tiles — all counts come from the list already fetched above. */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
         <StatTile
-          label="Customers"
+          label={t('stats.customers.label')}
           value={ready ? customers.length : <Skeleton className="h-7 w-10" />}
-          hint="In the registry"
+          hint={t('stats.customers.hint')}
           accent="bg-sky-400"
           icon={<Users className="size-4" />}
         />
         <StatTile
-          label="With a contact"
+          label={t('stats.withContact.label')}
           value={ready ? withContact : <Skeleton className="h-7 w-10" />}
           hint={
             ready
-              ? `${customers.length - withContact} missing one`
+              ? t('stats.withContact.hint', { count: customers.length - withContact })
               : undefined
           }
           accent="bg-emerald-400"
           icon={<Mail className="size-4" />}
         />
         <StatTile
-          label="Niches covered"
+          label={t('stats.niches.label')}
           value={ready ? niches : <Skeleton className="h-7 w-10" />}
-          hint="Distinct across all customers"
+          hint={t('stats.niches.hint')}
           accent="bg-violet-400"
           icon={<Tags className="size-4" />}
         />
@@ -102,10 +104,9 @@ export function CustomersView() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Registry</CardTitle>
+          <CardTitle className="text-base">{t('registry.title')}</CardTitle>
           <CardDescription>
-            Every customer you can attribute a tender to. Add or edit entries with
-            the right permissions.
+            {t('registry.description')}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -113,13 +114,13 @@ export function CustomersView() {
             <Skeleton className="h-64 w-full rounded-lg" />
           ) : isError ? (
             <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-sm text-destructive">
-              Could not load customers: {error.message}
+              {t('errorState.message', { error: error.message })}
             </div>
           ) : customers.length === 0 ? (
             <EmptyState
               icon={<Building2 />}
-              title="No customers yet"
-              description="Add the organizations you bid on behalf of so tenders can be attributed to them."
+              title={t('emptyState.title')}
+              description={t('emptyState.description')}
               action={newCustomerAction}
             />
           ) : (
@@ -127,9 +128,9 @@ export function CustomersView() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Niches</TableHead>
-                    <TableHead>Added</TableHead>
+                    <TableHead>{t('table.customer')}</TableHead>
+                    <TableHead>{t('table.niches')}</TableHead>
+                    <TableHead>{t('table.added')}</TableHead>
                     <TableHead className="w-0" />
                   </TableRow>
                 </TableHeader>
@@ -150,6 +151,7 @@ export function CustomersView() {
 // One registry row: tinted avatar + name over contact, niche badges, join date,
 // and the write-gated Edit dialog trigger.
 function CustomerRow({ customer }: { customer: CustomerDto }) {
+  const t = useTranslations('customers');
   return (
     <TableRow>
       <TableCell>
@@ -164,7 +166,7 @@ function CustomerRow({ customer }: { customer: CustomerDto }) {
               {customer.name}
             </div>
             <div className="truncate text-xs text-muted-foreground">
-              {customer.contact ?? 'No contact'}
+              {customer.contact ?? t('noContact')}
             </div>
           </div>
         </div>
@@ -190,7 +192,7 @@ function CustomerRow({ customer }: { customer: CustomerDto }) {
           <CustomerDialog
             customer={customer}
             trigger={
-              <Button variant="ghost" size="icon-sm" aria-label="Edit customer">
+              <Button variant="ghost" size="icon-sm" aria-label={t('actions.edit')}>
                 <Pencil />
               </Button>
             }

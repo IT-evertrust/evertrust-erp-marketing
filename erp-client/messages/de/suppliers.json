@@ -1,1 +1,88 @@
-{}
+{
+  "redirecting": "Weiterleitung…",
+  "header": {
+    "title": "Lieferanten",
+    "description": "Ihr Lieferantenverzeichnis für Matching und Beschaffung."
+  },
+  "actions": {
+    "new": "Lieferant hinzufügen",
+    "edit": "Lieferant bearbeiten"
+  },
+  "stats": {
+    "suppliers": {
+      "label": "Lieferanten",
+      "hint": "Im Verzeichnis"
+    },
+    "niches": {
+      "label": "Abgedeckte Nischen",
+      "hint": "Verschiedene Beschaffungsbereiche"
+    },
+    "fit": {
+      "label": "Auf Eignung bewertet",
+      "hintScored": "{count} noch nicht bewertet",
+      "hintReady": "Bereit für das Matching"
+    },
+    "reachable": {
+      "label": "Erreichbar",
+      "hintMissing": "{count} ohne Kontakt",
+      "hintReady": "Mit hinterlegtem Kontakt"
+    }
+  },
+  "registry": {
+    "title": "Verzeichnis",
+    "description": "Lieferanten für Ausschreibungs-Matching und Beschaffung."
+  },
+  "table": {
+    "supplier": "Lieferant",
+    "niches": "Nischen",
+    "capabilities": "Fähigkeiten",
+    "fit": "Eignung",
+    "contact": "Kontakt"
+  },
+  "errorState": {
+    "title": "Lieferanten konnten nicht geladen werden"
+  },
+  "emptyState": {
+    "title": "Noch keine Lieferanten",
+    "description": "Fügen Sie Ihren ersten Lieferanten hinzu, um ihn mit eingehenden Ausschreibungen abzugleichen."
+  },
+  "dialog": {
+    "titleEdit": "Lieferant bearbeiten",
+    "titleNew": "Lieferant hinzufügen",
+    "descriptionEdit": "Diesen Lieferanten im Verzeichnis aktualisieren.",
+    "descriptionNew": "Einen Lieferanten zum Verzeichnis hinzufügen.",
+    "fields": {
+      "name": {
+        "label": "Name",
+        "placeholder": "Name des Lieferanten"
+      },
+      "niches": {
+        "label": "Nischen",
+        "placeholder": "HLK, Straßenbau"
+      },
+      "capabilities": {
+        "label": "Fähigkeiten",
+        "placeholder": "Installation, Wartung"
+      },
+      "fitScore": {
+        "label": "Eignungswert",
+        "placeholder": "0,00–1,00"
+      },
+      "contact": {
+        "label": "Kontakt",
+        "placeholder": "name@lieferant.example"
+      }
+    },
+    "commaSeparated": "Durch Kommas getrennt.",
+    "nameRequired": "Name ist erforderlich.",
+    "cancel": "Abbrechen",
+    "saving": "Wird gespeichert…",
+    "saveChanges": "Änderungen speichern",
+    "create": "Lieferant anlegen"
+  },
+  "toast": {
+    "updated": "Lieferant aktualisiert.",
+    "created": "Lieferant angelegt.",
+    "saveError": "Lieferant konnte nicht gespeichert werden."
+  }
+}

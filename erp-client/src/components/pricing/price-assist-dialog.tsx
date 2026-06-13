@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { useTranslations } from 'next-intl';
 import { AlertTriangle, Sparkles } from 'lucide-react';
 import type { LineItemDto } from '@evertrust/shared';
 import { useAddObservation, usePriceAssist } from '@/hooks/use-pricing';
@@ -35,6 +36,7 @@ export function PriceAssistDialog({
   lineItem: LineItemDto;
   currency: string;
 }) {
+  const t = useTranslations('tenders');
   const [open, setOpen] = useState(false);
   // The price the human will actually record — prefilled with Claude's number but
   // editable, because the human decides.
@@ -51,7 +53,7 @@ export function PriceAssistDialog({
         if (res.suggestion) setPrice(res.suggestion.unitPrice);
         else if (res.error) toast.error(res.error);
       },
-      onError: (e) => toast.error(e.message ?? 'Price-assist failed.'),
+      onError: (e) => toast.error(e.message ?? t('pricing.assist.failed')),
     });
   }
 
@@ -69,25 +71,25 @@ export function PriceAssistDialog({
   function accept() {
     const trimmed = price.trim();
     if (!trimmed || !Number.isFinite(Number(trimmed))) {
-      toast.error('Enter a valid price.');
+      toast.error(t('pricing.assist.priceError'));
       return;
     }
     const note = suggestion
-      ? `Claude estimate (${Math.round(suggestion.confidence * 100)}% conf): ${suggestion.rationale}`.slice(
-          0,
-          500,
-        )
-      : 'Claude price estimate';
+      ? t('pricing.assist.noteWithConfidence', {
+          confidence: Math.round(suggestion.confidence * 100),
+          rationale: suggestion.rationale,
+        }).slice(0, 500)
+      : t('pricing.assist.noteFallback');
     add.mutate(
       { source: 'AI_ESTIMATE', price: trimmed, note },
       {
         onSuccess: () => {
-          toast.success('Recorded Claude estimate on the line.');
+          toast.success(t('pricing.assist.recordedToast'));
           setOpen(false);
           assist.reset();
           setPrice('');
         },
-        onError: (e) => toast.error(e.message ?? 'Could not record the estimate.'),
+        onError: (e) => toast.error(e.message ?? t('pricing.assist.recordError')),
       },
     );
   }
@@ -100,17 +102,17 @@ export function PriceAssistDialog({
           variant="ghost"
           size="xs"
           className="ml-auto text-violet-300 hover:text-violet-200"
-          title="Ask Claude for a price estimate"
+          title={t('pricing.assist.askClaudeTitle')}
         >
           <Sparkles />
-          Ask Claude
+          {t('pricing.assist.askClaude')}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="size-4 text-violet-400" />
-            Claude price-assist
+            {t('pricing.assist.title')}
           </DialogTitle>
           <DialogDescription className="truncate">
             {lineItem.position} · {lineItem.description}
@@ -119,26 +121,27 @@ export function PriceAssistDialog({
 
         {assist.isPending ? (
           <div className="flex flex-col gap-3 py-2">
-            <p className="text-sm text-muted-foreground">Claude is estimating…</p>
+            <p className="text-sm text-muted-foreground">{t('pricing.assist.estimating')}</p>
             <Skeleton className="h-10 w-40" />
             <Skeleton className="h-16 w-full" />
           </div>
         ) : result && !result.configured ? (
           <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-            Claude price-assist isn&apos;t configured. Set{' '}
-            <code className="rounded bg-muted px-1 py-0.5 text-xs">
-              ANTHROPIC_API_KEY
-            </code>{' '}
-            on the API to enable AI suggestions.
+            {t.rich('pricing.assist.notConfigured', {
+              code: (chunks) => (
+                <code className="rounded bg-muted px-1 py-0.5 text-xs">{chunks}</code>
+              ),
+            })}
           </div>
         ) : result?.error ? (
           <div className="flex flex-col gap-3">
+            {/* The error message is produced server-side and rendered verbatim. */}
             <div className="flex items-start gap-2 rounded-lg border border-rose-500/25 bg-rose-500/10 p-3 text-sm text-rose-300">
               <AlertTriangle className="mt-0.5 size-4 shrink-0" />
               <span>{result.error}</span>
             </div>
             <Button type="button" variant="outline" size="sm" onClick={run}>
-              Try again
+              {t('pricing.assist.tryAgain')}
             </Button>
           </div>
         ) : suggestion ? (
@@ -147,10 +150,10 @@ export function PriceAssistDialog({
             <div className="rounded-lg border border-violet-500/25 bg-violet-500/10 p-4">
               <div className="flex items-baseline justify-between">
                 <span className="text-xs uppercase tracking-wider text-violet-300/80">
-                  Suggested unit price
+                  {t('pricing.assist.suggestedUnitPrice')}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {Math.round(suggestion.confidence * 100)}% confidence
+                  {t('pricing.assist.confidence', { value: Math.round(suggestion.confidence * 100) })}
                 </span>
               </div>
               <div className="mt-1 text-2xl font-semibold tabular-nums text-violet-100">
@@ -173,15 +176,15 @@ export function PriceAssistDialog({
               <div className="flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/10 p-3 text-xs text-amber-300">
                 <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                 <span>
-                  Low confidence — treat this as a rough placeholder and seek a real
-                  supplier quote.
+                  {t('pricing.assist.lowConfidence')}
                 </span>
               </div>
             ) : null}
 
+            {/* Rationale text is produced server-side and rendered verbatim. */}
             <div>
               <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Rationale
+                {t('pricing.assist.rationale')}
               </p>
               <p className="text-sm">{suggestion.rationale}</p>
             </div>
@@ -189,8 +192,9 @@ export function PriceAssistDialog({
             {suggestion.assumptions.length > 0 ? (
               <div>
                 <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Assumptions
+                  {t('pricing.assist.assumptions')}
                 </p>
+                {/* Assumption items are produced server-side and rendered verbatim. */}
                 <ul className="list-disc pl-5 text-sm text-muted-foreground">
                   {suggestion.assumptions.map((a, i) => (
                     <li key={i}>{a}</li>
@@ -200,7 +204,7 @@ export function PriceAssistDialog({
             ) : null}
 
             <div className="grid gap-2">
-              <Label htmlFor="assist-price">Price to record (editable)</Label>
+              <Label htmlFor="assist-price">{t('pricing.assist.priceToRecord')}</Label>
               <Input
                 id="assist-price"
                 type="number"
@@ -211,8 +215,9 @@ export function PriceAssistDialog({
                 onChange={(e) => setPrice(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                Recorded as an <strong>AI estimate</strong> — the line stays unbacked
-                (RED) until a real quote backs it.
+                {t.rich('pricing.assist.recordedAs', {
+                  strong: (chunks) => <strong>{chunks}</strong>,
+                })}
               </p>
             </div>
           </div>
@@ -220,11 +225,11 @@ export function PriceAssistDialog({
 
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-            {suggestion ? 'Cancel' : 'Close'}
+            {suggestion ? t('common.cancel') : t('common.close')}
           </Button>
           {suggestion ? (
             <Button type="button" onClick={accept} disabled={add.isPending}>
-              {add.isPending ? 'Recording…' : 'Add as estimate'}
+              {add.isPending ? t('pricing.assist.recording') : t('pricing.assist.addAsEstimate')}
             </Button>
           ) : null}
         </DialogFooter>

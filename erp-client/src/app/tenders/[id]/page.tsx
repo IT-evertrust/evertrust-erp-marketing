@@ -1,6 +1,7 @@
 'use client';
 
 import { use } from 'react';
+import { useTranslations } from 'next-intl';
 // Client-rendered + dynamic: gated, browser-fetched data, nothing at build time.
 import { useRequirePermission } from '@/lib/permissions';
 import { AppShell } from '@/components/shell/app-shell';
@@ -14,6 +15,7 @@ export default function TenderDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const t = useTranslations('tenders');
   const { allowed, isLoading } = useRequirePermission('tenders:read');
 
   return (
@@ -23,7 +25,7 @@ export default function TenderDetailPage({
       ) : allowed ? (
         <TenderDetail id={id} />
       ) : (
-        <p className="text-sm text-muted-foreground">Redirecting…</p>
+        <p className="text-sm text-muted-foreground">{t('common.redirecting')}</p>
       )}
     </AppShell>
   );

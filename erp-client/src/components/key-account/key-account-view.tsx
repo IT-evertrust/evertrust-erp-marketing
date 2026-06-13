@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   Bot,
   Calendar,
@@ -12,7 +13,7 @@ import {
   Trash2,
   User,
 } from 'lucide-react';
-import { LeadStageLabel, type LeadDto, type LeadStage } from '@evertrust/shared';
+import { type LeadDto, type LeadStage } from '@evertrust/shared';
 import {
   useClearLeads,
   useLeads,
@@ -40,15 +41,16 @@ import { AddLeadDialog } from './add-lead-dialog';
 const ALL = 'all';
 
 // Board columns, left → right pipeline. ARCHIVED leads are hidden from the board.
+// Titles + subtitles are resolved at render via the `keyAccount` namespace
+// (stage.* / columns.*), keyed by the stage enum.
 const COLUMNS: {
   stage: LeadStage;
   dot: string;
-  sub: string;
 }[] = [
-  { stage: 'INTERESTED', dot: 'bg-emerald-400', sub: 'New + warming replies' },
-  { stage: 'MEETING_SCHEDULED', dot: 'bg-amber-400', sub: 'Calls on the calendar' },
-  { stage: 'ONGOING', dot: 'bg-sky-400', sub: 'Deals in progress' },
-  { stage: 'CUSTOMER', dot: 'bg-violet-400', sub: 'Graduated to the CRM' },
+  { stage: 'INTERESTED', dot: 'bg-emerald-400' },
+  { stage: 'MEETING_SCHEDULED', dot: 'bg-amber-400' },
+  { stage: 'ONGOING', dot: 'bg-sky-400' },
+  { stage: 'CUSTOMER', dot: 'bg-violet-400' },
 ];
 
 // Tier → ribbon + pill colors (matches the mockup: AAA violet, AA sky, A emerald).
@@ -69,6 +71,7 @@ const domainOf = (l: LeadDto) =>
 // Customer), fed by the n8n Hot Leads Pipeline (Sync from n8n) + manual adds.
 // Click a card to review it, change its stage, or graduate it to an ERP customer.
 export function KeyAccountView() {
+  const t = useTranslations('keyAccount');
   const [campaignId, setCampaignId] = useState<string | null>(null);
   const [tier, setTier] = useState<string>(ALL);
   const [q, setQ] = useState('');
@@ -116,37 +119,39 @@ export function KeyAccountView() {
     <div className="flex flex-col gap-6">
       {/* header */}
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Key Account</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {t('header.title')}
+        </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Move hot leads through the pipeline — review, book, and graduate them to customers.
+          {t('header.description')}
         </p>
       </div>
 
       {/* KPI strip */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <Kpi n={hot} label="Hot leads" tone="amber" />
-        <Kpi n={meetings} label="Meetings booked" />
-        <Kpi n={customers} label="Customers" tone="violet" />
-        <Kpi n={`${convPct}%`} label="Lead → customer" />
-        <Kpi n={campaignList.length} label="Live campaigns" />
+        <Kpi n={hot} label={t('kpi.hotLeads')} tone="amber" />
+        <Kpi n={meetings} label={t('kpi.meetingsBooked')} />
+        <Kpi n={customers} label={t('kpi.customers')} tone="violet" />
+        <Kpi n={`${convPct}%`} label={t('kpi.leadToCustomer')} />
+        <Kpi n={campaignList.length} label={t('kpi.liveCampaigns')} />
       </div>
 
       {/* toolbar */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-0.5 rounded-lg border bg-card p-0.5">
-          {[ALL, ...tiers].map((t) => (
+          {[ALL, ...tiers].map((tierOpt) => (
             <button
-              key={t}
+              key={tierOpt}
               type="button"
-              onClick={() => setTier(t)}
+              onClick={() => setTier(tierOpt)}
               className={cn(
                 'rounded-md px-3 py-1.5 text-xs font-semibold transition-colors',
-                tier === t
+                tier === tierOpt
                   ? 'bg-muted text-foreground'
                   : 'text-muted-foreground hover:text-foreground',
               )}
             >
-              {t === ALL ? 'All tiers' : t}
+              {tierOpt === ALL ? t('toolbar.allTiers') : tierOpt}
             </button>
           ))}
         </div>
@@ -155,7 +160,7 @@ export function KeyAccountView() {
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search company, email, niche…"
+            placeholder={t('toolbar.searchPlaceholder')}
             className="h-9 pl-8"
           />
         </div>
@@ -165,10 +170,10 @@ export function KeyAccountView() {
           onValueChange={(v) => setCampaignId(v === ALL ? null : v)}
         >
           <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="All campaigns" />
+            <SelectValue placeholder={t('toolbar.allCampaigns')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ALL}>All campaigns</SelectItem>
+            <SelectItem value={ALL}>{t('toolbar.allCampaigns')}</SelectItem>
             {campaignList.map((c) => (
               <SelectItem key={c.id} value={c.id}>
                 {c.name || c.project}
@@ -183,10 +188,10 @@ export function KeyAccountView() {
             size="sm"
             onClick={() => backfill.mutate()}
             disabled={backfill.isPending}
-            title="Import hot leads + graduated customers from n8n"
+            title={t('toolbar.syncTitle')}
           >
             {backfill.isPending ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-            {backfill.isPending ? 'Syncing…' : 'Sync from n8n'}
+            {backfill.isPending ? t('toolbar.syncing') : t('toolbar.sync')}
           </Button>
           <Button
             type="button"
@@ -194,25 +199,25 @@ export function KeyAccountView() {
             size="sm"
             onClick={() => runPipeline.mutate(campaignId ?? undefined)}
             disabled={runPipeline.isPending}
-            title="Trigger the Hot Leads Pipeline in n8n"
+            title={t('toolbar.runPipelineTitle')}
           >
             {runPipeline.isPending ? <Loader2 className="animate-spin" /> : null}
-            Run pipeline
+            {t('toolbar.runPipeline')}
           </Button>
           <Button type="button" size="sm" onClick={() => setAddOpen(true)}>
             <Plus />
-            Add lead
+            {t('toolbar.addLead')}
           </Button>
           <ConfirmButton
             trigger={
               <Button type="button" variant="outline" size="sm">
                 <Trash2 />
-                Clear leads
+                {t('toolbar.clearLeads')}
               </Button>
             }
-            title="Clear all leads?"
-            description="Deletes every hot lead in this CRM (linked customers are kept). Test-data reset — this can't be undone."
-            confirmLabel="Clear leads"
+            title={t('toolbar.clearTitle')}
+            description={t('toolbar.clearDescription')}
+            confirmLabel={t('toolbar.clearConfirm')}
             pending={clearLeads.isPending}
             onConfirm={() => clearLeads.mutate()}
           />
@@ -221,20 +226,28 @@ export function KeyAccountView() {
 
       {/* status / observability lines */}
       {leads.isError ? (
-        <p className="text-sm text-destructive">Could not load leads: {leads.error.message}</p>
+        <p className="text-sm text-destructive">
+          {t('status.loadError', { message: leads.error.message })}
+        </p>
       ) : null}
       {backfill.isError ? (
-        <p className="text-sm text-destructive">Sync failed: {backfill.error.message}</p>
+        <p className="text-sm text-destructive">
+          {t('status.syncFailed', { message: backfill.error.message })}
+        </p>
       ) : backfill.data ? (
         <p className="text-xs text-muted-foreground">
           {backfill.data.configured
-            ? `Synced from n8n — ${backfill.data.imported} lead${backfill.data.imported === 1 ? '' : 's'}, ${backfill.data.customers} new customer${backfill.data.customers === 1 ? '' : 's'} (scanned ${backfill.data.scanned}).`
-            : 'n8n API not configured — set N8N_API_URL / N8N_API_KEY to sync.'}
+            ? t('status.syncResult', {
+                imported: backfill.data.imported,
+                customers: backfill.data.customers,
+                scanned: backfill.data.scanned,
+              })
+            : t('status.syncNotConfigured')}
         </p>
       ) : null}
       {runPipeline.data && !runPipeline.data.configured ? (
         <p className="text-xs text-amber-600 dark:text-amber-400">
-          Hot Leads Pipeline webhook not configured (set N8N_HOT_LEADS_PIPELINE_WEBHOOK_URL).
+          {t('status.pipelineNotConfigured')}
         </p>
       ) : null}
 
@@ -256,12 +269,16 @@ export function KeyAccountView() {
               >
                 <div className="flex items-center gap-2 px-4 pb-2 pt-3.5">
                   <span className={cn('size-2.5 rounded-full', col.dot)} />
-                  <span className="text-sm font-semibold">{LeadStageLabel[col.stage]}</span>
+                  <span className="text-sm font-semibold">
+                    {t(`stage.${col.stage}`)}
+                  </span>
                   <span className="ml-auto rounded-full bg-muted px-2.5 py-0.5 text-xs font-bold tabular-nums text-muted-foreground">
                     {cards.length}
                   </span>
                 </div>
-                <p className="-mt-1 px-4 pb-2.5 text-[11px] text-muted-foreground">{col.sub}</p>
+                <p className="-mt-1 px-4 pb-2.5 text-[11px] text-muted-foreground">
+                  {t(`columns.${col.stage}`)}
+                </p>
                 <div className="flex flex-col gap-2.5 px-3 pb-3.5">
                   {cards.map((lead) => (
                     <LeadCard key={lead.id} lead={lead} onClick={() => setSelected(lead)} />
@@ -272,7 +289,7 @@ export function KeyAccountView() {
                       onClick={() => setAddOpen(true)}
                       className="rounded-xl border border-dashed py-2.5 text-center text-xs text-muted-foreground transition-colors hover:border-foreground/25 hover:text-foreground"
                     >
-                      + add lead
+                      {t('columns.addLead')}
                     </button>
                   </Can>
                 </div>
@@ -316,6 +333,7 @@ function Kpi({
 }
 
 function LeadCard({ lead, onClick }: { lead: LeadDto; onClick: () => void }) {
+  const t = useTranslations('keyAccount');
   const ts = tierStyle(lead.tier);
   const location = [lead.city, lead.country].filter(Boolean).join(', ');
   const reason = lead.hotReason || lead.leadStatus || lead.note;
@@ -366,7 +384,7 @@ function LeadCard({ lead, onClick }: { lead: LeadDto; onClick: () => void }) {
         ) : null}
         <span className="ml-auto inline-flex shrink-0 items-center gap-1">
           {lead.source === 'N8N' ? <Bot className="size-3" /> : <User className="size-3" />}
-          {lead.source === 'N8N' ? 'n8n' : 'manual'}
+          {lead.source === 'N8N' ? t('card.sourceN8n') : t('card.sourceManual')}
           {lead.detectedAt ? ` · ${formatDateTime(lead.detectedAt)}` : ''}
         </span>
       </div>

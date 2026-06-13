@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { ChevronLeft } from 'lucide-react';
 import { useTender } from '@/hooks/use-tenders';
 import { useTenderPricing } from '@/hooks/use-pricing';
@@ -26,6 +27,7 @@ import { RfqHistory } from './rfq-history';
 // the totals panel (subtotal/margin/finalPrice/risk/signals/finalize), so the two
 // can never disagree. Page-level guard is pricing:read (see the route).
 export function PricingWorkbench({ tenderId }: { tenderId: string }) {
+  const t = useTranslations('tenders');
   const tender = useTender(tenderId);
   const pricing = useTenderPricing(tenderId);
 
@@ -36,7 +38,7 @@ export function PricingWorkbench({ tenderId }: { tenderId: string }) {
         className="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft className="size-4" />
-        Back to tender
+        {t('pricing.back')}
       </Link>
 
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -52,7 +54,7 @@ export function PricingWorkbench({ tenderId }: { tenderId: string }) {
             ) : null}
           </div>
           <h1 className="text-2xl font-semibold tracking-tight">
-            Pricing workbench
+            {t('pricing.title')}
           </h1>
           {tender.data ? (
             <p className="mt-1 text-sm text-muted-foreground">
@@ -65,10 +67,10 @@ export function PricingWorkbench({ tenderId }: { tenderId: string }) {
       {pricing.isError ? (
         <Card className="border-destructive/30">
           <CardHeader>
-            <CardTitle>Could not load pricing</CardTitle>
+            <CardTitle>{t('pricing.loadError')}</CardTitle>
             <CardDescription>
               {pricing.error.status === 404
-                ? 'This tender does not exist or is not in your organization.'
+                ? t('pricing.notFound')
                 : pricing.error.message}
             </CardDescription>
           </CardHeader>
@@ -80,10 +82,9 @@ export function PricingWorkbench({ tenderId }: { tenderId: string }) {
           <div className="flex min-w-0 flex-col gap-6">
             <Card className="min-w-0">
               <CardHeader>
-                <CardTitle className="text-base">Line items (LV)</CardTitle>
+                <CardTitle className="text-base">{t('pricing.lines.title')}</CardTitle>
                 <CardDescription>
-                  Each line shows the engine&apos;s suggested price, confidence and
-                  evidence signal. Expand a row to review and add price evidence.
+                  {t('pricing.lines.description')}
                 </CardDescription>
                 <Can permission="tenders:write">
                   <CardAction>
@@ -103,10 +104,9 @@ export function PricingWorkbench({ tenderId }: { tenderId: string }) {
             {/* Phase 5c — Hermes supplier RFQ: request quotes + dispatch history. */}
             <Card className="min-w-0">
               <CardHeader>
-                <CardTitle className="text-base">Supplier RFQs</CardTitle>
+                <CardTitle className="text-base">{t('pricing.rfq.title')}</CardTitle>
                 <CardDescription>
-                  Ask suppliers to quote lines that need real evidence; replies come
-                  back as supplier quotes that turn lines GREEN.
+                  {t('pricing.rfq.description')}
                 </CardDescription>
                 <Can permission="pricing:write">
                   <CardAction>

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { useTranslations } from 'next-intl';
 import { Send } from 'lucide-react';
 import type { LinePricingDto } from '@evertrust/shared';
 import { useSuppliers } from '@/hooks/use-suppliers';
@@ -40,6 +41,7 @@ export function SendRfqDialog({
   tenderId: string;
   lines: LinePricingDto[];
 }) {
+  const t = useTranslations('tenders');
   const unbacked = lines.filter((l) => !l.backed);
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -73,7 +75,7 @@ export function SendRfqDialog({
   function submit() {
     const supplierIds = [...selected];
     if (supplierIds.length === 0) {
-      toast.error('Pick at least one supplier.');
+      toast.error(t('pricing.rfq.pickSupplierError'));
       return;
     }
     const scoped = scope === 'unbacked' ? unbacked : lines;
@@ -84,17 +86,17 @@ export function SendRfqDialog({
       {
         onSuccess: (row) => {
           if (row.status === 'DISPATCHED') {
-            toast.success(
-              `RFQ sent to ${supplierIds.length} supplier${supplierIds.length > 1 ? 's' : ''}.`,
-            );
+            toast.success(t('pricing.rfq.sentToast', { count: supplierIds.length }));
           } else {
             toast.error(
-              `RFQ recorded, but the Hermes webhook failed${row.detail ? `: ${row.detail}` : ''}.`,
+              row.detail
+                ? t('pricing.rfq.failedWithDetail', { detail: row.detail })
+                : t('pricing.rfq.failed'),
             );
           }
           onOpenChange(false);
         },
-        onError: (e) => toast.error(e.message ?? 'Could not send the RFQ.'),
+        onError: (e) => toast.error(e.message ?? t('pricing.rfq.sendError')),
       },
     );
   }
@@ -104,24 +106,23 @@ export function SendRfqDialog({
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <Send />
-          Request quotes
+          {t('pricing.rfq.requestQuotes')}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Request supplier quotes</DialogTitle>
+          <DialogTitle>{t('pricing.rfq.dialogTitle')}</DialogTitle>
           <DialogDescription>
-            Email an RFQ to suppliers via Hermes. Replies are recorded as supplier
-            quotes and back the lines GREEN.
+            {t('pricing.rfq.dialogDescription')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
           <div className="grid gap-2">
-            <Label>Suppliers</Label>
+            <Label>{t('pricing.rfq.suppliersLabel')}</Label>
             <div className="flex max-h-48 flex-col gap-2 overflow-y-auto rounded-lg border p-3">
               {suppliers.isLoading ? (
-                <p className="text-sm text-muted-foreground">Loading suppliers…</p>
+                <p className="text-sm text-muted-foreground">{t('pricing.rfq.loadingSuppliers')}</p>
               ) : suppliers.data && suppliers.data.length > 0 ? (
                 suppliers.data.map((s) => (
                   <label
@@ -144,49 +145,49 @@ export function SendRfqDialog({
                 ))
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  No suppliers yet. Add suppliers in the registry first.
+                  {t('pricing.rfq.noSuppliers')}
                 </p>
               )}
             </div>
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="rfq-scope">Lines to quote</Label>
+            <Label htmlFor="rfq-scope">{t('pricing.rfq.scopeLabel')}</Label>
             <Select value={scope} onValueChange={(v) => setScope(v as Scope)}>
               <SelectTrigger id="rfq-scope" className="w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="unbacked">
-                  Unbacked lines ({unbacked.length})
+                  {t('pricing.rfq.scopeUnbacked', { count: unbacked.length })}
                 </SelectItem>
-                <SelectItem value="all">All lines ({lines.length})</SelectItem>
+                <SelectItem value="all">{t('pricing.rfq.scopeAll', { count: lines.length })}</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="rfq-note">Message (optional)</Label>
+            <Label htmlFor="rfq-note">{t('pricing.rfq.messageLabel')}</Label>
             <Textarea
               id="rfq-note"
               value={note}
               maxLength={2000}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Context for the suppliers (deadline, delivery, etc.)"
+              placeholder={t('pricing.rfq.messagePlaceholder')}
             />
           </div>
         </div>
 
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             type="button"
             onClick={submit}
             disabled={send.isPending || selected.size === 0}
           >
-            {send.isPending ? 'Sending…' : 'Send RFQ'}
+            {send.isPending ? t('pricing.rfq.sending') : t('pricing.rfq.send')}
           </Button>
         </DialogFooter>
       </DialogContent>

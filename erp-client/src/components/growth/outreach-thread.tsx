@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import type { OutreachMessageDto } from '@evertrust/shared';
 import { useOutreachThread } from '@/hooks/use-outreach';
@@ -17,6 +18,7 @@ export function OutreachThread({
   prospectId: string;
   enabled?: boolean;
 }) {
+  const t = useTranslations('marketing');
   const q = useOutreachThread(prospectId, enabled);
 
   if (q.isLoading) {
@@ -32,7 +34,7 @@ export function OutreachThread({
   if (q.isError) {
     return (
       <p className="text-sm text-destructive">
-        Could not load the conversation: {q.error.message}
+        {t('thread.loadError', { message: q.error.message })}
       </p>
     );
   }
@@ -41,7 +43,7 @@ export function OutreachThread({
   if (messages.length === 0) {
     return (
       <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
-        No messages yet — the outreach ledger is empty for this prospect.
+        {t('thread.empty')}
       </p>
     );
   }
@@ -59,6 +61,7 @@ export function OutreachThread({
 }
 
 function ThreadBubble({ message: m }: { message: OutreachMessageDto }) {
+  const t = useTranslations('marketing');
   const outbound = m.direction === 'OUTBOUND';
   return (
     <li
@@ -75,7 +78,7 @@ function ThreadBubble({ message: m }: { message: OutreachMessageDto }) {
         ) : (
           <ArrowDownLeft className="size-3.5 text-emerald-400" />
         )}
-        <span>{outbound ? 'Sent' : 'Received'}</span>
+        <span>{outbound ? t('thread.sent') : t('thread.received')}</span>
         <span className="text-muted-foreground/50">·</span>
         <span className="lowercase">{m.status.toLowerCase()}</span>
         <span className="ml-auto tabular-nums normal-case tracking-normal">

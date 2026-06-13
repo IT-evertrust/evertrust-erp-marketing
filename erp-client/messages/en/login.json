@@ -1,1 +1,18 @@
-{}
+{
+  "brand": {
+    "tagline": "Tender operations platform",
+    "footer": "Evertrust GmbH · Authorized access only"
+  },
+  "form": {
+    "title": "Sign in",
+    "description": "Access the Evertrust operations console.",
+    "emailLabel": "Email",
+    "passwordLabel": "Password",
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "errors": {
+      "invalidCredentials": "Invalid email or password.",
+      "generic": "Sign in failed. Please try again."
+    }
+  }
+}

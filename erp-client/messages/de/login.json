@@ -1,1 +1,18 @@
-{}
+{
+  "brand": {
+    "tagline": "Plattform für Ausschreibungen",
+    "footer": "Evertrust GmbH · Nur für autorisierten Zugriff"
+  },
+  "form": {
+    "title": "Anmelden",
+    "description": "Zugang zur Evertrust-Konsole.",
+    "emailLabel": "E-Mail",
+    "passwordLabel": "Passwort",
+    "submit": "Anmelden",
+    "submitting": "Wird angemeldet…",
+    "errors": {
+      "invalidCredentials": "Ungültige E-Mail-Adresse oder Passwort.",
+      "generic": "Anmeldung fehlgeschlagen. Bitte erneut versuchen."
+    }
+  }
+}

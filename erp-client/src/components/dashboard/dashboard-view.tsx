@@ -31,6 +31,7 @@ import {
   Tooltip,
   LabelList,
 } from 'recharts';
+import { useTranslations } from 'next-intl';
 import {
   DEPARTMENT_LABELS,
   ROLE_LABELS,
@@ -68,25 +69,27 @@ function isOpen(t: TenderDto): boolean {
   );
 }
 
-// Tender lifecycle stages (label + colour) — the SAME closed set as the shared
+// Tender lifecycle stages (enum + colour) — the SAME closed set as the shared
 // TenderStatus enum, so the pipeline chart can't drift from the state machine.
-const TENDER_STAGES: ReadonlyArray<[TenderStatus, string, string]> = [
-  ['NOT_STARTED', 'Not started', '#64748b'],
-  ['PIC_PRICING', 'PIC pricing', '#38bdf8'],
-  ['CUSTOMER_PRICING', 'Cust. pricing', '#22d3ee'],
-  ['DOCUMENTS', 'Documents', '#a78bfa'],
-  ['SUBMITTED', 'Submitted', '#34d399'],
-  ['AWARDED', 'Awarded', '#fbbf24'],
-  ['LOST', 'Lost', '#f87171'],
+// Labels are resolved at render from the tenderPipeline.stages.* messages.
+const TENDER_STAGES: ReadonlyArray<[TenderStatus, string]> = [
+  ['NOT_STARTED', '#64748b'],
+  ['PIC_PRICING', '#38bdf8'],
+  ['CUSTOMER_PRICING', '#22d3ee'],
+  ['DOCUMENTS', '#a78bfa'],
+  ['SUBMITTED', '#34d399'],
+  ['AWARDED', '#fbbf24'],
+  ['LOST', '#f87171'],
 ];
-// Campaign lifecycle stages (label + colour) — the SAME closed set as the shared
+// Campaign lifecycle stages (enum + colour) — the SAME closed set as the shared
 // CampaignLifecycle enum, so the donut can't drift. Colours match the lifecycle
 // badge palette (active emerald, paused amber, draft slate, archived gray).
-const CAMPAIGN_STATES: ReadonlyArray<[CampaignLifecycle, string, string]> = [
-  ['ACTIVE', 'Active', '#34d399'],
-  ['PAUSED', 'Paused', '#fbbf24'],
-  ['DRAFT', 'Draft', '#64748b'],
-  ['ARCHIVED', 'Archived', '#9ca3af'],
+// Labels are resolved at render from the campaignStatus.states.* messages.
+const CAMPAIGN_STATES: ReadonlyArray<[CampaignLifecycle, string]> = [
+  ['ACTIVE', '#34d399'],
+  ['PAUSED', '#fbbf24'],
+  ['DRAFT', '#64748b'],
+  ['ARCHIVED', '#9ca3af'],
 ];
 
 // Dark tooltip matching the app theme.
@@ -117,6 +120,7 @@ function ChartTip({
 // comes from a hook a module already fetches — no decorative/fabricated values —
 // and every tile/chart is gated by the same read permission as its source.
 export function DashboardView() {
+  const t = useTranslations('dashboard');
   const { data: user, isLoading, isError, error } = useMe();
   const queryClient = useQueryClient();
 
@@ -128,30 +132,29 @@ export function DashboardView() {
         ) : isError ? (
           <>
             <PageHeader
-              title="Dashboard"
-              description="Your Evertrust operations workspace."
+              title={t('header.title')}
+              description={t('header.description')}
             />
             <Card className="max-w-xl">
               <CardHeader>
-                <CardTitle>Could not load your account</CardTitle>
+                <CardTitle>{t('loadError.title')}</CardTitle>
                 <CardDescription>{error.message}</CardDescription>
               </CardHeader>
               <CardContent className="flex flex-col items-start gap-3 text-sm text-muted-foreground">
-                <p>
-                  Your session may have expired or the account is no longer
-                  available. Sign out and log in again.
-                </p>
-                <LogoutButton>Sign out</LogoutButton>
+                <p>{t('loadError.body')}</p>
+                <LogoutButton>{t('loadError.signOut')}</LogoutButton>
               </CardContent>
             </Card>
           </>
         ) : user ? (
           <>
             <PageHeader
-              title={`Welcome back, ${user.name.split(/\s+/)[0] || user.name}`}
+              title={t('header.welcome', {
+                name: user.name.split(/\s+/)[0] || user.name,
+              })}
               description={
                 <>
-                  Acquisition → pipeline → won, at a glance
+                  {t('header.subtitle')}
                   {user.organizationName ? (
                     <>
                       {' · '}
@@ -179,7 +182,7 @@ export function DashboardView() {
                     onClick={() => void queryClient.invalidateQueries()}
                   >
                     <RefreshCw className="size-4" />
-                    Refresh
+                    {t('header.refresh')}
                   </Button>
                 </div>
               }
@@ -207,13 +210,7 @@ export function DashboardView() {
               <DeadlineAtRiskCard />
             </Can>
 
-            <p className="text-xs text-muted-foreground">
-              Every figure above is read live from operational data. Panels that
-              need historical tracking — acquisition-over-time, reply topics and
-              week-over-week trends — appear here once the Arsenal logs daily
-              metrics to the ERP; they are deliberately not shown rather than
-              fabricated.
-            </p>
+            <p className="text-xs text-muted-foreground">{t('footnote')}</p>
           </>
         ) : null}
       </div>
@@ -223,6 +220,7 @@ export function DashboardView() {
 
 // ---- KPI tiles (all real counts) ----
 function StatRow() {
+  const t = useTranslations('dashboard');
   const tenders = useTenders();
   const atRisk = useDeadlineRisk();
   const campaigns = useCampaigns();
@@ -246,12 +244,15 @@ function StatRow() {
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
       <Can permission="campaigns:read">
         <StatTile
-          label="Campaigns"
+          label={t('stats.campaigns.label')}
           value={num(campaigns.isLoading, live)}
           hint={
             campaigns.isError
-              ? 'Could not load'
-              : `${campaigns.data?.length ?? 0} total · ${live} live`
+              ? t('common.couldNotLoad')
+              : t('stats.campaigns.hint', {
+                  total: campaigns.data?.length ?? 0,
+                  live,
+                })
           }
           accent="bg-violet-400"
           icon={<Crosshair className="size-4" />}
@@ -259,37 +260,49 @@ function StatRow() {
       </Can>
       <Can permission="campaigns:read">
         <StatTile
-          label="Hot leads"
+          label={t('stats.hotLeads.label')}
           value={num(leads.isLoading, leads.data?.length ?? 0)}
-          hint={leads.isError ? 'Could not load' : 'Interested in pipeline'}
+          hint={
+            leads.isError ? t('common.couldNotLoad') : t('stats.hotLeads.hint')
+          }
           accent="bg-sky-400"
           icon={<Contact className="size-4" />}
         />
       </Can>
       <Can permission="campaigns:read">
         <StatTile
-          label="Meetings"
+          label={t('stats.meetings.label')}
           value={num(meetings.isLoading, meetings.data?.length ?? 0)}
-          hint={meetings.isError ? 'Could not load' : 'Analyzed calls'}
+          hint={
+            meetings.isError
+              ? t('common.couldNotLoad')
+              : t('stats.meetings.hint')
+          }
           accent="bg-amber-400"
           icon={<CalendarCheck className="size-4" />}
         />
       </Can>
       <Can permission="campaigns:read">
         <StatTile
-          label="Customers"
+          label={t('stats.customers.label')}
           value={num(customers.isLoading, customers.data?.length ?? 0)}
-          hint={customers.isError ? 'Could not load' : 'Won accounts'}
+          hint={
+            customers.isError
+              ? t('common.couldNotLoad')
+              : t('stats.customers.hint')
+          }
           accent="bg-emerald-400"
           icon={<Trophy className="size-4" />}
         />
       </Can>
       <Can permission="tenders:read">
         <StatTile
-          label="Open tenders"
+          label={t('stats.openTenders.label')}
           value={num(tenders.isLoading, openTenders)}
           hint={
-            tenders.isError ? 'Could not load' : `${tenderRows.length} total`
+            tenders.isError
+              ? t('common.couldNotLoad')
+              : t('stats.openTenders.hint', { total: tenderRows.length })
           }
           accent="bg-sky-400"
           icon={<FileText className="size-4" />}
@@ -297,16 +310,16 @@ function StatRow() {
       </Can>
       <Can permission="tenders:read">
         <StatTile
-          label="At deadline risk"
+          label={t('stats.atRisk.label')}
           value={num(atRisk.isLoading, atRiskCount)}
           hint={
             atRisk.isError
-              ? 'Could not load'
+              ? t('common.couldNotLoad')
               : overdue > 0
-                ? `${overdue} overdue`
+                ? t('stats.atRisk.overdue', { count: overdue })
                 : atRiskCount > 0
-                  ? 'Within T-2 window'
-                  : 'All on track'
+                  ? t('stats.atRisk.withinWindow')
+                  : t('stats.atRisk.onTrack')
           }
           accent={atRiskCount > 0 ? 'bg-orange-400' : 'bg-emerald-400'}
           icon={<AlarmClock className="size-4" />}
@@ -318,6 +331,7 @@ function StatRow() {
 
 // ---- Acquisition funnel (real: hot leads → meetings → customers won) ----
 function AcquisitionFunnelCard() {
+  const t = useTranslations('dashboard');
   const leads = useLeads();
   const meetings = useMeetings();
   const customers = useCustomers();
@@ -325,17 +339,17 @@ function AcquisitionFunnelCard() {
   const loading = leads.isLoading || meetings.isLoading || customers.isLoading;
   const stages = [
     {
-      label: 'Hot leads',
+      label: t('acquisition.stages.hotLeads'),
       value: leads.data?.length ?? 0,
       color: '#a78bfa',
     },
     {
-      label: 'Meetings',
+      label: t('acquisition.stages.meetings'),
       value: meetings.data?.length ?? 0,
       color: '#38bdf8',
     },
     {
-      label: 'Customers won',
+      label: t('acquisition.stages.customersWon'),
       value: customers.data?.length ?? 0,
       color: '#34d399',
     },
@@ -347,15 +361,16 @@ function AcquisitionFunnelCard() {
     <Card className="lg:col-span-2">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <Filter className="size-4 text-muted-foreground" /> Acquisition funnel
+          <Filter className="size-4 text-muted-foreground" />{' '}
+          {t('acquisition.title')}
         </CardTitle>
-        <CardDescription>Hot leads → meetings → customers won</CardDescription>
+        <CardDescription>{t('acquisition.description')}</CardDescription>
       </CardHeader>
       <CardContent>
         {loading ? (
           <Skeleton className="h-[180px] w-full" />
         ) : !anyData ? (
-          <EmptyChart label="No acquisition data yet" h={180} />
+          <EmptyChart label={t('acquisition.empty')} h={180} />
         ) : (
           <div className="flex flex-col gap-4 py-2">
             {stages.map((s, i) => {
@@ -393,6 +408,7 @@ function AcquisitionFunnelCard() {
 
 // ---- Needs attention (real: deadline risk + unattributed meetings + failed campaigns) ----
 function NeedsAttentionCard() {
+  const t = useTranslations('dashboard');
   const atRisk = useDeadlineRisk();
   const meetings = useMeetings();
   const campaigns = useCampaigns();
@@ -417,22 +433,24 @@ function NeedsAttentionCard() {
     items.push({
       icon: <AlarmClock className="size-4" />,
       tone: 'text-orange-400',
-      title: `${riskRows.length} tender${riskRows.length > 1 ? 's' : ''} at deadline risk`,
+      title: t('needsAttention.risk.title', { count: riskRows.length }),
       sub: mostUrgent
-        ? `Most urgent: ${mostUrgent.tender.title}`
-        : 'Within the T-2 window',
+        ? t('needsAttention.risk.mostUrgent', { title: mostUrgent.tender.title })
+        : t('needsAttention.risk.fallback'),
       href: mostUrgent ? `/tenders/${mostUrgent.tender.id}` : undefined,
-      cta: 'Open',
+      cta: t('needsAttention.risk.cta'),
     });
   }
   if (unattributed.length > 0) {
     items.push({
       icon: <Unlink className="size-4" />,
       tone: 'text-amber-400',
-      title: `${unattributed.length} unattributed meeting${unattributed.length > 1 ? 's' : ''}`,
-      sub: 'Sales · no campaign matched',
+      title: t('needsAttention.unattributed.title', {
+        count: unattributed.length,
+      }),
+      sub: t('needsAttention.unattributed.sub'),
       href: '/sales',
-      cta: 'Link',
+      cta: t('needsAttention.unattributed.cta'),
     });
   }
 
@@ -440,15 +458,15 @@ function NeedsAttentionCard() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <AlertTriangle className="size-4 text-muted-foreground" /> Needs
-          attention
+          <AlertTriangle className="size-4 text-muted-foreground" />{' '}
+          {t('needsAttention.title')}
         </CardTitle>
         <CardDescription>
           {loading
-            ? 'Checking…'
+            ? t('needsAttention.checking')
             : items.length === 0
-              ? 'Nothing needs attention'
-              : `${items.length} item${items.length > 1 ? 's' : ''} to clear`}
+              ? t('needsAttention.none')
+              : t('needsAttention.count', { count: items.length })}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -457,7 +475,7 @@ function NeedsAttentionCard() {
         ) : items.length === 0 ? (
           <div className="flex h-[180px] flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
             <CheckCircle2 className="size-7 text-emerald-400" />
-            All clear — no deadlines at risk, every meeting attributed.
+            {t('needsAttention.allClear')}
           </div>
         ) : (
           <ul className="flex flex-col gap-2">
@@ -501,11 +519,12 @@ function NeedsAttentionCard() {
 
 // ---- Tender pipeline (bar, real) ----
 function TenderPipelineCard() {
+  const t = useTranslations('dashboard');
   const tenders = useTenders();
   const rows = tenders.data ?? [];
-  const data = TENDER_STAGES.map(([s, label, fill]) => ({
-    stage: label,
-    n: rows.filter((t) => t.status === s).length,
+  const data = TENDER_STAGES.map(([s, fill]) => ({
+    stage: t(`tenderPipeline.stages.${s}`),
+    n: rows.filter((row) => row.status === s).length,
     fill,
   }));
   const open = rows.filter(isOpen).length;
@@ -514,15 +533,18 @@ function TenderPipelineCard() {
     <Card className="lg:col-span-2">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <Layers className="size-4 text-muted-foreground" /> Tender pipeline
+          <Layers className="size-4 text-muted-foreground" />{' '}
+          {t('tenderPipeline.title')}
         </CardTitle>
-        <CardDescription>{open} open · by stage</CardDescription>
+        <CardDescription>
+          {t('tenderPipeline.description', { count: open })}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         {tenders.isLoading ? (
           <Skeleton className="h-[220px] w-full" />
         ) : rows.length === 0 ? (
-          <EmptyChart label="No tenders yet" />
+          <EmptyChart label={t('tenderPipeline.empty')} />
         ) : (
           <div className="h-[220px] w-full">
             <ResponsiveContainer width="100%" height="100%">
@@ -543,7 +565,12 @@ function TenderPipelineCard() {
                   tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
                 />
                 <Tooltip content={<ChartTip />} cursor={{ fill: 'rgba(255,255,255,.03)' }} />
-                <Bar dataKey="n" name="Tenders" radius={[6, 6, 0, 0]} maxBarSize={44}>
+                <Bar
+                  dataKey="n"
+                  name={t('tenderPipeline.series')}
+                  radius={[6, 6, 0, 0]}
+                  maxBarSize={44}
+                >
                   {data.map((d, i) => (
                     <Cell key={i} fill={d.fill} />
                   ))}
@@ -565,10 +592,11 @@ function TenderPipelineCard() {
 
 // ---- Campaign status (donut, real) ----
 function CampaignStatusCard() {
+  const t = useTranslations('dashboard');
   const campaigns = useCampaigns();
   const rows = campaigns.data ?? [];
-  const data = CAMPAIGN_STATES.map(([s, label, fill]) => ({
-    name: label,
+  const data = CAMPAIGN_STATES.map(([s, fill]) => ({
+    name: t(`campaignStatus.states.${s}`),
     value: rows.filter((c) => c.lifecycle === s).length,
     fill,
   })).filter((d) => d.value > 0);
@@ -577,15 +605,18 @@ function CampaignStatusCard() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <Briefcase className="size-4 text-muted-foreground" /> Campaigns
+          <Briefcase className="size-4 text-muted-foreground" />{' '}
+          {t('campaignStatus.title')}
         </CardTitle>
-        <CardDescription>{rows.length} total · by lifecycle</CardDescription>
+        <CardDescription>
+          {t('campaignStatus.description', { count: rows.length })}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         {campaigns.isLoading ? (
           <Skeleton className="h-[220px] w-full" />
         ) : rows.length === 0 ? (
-          <EmptyChart label="No campaigns yet" />
+          <EmptyChart label={t('campaignStatus.empty')} />
         ) : (
           <div className="flex h-[220px] items-center gap-3">
             <div className="h-full flex-1">

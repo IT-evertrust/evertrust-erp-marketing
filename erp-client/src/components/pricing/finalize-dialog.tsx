@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { useTranslations } from 'next-intl';
 import { CheckCircle2 } from 'lucide-react';
 import type { TenderPricingDto } from '@evertrust/shared';
 import { useFinalizePricing } from '@/hooks/use-pricing';
@@ -29,6 +30,7 @@ export function FinalizeDialog({
   tenderId: string;
   pricing: TenderPricingDto;
 }) {
+  const t = useTranslations('tenders');
   const [open, setOpen] = useState(false);
   const finalize = useFinalizePricing(tenderId);
   const isFinal = pricing.status === 'FINAL';
@@ -36,11 +38,11 @@ export function FinalizeDialog({
   function confirm() {
     finalize.mutate(undefined, {
       onSuccess: () => {
-        toast.success('Pricing finalized — tender moved to Customer pricing.');
+        toast.success(t('pricing.finalize.finalizedToast'));
         setOpen(false);
       },
       onError: (error) =>
-        toast.error(error.message ?? 'Could not finalize pricing.'),
+        toast.error(error.message ?? t('pricing.finalize.finalizeError')),
     });
   }
 
@@ -49,25 +51,26 @@ export function FinalizeDialog({
       <DialogTrigger asChild>
         <Button type="button" disabled={isFinal} className="w-full">
           <CheckCircle2 />
-          {isFinal ? 'Pricing finalized' : 'Finalize pricing'}
+          {isFinal ? t('pricing.finalize.finalized') : t('pricing.finalize.finalize')}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Finalize pricing?</DialogTitle>
+          <DialogTitle>{t('pricing.finalize.title')}</DialogTitle>
           <DialogDescription>
-            This locks the pricing as FINAL and moves the tender to Customer
-            pricing. Final price is{' '}
-            <span className="font-medium text-foreground">
-              {formatMoney(pricing.finalPrice, pricing.currency)}
-            </span>
-            .
+            {t.rich('pricing.finalize.description', {
+              price: formatMoney(pricing.finalPrice, pricing.currency),
+              amount: (chunks) => (
+                <span className="font-medium text-foreground">{chunks}</span>
+              ),
+            })}
           </DialogDescription>
         </DialogHeader>
         {pricing.highRisk ? (
           <Alert variant="destructive">
-            <AlertTitle>High-risk pricing</AlertTitle>
+            <AlertTitle>{t('pricing.finalize.highRiskTitle')}</AlertTitle>
             <AlertDescription>
+              {/* Risk reasons are produced server-side and rendered verbatim. */}
               <ul className="list-disc pl-4">
                 {pricing.riskReasons.map((r) => (
                   <li key={r}>{r}</li>
@@ -78,10 +81,10 @@ export function FinalizeDialog({
         ) : null}
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button type="button" onClick={confirm} disabled={finalize.isPending}>
-            {finalize.isPending ? 'Finalizing…' : 'Confirm finalize'}
+            {finalize.isPending ? t('pricing.finalize.finalizing') : t('pricing.finalize.confirm')}
           </Button>
         </DialogFooter>
       </DialogContent>

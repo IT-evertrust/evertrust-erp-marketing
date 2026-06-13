@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useState, type ReactNode } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   ChevronRight,
   Crosshair,
@@ -14,8 +15,6 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import {
-  ARSENAL_METRIC_LABEL,
-  ARSENAL_STAGE_META,
   STAGE_PRIMARY_METRIC,
   type ArsenalStage,
   type MarketingReportPeriod,
@@ -45,17 +44,7 @@ import { Sparkline } from './sparkline';
 // Sentinel for the "all campaigns" option (Select can't use an empty value).
 const ALL = 'all';
 
-const PERIODS: { value: MarketingReportPeriod; label: string }[] = [
-  { value: 'day', label: 'Day' },
-  { value: 'week', label: 'Week' },
-  { value: 'month', label: 'Month' },
-];
-
-const WINDOW_LABEL: Record<MarketingReportPeriod, string> = {
-  day: 'Last 24 hours',
-  week: 'Last 7 days',
-  month: 'Last 30 days',
-};
+const PERIODS: MarketingReportPeriod[] = ['day', 'week', 'month'];
 
 const STAGE_ICON: Record<ArsenalStage, LucideIcon> = {
   LEAD_SATELLITE: Radar,
@@ -65,7 +54,8 @@ const STAGE_ICON: Record<ArsenalStage, LucideIcon> = {
   SLEEPER_GRENADE: Moon,
 };
 
-const RAG_STEPS = ['Unsure', 'Drafted', 'Approved', 'Sent', 'Replied'];
+// The RAG draft funnel steps, in order; labels come from report.ragSteps.*.
+const RAG_STEPS = ['unsure', 'drafted', 'approved', 'sent', 'replied'] as const;
 
 const pct = (r: number | null) => (r === null ? '—' : `${Math.round(r * 100)}%`);
 
@@ -75,6 +65,7 @@ const pct = (r: number | null) => (r === null ? '—' : `${Math.round(r * 100)}%
 // "awaiting" placeholders — no fabricated numbers — and light up once those sources
 // exist (the RAG Agent workflow's counts; a campaign↔tender link).
 export function MarketingReport() {
+  const t = useTranslations('marketing');
   const [period, setPeriod] = useState<MarketingReportPeriod>('week');
   const [campaignId, setCampaignId] = useState<string | null>(null);
   const query = useMarketingReport(period, campaignId);
@@ -91,17 +82,17 @@ export function MarketingReport() {
         <div className="inline-flex rounded-lg border bg-card p-0.5">
           {PERIODS.map((p) => (
             <button
-              key={p.value}
+              key={p}
               type="button"
-              onClick={() => setPeriod(p.value)}
+              onClick={() => setPeriod(p)}
               className={cn(
                 'rounded-md px-3 py-1 text-sm font-medium transition-colors',
-                period === p.value
+                period === p
                   ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground hover:text-foreground',
               )}
             >
-              {p.label}
+              {t(`report.period.${p}`)}
             </button>
           ))}
         </div>
@@ -110,10 +101,10 @@ export function MarketingReport() {
           onValueChange={(v) => setCampaignId(v === ALL ? null : v)}
         >
           <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="All campaigns" />
+            <SelectValue placeholder={t('report.allCampaigns')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ALL}>All campaigns</SelectItem>
+            <SelectItem value={ALL}>{t('report.allCampaigns')}</SelectItem>
             {campaignList.map((c) => (
               <SelectItem key={c.id} value={c.id}>
                 {c.name || c.project}
@@ -122,7 +113,7 @@ export function MarketingReport() {
           </SelectContent>
         </Select>
         <span className="hidden text-xs text-muted-foreground sm:inline">
-          {WINDOW_LABEL[period]}
+          {t(`report.window.${period}`)}
         </span>
         <div className="ml-auto flex items-center gap-2">
           <Can permission="campaigns:write">
@@ -132,25 +123,25 @@ export function MarketingReport() {
               size="sm"
               onClick={() => backfill.mutate()}
               disabled={backfill.isPending}
-              title="Import recent runs + counts from n8n's execution history"
+              title={t('report.syncTitle')}
             >
               {backfill.isPending ? (
                 <Loader2 className="animate-spin" />
               ) : (
                 <RefreshCw />
               )}
-              {backfill.isPending ? 'Syncing…' : 'Sync from n8n'}
+              {backfill.isPending ? t('report.syncing') : t('report.syncFromN8n')}
             </Button>
             <ConfirmButton
               trigger={
                 <Button type="button" variant="outline" size="sm">
                   <Trash2 />
-                  Clear runs
+                  {t('report.clearRuns')}
                 </Button>
               }
-              title="Clear all run activity?"
-              description="Deletes every arsenal run (Live activity + this report). Test-data reset — this can't be undone."
-              confirmLabel="Clear runs"
+              title={t('report.clearTitle')}
+              description={t('report.clearDescription')}
+              confirmLabel={t('report.clearRuns')}
               pending={clearRuns.isPending}
               onConfirm={() => clearRuns.mutate()}
             />
@@ -160,43 +151,46 @@ export function MarketingReport() {
 
       {query.isError ? (
         <p className="text-sm text-destructive">
-          Could not load the report: {query.error.message}
+          {t('report.loadError', { message: query.error.message })}
         </p>
       ) : null}
 
       {backfill.isError ? (
         <p className="text-sm text-destructive">
-          Sync failed: {backfill.error.message}
+          {t('report.syncError', { message: backfill.error.message })}
         </p>
       ) : backfill.data ? (
         <p className="text-xs text-muted-foreground">
           {backfill.data.configured
-            ? `Synced from n8n — imported ${backfill.data.imported} run${backfill.data.imported === 1 ? '' : 's'} (scanned ${backfill.data.scanned}).`
-            : 'n8n API not configured — set N8N_API_URL / N8N_API_KEY to sync.'}
+            ? t('report.synced', {
+                count: backfill.data.imported,
+                scanned: backfill.data.scanned,
+              })
+            : t('report.syncNotConfigured')}
         </p>
       ) : null}
 
       {/* Funnel — REAL (arsenal_runs metrics) */}
-      <ReportSection title="Funnel">
+      <ReportSection title={t('report.section.funnel')}>
         {query.isLoading ? (
           <Skeleton className="h-16 w-full" />
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <FunnelStep label="Leads found" value={data?.funnel.leadsFound ?? null} />
-            <FunnelStep label="Emails sent" value={data?.funnel.emailsSent ?? null} />
-            <FunnelStep label="Replies" value={data?.funnel.repliesHandled ?? null} />
-            <FunnelStep label="Meetings" value={data?.funnel.meetingsBooked ?? null} />
+            <FunnelStep label={t('report.funnel.leadsFound')} value={data?.funnel.leadsFound ?? null} />
+            <FunnelStep label={t('report.funnel.emailsSent')} value={data?.funnel.emailsSent ?? null} />
+            <FunnelStep label={t('report.funnel.replies')} value={data?.funnel.repliesHandled ?? null} />
+            <FunnelStep label={t('report.funnel.meetings')} value={data?.funnel.meetingsBooked ?? null} />
           </div>
         )}
         <p className="mt-3 text-xs text-muted-foreground">
-          Amber = awaiting n8n. Each lights up once the stage reports a{' '}
-          <code className="mx-0.5 rounded bg-muted px-1">metrics</code> count via the
-          run callback.
+          {t.rich('report.funnel.hint', {
+            code: (chunks) => <code className="mx-0.5 rounded bg-muted px-1">{chunks}</code>,
+          })}
         </p>
       </ReportSection>
 
       {/* RAG draft funnel — awaiting (RAG Agent workflow not yet reporting) */}
-      <ReportSection title="RAG draft funnel">
+      <ReportSection title={t('report.section.ragFunnel')}>
         <div className="flex items-stretch gap-1.5 overflow-x-auto">
           {RAG_STEPS.map((s, i) => (
             <Fragment key={s}>
@@ -208,45 +202,54 @@ export function MarketingReport() {
                   —
                 </div>
                 <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                  {s}
+                  {t(`report.ragSteps.${s}`)}
                 </div>
               </div>
             </Fragment>
           ))}
         </div>
         <p className="mt-3 text-xs text-muted-foreground">
-          Lights up once the RAG Agent workflow reports drafted / approved / sent
-          counts.
+          {t('report.ragHint')}
         </p>
       </ReportSection>
 
       {/* Draft outcomes & response timing — awaiting */}
-      <ReportSection title="Draft outcomes & response timing">
+      <ReportSection title={t('report.section.draftOutcomes')}>
         <div className="grid gap-3 sm:grid-cols-2">
           <KvBox
-            title="Outcomes (30d)"
-            rows={['Sent', 'Edited → sent', 'Discarded', 'Approval rate', 'Avg edits / draft']}
+            title={t('report.outcomes.title')}
+            rows={[
+              t('report.outcomes.rowSent'),
+              t('report.outcomes.rowEditedSent'),
+              t('report.outcomes.rowDiscarded'),
+              t('report.outcomes.rowApprovalRate'),
+              t('report.outcomes.rowAvgEdits'),
+            ]}
           />
           <KvBox
-            title="Response timing"
-            rows={['Unsure → draft ready', 'Draft → sent', 'Stale drafts (>24h)', 'Fastest send']}
+            title={t('report.timing.title')}
+            rows={[
+              t('report.timing.rowUnsureReady'),
+              t('report.timing.rowDraftSent'),
+              t('report.timing.rowStale'),
+              t('report.timing.rowFastest'),
+            ]}
           />
         </div>
         <p className="mt-3 text-xs text-muted-foreground">
-          Populated once RAG-draft outcomes are tracked end-to-end.
+          {t('report.draftOutcomesHint')}
         </p>
       </ReportSection>
 
       {/* Tender attribution — awaiting (no campaign↔tender link yet) */}
-      <ReportSection title="Tender attribution — what this activity is advancing">
+      <ReportSection title={t('report.section.tenderAttribution')}>
         <p className="text-sm text-muted-foreground">
-          No campaign → tender links yet. Once outbound leads graduate into tenders,
-          this shows which tenders each campaign is advancing and their € value.
+          {t('report.tenderAttributionText')}
         </p>
       </ReportSection>
 
       {/* Per stage · this period — REAL */}
-      <ReportSection title="Per stage · this period">
+      <ReportSection title={t('report.section.perStage')}>
         {query.isLoading ? (
           <Skeleton className="h-48 w-full" />
         ) : data ? (
@@ -298,6 +301,7 @@ function KvBox({ title, rows }: { title: string; rows: string[] }) {
 }
 
 function FunnelStep({ label, value }: { label: string; value: number | null }) {
+  const t = useTranslations('marketing');
   const empty = value === null;
   return (
     <div
@@ -323,7 +327,7 @@ function FunnelStep({ label, value }: { label: string; value: number | null }) {
       </div>
       {empty ? (
         <div className="text-[10px] text-amber-600 dark:text-amber-400">
-          awaiting n8n
+          {t('report.funnel.awaiting')}
         </div>
       ) : null}
     </div>
@@ -331,11 +335,12 @@ function FunnelStep({ label, value }: { label: string; value: number | null }) {
 }
 
 function StageLane({ stage: s }: { stage: MarketingStageReportDto }) {
+  const t = useTranslations('marketing');
   const Icon = STAGE_ICON[s.stage] ?? Crosshair;
   const hasError = s.errors > 0;
   const metricKey = STAGE_PRIMARY_METRIC[s.stage];
   const metricVal = s.metrics[metricKey];
-  const metricLabel = ARSENAL_METRIC_LABEL[metricKey];
+  const metricLabel = t(`metric.${metricKey}`);
 
   return (
     <div className="flex items-center gap-4 overflow-x-auto border-t py-3 first:border-t-0">
@@ -353,14 +358,14 @@ function StageLane({ stage: s }: { stage: MarketingStageReportDto }) {
         <Icon className="size-4 shrink-0 text-muted-foreground" />
         <span
           className="truncate text-sm font-medium"
-          title={ARSENAL_STAGE_META[s.stage].what}
+          title={t(`stageWhat.${s.stage}`)}
         >
-          {ARSENAL_STAGE_META[s.stage].label}
+          {t(`stage.${s.stage}`)}
         </span>
       </div>
 
       <div className="w-32 shrink-0 text-xs tabular-nums text-muted-foreground">
-        {s.runs} runs · {pct(s.successRate)} ok
+        {t('report.stageRuns', { runs: s.runs, pct: pct(s.successRate) })}
       </div>
 
       {hasError ? (
@@ -368,14 +373,14 @@ function StageLane({ stage: s }: { stage: MarketingStageReportDto }) {
           variant="outline"
           className="shrink-0 border-destructive/30 bg-destructive/10 text-[10px] text-destructive"
         >
-          {s.errors} error{s.errors === 1 ? '' : 's'}
+          {t('report.stageErrors', { count: s.errors })}
         </Badge>
       ) : null}
 
       <div className="min-w-0 flex-1 text-xs">
         {metricLabel}{' '}
         {metricVal === undefined ? (
-          <span className="text-amber-600 dark:text-amber-400">— awaiting n8n</span>
+          <span className="text-amber-600 dark:text-amber-400">{t('report.metricAwaiting')}</span>
         ) : (
           <span className="font-semibold text-sky-700 dark:text-sky-300 tabular-nums">
             {metricVal.toLocaleString()}

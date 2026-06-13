@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Loader2, Plus, X } from 'lucide-react';
 import {
-  CONTRIBUTION_ROLE_LABELS,
   ContributionRole,
   type ContributionRole as Role,
 } from '@evertrust/shared';
@@ -30,6 +30,7 @@ const ROLES = ContributionRole.options;
 // pricing approver / submitter; the rest are added by hand. Feeds contribution
 // scoring for bonuses.
 export function TenderContributorsCard({ tenderId }: { tenderId: string }) {
+  const t = useTranslations('tenders');
   const contributions = useTenderContributions(tenderId);
   const users = useUsers();
   const add = useAddContribution(tenderId);
@@ -43,10 +44,9 @@ export function TenderContributorsCard({ tenderId }: { tenderId: string }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Revenue attribution</CardTitle>
+        <CardTitle className="text-base">{t('contributors.title')}</CardTitle>
         <CardDescription>
-          Who contributed to this tender, by role. Validation is auto-detected from the pricing
-          approver &amp; submitter; add the rest.
+          {t('contributors.description')}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -56,24 +56,24 @@ export function TenderContributorsCard({ tenderId }: { tenderId: string }) {
             return (
               <div key={r} className="grid grid-cols-[130px_1fr] items-start gap-2 text-sm">
                 <span className="pt-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {CONTRIBUTION_ROLE_LABELS[r]}
+                  {t(`contributionRole.${r}`)}
                 </span>
                 <div className="flex flex-wrap gap-1.5">
                   {people.length === 0 ? (
-                    <span className="pt-1 text-xs text-muted-foreground/60">—</span>
+                    <span className="pt-1 text-xs text-muted-foreground/60">{t('contributors.empty')}</span>
                   ) : (
                     people.map((c) => (
                       <span
                         key={c.id}
                         className="inline-flex items-center gap-1 rounded-full border bg-muted/40 py-1 pl-2.5 pr-1 text-[12.5px]"
                       >
-                        {c.userName ?? 'Unknown'}
+                        {c.userName ?? t('contributors.unknown')}
                         <Can permission="performance:write">
                           <button
                             type="button"
                             onClick={() => remove.mutate(c.id)}
                             className="grid size-4 place-items-center rounded-full text-muted-foreground hover:bg-destructive/15 hover:text-destructive"
-                            aria-label="Remove"
+                            aria-label={t('contributors.remove')}
                           >
                             <X className="size-3" />
                           </button>
@@ -96,7 +96,7 @@ export function TenderContributorsCard({ tenderId }: { tenderId: string }) {
             >
               {ROLES.map((r) => (
                 <option key={r} value={r}>
-                  {CONTRIBUTION_ROLE_LABELS[r]}
+                  {t(`contributionRole.${r}`)}
                 </option>
               ))}
             </select>
@@ -105,7 +105,7 @@ export function TenderContributorsCard({ tenderId }: { tenderId: string }) {
               onChange={(e) => setUserId(e.target.value)}
               className="h-9 min-w-[160px] flex-1 rounded-md border bg-card px-2 text-sm"
             >
-              <option value="">Select employee…</option>
+              <option value="">{t('contributors.selectEmployee')}</option>
               {userList.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}
@@ -124,7 +124,7 @@ export function TenderContributorsCard({ tenderId }: { tenderId: string }) {
               disabled={!userId || add.isPending}
             >
               {add.isPending ? <Loader2 className="animate-spin" /> : <Plus />}
-              Add
+              {t('contributors.add')}
             </Button>
           </div>
         </Can>
