@@ -1,0 +1,149 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "marketing": "Marketing",
+    "niches": "Nischen",
+    "drafts": "Antwortentwürfe",
+    "suppressions": "Sperrliste",
+    "keyAccount": "Key Account",
+    "sales": "Vertrieb",
+    "performance": "Leistung",
+    "users": "Benutzer",
+    "general": "Allgemein",
+    "configuration": "Konfiguration",
+    "group": {
+      "Acquisition": "Akquise",
+      "Management": "Verwaltung",
+      "Administration": "Administration",
+      "Settings": "Einstellungen"
+    }
+  },
+  "common": {
+    "settings": "Einstellungen",
+    "profile": "Profil",
+    "logOut": "Abmelden"
+  },
+  "settings": {
+    "general": {
+      "header": {
+        "title": "Allgemein",
+        "description": "Darstellung und App-Einstellungen."
+      },
+      "appearance": {
+        "title": "Darstellung",
+        "description": "Wählen Sie, wie die Konsole aussieht. Ihre Auswahl wird auf diesem Gerät gespeichert.",
+        "ariaLabel": "Design",
+        "system": "System",
+        "light": "Hell",
+        "dark": "Dunkel"
+      },
+      "display": {
+        "title": "Anzeige",
+        "description": "Wo Sie nach der Anmeldung landen und wie kompakt die Konsole dargestellt wird. Auf diesem Gerät gespeichert.",
+        "landingLabel": "Standard-Startseite",
+        "landingHint": "Die Seite, die Sie direkt nach der Anmeldung sehen.",
+        "landingToast": "Startseite auf {label} gesetzt.",
+        "densityLabel": "Dichte",
+        "densityAriaLabel": "Dichte",
+        "comfortable": "Komfortabel",
+        "compact": "Kompakt",
+        "densityHint": "Kompakt verringert die Abstände in der gesamten Konsole.",
+        "densityToast": "Dichte auf {label} gesetzt."
+      },
+      "language": {
+        "title": "Sprache",
+        "description": "Die Sprache für Menüs und Beschriftungen. In Ihrem Browser gespeichert.",
+        "ariaLabel": "Sprache",
+        "english": "English",
+        "german": "Deutsch",
+        "toast": "Sprache auf {label} gesetzt."
+      }
+    },
+    "config": {
+      "header": {
+        "title": "Konfiguration",
+        "description": "Automatisierung & Integrationen für Ihren Arbeitsbereich."
+      },
+      "badge": {
+        "custom": "Angepasst",
+        "envDefault": "Umgebungsstandard"
+      },
+      "wiring": {
+        "title": "Workflow-Verdrahtung",
+        "description": "Der n8n-Webhook, den jede Stufe der Growth-Engine auslöst. Lassen Sie ein Feld leer, um den Umgebungsstandard zu verwenden."
+      },
+      "n8n": {
+        "title": "n8n-Verbindung",
+        "description": "Wie das ERP n8n erreicht, um den Live-Ausführungsstatus zu lesen.",
+        "apiUrlLabel": "API-Basis-URL",
+        "apiKeyLabel": "API-Schlüssel",
+        "apiKeySet": "Gesetzt (Umgebung)",
+        "apiKeyNotSet": "Nicht gesetzt",
+        "testConnection": "Verbindung testen",
+        "testing": "Test läuft…",
+        "toastOk": "n8n-Verbindung OK.",
+        "toastError": "n8n: {detail}",
+        "toastNotConfigured": "n8n ist nicht konfiguriert.",
+        "toastUnreachable": "n8n konnte nicht erreicht werden.",
+        "workflowCount": "{count, plural, one {# Workflow} other {# Workflows}}"
+      },
+      "ingest": {
+        "title": "Ingest-Sicherheit",
+        "description": "n8n verwendet dieses Token, um Ergebnisse zurück an das ERP zu schreiben.",
+        "tokenLabel": "Ingest-Token",
+        "sourceRotated": "In der App rotiert",
+        "sourceEnv": "Aus Umgebung",
+        "sourceNone": "Nicht gesetzt",
+        "lastSet": "Zuletzt gesetzt {ago}.",
+        "rotate": "Token rotieren",
+        "rotating": "Rotiere…",
+        "revert": "Auf Umgebungs-Token zurücksetzen",
+        "reverting": "Zurücksetzen…",
+        "revertConfirm": "Auf das Umgebungs-Ingest-Token zurücksetzen? n8n muss wieder den Wert von ARSENAL_INGEST_TOKEN verwenden.",
+        "revertToast": "Auf das Umgebungs-Ingest-Token zurückgesetzt.",
+        "revertError": "Token konnte nicht zurückgesetzt werden.",
+        "rotateError": "Token konnte nicht rotiert werden.",
+        "copied": "Kopiert",
+        "copyError": "Kopieren fehlgeschlagen — bitte manuell markieren und kopieren.",
+        "dialogTitle": "Neues Ingest-Token",
+        "dialogDescription": "Kopieren Sie es jetzt — es wird nur einmal angezeigt. Fügen Sie es in die n8n-Anmeldedaten „ERP Ingest“ ein (Header x-arsenal-token). Das ERP speichert nur einen Hash.",
+        "copyAria": "Token kopieren",
+        "done": "Fertig"
+      },
+      "cadence": {
+        "title": "Taktung & Absender",
+        "description": "Der Standard-Absenderalias und wie die Sequenz zeitlich verteilt wird.",
+        "senderLabel": "Standard-Absender",
+        "senderDefault": "— Standard verwenden",
+        "senderInfo": "Info (info@)",
+        "senderHanna": "Hanna (hanna@)",
+        "followupLabel": "Erste Nachfass-Mail — Tage nach der ersten E-Mail",
+        "finalPushLabel": "Letzter Anstoß — Tage"
+      },
+      "dailySend": {
+        "title": "Täglicher Versand",
+        "description": "Ein zusätzlicher täglicher Reach-Bazooka-Versand, ausgelöst vom ERP."
+      },
+      "catalogs": {
+        "title": "Verwaltete Kataloge",
+        "description": "Springen Sie zu den Listen, die Ihren Arbeitsbereich steuern.",
+        "nichesTitle": "Nischen & Ziele",
+        "nichesDescription": "Definieren Sie die Nischen und Zielarchetypen, die Kampagnen erweitern.",
+        "suppressionsTitle": "Sperrliste",
+        "suppressionsDescription": "Ihre Nicht-kontaktieren-Liste — Adressen, die die Ansprache überspringt.",
+        "usersTitle": "Benutzer & Rollen",
+        "usersDescription": "Mitglieder, Rollen und Berechtigungen verwalten."
+      },
+      "save": {
+        "unsaved": "Nicht gespeicherte Änderungen",
+        "saveChanges": "Änderungen speichern",
+        "saving": "Speichern…",
+        "toastOk": "Konfiguration gespeichert.",
+        "toastError": "Konfiguration konnte nicht gespeichert werden.",
+        "invalidWebhook": "{label}: Geben Sie eine gültige URL ein (oder leeren Sie das Feld, um den Umgebungsstandard zu verwenden).",
+        "invalidApiUrl": "n8n-API-URL: Geben Sie eine gültige URL ein (oder leeren Sie das Feld, um den Umgebungsstandard zu verwenden).",
+        "invalidCadence": "Die Taktungstage müssen eine ganze Zahl von 0 oder mehr sein."
+      }
+    }
+  }
+}

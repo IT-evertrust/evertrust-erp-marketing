@@ -1,9 +1,14 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import createNextIntlPlugin from 'next-intl/plugin';
 import type { NextConfig } from 'next';
 
 // ESM config: derive __dirname for outputFileTracingRoot below.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// next-intl, cookie/preference mode (no locale URL segment — see
+// src/i18n/request.ts). The plugin wires the request config into the build.
+const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 
 const nextConfig: NextConfig = {
   // Emit a self-contained server bundle (.next/standalone with server.js + a
@@ -20,4 +25,4 @@ const nextConfig: NextConfig = {
   eslint: { ignoreDuringBuilds: false },
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

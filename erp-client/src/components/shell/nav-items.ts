@@ -23,6 +23,9 @@ import type { Permission } from '@evertrust/shared';
 export type NavItem = {
   href: string;
   label: string;
+  // Key into the `nav` i18n namespace (messages/*.json). The English `label`
+  // stays as a fallback for any locale/key that hasn't been translated yet.
+  i18nKey: string;
   icon: LucideIcon;
   // null => always shown to authenticated users (dashboard). Otherwise the read
   // permission required to see the link.
@@ -32,18 +35,18 @@ export type NavItem = {
 };
 
 export const NAV_ITEMS: readonly NavItem[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: null },
-  { href: '/marketing', label: 'Marketing', icon: LineChart, permission: 'campaigns:read', group: 'Acquisition' },
-  { href: '/marketing/niches', label: 'Niches', icon: Target, permission: 'campaigns:read', group: 'Acquisition' },
-  { href: '/marketing/drafts', label: 'Reply drafts', icon: Inbox, permission: 'campaigns:read', group: 'Acquisition' },
-  { href: '/marketing/suppressions', label: 'Suppressions', icon: ShieldOff, permission: 'campaigns:read', group: 'Acquisition' },
-  { href: '/key-account', label: 'Key Account', icon: Contact, permission: 'campaigns:read', group: 'Acquisition' },
-  { href: '/sales', label: 'Sales', icon: Headset, permission: 'campaigns:read', group: 'Acquisition' },
-  { href: '/performance', label: 'Performance', icon: Gauge, permission: 'performance:read', group: 'Management' },
-  { href: '/users', label: 'Users', icon: Users, permission: 'users:manage', group: 'Administration' },
+  { href: '/dashboard', label: 'Dashboard', i18nKey: 'dashboard', icon: LayoutDashboard, permission: null },
+  { href: '/marketing', label: 'Marketing', i18nKey: 'marketing', icon: LineChart, permission: 'campaigns:read', group: 'Acquisition' },
+  { href: '/marketing/niches', label: 'Niches', i18nKey: 'niches', icon: Target, permission: 'campaigns:read', group: 'Acquisition' },
+  { href: '/marketing/drafts', label: 'Reply drafts', i18nKey: 'drafts', icon: Inbox, permission: 'campaigns:read', group: 'Acquisition' },
+  { href: '/marketing/suppressions', label: 'Suppressions', i18nKey: 'suppressions', icon: ShieldOff, permission: 'campaigns:read', group: 'Acquisition' },
+  { href: '/key-account', label: 'Key Account', i18nKey: 'keyAccount', icon: Contact, permission: 'campaigns:read', group: 'Acquisition' },
+  { href: '/sales', label: 'Sales', i18nKey: 'sales', icon: Headset, permission: 'campaigns:read', group: 'Acquisition' },
+  { href: '/performance', label: 'Performance', i18nKey: 'performance', icon: Gauge, permission: 'performance:read', group: 'Management' },
+  { href: '/users', label: 'Users', i18nKey: 'users', icon: Users, permission: 'users:manage', group: 'Administration' },
   // Settings: General is open to every authed user (permission: null); Configuration
   // is admin-only (admin:config, held by SUPER_ADMIN + ADMIN) — the sidebar hides it
   // for everyone else.
-  { href: '/settings/general', label: 'General', icon: Settings, permission: null, group: 'Settings' },
-  { href: '/settings/configuration', label: 'Configuration', icon: SlidersHorizontal, permission: 'admin:config', group: 'Settings' },
+  { href: '/settings/general', label: 'General', i18nKey: 'general', icon: Settings, permission: null, group: 'Settings' },
+  { href: '/settings/configuration', label: 'Configuration', i18nKey: 'configuration', icon: SlidersHorizontal, permission: 'admin:config', group: 'Settings' },
 ];

@@ -72,6 +72,16 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/* Display density (Settings → General → Display). Tailwind v4 derives its whole
+   spacing scale from --spacing: every p-*, gap-*, space-*, etc. resolves to
+   calc(var(--spacing) * n). Shrinking --spacing therefore tightens layout
+   app-wide in one shot. "comfortable" is the default 0.25rem (no attribute);
+   PreferencesBoot sets data-density="compact" on <html> to switch to 0.2rem
+   (~20% tighter). */
+[data-density='compact'] {
+  --spacing: 0.2rem;
+}
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

@@ -4,11 +4,13 @@ import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { LoginDto, LoginResponseDto, MeDto, UpdateMyNameDto } from '@evertrust/shared';
 import { ApiError, api } from '@/lib/api';
+import { getLandingPath } from '@/lib/preferences';
 import { queryKeys } from '@/lib/query-keys';
 
 // Login: verify credentials against the API, then hand the returned token to our
 // own route handler so a web-origin mirror cookie exists for middleware gating.
-// On success we seed the user cache and navigate to the dashboard.
+// On success we seed the user cache and navigate to the user's chosen landing
+// page (Settings → General → Display; defaults to /dashboard).
 export function useLogin() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -24,7 +26,7 @@ export function useLogin() {
     },
     onSuccess: (result) => {
       queryClient.setQueryData(queryKeys.me, result.user);
-      router.replace('/dashboard');
+      router.replace(getLandingPath());
       router.refresh();
     },
   });

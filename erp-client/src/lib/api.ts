@@ -66,6 +66,10 @@ import {
   TenderPricingDto,
   TransitionTenderDto,
   UpdateArsenalSettingsDto,
+  WorkflowConfigDto,
+  UpdateWorkflowConfigDto,
+  TestN8nResultDto,
+  RotateIngestTokenResultDto,
   UpdateCustomerDto,
   UpdateLineItemDto,
   UpdateMyNameDto,
@@ -793,6 +797,49 @@ export const api = {
         method: 'PUT',
         body: UpdateArsenalSettingsDto.parse(input),
         schema: ArsenalSettingsDto,
+      }),
+
+    // The resolved Growth-Engine workflow config: per-stage webhooks + n8n wiring
+    // (each {value, overridden}), plus secret-status flags and cadence/sender.
+    getConfig: (signal?: AbortSignal) =>
+      request<z.infer<typeof WorkflowConfigDto>>('/arsenal/config', {
+        schema: WorkflowConfigDto,
+        signal,
+      }),
+
+    // Partial update of the workflow config: a string sets an override, null (or
+    // "") clears it back to the env default, an omitted key is left untouched.
+    // Returns the freshly-resolved config.
+    updateConfig: (input: z.infer<typeof UpdateWorkflowConfigDto>) =>
+      request<z.infer<typeof WorkflowConfigDto>>('/arsenal/config', {
+        method: 'PUT',
+        body: UpdateWorkflowConfigDto.parse(input),
+        schema: WorkflowConfigDto,
+      }),
+
+    // Probe the n8n public API with the resolved base URL + env key. Never throws
+    // server-side — failures come back in `detail` (the endpoint always 200s).
+    testN8n: () =>
+      request<z.infer<typeof TestN8nResultDto>>('/arsenal/config/test-n8n', {
+        method: 'POST',
+        schema: TestN8nResultDto,
+      }),
+
+    // Rotate the machine ingest token. The plaintext `token` is returned EXACTLY
+    // ONCE (only its hash is stored) — surface it to the admin to copy, then it's
+    // gone. Flips ingestTokenSource → 'rotated'.
+    rotateToken: () =>
+      request<z.infer<typeof RotateIngestTokenResultDto>>(
+        '/arsenal/config/rotate-token',
+        { method: 'POST', schema: RotateIngestTokenResultDto },
+      ),
+
+    // Revert machine-route auth to the env token (deletes the stored hash).
+    // Returns the freshly-resolved config (ingestTokenSource → 'env' or 'none').
+    clearIngestToken: () =>
+      request<z.infer<typeof WorkflowConfigDto>>('/arsenal/config/ingest-token', {
+        method: 'DELETE',
+        schema: WorkflowConfigDto,
       }),
   },
 

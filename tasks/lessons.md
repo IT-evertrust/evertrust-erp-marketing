@@ -43,3 +43,8 @@ bootstrap org exists. Keep any future seeding guarded the same way.
   ship raw TS — intentional, do not "fix" by precompiling without a plan.
 - `docker compose up -d --no-deps <svc>` restarts one service without re-triggering deps.
 - Additive migrations apply in place; enum/PK changes need a fresh schema (dev only).
+
+### 2026-06-13 - "Settings" pages: confirm intent against what already exists
+- **Trigger:** Asked to build General + Configuration settings pages, I made General a clone of the existing user profile (`/users/[id]`, already in the avatar menu) and made Configuration a read-only status/health dashboard. The user wanted General = app/website preferences (theme, language, locale) and Configuration = a real control surface to edit the n8n workflow nodes + the Postgres data that drives them (webhook endpoints, ingest token, cadence, niches/targets/suppressions/sender).
+- **Lesson:** I designed named surfaces from the label alone without contrasting them against features the app already ships, so I restated existing functionality; and I read "Configuration" as "show the config's status" rather than "edit the config."
+- **Rule going forward:** Before designing any named surface (a "Settings", "Dashboard", "Config" page), first list what already covers that concern in the app and explicitly state how the new surface differs — never duplicate an existing page. Read "Configuration/Settings" as an EDIT surface (knobs that change state) unless the user says "status/health."

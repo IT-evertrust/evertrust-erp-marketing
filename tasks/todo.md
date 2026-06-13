@@ -199,6 +199,24 @@ Context: the 3 "(Web)" nodes (`Country Profiler (Web)`, `Search Companies (Web)`
 
 ## Review
 
+**2026-06-13 — C1 workflow_config wired into the NestJS API (env-fallback resolver + admin endpoints + guard hash).**
+Added shared DTOs `WorkflowConfigDto` / `UpdateWorkflowConfigDto` (+ `ConfigFieldDto`, `DefaultSender`)
+to packages/shared. New `WorkflowConfigService` (src/arsenal/workflow-config.service.ts): reads the
+GLOBAL singleton, 5s in-memory cache + `invalidate()`, resolvers `getStageWebhook/getAimWebhook/
+getN8nApiUrl/getIngestTokenHash` (each stored-override ?? env), `getEffective()` (full DTO), `update()`
+(find-or-create upsert, no onConflict), and `setIngestTokenHash()` for the later rotation phase.
+Provided via a `@Global() WorkflowConfigModule` (matches its global DB + AppConfigService deps; the
+guard is provided in 6 modules so a global avoids per-module wiring). Refactored the 4 consumers to the
+resolver (arsenal.service stage webhook, campaigns.service AIM, n8n-executions/n8n-backfill base URL —
+API *key* stays env). ArsenalTokenGuard now async: if a stored SHA-256 hash exists it hashes the header
+and timing-safe-compares, else falls back to the env constant-time compare (503/401 semantics preserved;
+SHA-256 per the schema comment + task, NOT the line-234 argon2 note). Endpoints: GET/PUT /arsenal/config
+in a new WorkflowConfigController (admin:config, audited PUT). Added a `makeWorkflowConfig` test helper +
+fixed every changed constructor in the specs; new test/workflow-config.service.spec.ts (env fallback +
+override wins + upsert) and rewrote the guard spec (async + rotated-hash cases).
+VERIFY: `npm run build` clean, `pnpm --filter @evertrust/api typecheck` clean, full jest suite
+**47 suites / 375 tests green**. Web UI (C2) + rotation/test-webhook actions (C3) still TODO.
+
 **2026-06-11 — ERP monorepo import + mini infra ready (branch `migrate-evertrust-erp`).**
 Imported `Ryugwki/evertrust-ERP@c118222` with renames (apps/api→erp-server, apps/web→erp-client,
 packages/* kept), replacing all boilerplate. Verified: pnpm build/lint/typecheck green, 35 jest
@@ -219,3 +237,39 @@ Current Focus (Render dump needs the user's external DB URL; .env fill is a user
 - packages/shared: `CampaignTemplatesDto = z.record(z.string(), z.string())`; referenced in `CampaignConfigDto` (`templates: …default({})`) and `CampaignDto` (`templates: …nullable()`); `CampaignTemplatesBodyDto = { templates }`. Barrel = the single index.ts (`export const` is the export).
 - erp-server: NEW `CampaignTemplatesService.merge(campaignId, blocks)` (read-spread-write merge, never clobbers existing keys; 404 unknown; `writeMachineAudit` action TEMPLATES, actorType N8N; returns merged map). NEW route **POST /campaigns/:id/templates** = @Public + ArsenalTokenGuard (machine), the assets-route pattern. `getConfig` returns `templates: c.templates ?? {}`. `GET /campaigns/:id` (JWT) returns the row incl. templates via the widened CampaignDto. Service registered in campaigns.module.
 - Verified: `@evertrust/shared` + `@evertrust/api` typecheck green; `@evertrust/api` build (nest build) green; jest **46 suites / 360 tests** all pass (was 45/355). New `test/campaign-templates.service.spec.ts` (5 tests): merge distinct keys across 2 POSTs (both survive), same-key overwrite, config exposes merged map, config defaults to {}, 404 unknown campaign.
+
+## Settings v2 — General (app prefs) + Configuration (control panel)  [2026-06-13]
+
+Correction: General is NOT the user profile (that's the avatar menu → /users/[id]).
+General = app/website preferences. Configuration = EDIT the n8n/Postgres workflow
+config (today env-only → redeploy to change), not a status dashboard.
+
+User-chosen scope: General = theme + display prefs + EN/DE language. Configuration =
+full Postgres-backed control panel.
+
+Decisions: i18n = next-intl, cookie/pref mode (no /de/ URL prefix, avoids auth
+middleware clash), translate incrementally. Secrets = never plaintext in PG; webhook
+URLs editable in workflow_config; ingest token stored argon2-HASHED + rotate (machine
+guard compares against hash); n8n API key stays env, status-only in UI.
+
+General:
+- [x] G1 Theme System/Light/Dark (next-themes provider + toggle; drop hardcoded
+      <html class="dark">; rewrite general-settings.tsx from profile-clone → App prefs)
+      DONE 2026-06-13 — verified light+dark on /login; default stays dark.
+- [ ] G2 Display prefs — density, default landing page, date/timezone (client-stored)
+- [ ] G3 Language EN/DE — next-intl setup + switcher; translate shell + Settings first
+
+Configuration (db + shared + api + web):
+- [x] C1 Foundation — workflow_config table (migration 0021) + Drizzle schema (DONE by
+      prisma-database agent: schema.workflowConfig, GLOBAL singleton) + shared DTOs
+      (WorkflowConfigDto / UpdateWorkflowConfigDto) + WorkflowConfigService
+      (PG → env fallback, 5s cache, invalidate()); refactored arsenal.service
+      STAGE_WEBHOOK_ENV + campaigns AIM + n8n-executions/backfill base URL to read via
+      the resolver. NOTE: ingest-token hash is SHA-256 hex (matches the schema comment
+      + the task), NOT argon2 — supersedes the line-234 argon2 note. API half of C2 +
+      the guard-hash groundwork from C3 landed here (this session, nestjs-backend agent).
+- [x] C2 (API half) — GET/PUT /arsenal/config (admin:config), audit-logged PUT.
+      Web UI (Configuration page sections: webhook map, cadence/sender, catalog) = still TODO.
+- [~] C3 Actions — guard now SHA-256-hash-aware (getIngestTokenHash → timingSafeEqual,
+      env fallback preserved) + setIngestTokenHash() on the service so rotation is ready.
+      Rotate endpoint + Test-webhook/Test-n8n actions = still TODO (later phase).

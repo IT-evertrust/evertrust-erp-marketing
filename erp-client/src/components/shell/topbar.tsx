@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { Building2, ChevronRight, Crosshair } from 'lucide-react';
 import type { MeDto } from '@evertrust/shared';
 import { UserMenu } from './user-menu';
@@ -16,6 +17,7 @@ import { NAV_ITEMS } from './nav-items';
 // max-w-7xl to line up with the content area below it.
 export function Topbar({ user }: { user?: MeDto }) {
   const pathname = usePathname();
+  const t = useTranslations('nav');
   const section = NAV_ITEMS.find(
     (i) => pathname === i.href || pathname.startsWith(`${i.href}/`),
   );
@@ -38,7 +40,9 @@ export function Topbar({ user }: { user?: MeDto }) {
         {section ? (
           <div className="flex min-w-0 items-center gap-1.5 text-sm">
             <ChevronRight className="size-4 shrink-0 text-muted-foreground/40" />
-            <span className="truncate font-medium">{section.label}</span>
+            <span className="truncate font-medium">
+              {t(section.i18nKey, { default: section.label })}
+            </span>
           </div>
         ) : null}
 
