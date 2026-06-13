@@ -13,15 +13,16 @@ import {
 import { DB, type DbClient } from '../db/db.tokens';
 import { tenantScope } from '../common/tenant';
 import { driveFolderUrl, writeMachineAudit } from '../common/machine-audit';
-import { AppConfigService } from '../config/app-config.service';
 import type { Env } from '../config/env.schema';
+import { WorkflowConfigService } from './workflow-config.service';
 
 type CampaignRow = typeof schema.campaigns.$inferSelect;
 type ArsenalRunRow = typeof schema.arsenalRuns.$inferSelect;
 
-// ArsenalStage → the env var holding that stage's n8n webhook URL. `as const
-// satisfies` keeps the literal key types (so config.get returns string, not the
-// whole Env value union) while still checking every value is a real Env key.
+// ArsenalStage → the env var holding that stage's n8n webhook URL. The effective
+// URL now resolves through WorkflowConfigService (stored override ?? env); this map
+// only names the env var for the "not wired up" operator hint. `as const satisfies`
+// keeps the literal key types while checking every value is a real Env key.
 const STAGE_WEBHOOK_ENV = {
   LEAD_SATELLITE: 'N8N_LEAD_SATELLITE_WEBHOOK_URL',
   AMMO_FORGE: 'N8N_AMMO_FORGE_WEBHOOK_URL',
@@ -52,7 +53,7 @@ const STAGE_METHOD: Record<ArsenalStage, 'GET' | 'POST'> = {
 export class ArsenalService {
   constructor(
     @Inject(DB) private readonly db: DbClient,
-    private readonly config: AppConfigService,
+    private readonly workflowConfig: WorkflowConfigService,
   ) {}
 
   // Recent arsenal runs visible to the caller's org PLUS global (scheduled) runs,
@@ -185,7 +186,7 @@ export class ArsenalService {
       payload = { stage, source: 'erp' };
     }
 
-    const webhookUrl = this.config.get(STAGE_WEBHOOK_ENV[stage]);
+    const webhookUrl = await this.workflowConfig.getStageWebhook(stage);
     if (!webhookUrl) {
       throw new BadRequestException(
         `${meta.label} is not wired up yet — set ${STAGE_WEBHOOK_ENV[stage]} (and add a Webhook trigger to the n8n workflow).`,

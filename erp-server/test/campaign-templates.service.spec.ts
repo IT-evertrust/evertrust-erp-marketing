@@ -5,7 +5,7 @@ import { CampaignTemplatesService } from '../src/campaigns/campaign-templates.se
 import { CampaignsService } from '../src/campaigns/campaigns.service';
 import { NichesService } from '../src/niches/niches.service';
 import type { AppConfigService } from '../src/config/app-config.service';
-import { FakeTable, makeFakeDb } from './fake-db';
+import { FakeTable, makeFakeDb, makeWorkflowConfig } from './fake-db';
 
 const ORG_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const USER = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
@@ -45,7 +45,11 @@ function seed() {
   const nichesService = new NichesService(db);
   return {
     templates: new CampaignTemplatesService(db),
-    campaignsService: new CampaignsService(db, makeConfig(), nichesService),
+    campaignsService: new CampaignsService(
+      db,
+      makeWorkflowConfig(db, makeConfig()),
+      nichesService,
+    ),
     campaigns,
     auditLog,
   };

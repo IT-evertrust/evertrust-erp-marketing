@@ -2386,3 +2386,115 @@ export const NotificationDto = z.object({
   createdAt: z.string(),
 });
 export type NotificationDto = z.infer<typeof NotificationDto>;
+
+// ============================================================================
+// Growth-Engine workflow config (the GLOBAL, app-wide singleton in
+// workflow_config). Makes the n8n wiring — currently env-only (redeploy to
+// change) — admin-editable from the ERP, with the env var as the fallback. The
+// read shape exposes, per field, the EFFECTIVE value (stored override ?? env)
+// plus whether a stored override exists. Secrets are never returned: the n8n API
+// key and the ingest token are status-only.
+// ============================================================================
+
+// Per-field resolution envelope: `value` is the effective (stored ?? env) value;
+// `overridden` is true when a stored override row value exists (so the UI can show
+// "overriding env" vs "from env").
+export const ConfigFieldDto = z.object({
+  value: z.string().nullable(),
+  overridden: z.boolean(),
+});
+export type ConfigFieldDto = z.infer<typeof ConfigFieldDto>;
+
+// The default Gmail sending alias. Mirrors campaigns.sender (plain text, not a
+// pgEnum) — constrained to the two real Gmail identities the team sends from.
+export const DefaultSender = z.enum(['info', 'hanna']);
+export type DefaultSender = z.infer<typeof DefaultSender>;
+
+// GET /arsenal/config — the resolved Growth-Engine workflow config. Every webhook
+// + the n8n base URL carry the {value, overridden} envelope. The n8n API key and
+// ingest token are status-only (never returned): `n8nApiKeySet` reflects the env
+// key; `ingestTokenSet` + `ingestTokenSource` ('rotated' = a stored hash exists,
+// 'env' = falling back to ARSENAL_INGEST_TOKEN, 'none' = neither) describe the
+// machine-route auth without disclosing the secret.
+export const WorkflowConfigDto = z.object({
+  webhooks: z.object({
+    aim: ConfigFieldDto,
+    leadSatellite: ConfigFieldDto,
+    ammoForge: ConfigFieldDto,
+    reachBazooka: ConfigFieldDto,
+    replyGlock: ConfigFieldDto,
+    sleeperGrenade: ConfigFieldDto,
+  }),
+  n8nApiUrl: ConfigFieldDto,
+  n8nApiKeySet: z.boolean(),
+  ingestTokenSet: z.boolean(),
+  ingestTokenSource: z.enum(['rotated', 'env', 'none']),
+  ingestTokenSetAt: z.string().nullable(),
+  defaultSender: DefaultSender.nullable(),
+  followupOffsetDays: z.number().int().nullable(),
+  finalPushOffsetDays: z.number().int().nullable(),
+});
+export type WorkflowConfigDto = z.infer<typeof WorkflowConfigDto>;
+
+// A nullable URL override field for the PUT body: a non-empty string must be a
+// valid URL (sets the override); an empty string OR null clears the override (→
+// env fallback); an omitted key leaves the stored value unchanged. The
+// empty-string→null coercion runs before validation so a cleared form input reads
+// as "clear", not "invalid URL".
+const NullableUrlOverride = z.preprocess(
+  (v) => (v === '' ? null : v),
+  z.string().url('Must be a valid URL').nullable(),
+);
+
+// A nullable nonnegative-int override (sequence offsets), empty string → null.
+const NullableOffsetDays = z.preprocess(
+  (v) => (v === '' ? null : v),
+  z.number().int().min(0, 'Days must be 0 or more').nullable(),
+);
+
+// PUT /arsenal/config — partial update of the singleton. Every field is optional;
+// providing a value sets the override, `null` (or "") clears it back to env, and
+// omitting it leaves the stored value untouched. The ingest token is deliberately
+// NOT here — rotation is a separate, later endpoint.
+export const UpdateWorkflowConfigDto = z.object({
+  webhooks: z
+    .object({
+      aim: NullableUrlOverride.optional(),
+      leadSatellite: NullableUrlOverride.optional(),
+      ammoForge: NullableUrlOverride.optional(),
+      reachBazooka: NullableUrlOverride.optional(),
+      replyGlock: NullableUrlOverride.optional(),
+      sleeperGrenade: NullableUrlOverride.optional(),
+    })
+    .optional(),
+  n8nApiUrl: NullableUrlOverride.optional(),
+  defaultSender: DefaultSender.nullable().optional(),
+  followupOffsetDays: NullableOffsetDays.optional(),
+  finalPushOffsetDays: NullableOffsetDays.optional(),
+});
+export type UpdateWorkflowConfigDto = z.infer<typeof UpdateWorkflowConfigDto>;
+
+// POST /arsenal/config/test-n8n — the result of probing the n8n public API with the
+// resolved base URL (stored override ?? env) + the env N8N_API_KEY. `configured` is
+// false when the URL or key is unset (no call attempted); `ok` is true only on a
+// successful authenticated 2xx. `detail` is a human string ('Connected', an HTTP
+// status, or an error message) and `workflowCount` is the count the probe could read
+// (null when the body doesn't expose it or the call wasn't made/failed). The endpoint
+// never throws — failures are surfaced in `detail`, never as a 5xx.
+export const TestN8nResultDto = z.object({
+  ok: z.boolean(),
+  configured: z.boolean(),
+  detail: z.string(),
+  workflowCount: z.number().int().nullable(),
+});
+export type TestN8nResultDto = z.infer<typeof TestN8nResultDto>;
+
+// POST /arsenal/config/rotate-token — the freshly minted machine ingest token. The
+// plaintext `token` is returned EXACTLY ONCE for the admin to paste into n8n; only
+// its SHA-256 hash is persisted (workflow_config.ingestTokenHash), so it can never be
+// read back. `setAt` is the ISO stamp the rotation took effect.
+export const RotateIngestTokenResultDto = z.object({
+  token: z.string(),
+  setAt: z.string(),
+});
+export type RotateIngestTokenResultDto = z.infer<typeof RotateIngestTokenResultDto>;

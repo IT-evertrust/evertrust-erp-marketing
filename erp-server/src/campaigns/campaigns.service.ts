@@ -19,7 +19,7 @@ import { DB, type DbClient } from '../db/db.tokens';
 import { tenantScope } from '../common/tenant';
 import { driveFolderUrl } from '../common/machine-audit';
 import { NichesService } from '../niches/niches.service';
-import { AppConfigService } from '../config/app-config.service';
+import { WorkflowConfigService } from '../arsenal/workflow-config.service';
 
 type CampaignRow = typeof schema.campaigns.$inferSelect;
 type CampaignPatch = Partial<typeof schema.campaigns.$inferInsert>;
@@ -61,7 +61,7 @@ export class CampaignsService {
 
   constructor(
     @Inject(DB) private readonly db: DbClient,
-    private readonly config: AppConfigService,
+    private readonly workflowConfig: WorkflowConfigService,
     private readonly niches: NichesService,
   ) {}
 
@@ -121,7 +121,7 @@ export class CampaignsService {
     let row = inserted[0];
     if (!row) throw new Error('Failed to create campaign');
 
-    const webhookUrl = (this.config.get('N8N_AIM_WEBHOOK_URL') ?? '').trim();
+    const webhookUrl = await this.workflowConfig.getAimWebhook();
     // No webhook configured → the campaign persists as DRAFT (safe to run before the
     // webhook is set); the operator activates it later once AIM is wired.
     if (!webhookUrl) {

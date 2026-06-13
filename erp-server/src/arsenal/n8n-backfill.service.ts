@@ -5,6 +5,7 @@ import { DB, type DbClient } from '../db/db.tokens';
 import { tenantScope } from '../common/tenant';
 import { AppConfigService } from '../config/app-config.service';
 import { STAGE_WORKFLOW_ID } from './n8n-executions.service';
+import { WorkflowConfigService } from './workflow-config.service';
 
 // --- n8n execution-data shapes (only the bits we read) ----------------------
 interface RunItem {
@@ -166,21 +167,16 @@ export class N8nBackfillService {
   constructor(
     @Inject(DB) private readonly db: DbClient,
     private readonly config: AppConfigService,
+    private readonly workflowConfig: WorkflowConfigService,
   ) {}
 
-  private isConfigured(): boolean {
-    return (
-      this.config.get('N8N_API_URL').trim().length > 0 &&
-      this.config.get('N8N_API_KEY').trim().length > 0
-    );
-  }
-
   async sync(orgId: string): Promise<ArsenalBackfillResultDto> {
-    if (!this.isConfigured()) {
+    const baseUrl = await this.workflowConfig.getN8nApiUrl();
+    const key = this.config.get('N8N_API_KEY').trim();
+    if (!baseUrl || key.length === 0) {
       return { configured: false, scanned: 0, imported: 0, byStage: {} };
     }
-    const base = this.config.get('N8N_API_URL').trim().replace(/\/+$/, '');
-    const key = this.config.get('N8N_API_KEY').trim();
+    const base = baseUrl.replace(/\/+$/, '');
 
     // Already-imported execution ids (idempotency) + campaign folder lookup.
     const existing = await this.db.select().from(schema.arsenalRuns);
