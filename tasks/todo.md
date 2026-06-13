@@ -273,3 +273,14 @@ Configuration (db + shared + api + web):
 - [~] C3 Actions — guard now SHA-256-hash-aware (getIngestTokenHash → timingSafeEqual,
       env fallback preserved) + setIngestTokenHash() on the service so rotation is ready.
       Rotate endpoint + Test-webhook/Test-n8n actions = still TODO (later phase).
+
+## Templates + Leads config sections [2026-06-13]
+- [x] Migration 0022: workflow_config += default_template jsonb, signature, tone,
+      template_language, max_leads_per_run, max_per_niche, daily_send_cap,
+      default_regions text[], respect_suppressions, dedup_days, require_niche_analysis (applied)
+- [x] API: WorkflowConfigDto/UpdateWorkflowConfigDto += templates{} + leads{}; service
+      getEffective/update extended (gate booleans default true); GET /arsenal/lead-stats. 388 tests.
+- [x] Web: Templates + Leads cards on Configuration (one Save flow) + live lead-stats
+      metric strip; EN/DE i18n. typecheck+lint+build green.
+- [ ] n8n read-side: Lead Satellite (caps/regions/dedup/gate), Ammo Forge (template/
+      signature/tone/language), Bazooka (dailySendCap) must consume the new fields

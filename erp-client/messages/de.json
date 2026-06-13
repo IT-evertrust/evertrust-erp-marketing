@@ -120,6 +120,50 @@
         "followupLabel": "Erste Nachfass-Mail — Tage nach der ersten E-Mail",
         "finalPushLabel": "Letzter Anstoß — Tage"
       },
+      "templates": {
+        "title": "Vorlagen",
+        "description": "Der Basistext für die Ansprache, den die Sequenz versendet. Leer lassen, um nichts zu senden.",
+        "block": {
+          "cold": "Erstkontakt — erste E-Mail",
+          "followup": "Nachfassen",
+          "finalPush": "Letzter Anstoß"
+        },
+        "subjectLabel": "Betreff",
+        "subjectPlaceholder": "Betreffzeile…",
+        "bodyLabel": "Text",
+        "bodyPlaceholder": "E-Mail-Text…",
+        "tokensLabel": "Verfügbare Platzhalter (werden automatisch eingefügt):",
+        "signatureLabel": "Signatur",
+        "signaturePlaceholder": "Mit freundlichen Grüßen, …",
+        "toneLabel": "Tonfall",
+        "toneFriendly": "Freundlich",
+        "toneFormal": "Förmlich",
+        "toneDirect": "Direkt",
+        "languageLabel": "Sprache",
+        "languageEn": "Englisch",
+        "languageDe": "Deutsch",
+        "unset": "— Nicht gesetzt"
+      },
+      "leads": {
+        "title": "Leads",
+        "description": "Wie Lead Satellite sucht und wie die Ansprache getaktet wird.",
+        "statLeads": "Leads",
+        "statProspects": "Interessenten",
+        "statSuppressed": "Gesperrt",
+        "maxLeadsPerRunLabel": "Max. Leads pro Lauf",
+        "maxPerNicheLabel": "Max. pro Nische",
+        "dailySendCapLabel": "Tägliches Sendelimit",
+        "regionsLabel": "Standardregionen",
+        "regionsHelper": "Regionen, die Lead Satellite standardmäßig anvisiert.",
+        "regionsPlaceholder": "Region hinzufügen…",
+        "regionsAdd": "Hinzufügen",
+        "regionsRemove": "{region} entfernen",
+        "dedupLabel": "Duplikate überspringen innerhalb von … Tagen",
+        "respectSuppressionsLabel": "Sperrliste beachten",
+        "respectSuppressionsHelper": "Adressen auf Ihrer Nicht-kontaktieren-Liste überspringen.",
+        "requireNicheAnalysisLabel": "Nischenanalyse erforderlich",
+        "requireNicheAnalysisHelper": "Eine Nischenanalyse verlangen, bevor Lead Satellite sucht."
+      },
       "dailySend": {
         "title": "Täglicher Versand",
         "description": "Ein zusätzlicher täglicher Reach-Bazooka-Versand, ausgelöst vom ERP."
@@ -142,7 +186,8 @@
         "toastError": "Konfiguration konnte nicht gespeichert werden.",
         "invalidWebhook": "{label}: Geben Sie eine gültige URL ein (oder leeren Sie das Feld, um den Umgebungsstandard zu verwenden).",
         "invalidApiUrl": "n8n-API-URL: Geben Sie eine gültige URL ein (oder leeren Sie das Feld, um den Umgebungsstandard zu verwenden).",
-        "invalidCadence": "Die Taktungstage müssen eine ganze Zahl von 0 oder mehr sein."
+        "invalidCadence": "Die Taktungstage müssen eine ganze Zahl von 0 oder mehr sein.",
+        "invalidLeadCap": "Lead-Limits müssen eine ganze Zahl von 0 oder mehr sein."
       }
     }
   }

@@ -155,6 +155,13 @@
       "when": 1780569000000,
       "tag": "0021_workflow_config",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1780570000000,
+      "tag": "0022_workflow_config_templates_leads",
+      "breakpoints": true
     }
   ]
 }

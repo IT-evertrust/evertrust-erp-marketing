@@ -2390,6 +2390,31 @@ export type ConfigFieldDto = z.infer<typeof ConfigFieldDto>;
 export const DefaultSender = z.enum(['info', 'hanna']);
 export type DefaultSender = z.infer<typeof DefaultSender>;
 
+// Outreach tone + template language. Stored as plain text on workflow_config (the
+// project forbids new pgEnums), validated to these literals on the wire. Nullable
+// everywhere: null = unset (no product default — the UI shows "not set").
+export const OutreachTone = z.enum(['friendly', 'formal', 'direct']);
+export type OutreachTone = z.infer<typeof OutreachTone>;
+export const TemplateLanguage = z.enum(['en', 'de']);
+export type TemplateLanguage = z.infer<typeof TemplateLanguage>;
+
+// One block of the baseline outreach sequence — a subject + body pair. The default
+// template is exactly three of these (cold → followup → finalPush).
+export const TemplateBlockDto = z.object({
+  subject: z.string(),
+  body: z.string(),
+});
+export type TemplateBlockDto = z.infer<typeof TemplateBlockDto>;
+
+// The stored `defaultTemplate` jsonb shape: the full 3-block sequence, or null when
+// no baseline has been set. All three blocks are required when the object is present.
+export const DefaultTemplateDto = z.object({
+  cold: TemplateBlockDto,
+  followup: TemplateBlockDto,
+  finalPush: TemplateBlockDto,
+});
+export type DefaultTemplateDto = z.infer<typeof DefaultTemplateDto>;
+
 // GET /arsenal/config — the resolved Growth-Engine workflow config. Every webhook
 // + the n8n base URL carry the {value, overridden} envelope. The n8n API key and
 // ingest token are status-only (never returned): `n8nApiKeySet` reflects the env
@@ -2413,6 +2438,27 @@ export const WorkflowConfigDto = z.object({
   defaultSender: DefaultSender.nullable(),
   followupOffsetDays: z.number().int().nullable(),
   finalPushOffsetDays: z.number().int().nullable(),
+  // Configuration > Templates — the baseline outreach copy. Every field is the raw
+  // stored value (null = unset); there is no env fallback for these.
+  templates: z.object({
+    default: DefaultTemplateDto.nullable(),
+    signature: z.string().nullable(),
+    tone: OutreachTone.nullable(),
+    language: TemplateLanguage.nullable(),
+  }),
+  // Configuration > Leads — lead-generation governance. The caps are raw stored
+  // values (null = unset = no cap). `defaultRegions` is the stored array (never
+  // null — defaults to []). The two booleans are EFFECTIVE: an unset value resolves
+  // to the safe product default `true` so it can never silently read as "off".
+  leads: z.object({
+    maxLeadsPerRun: z.number().int().nullable(),
+    maxPerNiche: z.number().int().nullable(),
+    dailySendCap: z.number().int().nullable(),
+    defaultRegions: z.array(z.string()),
+    respectSuppressions: z.boolean(),
+    dedupDays: z.number().int().nullable(),
+    requireNicheAnalysis: z.boolean(),
+  }),
 });
 export type WorkflowConfigDto = z.infer<typeof WorkflowConfigDto>;
 
@@ -2431,6 +2477,45 @@ const NullableOffsetDays = z.preprocess(
   (v) => (v === '' ? null : v),
   z.number().int().min(0, 'Days must be 0 or more').nullable(),
 );
+
+// A nullable nonnegative-int cap (lead caps / dedup window): a value sets it, null
+// (or "") clears it back to "no cap". Reuses the offset coercion + bound.
+const NullableCap = z.preprocess(
+  (v) => (v === '' ? null : v),
+  z.number().int().min(0, 'Must be 0 or more').nullable(),
+);
+
+// Default target regions: an array of NON-EMPTY strings, each trimmed. Blank/
+// whitespace-only entries are rejected (not silently dropped) so a bad form row
+// surfaces as a validation error rather than vanishing.
+const DefaultRegions = z.array(
+  z
+    .string()
+    .transform((s) => s.trim())
+    .refine((s) => s.length > 0, 'Region must not be empty'),
+);
+
+// PUT body for the Templates group. Every field optional; null clears, omit leaves
+// unchanged. `default` is the full 3-block object (validated) OR null to clear the
+// baseline — a partial template is rejected (all three blocks with subject+body).
+const UpdateTemplates = z.object({
+  default: DefaultTemplateDto.nullable().optional(),
+  signature: z.string().nullable().optional(),
+  tone: OutreachTone.nullable().optional(),
+  language: TemplateLanguage.nullable().optional(),
+});
+
+// PUT body for the Leads group. Every field optional; null clears a cap, omit
+// leaves unchanged. `defaultRegions` replaces the stored array wholesale.
+const UpdateLeads = z.object({
+  maxLeadsPerRun: NullableCap.optional(),
+  maxPerNiche: NullableCap.optional(),
+  dailySendCap: NullableCap.optional(),
+  defaultRegions: DefaultRegions.optional(),
+  respectSuppressions: z.boolean().optional(),
+  dedupDays: NullableCap.optional(),
+  requireNicheAnalysis: z.boolean().optional(),
+});
 
 // PUT /arsenal/config — partial update of the singleton. Every field is optional;
 // providing a value sets the override, `null` (or "") clears it back to env, and
@@ -2451,8 +2536,20 @@ export const UpdateWorkflowConfigDto = z.object({
   defaultSender: DefaultSender.nullable().optional(),
   followupOffsetDays: NullableOffsetDays.optional(),
   finalPushOffsetDays: NullableOffsetDays.optional(),
+  templates: UpdateTemplates.optional(),
+  leads: UpdateLeads.optional(),
 });
 export type UpdateWorkflowConfigDto = z.infer<typeof UpdateWorkflowConfigDto>;
+
+// GET /arsenal/lead-stats — the org-scoped counts behind the Configuration page's
+// metric strip: total leads, prospects, and suppression-list entries for the
+// caller's organization. Pure tallies — no env/override semantics here.
+export const LeadStatsDto = z.object({
+  leads: z.number().int(),
+  prospects: z.number().int(),
+  suppressed: z.number().int(),
+});
+export type LeadStatsDto = z.infer<typeof LeadStatsDto>;
 
 // POST /arsenal/config/test-n8n — the result of probing the n8n public API with the
 // resolved base URL (stored override ?? env) + the env N8N_API_KEY. `configured` is
