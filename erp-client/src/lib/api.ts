@@ -90,6 +90,12 @@ import {
   type LeadStage,
   // Growth Engine: prospects, niche targets, reply drafts, outreach, contracts,
   // suppressions (the cold-outreach surface).
+  IndustryDto,
+  IndustryListItemDto,
+  CreateIndustryDto,
+  UpdateIndustryDto,
+  AssignNicheIndustryDto,
+  NicheDto,
   NicheListItemDto,
   NicheTargetDto,
   CreateNicheTargetDto,
@@ -129,6 +135,9 @@ const CampaignListDto = z.array(CampaignDto);
 // target/campaign counts. A superset of the combobox shape (id/name/slug), so the
 // AIM pick-or-create combobox still reads from the same /niches response.
 const NicheListItemListDto = z.array(NicheListItemDto);
+// Growth Engine: the org's industries (niche grouping parents) with their rollup
+// niche counts. Grouping/search only — never part of the lead-research payload.
+const IndustryListItemListDto = z.array(IndustryListItemDto);
 // Growth Engine: a niche's targets (enabled + disabled) for the management view.
 const NicheTargetListDto = z.array(NicheTargetDto);
 // Growth Engine: the RAG reply-draft review queue.
@@ -587,6 +596,48 @@ export const api = {
         method: 'POST',
         body: CreateNicheTargetDto.parse(input),
         schema: NicheTargetDto,
+      }),
+
+    // Assign the niche to an industry (or unassign with industryId = null).
+    // Grouping only — does not touch the campaign config or the arsenal payload.
+    assignIndustry: (id: string, industryId: string | null) =>
+      request<NicheDto>(`/niches/${id}/industry`, {
+        method: 'PATCH',
+        body: AssignNicheIndustryDto.parse({ industryId }),
+        schema: NicheDto,
+      }),
+  },
+
+  // ---- Growth Engine: industries (org-scoped niche grouping; search only) ----
+  industries: {
+    // The management list: industry rows enriched with their niche counts.
+    list: (signal?: AbortSignal) =>
+      request<IndustryListItemDto[]>('/industries', {
+        schema: IndustryListItemListDto,
+        signal,
+      }),
+
+    // Create an industry (deduped by org + slugify(name) server-side).
+    create: (input: z.infer<typeof CreateIndustryDto>) =>
+      request<IndustryDto>('/industries', {
+        method: 'POST',
+        body: CreateIndustryDto.parse(input),
+        schema: IndustryDto,
+      }),
+
+    // Rename an industry (409 on a sibling slug clash in the same org).
+    rename: (id: string, input: z.infer<typeof UpdateIndustryDto>) =>
+      request<IndustryDto>(`/industries/${id}`, {
+        method: 'PATCH',
+        body: UpdateIndustryDto.parse(input),
+        schema: IndustryDto,
+      }),
+
+    // Delete an industry (409 if niches are still assigned to it).
+    remove: (id: string) =>
+      request<ClearResultDto>(`/industries/${id}`, {
+        method: 'DELETE',
+        schema: ClearResultDto,
       }),
   },
 

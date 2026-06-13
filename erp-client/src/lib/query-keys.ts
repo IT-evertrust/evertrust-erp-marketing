@@ -64,6 +64,13 @@ export const queryKeys = {
     targets: (id: string) => ['niches', 'targets', id] as const,
   },
 
+  // Growth Engine: the org's industries (niche grouping parents). Assigning a
+  // niche to an industry mutates both this list (nicheCount) and the niche list.
+  industries: {
+    all: ['industries'] as const,
+    list: () => ['industries', 'list'] as const,
+  },
+
   // Growth Engine: the cold-outreach prospect board + per-prospect drawer.
   prospects: {
     all: ['prospects'] as const,
