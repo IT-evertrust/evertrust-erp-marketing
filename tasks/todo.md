@@ -289,4 +289,9 @@ Configuration (db + shared + api + web):
       signature/tone/language}; Bazooka zyCTVLpZj3YyR2qV "Send Cap Guard" → automation.leads.
       dailySendCap (fallback 25); Lead Satellite dCGzrlpaxpxJanbJ "Build Search Query"
       MAX_SEGMENTS → automation.leads.maxLeadsPerRun (fallback 500). Workflows still INACTIVE.
-      LEFT: maxPerNiche/regions/dedup/respectSuppressions (no clean single-node mapping).
+- [x] Remaining leads knobs: dedupDays + respectSuppressions wired ERP-side in the
+      prospects sendList predicate (cooldown = dedupDays ?? 3d; suppression gate =
+      respectSuppressions, default true) — 390 tests; defaultRegions wired in Lead
+      Satellite Build Search Query (fallback when campaign has no cities).
+      maxPerNiche intentionally not separate — for a per-campaign (single-niche) run it
+      equals maxLeadsPerRun (already wired) + the Niche Gate already blocks empty niches.
