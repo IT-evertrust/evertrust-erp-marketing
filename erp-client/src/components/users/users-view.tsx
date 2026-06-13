@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import {
   ChevronDown,
@@ -15,7 +16,6 @@ import {
 } from 'lucide-react';
 import {
   DEPARTMENT_LABELS,
-  POSITION_LABELS,
   PERMISSIONS,
   ROLE_LABELS,
   effectivePermissions,
@@ -84,6 +84,7 @@ type StatusFilter = 'all' | 'active' | 'inactive';
 type Layout = 'flat' | 'grouped';
 
 export function UsersView() {
+  const t = useTranslations('users');
   const usersQ = useAdminUsers();
   const me = useMe();
   const [q, setQ] = useState('');
@@ -119,8 +120,8 @@ export function UsersView() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="Team & access"
-        description="Everyone in your workspace — roles, departments, and what they can do."
+        title={t('title')}
+        description={t('description')}
         actions={
           <div className="flex items-center gap-2">
             <div className="inline-flex rounded-lg border bg-card p-0.5">
@@ -133,13 +134,13 @@ export function UsersView() {
                     layout === l ? 'bg-muted text-foreground' : 'text-muted-foreground',
                   )}
                 >
-                  {l === 'flat' ? 'Flat' : 'Grouped'}
+                  {l === 'flat' ? t('layout.flat') : t('layout.grouped')}
                 </button>
               ))}
             </div>
             <Button onClick={() => setShowCreate(true)}>
               <UserPlus className="size-4" />
-              Add member
+              {t('addMember')}
             </Button>
           </div>
         }
@@ -147,16 +148,16 @@ export function UsersView() {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {([
-          ['Members', all.length],
-          ['Active', activeCount],
-          ['Admins', adminCount],
-          ['Departments', deptCount],
+          ['members', all.length],
+          ['active', activeCount],
+          ['admins', adminCount],
+          ['departments', deptCount],
         ] as [string, number][]).map(([k, v]) => (
           <div key={k} className="rounded-xl border bg-card px-4 py-3">
             <div className="text-xl font-bold tabular-nums">
               {usersQ.isLoading ? <Skeleton className="h-6 w-8" /> : v}
             </div>
-            <div className="mt-0.5 text-[10.5px] uppercase tracking-wide text-muted-foreground/70">{k}</div>
+            <div className="mt-0.5 text-[10.5px] uppercase tracking-wide text-muted-foreground/70">{t(`stats.${k}`)}</div>
           </div>
         ))}
       </div>
@@ -165,7 +166,7 @@ export function UsersView() {
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search name or email…"
+          placeholder={t('searchPlaceholder')}
           className="h-9 max-w-xs"
         />
         <select
@@ -173,9 +174,9 @@ export function UsersView() {
           onChange={(e) => setRoleF(e.target.value as 'all' | UserRole)}
           className="h-9 rounded-md border bg-card px-2 text-sm"
         >
-          <option value="all">All roles</option>
+          <option value="all">{t('allRoles')}</option>
           {(Object.keys(ROLE_LABELS) as UserRole[]).map((r) => (
-            <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+            <option key={r} value={r}>{t(`role.${r}`)}</option>
           ))}
         </select>
         {layout === 'flat' ? (
@@ -184,9 +185,9 @@ export function UsersView() {
             onChange={(e) => setDeptF(e.target.value as 'all' | Department)}
             className="h-9 rounded-md border bg-card px-2 text-sm"
           >
-            <option value="all">All departments</option>
+            <option value="all">{t('allDepartments')}</option>
             {DEPTS.map((d) => (
-              <option key={d} value={d}>{DEPARTMENT_LABELS[d]}</option>
+              <option key={d} value={d}>{t(`department.${d}`)}</option>
             ))}
           </select>
         ) : null}
@@ -197,12 +198,12 @@ export function UsersView() {
               onClick={() => setStatusF(s)}
               className={cn('h-9 px-3 text-xs capitalize', statusF === s ? 'bg-muted text-foreground' : 'text-muted-foreground')}
             >
-              {s}
+              {t(`statusFilter.${s}`)}
             </button>
           ))}
         </div>
         <span className="ml-auto text-xs text-muted-foreground">
-          {filtered.length} of {all.length} members
+          {t('countSummary', { filtered: filtered.length, total: all.length })}
         </span>
       </div>
 
@@ -210,26 +211,26 @@ export function UsersView() {
         {usersQ.isLoading ? (
           <Skeleton className="h-64 w-full" />
         ) : usersQ.isError ? (
-          <p className="p-6 text-sm text-destructive">Could not load users: {usersQ.error.message}</p>
+          <p className="p-6 text-sm text-destructive">{t('loadError', { message: usersQ.error.message })}</p>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Member</TableHead>
-                <TableHead>Role</TableHead>
-                {layout === 'flat' ? <TableHead>Department</TableHead> : null}
-                <TableHead>Position</TableHead>
-                <TableHead>Access</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Joined</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>{t('table.member')}</TableHead>
+                <TableHead>{t('table.role')}</TableHead>
+                {layout === 'flat' ? <TableHead>{t('table.department')}</TableHead> : null}
+                <TableHead>{t('table.position')}</TableHead>
+                <TableHead>{t('table.access')}</TableHead>
+                <TableHead>{t('table.status')}</TableHead>
+                <TableHead>{t('table.joined')}</TableHead>
+                <TableHead className="text-right">{t('table.actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={cols} className="py-10 text-center text-sm text-muted-foreground">
-                    No members match your filters.
+                    {t('noMembers')}
                   </TableCell>
                 </TableRow>
               ) : layout === 'flat' ? (
@@ -249,7 +250,7 @@ export function UsersView() {
                   const isNone = (dept as unknown as string) === NO_DEPT;
                   const members = filtered.filter((u) => (isNone ? !u.department : u.department === dept));
                   if (!members.length) return [];
-                  const label = isNone ? 'No department' : DEPARTMENT_LABELS[dept];
+                  const label = isNone ? t('noDepartment') : t(`department.${dept}`);
                   const isCol = collapsed.has(label);
                   return [
                     <TableRow
@@ -320,6 +321,7 @@ function UserRowCells({
   onEdit: () => void;
   onDelete: () => void;
 }) {
+  const t = useTranslations('users');
   const update = useUpdateUser();
   const isSA = u.role === 'SUPER_ADMIN';
   const isSelf = u.id === selfId;
@@ -331,7 +333,10 @@ function UserRowCells({
     update.mutate(
       { id: u.id, patch: { active: !u.active } },
       {
-        onSuccess: () => toast.success(`${u.name} ${u.active ? 'deactivated' : 'reactivated'}`),
+        onSuccess: () =>
+          toast.success(
+            t(u.active ? 'toast.deactivated' : 'toast.reactivated', { name: u.name }),
+          ),
         onError: (e) => toast.error(e.message),
       },
     );
@@ -352,26 +357,30 @@ function UserRowCells({
       </TableCell>
       <TableCell>
         <span className={cn('inline-flex rounded-full border px-2.5 py-0.5 text-[11.5px] font-semibold', ROLE_PILL[u.role])}>
-          {ROLE_LABELS[u.role]}
+          {t(`role.${u.role}`)}
         </span>
       </TableCell>
       {showDept ? (
         <TableCell className="text-[13px]">
-          {u.department ? DEPARTMENT_LABELS[u.department] : <span className="text-muted-foreground">—</span>}
+          {u.department ? t(`department.${u.department}`) : <span className="text-muted-foreground">—</span>}
         </TableCell>
       ) : null}
       <TableCell className="text-[13px]">
-        {u.position ? POSITION_LABELS[u.position] : <span className="text-muted-foreground">—</span>}
+        {u.position ? t(`position.${u.position}`) : <span className="text-muted-foreground">—</span>}
       </TableCell>
       <TableCell>
         {isSA ? (
           <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-emerald-500">
-            <ShieldCheck className="size-3.5" /> Full access
+            <ShieldCheck className="size-3.5" /> {t('fullAccess')}
           </span>
         ) : (
           <span className="inline-flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
             <KeyRound className="size-3" />
-            <b className="text-foreground">{permCount(u)}</b>/{total} perms
+            {t.rich('permsCount', {
+              count: permCount(u),
+              total,
+              b: (chunks) => <b className="text-foreground">{chunks}</b>,
+            })}
           </span>
         )}
       </TableCell>
@@ -383,8 +392,16 @@ function UserRowCells({
             aria-checked={u.active}
             onClick={toggleActive}
             disabled={protectedRow || update.isPending}
-            title={protectedRow ? (isSA ? 'Super Admin — protected' : 'You can’t deactivate yourself') : u.active ? 'Deactivate member' : 'Reactivate member'}
-            aria-label={u.active ? 'Deactivate' : 'Reactivate'}
+            title={
+              protectedRow
+                ? isSA
+                  ? t('toggle.protectedSuperAdmin')
+                  : t('toggle.protectedSelf')
+                : u.active
+                  ? t('toggle.deactivate')
+                  : t('toggle.reactivate')
+            }
+            aria-label={u.active ? t('toggle.ariaDeactivate') : t('toggle.ariaReactivate')}
             className={cn(
               'relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors',
               u.active ? 'bg-emerald-500' : 'bg-muted ring-1 ring-inset ring-border',
@@ -399,7 +416,7 @@ function UserRowCells({
             />
           </button>
           <span className={cn('text-[12.5px]', !u.active && 'text-muted-foreground')}>
-            {u.active ? 'Active' : 'Deactivated'}
+            {u.active ? t('status.active') : t('status.deactivated')}
           </span>
           {isSA ? <Lock className="size-3 text-muted-foreground" /> : null}
         </div>
@@ -414,24 +431,24 @@ function UserRowCells({
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-52">
             <DropdownMenuItem onClick={onDetails}>
-              <Eye className="size-4" /> View details
+              <Eye className="size-4" /> {t('menu.viewDetails')}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onEdit}>
-              <Pencil className="size-4" /> Edit access
+              <Pencil className="size-4" /> {t('menu.editAccess')}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             {protectedRow ? (
               <DropdownMenuItem disabled>
-                <Lock className="size-4" /> {isSA ? 'Protected (Super Admin)' : 'Protected (you)'}
+                <Lock className="size-4" /> {isSA ? t('menu.protectedSuperAdmin') : t('menu.protectedSelf')}
               </DropdownMenuItem>
             ) : (
               <>
                 <DropdownMenuItem onClick={toggleActive}>
-                  {u.active ? 'Deactivate member' : 'Reactivate member'}
+                  {u.active ? t('menu.deactivate') : t('menu.reactivate')}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDelete}>
-                  <Trash2 className="size-4" /> Delete permanently
+                  <Trash2 className="size-4" /> {t('menu.delete')}
                 </DropdownMenuItem>
               </>
             )}

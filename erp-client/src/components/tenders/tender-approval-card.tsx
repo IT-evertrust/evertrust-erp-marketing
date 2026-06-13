@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { useTranslations } from 'next-intl';
 import { ShieldCheck, ShieldAlert, Gavel, Send } from 'lucide-react';
 import type { ApprovalRequestDto, ApprovalStatus } from '@evertrust/shared';
 import {
@@ -50,6 +51,7 @@ import { formatDateTime } from '@/lib/tender-format';
 // by …"). Opening a request is gated by tenders:write; the DECISION (what unblocks
 // submission) by approvals:decide.
 export function TenderApprovalCard({ tenderId }: { tenderId: string }) {
+  const t = useTranslations('tenders');
   const approvals = useTenderApprovals(tenderId);
   const rows = approvals.data ?? [];
   const hasCustomerApproval = rows.some(
@@ -59,10 +61,9 @@ export function TenderApprovalCard({ tenderId }: { tenderId: string }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Customer Approval</CardTitle>
+        <CardTitle className="text-base">{t('approval.title')}</CardTitle>
         <CardDescription>
-          Submission stays blocked until the customer&apos;s approval is recorded —
-          any channel counts (email, WhatsApp, call).
+          {t('approval.description')}
         </CardDescription>
         <Can permission="tenders:write">
           <CardAction>
@@ -78,17 +79,17 @@ export function TenderApprovalCard({ tenderId }: { tenderId: string }) {
             {hasCustomerApproval ? (
               <Alert className="border-emerald-500/30 text-emerald-700 dark:text-emerald-400">
                 <ShieldCheck />
-                <AlertTitle>Customer approval recorded</AlertTitle>
+                <AlertTitle>{t('approval.recordedTitle')}</AlertTitle>
                 <AlertDescription className="text-emerald-700/90 dark:text-emerald-400/90">
-                  Submission is unblocked for this tender.
+                  {t('approval.recordedBody')}
                 </AlertDescription>
               </Alert>
             ) : (
               <Alert variant="destructive">
                 <ShieldAlert />
-                <AlertTitle>No customer approval recorded</AlertTitle>
+                <AlertTitle>{t('approval.missingTitle')}</AlertTitle>
                 <AlertDescription>
-                  This tender cannot be submitted until an approval is recorded.
+                  {t('approval.missingBody')}
                 </AlertDescription>
               </Alert>
             )}
@@ -101,7 +102,7 @@ export function TenderApprovalCard({ tenderId }: { tenderId: string }) {
               </ul>
             ) : (
               <p className="text-sm text-muted-foreground">
-                No approval requests yet.
+                {t('approval.empty')}
               </p>
             )}
           </>
@@ -118,6 +119,7 @@ function ApprovalRow({
   approval: ApprovalRequestDto;
   tenderId: string;
 }) {
+  const t = useTranslations('tenders');
   const decided = approval.status !== 'PENDING';
   return (
     <li className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
@@ -133,13 +135,13 @@ function ApprovalRow({
             className="mt-1 truncate text-sm text-muted-foreground"
             title={approval.evidenceUrl}
           >
-            Evidence: {approval.evidenceUrl}
+            {t('approval.evidenceLine', { evidence: approval.evidenceUrl })}
           </p>
         ) : null}
         <p className="mt-1 text-xs text-muted-foreground">
           {decided
-            ? `Decided ${formatDateTime(approval.decidedAt)}`
-            : `Requested ${formatDateTime(approval.requestedAt)}`}
+            ? t('approval.decided', { date: formatDateTime(approval.decidedAt) })
+            : t('approval.requested', { date: formatDateTime(approval.requestedAt) })}
         </p>
       </div>
       {!decided ? (
@@ -151,36 +153,27 @@ function ApprovalRow({
   );
 }
 
-const STATUS_BADGE: Record<
-  ApprovalStatus,
-  { label: string; className: string }
-> = {
-  PENDING: {
-    label: 'Pending',
-    className: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
-  },
-  APPROVED: {
-    label: 'Approved',
-    className:
-      'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
-  },
-  REJECTED: {
-    label: 'Rejected',
-    className: 'border-destructive/30 bg-destructive/10 text-destructive',
-  },
+// Badge palette per approval status. The label is translated at the call site
+// (approval.status.<status>) rather than stored alongside the className.
+const STATUS_BADGE_CLASS: Record<ApprovalStatus, string> = {
+  PENDING: 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  APPROVED:
+    'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+  REJECTED: 'border-destructive/30 bg-destructive/10 text-destructive',
 };
 
 function ApprovalStatusBadge({ status }: { status: ApprovalStatus }) {
-  const s = STATUS_BADGE[status];
+  const t = useTranslations('tenders');
   return (
-    <Badge variant="outline" className={cn('font-medium', s.className)}>
-      {s.label}
+    <Badge variant="outline" className={cn('font-medium', STATUS_BADGE_CLASS[status])}>
+      {t(`approval.status.${status}`)}
     </Badge>
   );
 }
 
 // Open a PENDING customer-approval request, optionally attaching the evidence now.
 function RequestDialog({ tenderId }: { tenderId: string }) {
+  const t = useTranslations('tenders');
   const [open, setOpen] = useState(false);
   const [evidence, setEvidence] = useState('');
   const request = useRequestApproval(tenderId);
@@ -193,12 +186,12 @@ function RequestDialog({ tenderId }: { tenderId: string }) {
       },
       {
         onSuccess: () => {
-          toast.success('Approval request opened.');
+          toast.success(t('approval.requestOpened'));
           setOpen(false);
           setEvidence('');
         },
         onError: (error) =>
-          toast.error(error.message ?? 'Could not open the request.'),
+          toast.error(error.message ?? t('approval.requestError')),
       },
     );
   }
@@ -208,33 +201,32 @@ function RequestDialog({ tenderId }: { tenderId: string }) {
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <Send />
-          Request approval
+          {t('approval.request')}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Request customer approval</DialogTitle>
+          <DialogTitle>{t('approval.requestTitle')}</DialogTitle>
           <DialogDescription>
-            Open a pending customer-approval request. The decision is recorded
-            separately once the customer responds.
+            {t('approval.requestDescription')}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-2">
-          <Label htmlFor="request-evidence">Evidence (optional)</Label>
+          <Label htmlFor="request-evidence">{t('approval.requestEvidenceLabel')}</Label>
           <Textarea
             id="request-evidence"
             value={evidence}
             maxLength={2000}
             onChange={(e) => setEvidence(e.target.value)}
-            placeholder="Link or note — e.g. email thread URL, or 'sent pricing pack via WhatsApp 2026-05-30'"
+            placeholder={t('approval.requestEvidencePlaceholder')}
           />
         </div>
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button type="button" onClick={submit} disabled={request.isPending}>
-            {request.isPending ? 'Opening…' : 'Open request'}
+            {request.isPending ? t('approval.opening') : t('approval.openRequest')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -250,6 +242,7 @@ function DecideDialog({
   approval: ApprovalRequestDto;
   tenderId: string;
 }) {
+  const t = useTranslations('tenders');
   const [open, setOpen] = useState(false);
   const [decision, setDecision] = useState<'APPROVED' | 'REJECTED' | undefined>(
     undefined,
@@ -259,7 +252,7 @@ function DecideDialog({
 
   function submit() {
     if (!decision) {
-      toast.error('Choose approve or reject.');
+      toast.error(t('approval.chooseError'));
       return;
     }
     decide.mutate(
@@ -271,13 +264,13 @@ function DecideDialog({
         onSuccess: (a) => {
           toast.success(
             a.status === 'APPROVED'
-              ? 'Customer approval recorded — submission unblocked.'
-              : 'Recorded as rejected.',
+              ? t('approval.approvedToast')
+              : t('approval.rejectedToast'),
           );
           setOpen(false);
         },
         onError: (error) =>
-          toast.error(error.message ?? 'Could not record the decision.'),
+          toast.error(error.message ?? t('approval.decideError')),
       },
     );
   }
@@ -287,50 +280,49 @@ function DecideDialog({
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <Gavel />
-          Record decision
+          {t('approval.recordDecision')}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Record customer decision</DialogTitle>
+          <DialogTitle>{t('approval.decideTitle')}</DialogTitle>
           <DialogDescription>
-            Attach the proof of the customer&apos;s decision. Any channel counts —
-            paste a link or describe the call.
+            {t('approval.decideDescription')}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="decision">Decision</Label>
+            <Label htmlFor="decision">{t('approval.decisionLabel')}</Label>
             <Select
               value={decision}
               onValueChange={(v) => setDecision(v as 'APPROVED' | 'REJECTED')}
             >
               <SelectTrigger id="decision" className="w-full">
-                <SelectValue placeholder="Approve or reject" />
+                <SelectValue placeholder={t('approval.decisionPlaceholder')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="APPROVED">Approved</SelectItem>
-                <SelectItem value="REJECTED">Rejected</SelectItem>
+                <SelectItem value="APPROVED">{t('approval.approved')}</SelectItem>
+                <SelectItem value="REJECTED">{t('approval.rejected')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="decide-evidence">Evidence</Label>
+            <Label htmlFor="decide-evidence">{t('approval.decideEvidenceLabel')}</Label>
             <Textarea
               id="decide-evidence"
               value={evidence}
               maxLength={2000}
               onChange={(e) => setEvidence(e.target.value)}
-              placeholder="Link or note — e.g. 'phone 2026-05-30, confirmed by Frau Müller'"
+              placeholder={t('approval.decideEvidencePlaceholder')}
             />
           </div>
         </div>
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button type="button" onClick={submit} disabled={decide.isPending}>
-            {decide.isPending ? 'Saving…' : 'Save decision'}
+            {decide.isPending ? t('approval.saving') : t('approval.saveDecision')}
           </Button>
         </DialogFooter>
       </DialogContent>

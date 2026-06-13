@@ -10,13 +10,17 @@ import { useNiches } from '@/hooks/use-niche-targets';
 import {
   useAssignNicheIndustry,
   useCreateIndustry,
+  useCreateNiche,
   useDeleteIndustry,
+  useDeleteNiche,
   useIndustries,
   useRenameIndustry,
+  useRenameNiche,
 } from '@/hooks/use-industries';
 import { PageHeader } from '@/components/common/page-header';
 import { StatTile } from '@/components/common/stat-tile';
 import { EmptyState } from '@/components/common/empty-state';
+import { ConfirmButton } from '@/components/common/confirm-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -71,6 +75,9 @@ export function NichesView() {
   const createIndustry = useCreateIndustry();
   const renameIndustry = useRenameIndustry();
   const deleteIndustry = useDeleteIndustry();
+  const createNiche = useCreateNiche();
+  const renameNiche = useRenameNiche();
+  const deleteNiche = useDeleteNiche();
 
   // The niche being managed (targets dialog), and the industry dialogs' state.
   const [selected, setSelected] = useState<NicheListItemDto | null>(null);
@@ -78,6 +85,16 @@ export function NichesView() {
   const [newName, setNewName] = useState('');
   const [renaming, setRenaming] = useState<IndustryListItemDto | null>(null);
   const [renameValue, setRenameValue] = useState('');
+
+  // The niche create/rename dialogs' state. Create carries a chosen industry
+  // (UNASSIGNED sentinel = no parent); rename edits one niche's name.
+  const [nicheCreateOpen, setNicheCreateOpen] = useState(false);
+  const [nicheName, setNicheName] = useState('');
+  const [nicheIndustry, setNicheIndustry] = useState<string>(UNASSIGNED);
+  const [nicheRenaming, setNicheRenaming] = useState<NicheListItemDto | null>(
+    null,
+  );
+  const [nicheRenameValue, setNicheRenameValue] = useState('');
 
   const niches = useMemo(() => nichesQuery.data ?? [], [nichesQuery.data]);
   const industries = useMemo(
@@ -186,6 +203,71 @@ export function NichesView() {
     });
   }
 
+  function handleCreateNiche() {
+    const name = nicheName.trim();
+    if (!name) return;
+    const industryId = nicheIndustry === UNASSIGNED ? null : nicheIndustry;
+    createNiche.mutate(
+      { name, industryId },
+      {
+        onSuccess: () => {
+          toast.success(t('niche.newToast', { name }));
+          setNicheCreateOpen(false);
+          setNicheName('');
+          setNicheIndustry(UNASSIGNED);
+        },
+        // A duplicate niche name is a 409 — surface the server message verbatim,
+        // falling back to the localized equivalent.
+        onError: (error) =>
+          toast.error(
+            error instanceof ApiError && error.status === 409
+              ? error.message
+              : (error.message ?? t('niche.createError')),
+          ),
+      },
+    );
+  }
+
+  function handleRenameNiche() {
+    if (!nicheRenaming) return;
+    const name = nicheRenameValue.trim();
+    if (!name || name === nicheRenaming.name) {
+      setNicheRenaming(null);
+      return;
+    }
+    renameNiche.mutate(
+      { id: nicheRenaming.id, name },
+      {
+        onSuccess: () => {
+          toast.success(t('niche.renameToast', { name }));
+          setNicheRenaming(null);
+        },
+        // A clashing name is a 409 — surface the server message verbatim.
+        onError: (error) =>
+          toast.error(
+            error instanceof ApiError && error.status === 409
+              ? error.message
+              : (error.message ?? t('niche.renameError')),
+          ),
+      },
+    );
+  }
+
+  function handleDeleteNiche(niche: NicheListItemDto) {
+    deleteNiche.mutate(niche.id, {
+      onSuccess: () => toast.success(t('niche.deleteToast', { name: niche.name })),
+      // The API returns 409 ("…campaigns or prospects — reassign or archive…")
+      // when blocked — surface its message verbatim, falling back to the localized
+      // equivalent.
+      onError: (error) =>
+        toast.error(
+          error instanceof ApiError && error.status === 409
+            ? error.message
+            : (error.message ?? t('niche.deleteError')),
+        ),
+    });
+  }
+
   const isLoading = nichesQuery.isLoading || industriesQuery.isLoading;
 
   return (
@@ -194,10 +276,16 @@ export function NichesView() {
         title={t('header.title')}
         description={t('header.description')}
         actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus />
-            {t('industry.new')}
-          </Button>
+          <>
+            <Button variant="outline" onClick={() => setNicheCreateOpen(true)}>
+              <Plus />
+              {t('niche.new')}
+            </Button>
+            <Button onClick={() => setCreateOpen(true)}>
+              <Plus />
+              {t('industry.new')}
+            </Button>
+          </>
         }
       />
 
@@ -251,6 +339,12 @@ export function NichesView() {
               }}
               onDelete={handleDelete}
               deleting={deleteIndustry.isPending}
+              onRenameNiche={(niche) => {
+                setNicheRenaming(niche);
+                setNicheRenameValue(niche.name);
+              }}
+              onDeleteNiche={handleDeleteNiche}
+              deletingNiche={deleteNiche.isPending}
             />
           ))}
         </div>
@@ -353,6 +447,104 @@ export function NichesView() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* New niche — name + an industry to group it under (or Unassigned). */}
+      <Dialog
+        open={nicheCreateOpen}
+        onOpenChange={(open) => {
+          setNicheCreateOpen(open);
+          if (!open) {
+            setNicheName('');
+            setNicheIndustry(UNASSIGNED);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t('niche.createDialogTitle')}</DialogTitle>
+            <DialogDescription>
+              {t('niche.createDialogDescription')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-3">
+            <Input
+              autoFocus
+              value={nicheName}
+              placeholder={t('niche.namePlaceholder')}
+              maxLength={120}
+              onChange={(e) => setNicheName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleCreateNiche();
+              }}
+            />
+            <Select value={nicheIndustry} onValueChange={setNicheIndustry}>
+              <SelectTrigger
+                className="w-full"
+                aria-label={t('niche.industryLabel')}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={UNASSIGNED}>{t('unassigned')}</SelectItem>
+                {industries.map((i) => (
+                  <SelectItem key={i.id} value={i.id}>
+                    {i.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setNicheCreateOpen(false)}
+            >
+              {t('niche.cancel')}
+            </Button>
+            <Button
+              onClick={handleCreateNiche}
+              disabled={!nicheName.trim() || createNiche.isPending}
+            >
+              {createNiche.isPending ? t('niche.creating') : t('niche.create')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename niche. */}
+      <Dialog
+        open={!!nicheRenaming}
+        onOpenChange={(open) => {
+          if (!open) setNicheRenaming(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t('niche.renameDialogTitle')}</DialogTitle>
+          </DialogHeader>
+          <Input
+            autoFocus
+            value={nicheRenameValue}
+            placeholder={t('niche.namePlaceholder')}
+            maxLength={120}
+            onChange={(e) => setNicheRenameValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleRenameNiche();
+            }}
+          />
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setNicheRenaming(null)}>
+              {t('niche.cancel')}
+            </Button>
+            <Button
+              onClick={handleRenameNiche}
+              disabled={!nicheRenameValue.trim() || renameNiche.isPending}
+            >
+              {renameNiche.isPending ? t('niche.saving') : t('niche.save')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -368,6 +560,9 @@ function IndustrySection({
   onRename,
   onDelete,
   deleting,
+  onRenameNiche,
+  onDeleteNiche,
+  deletingNiche,
 }: {
   section: Section;
   industries: IndustryListItemDto[];
@@ -376,6 +571,9 @@ function IndustrySection({
   onRename: (industry: IndustryListItemDto) => void;
   onDelete: (industry: IndustryListItemDto) => void;
   deleting: boolean;
+  onRenameNiche: (niche: NicheListItemDto) => void;
+  onDeleteNiche: (niche: NicheListItemDto) => void;
+  deletingNiche: boolean;
 }) {
   const t = useTranslations('growth.niches');
   const { industry, niches } = section;
@@ -426,6 +624,7 @@ function IndustrySection({
                 <TableHead className="text-right">{t('column.prospects')}</TableHead>
                 <TableHead className="text-right">{t('column.targets')}</TableHead>
                 <TableHead className="text-right">{t('column.campaigns')}</TableHead>
+                <TableHead className="w-20" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -483,6 +682,43 @@ function IndustrySection({
                   </TableCell>
                   <TableCell className="text-right tabular-nums">
                     {n.campaignCount}
+                  </TableCell>
+                  {/* Rename + delete are interactive — stop row-level
+                      click/key handlers from also opening the targets dialog. */}
+                  <TableCell
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="size-8 text-muted-foreground"
+                        aria-label={t('niche.renameAriaLabel', { niche: n.name })}
+                        onClick={() => onRenameNiche(n)}
+                      >
+                        <Pencil />
+                      </Button>
+                      <ConfirmButton
+                        trigger={
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="size-8 text-muted-foreground hover:text-destructive"
+                            aria-label={t('niche.deleteAriaLabel', {
+                              niche: n.name,
+                            })}
+                          >
+                            <Trash2 />
+                          </Button>
+                        }
+                        title={t('niche.deleteConfirmTitle', { name: n.name })}
+                        description={t('niche.deleteConfirmDescription')}
+                        confirmLabel={t('niche.delete')}
+                        pending={deletingNiche}
+                        onConfirm={() => onDeleteNiche(n)}
+                      />
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

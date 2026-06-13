@@ -1,6 +1,7 @@
 'use client';
 
 import { use } from 'react';
+import { useTranslations } from 'next-intl';
 // Client-rendered + dynamic: gated, browser-fetched data, nothing at build time.
 import { useRequirePermission } from '@/lib/permissions';
 import { AppShell } from '@/components/shell/app-shell';
@@ -14,6 +15,7 @@ export default function CampaignDetailPage({
   params: Promise<{ campaignId: string }>;
 }) {
   const { campaignId } = use(params);
+  const t = useTranslations('common');
   const { allowed, isLoading } = useRequirePermission('campaigns:read');
 
   return (
@@ -23,7 +25,7 @@ export default function CampaignDetailPage({
       ) : allowed ? (
         <CampaignDetail id={campaignId} />
       ) : (
-        <p className="text-sm text-muted-foreground">Redirecting…</p>
+        <p className="text-sm text-muted-foreground">{t('redirecting')}</p>
       )}
     </AppShell>
   );

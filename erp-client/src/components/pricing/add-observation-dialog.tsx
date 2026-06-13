@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { useTranslations } from 'next-intl';
 import { Plus } from 'lucide-react';
 import type { PriceSource } from '@evertrust/shared';
 import { useAddObservation } from '@/hooks/use-pricing';
@@ -26,7 +27,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { PRICE_SOURCE_LABEL, PRICE_SOURCE_ORDER } from '@/lib/pricing-format';
+import { PRICE_SOURCE_ORDER } from '@/lib/pricing-format';
 
 const NO_SUPPLIER = '__none__';
 
@@ -41,6 +42,7 @@ export function AddObservationDialog({
   tenderId: string;
   lineId: string;
 }) {
+  const t = useTranslations('tenders');
   const [open, setOpen] = useState(false);
   const [source, setSource] = useState<PriceSource>('SUPPLIER_QUOTE');
   const [supplierId, setSupplierId] = useState<string>(NO_SUPPLIER);
@@ -60,7 +62,7 @@ export function AddObservationDialog({
     const trimmed = price.trim();
     // Validate against the same numeric-string contract the API enforces.
     if (!trimmed || !Number.isFinite(Number(trimmed))) {
-      toast.error('Enter a valid price.');
+      toast.error(t('pricing.addObservation.priceError'));
       return;
     }
     add.mutate(
@@ -72,12 +74,12 @@ export function AddObservationDialog({
       },
       {
         onSuccess: () => {
-          toast.success('Observation added.');
+          toast.success(t('pricing.addObservation.addedToast'));
           setOpen(false);
           reset();
         },
         onError: (error) =>
-          toast.error(error.message ?? 'Could not add observation.'),
+          toast.error(error.message ?? t('pricing.addObservation.addError')),
       },
     );
   }
@@ -87,20 +89,19 @@ export function AddObservationDialog({
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <Plus />
-          Add observation
+          {t('pricing.addObservation.trigger')}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add price observation</DialogTitle>
+          <DialogTitle>{t('pricing.addObservation.title')}</DialogTitle>
           <DialogDescription>
-            Record evidence for this line. The highest-trust source sets the
-            suggested price; supplier quotes turn the line GREEN.
+            {t('pricing.addObservation.description')}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="obs-source">Source</Label>
+            <Label htmlFor="obs-source">{t('pricing.addObservation.sourceLabel')}</Label>
             <Select
               value={source}
               onValueChange={(v) => setSource(v as PriceSource)}
@@ -111,20 +112,20 @@ export function AddObservationDialog({
               <SelectContent>
                 {PRICE_SOURCE_ORDER.map((s) => (
                   <SelectItem key={s} value={s}>
-                    {PRICE_SOURCE_LABEL[s]}
+                    {t(`pricing.priceSource.${s}`)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="obs-supplier">Supplier (optional)</Label>
+            <Label htmlFor="obs-supplier">{t('pricing.addObservation.supplierLabel')}</Label>
             <Select value={supplierId} onValueChange={setSupplierId}>
               <SelectTrigger id="obs-supplier" className="w-full">
-                <SelectValue placeholder="None" />
+                <SelectValue placeholder={t('common.none')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={NO_SUPPLIER}>None</SelectItem>
+                <SelectItem value={NO_SUPPLIER}>{t('common.none')}</SelectItem>
                 {suppliers.data?.map((s) => (
                   <SelectItem key={s.id} value={s.id}>
                     {s.name}
@@ -134,7 +135,7 @@ export function AddObservationDialog({
             </Select>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="obs-price">Price</Label>
+            <Label htmlFor="obs-price">{t('pricing.addObservation.price')}</Label>
             <Input
               id="obs-price"
               type="number"
@@ -143,26 +144,26 @@ export function AddObservationDialog({
               min="0"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              placeholder="0.00"
+              placeholder={t('pricing.addObservation.pricePlaceholder')}
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="obs-note">Note (optional)</Label>
+            <Label htmlFor="obs-note">{t('pricing.addObservation.noteLabel')}</Label>
             <Textarea
               id="obs-note"
               value={note}
               maxLength={500}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Context for this observation"
+              placeholder={t('pricing.addObservation.notePlaceholder')}
             />
           </div>
         </div>
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button type="button" onClick={submit} disabled={add.isPending}>
-            {add.isPending ? 'Adding…' : 'Add'}
+            {add.isPending ? t('pricing.addObservation.adding') : t('pricing.addObservation.add')}
           </Button>
         </DialogFooter>
       </DialogContent>

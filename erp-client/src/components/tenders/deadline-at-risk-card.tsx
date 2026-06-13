@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { AlarmClock, ArrowUpRight } from 'lucide-react';
 import { useDeadlineRisk } from '@/hooks/use-tenders';
 import { Badge } from '@/components/ui/badge';
@@ -21,6 +22,7 @@ import { DeadlineRiskBadge } from './deadline-risk-badge';
 // — the SAME deterministic computation n8n polls, so the human view and the
 // automated escalation can't disagree.
 export function DeadlineAtRiskCard() {
+  const t = useTranslations('tenders');
   const atRisk = useDeadlineRisk();
 
   return (
@@ -28,11 +30,10 @@ export function DeadlineAtRiskCard() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <AlarmClock className="size-4 text-amber-500" />
-          Deadline at risk
+          {t('deadlineRisk.title')}
         </CardTitle>
         <CardDescription>
-          Open tenders within the T-2 submission window (or overdue), most urgent
-          first. n8n escalates these up the L4→L3→L2 chain.
+          {t('deadlineRisk.description')}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -40,7 +41,7 @@ export function DeadlineAtRiskCard() {
           <Skeleton className="h-16 w-full" />
         ) : atRisk.isError ? (
           <p className="text-sm text-destructive">
-            Could not load deadline risk: {atRisk.error.message}
+            {t('deadlineRisk.loadError', { detail: atRisk.error.message })}
           </p>
         ) : atRisk.data && atRisk.data.length > 0 ? (
           <ul className="divide-y divide-border">
@@ -61,14 +62,14 @@ export function DeadlineAtRiskCard() {
                     <StatusBadge status={tender.status} />
                     <DeadlineRiskBadge risk={risk} />
                     <Badge variant="outline" className="font-mono text-xs">
-                      escalate → {risk.escalateTo}
+                      {t('deadlineRisk.escalate', { target: risk.escalateTo })}
                     </Badge>
                   </div>
                 </div>
                 <Link
                   href={`/tenders/${tender.id}`}
                   className="shrink-0 text-muted-foreground hover:text-foreground"
-                  aria-label={`Open ${tender.title}`}
+                  aria-label={t('deadlineRisk.openAria', { title: tender.title })}
                 >
                   <ArrowUpRight className="size-4" />
                 </Link>
@@ -77,7 +78,7 @@ export function DeadlineAtRiskCard() {
           </ul>
         ) : (
           <p className="text-sm text-muted-foreground">
-            Nothing at deadline risk right now.
+            {t('deadlineRisk.empty')}
           </p>
         )}
       </CardContent>

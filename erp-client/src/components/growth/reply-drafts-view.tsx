@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import {
   ChevronDown,
@@ -19,7 +20,7 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { formatDateTime } from '@/lib/tender-format';
-import { REPLY_VERDICT_CLASS, REPLY_VERDICT_LABEL } from '@/lib/growth-format';
+import { REPLY_VERDICT_CLASS } from '@/lib/growth-format';
 import { OutreachThread } from './outreach-thread';
 import { ProspectDetailDrawer } from './prospect-detail-drawer';
 
@@ -28,6 +29,7 @@ import { ProspectDetailDrawer } from './prospect-detail-drawer';
 // Actions are copy-to-clipboard + open-prospect ONLY — there is no server
 // "mark handled" endpoint, so nothing here fabricates one.
 export function ReplyDraftsView() {
+  const t = useTranslations('marketing');
   const q = useReplyDrafts();
   const [openProspect, setOpenProspect] = useState<string | null>(null);
 
@@ -36,8 +38,8 @@ export function ReplyDraftsView() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="Reply drafts"
-        description="RAG-suggested replies awaiting a human. Copy the draft into your reply, or open the prospect for the full thread."
+        title={t('drafts.title')}
+        description={t('drafts.description')}
       />
 
       {q.isLoading ? (
@@ -47,13 +49,13 @@ export function ReplyDraftsView() {
         </div>
       ) : q.isError ? (
         <Card className="p-6 text-sm text-destructive">
-          Could not load reply drafts: {q.error.message}
+          {t('drafts.loadError', { message: q.error.message })}
         </Card>
       ) : drafts.length === 0 ? (
         <EmptyState
           icon={<Inbox />}
-          title="No drafts awaiting review"
-          description="When the reply classifier drafts a suggested response, it appears here for approval."
+          title={t('drafts.emptyTitle')}
+          description={t('drafts.emptyDescription')}
         />
       ) : (
         <ul className="flex flex-col gap-3">
@@ -84,14 +86,15 @@ function DraftCard({
   draft: ReplyDraftDto;
   onOpenProspect: () => void;
 }) {
+  const t = useTranslations('marketing');
   const [showThread, setShowThread] = useState(false);
 
   async function copyDraft() {
     try {
       await navigator.clipboard.writeText(d.suggestedReply);
-      toast.success('Draft copied to clipboard.');
+      toast.success(t('drafts.copied'));
     } catch {
-      toast.error('Could not copy — your browser blocked clipboard access.');
+      toast.error(t('drafts.copyError'));
     }
   }
 
@@ -103,15 +106,15 @@ function DraftCard({
             {d.prospectCompanyName || d.prospectEmail}
           </span>
           <Badge variant="outline" className={REPLY_VERDICT_CLASS[d.verdict]}>
-            {REPLY_VERDICT_LABEL[d.verdict]}
+            {t(`verdict.${d.verdict}`)}
           </Badge>
           {d.latestVerdict !== d.verdict ? (
             <Badge
               variant="outline"
               className="border-amber-500/30 bg-amber-500/10 text-[10px] text-amber-400"
-              title="The prospect's current verdict has since changed"
+              title={t('drafts.nowTitle')}
             >
-              now {REPLY_VERDICT_LABEL[d.latestVerdict]}
+              {t('drafts.now', { verdict: t(`verdict.${d.latestVerdict}`) })}
             </Badge>
           ) : null}
           <span className="ml-auto text-xs tabular-nums text-muted-foreground">
@@ -131,11 +134,11 @@ function DraftCard({
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" onClick={copyDraft}>
               <Copy />
-              Copy draft
+              {t('drafts.copyDraft')}
             </Button>
             <Button size="sm" variant="outline" onClick={onOpenProspect}>
               <UserSearch />
-              Open prospect
+              {t('drafts.openProspect')}
             </Button>
             <Button
               size="sm"
@@ -144,7 +147,7 @@ function DraftCard({
               aria-expanded={showThread}
             >
               <MessageSquare />
-              {showThread ? 'Hide' : 'Show'} conversation
+              {showThread ? t('drafts.hideConversation') : t('drafts.showConversation')}
               <ChevronDown
                 className={cn(
                   'size-4 transition-transform',

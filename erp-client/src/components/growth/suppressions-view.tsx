@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { ShieldOff, Undo2 } from 'lucide-react';
 import type { SuppressionListItemDto } from '@evertrust/shared';
@@ -23,37 +24,38 @@ import { formatDateTime } from '@/lib/tender-format';
 // Suppressions (the org do-not-contact list). Un-suppress is confirm-gated and
 // optimistic (DELETE /suppressions/:id). All data is real (GET /suppressions).
 export function SuppressionsView() {
+  const t = useTranslations('marketing');
   const q = useSuppressions();
   const list = q.data ?? [];
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="Suppressions"
-        description="The org-wide do-not-contact list. The arsenal never emails a suppressed address. Un-suppress to allow contact again."
+        title={t('suppressions.title')}
+        description={t('suppressions.description')}
       />
 
       {q.isLoading ? (
         <Skeleton className="h-64 w-full rounded-lg" />
       ) : q.isError ? (
         <p className="text-sm text-destructive">
-          Could not load suppressions: {q.error.message}
+          {t('suppressions.loadError', { message: q.error.message })}
         </p>
       ) : list.length === 0 ? (
         <EmptyState
           icon={<ShieldOff />}
-          title="No suppressions"
-          description="Addresses land here when a prospect unsubscribes, bounces, or is marked do-not-contact."
+          title={t('suppressions.emptyTitle')}
+          description={t('suppressions.emptyDescription')}
         />
       ) : (
         <div className="overflow-hidden rounded-lg border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Email</TableHead>
-                <TableHead>Reason</TableHead>
-                <TableHead>Added</TableHead>
-                <TableHead className="w-px text-right">Action</TableHead>
+                <TableHead>{t('suppressions.colEmail')}</TableHead>
+                <TableHead>{t('suppressions.colReason')}</TableHead>
+                <TableHead>{t('suppressions.colAdded')}</TableHead>
+                <TableHead className="w-px text-right">{t('suppressions.colAction')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -73,12 +75,13 @@ function SuppressionRow({
 }: {
   suppression: SuppressionListItemDto;
 }) {
+  const t = useTranslations('marketing');
   const del = useDeleteSuppression();
 
   function onUnsuppress() {
     del.mutate(s.id, {
-      onSuccess: () => toast.success(`Un-suppressed ${s.email}.`),
-      onError: (e) => toast.error(e.message ?? 'Could not un-suppress.'),
+      onSuccess: () => toast.success(t('suppressions.unsuppressed', { email: s.email })),
+      onError: (e) => toast.error(e.message ?? t('suppressions.unsuppressError')),
     });
   }
 
@@ -98,12 +101,12 @@ function SuppressionRow({
             trigger={
               <Button size="sm" variant="outline" disabled={del.isPending}>
                 <Undo2 />
-                Un-suppress
+                {t('suppressions.unsuppress')}
               </Button>
             }
-            title={`Un-suppress ${s.email}?`}
-            description="The arsenal will be allowed to contact this address again. This cannot be undone from here."
-            confirmLabel="Un-suppress"
+            title={t('suppressions.confirmTitle', { email: s.email })}
+            description={t('suppressions.confirmDescription')}
+            confirmLabel={t('suppressions.unsuppress')}
             pending={del.isPending}
             onConfirm={onUnsuppress}
           />

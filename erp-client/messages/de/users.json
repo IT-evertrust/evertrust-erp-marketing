@@ -1,0 +1,215 @@
+{
+  "title": "Team & Zugriff",
+  "description": "Alle in Ihrem Arbeitsbereich — Rollen, Abteilungen und ihre Berechtigungen.",
+  "layout": {
+    "flat": "Flach",
+    "grouped": "Gruppiert"
+  },
+  "addMember": "Mitglied hinzufügen",
+  "stats": {
+    "members": "Mitglieder",
+    "active": "Aktiv",
+    "admins": "Admins",
+    "departments": "Abteilungen"
+  },
+  "searchPlaceholder": "Name oder E-Mail suchen…",
+  "allRoles": "Alle Rollen",
+  "allDepartments": "Alle Abteilungen",
+  "statusFilter": {
+    "all": "alle",
+    "active": "aktiv",
+    "inactive": "inaktiv"
+  },
+  "countSummary": "{filtered} von {total} Mitgliedern",
+  "loadError": "Benutzer konnten nicht geladen werden: {message}",
+  "table": {
+    "member": "Mitglied",
+    "role": "Rolle",
+    "department": "Abteilung",
+    "position": "Position",
+    "access": "Zugriff",
+    "status": "Status",
+    "joined": "Beigetreten",
+    "actions": "Aktionen"
+  },
+  "noMembers": "Keine Mitglieder entsprechen Ihren Filtern.",
+  "noDepartment": "Keine Abteilung",
+  "fullAccess": "Voller Zugriff",
+  "permsCount": "<b>{count}</b>/{total} Rechte",
+  "status": {
+    "active": "Aktiv",
+    "deactivated": "Deaktiviert",
+    "inactive": "Inaktiv"
+  },
+  "toggle": {
+    "protectedSuperAdmin": "Super-Admin — geschützt",
+    "protectedSelf": "Sie können sich nicht selbst deaktivieren",
+    "deactivate": "Mitglied deaktivieren",
+    "reactivate": "Mitglied reaktivieren",
+    "ariaDeactivate": "Deaktivieren",
+    "ariaReactivate": "Reaktivieren"
+  },
+  "toast": {
+    "deactivated": "{name} deaktiviert",
+    "reactivated": "{name} reaktiviert"
+  },
+  "menu": {
+    "viewDetails": "Details anzeigen",
+    "editAccess": "Zugriff bearbeiten",
+    "protectedSuperAdmin": "Geschützt (Super-Admin)",
+    "protectedSelf": "Geschützt (Sie)",
+    "deactivate": "Mitglied deaktivieren",
+    "reactivate": "Mitglied reaktivieren",
+    "delete": "Endgültig löschen"
+  },
+  "create": {
+    "title": "Benutzer hinzufügen",
+    "description": "Erstellen Sie ein Teammitglied und legen Sie das initiale Passwort fest — es gibt keine Selbstregistrierung.",
+    "name": "Name",
+    "email": "E-Mail",
+    "initialPassword": "Initiales Passwort",
+    "passwordPlaceholder": "Mindestens 8 Zeichen",
+    "passwordHint": "Verwenden Sie mindestens 8 Zeichen.",
+    "phone": "Telefon",
+    "phoneOptional": "(optional)",
+    "role": "Rolle",
+    "position": "Position",
+    "department": "Abteilung",
+    "none": "— Keine —",
+    "footnote": "Teilen Sie dem neuen Benutzer das initiale Passwort mit, damit er sich anmelden kann. Berechtigungen folgen der Rolle und können nach der Erstellung angepasst werden.",
+    "cancel": "Abbrechen",
+    "creating": "Wird erstellt…",
+    "submit": "Benutzer erstellen",
+    "createdToast": "{name} erstellt.",
+    "createError": "Der Benutzer konnte nicht erstellt werden."
+  },
+  "editAccess": {
+    "title": "Bearbeiten — {name}",
+    "role": "Rolle",
+    "position": "Position",
+    "department": "Abteilung",
+    "none": "—",
+    "permsSuperAdmin": "Berechtigungen · Super-Admin hat vollen Zugriff",
+    "permsEffective": "Berechtigungen · effektiv",
+    "resetDefaults": "Auf Rollenstandard zurücksetzen",
+    "cancel": "Abbrechen",
+    "saving": "Wird gespeichert…",
+    "submit": "Änderungen speichern",
+    "savedToast": "Änderungen gespeichert"
+  },
+  "details": {
+    "role": "Rolle",
+    "department": "Abteilung",
+    "position": "Position",
+    "status": "Status",
+    "joined": "Beigetreten",
+    "access": "Zugriff",
+    "fullAccess": "Voller Zugriff",
+    "permsCount": "{count}/{total} Berechtigungen",
+    "grantedPermissions": "Erteilte Berechtigungen",
+    "allPermissions": "Alle Berechtigungen",
+    "none": "Keine"
+  },
+  "delete": {
+    "title": "Mitglied löschen?",
+    "description": "<b>{name}</b> ({email}) endgültig entfernen? Dies kann nicht rückgängig gemacht werden und löscht den gesamten Verlauf. In nahezu jedem Fall ist <b>Deaktivieren</b> die richtige Wahl — es entzieht den Zugriff, behält aber den Audit-Trail. (Mitglieder mit verknüpften Datensätzen können nicht gelöscht werden.)",
+    "deactivateInstead": "Stattdessen deaktivieren",
+    "cancel": "Abbrechen",
+    "deleting": "Wird gelöscht…",
+    "delete": "Endgültig löschen",
+    "deletedToast": "{name} gelöscht",
+    "deactivatedToast": "{name} deaktiviert"
+  },
+  "editProfile": {
+    "title": "{name} bearbeiten",
+    "name": "Name",
+    "role": "Rolle",
+    "position": "Position",
+    "department": "Abteilung",
+    "phone": "Telefon",
+    "none": "— Keine —",
+    "roleLocked": "🔒 Die Rolle Super-Admin ist gesperrt",
+    "footnote": "Die E-Mail wird von einem Super-Admin auf der Benutzerseite geändert; Berechtigungen werden ebenfalls dort bearbeitet.",
+    "cancel": "Abbrechen",
+    "saving": "Wird gespeichert…",
+    "submit": "Änderungen speichern",
+    "savedToast": "Änderungen an {name} gespeichert.",
+    "saveError": "Änderungen konnten nicht gespeichert werden."
+  },
+  "profile": {
+    "back": "Benutzer",
+    "loadError": "Dieses Profil konnte nicht geladen werden: {message}",
+    "notFound": "Benutzer nicht gefunden. Möglicherweise wurde er entfernt, oder dies ist ein veralteter Link.",
+    "active": "Aktiv",
+    "inactive": "Inaktiv",
+    "memberSince": "Mitglied seit {date}",
+    "editProfile": "Profil bearbeiten",
+    "tiles": {
+      "campaignsLaunched": "Gestartete Kampagnen",
+      "stagesRun": "Ausgeführte Phasen",
+      "actionsLogged": "Protokollierte Aktionen",
+      "permissions": "Berechtigungen",
+      "granted": "erteilt"
+    },
+    "tabs": {
+      "access": "Zugriff",
+      "account": "Konto",
+      "activity": "Aktivität"
+    },
+    "rolePlacement": "Rolle & Einordnung",
+    "role": "Rolle",
+    "department": "Abteilung",
+    "position": "Position",
+    "locked": "🔒 gesperrt",
+    "effectivePermissions": "Effektive Berechtigungen ({count})",
+    "editAccess": "Zugriff bearbeiten",
+    "account": "Konto",
+    "accountRow": {
+      "email": "E-Mail",
+      "phone": "Telefon",
+      "password": "Passwort",
+      "status": "Status",
+      "role": "Rolle",
+      "memberSince": "Mitglied seit",
+      "userId": "Benutzer-ID"
+    },
+    "change": "Ändern",
+    "passwordNote": "Das Ändern des Passworts setzt sofort ein neues — es gibt keinen E-Mail-Reset-Ablauf, teilen Sie es daher sicher mit.",
+    "noActivity": "Noch keine Aktivität erfasst.",
+    "passwordDialog": {
+      "title": "Neues Passwort festlegen",
+      "newPassword": "Neues Passwort",
+      "placeholder": "Mindestens 8 Zeichen",
+      "hint": "Verwenden Sie mindestens 8 Zeichen.",
+      "cancel": "Abbrechen",
+      "saving": "Wird gespeichert…",
+      "submit": "Passwort festlegen",
+      "updatedToast": "Passwort für {name} aktualisiert.",
+      "error": "Das Passwort konnte nicht festgelegt werden."
+    }
+  },
+  "role": {
+    "SUPER_ADMIN": "Super-Admin",
+    "ADMIN": "Admin",
+    "MANAGER": "Manager",
+    "EMPLOYEE": "Mitarbeiter"
+  },
+  "department": {
+    "OPERATIONS": "Betrieb",
+    "IT": "IT",
+    "CONSULTING": "Beratung",
+    "MARKETING": "Marketing",
+    "BUSINESS": "Business",
+    "HR": "Personal"
+  },
+  "position": {
+    "CEO": "CEO",
+    "CTO": "CTO",
+    "CFO": "CFO",
+    "COO": "COO",
+    "DEPT_MANAGER": "Abt.-Leiter",
+    "EXECUTIVE": "Führungskraft",
+    "OFFICER": "Sachbearbeiter",
+    "SPECIALIST": "Spezialist"
+  }
+}

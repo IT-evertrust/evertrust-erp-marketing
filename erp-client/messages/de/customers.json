@@ -1,0 +1,73 @@
+{
+  "redirecting": "Weiterleitung…",
+  "header": {
+    "title": "Kunden",
+    "description": "Ihr Kundenverzeichnis für die Ausschreibungszuordnung."
+  },
+  "actions": {
+    "new": "Kunde hinzufügen",
+    "edit": "Kunde bearbeiten"
+  },
+  "stats": {
+    "customers": {
+      "label": "Kunden",
+      "hint": "Im Verzeichnis"
+    },
+    "withContact": {
+      "label": "Mit Kontakt",
+      "hint": "{count} ohne Kontakt"
+    },
+    "niches": {
+      "label": "Abgedeckte Nischen",
+      "hint": "Verschieden über alle Kunden"
+    }
+  },
+  "registry": {
+    "title": "Verzeichnis",
+    "description": "Jeder Kunde, dem Sie eine Ausschreibung zuordnen können. Einträge mit den entsprechenden Berechtigungen hinzufügen oder bearbeiten."
+  },
+  "table": {
+    "customer": "Kunde",
+    "niches": "Nischen",
+    "added": "Hinzugefügt"
+  },
+  "noContact": "Kein Kontakt",
+  "errorState": {
+    "message": "Kunden konnten nicht geladen werden: {error}"
+  },
+  "emptyState": {
+    "title": "Noch keine Kunden",
+    "description": "Fügen Sie die Organisationen hinzu, für die Sie bieten, damit Ausschreibungen ihnen zugeordnet werden können."
+  },
+  "dialog": {
+    "titleEdit": "Kunde bearbeiten",
+    "titleNew": "Kunde hinzufügen",
+    "descriptionEdit": "Diesen Kunden im Verzeichnis aktualisieren.",
+    "descriptionNew": "Einen Kunden zum Verzeichnis hinzufügen.",
+    "fields": {
+      "name": {
+        "label": "Name",
+        "placeholder": "Name des Kunden"
+      },
+      "contact": {
+        "label": "Kontakt",
+        "placeholder": "name@kunde.example"
+      },
+      "niches": {
+        "label": "Nischen",
+        "placeholder": "öffentliche Aufträge, Versorgung"
+      }
+    },
+    "commaSeparated": "Durch Kommas getrennt.",
+    "nameRequired": "Name ist erforderlich.",
+    "cancel": "Abbrechen",
+    "saving": "Wird gespeichert…",
+    "saveChanges": "Änderungen speichern",
+    "create": "Kunde anlegen"
+  },
+  "toast": {
+    "updated": "Kunde aktualisiert.",
+    "created": "Kunde angelegt.",
+    "saveError": "Kunde konnte nicht gespeichert werden."
+  }
+}

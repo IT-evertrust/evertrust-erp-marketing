@@ -1,0 +1,162 @@
+{
+  "engine": {
+    "title": "Growth engine",
+    "status": {
+      "active": "{count, plural, =0 {No active campaigns} one {# active} other {# active}}",
+      "nextSend": "next send",
+      "manual": "manual"
+    },
+    "sync": "Sync",
+    "syncing": "Syncing…",
+    "syncHint": "Import recent runs + counts from n8n's execution history.",
+    "funnel": {
+      "title": "Outcome funnel",
+      "description": "What the engine produced this week, from leads to booked meetings.",
+      "leads": "Leads found",
+      "emails": "Emails sent",
+      "replies": "Replies",
+      "meetings": "Meetings"
+    },
+    "pipeline": {
+      "heading": "Pipeline — the arsenal sequence",
+      "running": "running…",
+      "last": "last {ago}",
+      "noRuns": "no runs yet",
+      "run": "Run"
+    },
+    "phase": {
+      "target": "Target",
+      "arm": "Arm",
+      "fire": "Fire",
+      "catch": "Catch",
+      "revive": "Revive"
+    },
+    "niches": {
+      "title": "Top niches by industry",
+      "description": "The niches with the most live prospects right now.",
+      "unassigned": "Unassigned",
+      "empty": "No prospects yet"
+    }
+  },
+  "niches": {
+    "header": {
+      "title": "Niches",
+      "description": "The shared niche vocabulary — segments the Growth Engine scrapes, grouped by industry. Manage each niche's targets."
+    },
+    "stat": {
+      "industries": "Industries",
+      "niches": "Niches",
+      "targets": "Targets",
+      "campaigns": "Campaigns",
+      "prospects": "Prospects"
+    },
+    "column": {
+      "niche": "Niche",
+      "slug": "Slug",
+      "industry": "Industry",
+      "targets": "Targets",
+      "campaigns": "Campaigns",
+      "prospects": "Prospects"
+    },
+    "unassigned": "Unassigned",
+    "nicheCount": "{count, plural, one {# niche} other {# niches}}",
+    "assignAriaLabel": "Industry for {niche}",
+    "assignToast": "{niche} moved to {industry}.",
+    "unassignToast": "{niche} unassigned.",
+    "assignError": "Could not change the industry.",
+    "empty": {
+      "title": "No niches yet",
+      "description": "Niches are created when you launch a campaign from the Growth Engine (AIM)."
+    },
+    "loadError": "Could not load niches: {message}",
+    "manage": {
+      "description": "Manage the targets the arsenal scrapes for this niche."
+    },
+    "industry": {
+      "new": "New industry",
+      "newToast": "Industry “{name}” created.",
+      "createError": "Could not create the industry.",
+      "createDialogTitle": "New industry",
+      "createDialogDescription": "Industries group niches for search and reporting only — they never touch lead research.",
+      "namePlaceholder": "Industry name",
+      "create": "Create",
+      "creating": "Creating…",
+      "rename": "Rename",
+      "renameAriaLabel": "Rename {industry}",
+      "renameDialogTitle": "Rename industry",
+      "renameToast": "Industry renamed to “{name}”.",
+      "renameError": "Could not rename the industry.",
+      "save": "Save",
+      "saving": "Saving…",
+      "delete": "Delete",
+      "deleteAriaLabel": "Delete {industry}",
+      "deleteToast": "Industry “{name}” deleted.",
+      "deleteError": "Reassign its niches first.",
+      "cancel": "Cancel"
+    },
+    "niche": {
+      "new": "New niche",
+      "newToast": "Niche “{name}” created.",
+      "createError": "Could not create the niche.",
+      "createDialogTitle": "New niche",
+      "createDialogDescription": "Niches are the segments the arsenal scrapes. Assign an industry now, or leave it unassigned.",
+      "namePlaceholder": "Niche name",
+      "industryLabel": "Industry",
+      "create": "Create",
+      "creating": "Creating…",
+      "rename": "Rename",
+      "renameAriaLabel": "Rename {niche}",
+      "renameDialogTitle": "Rename niche",
+      "renameToast": "Niche renamed to “{name}”.",
+      "renameError": "Could not rename the niche.",
+      "save": "Save",
+      "saving": "Saving…",
+      "delete": "Delete",
+      "deleteAriaLabel": "Delete {niche}",
+      "deleteConfirmTitle": "Delete niche {name}?",
+      "deleteConfirmDescription": "Its targets will be removed.",
+      "deleteToast": "Niche “{name}” deleted.",
+      "deleteError": "This niche still has campaigns or prospects — reassign or archive them first.",
+      "cancel": "Cancel"
+    }
+  },
+  "aim": {
+    "trigger": "AIM",
+    "dialogTitle": "AIM — set the target",
+    "dialogDescription": "Lock & Load launches the campaign: the ERP provisions the Drive folder via n8n, then the arsenal runs autonomously.",
+    "nameLabel": "Name",
+    "nameOptional": " (optional)",
+    "namePlaceholder": "Name this attack (optional)",
+    "nicheLabel": "Niche",
+    "nichePlaceholder": "LED",
+    "nicheHintNew": "New niche — it’ll be created for your org on launch.",
+    "nicheHintExisting": "Pick an existing niche or type a new name.",
+    "nicheUnassignedGroup": "Unassigned",
+    "countryLabel": "Country",
+    "countryPlaceholder": "Germany",
+    "regionLabel": "Region",
+    "regionPlaceholder": "Warszawa, Kraków",
+    "projectLabel": "Project",
+    "projectPlaceholder": "LED Retrofit Berlin 2026",
+    "gmailLabel": "Gmail label",
+    "gmailPlaceholder": "LED-Berlin-2026",
+    "gmailHint": "Auto-generated from niche · country · zone · year — edit to override.",
+    "whatsappLabel": "WhatsApp number",
+    "whatsappPlaceholder": "+49…",
+    "senderLabel": "Sender alias",
+    "senderHint": "Gmail alias used as the From identity.",
+    "validationMissing": "Fill in: {fields}.",
+    "fieldNiche": "Niche",
+    "fieldCountry": "Country",
+    "fieldRegion": "Region",
+    "fieldProject": "Project",
+    "fieldGmailLabel": "Gmail label",
+    "fieldWhatsapp": "WhatsApp number",
+    "toastDraft": "Saved as draft ({project}) — the AIM webhook isn't configured yet.",
+    "toastLaunched": "Locked & loaded — campaign launched ({project}).",
+    "toastError": "Launch failed.",
+    "cancel": "Cancel",
+    "submit": "Lock & Load",
+    "submitting": "Launching…"
+  }
+}

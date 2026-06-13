@@ -1,10 +1,9 @@
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import type { TenderDto, TenderStatus } from '@evertrust/shared';
 import { cn } from '@/lib/utils';
 import {
-  REGIME_LABEL,
   STATUS_BADGE_CLASS,
-  STATUS_LABEL,
   STATUS_ORDER,
   formatDate,
   formatValue,
@@ -15,6 +14,7 @@ import {
 // opens the detail page where transitions happen. (Drag-to-transition is
 // intentionally out of scope for M1; the detail page is the transition surface.)
 export function TendersBoard({ tenders }: { tenders: TenderDto[] }) {
+  const t = useTranslations('tenders');
   const byStatus = groupByStatus(tenders);
 
   return (
@@ -33,7 +33,7 @@ export function TendersBoard({ tenders }: { tenders: TenderDto[] }) {
                   STATUS_BADGE_CLASS[status],
                 )}
               >
-                {STATUS_LABEL[status]}
+                {t(`status.${status}`)}
               </span>
               <span className="text-xs tabular-nums text-muted-foreground">
                 {items.length}
@@ -42,7 +42,7 @@ export function TendersBoard({ tenders }: { tenders: TenderDto[] }) {
             <div className="flex flex-col gap-2 p-2">
               {items.length === 0 ? (
                 <p className="px-1 py-6 text-center text-xs text-muted-foreground">
-                  None
+                  {t('board.empty')}
                 </p>
               ) : (
                 items.map((tender) => <BoardCard key={tender.id} tender={tender} />)
@@ -56,6 +56,7 @@ export function TendersBoard({ tenders }: { tenders: TenderDto[] }) {
 }
 
 function BoardCard({ tender }: { tender: TenderDto }) {
+  const t = useTranslations('tenders');
   return (
     <Link
       href={`/tenders/${tender.id}`}
@@ -65,16 +66,16 @@ function BoardCard({ tender }: { tender: TenderDto }) {
         {tender.title}
       </p>
       <p className="mt-1 truncate text-xs text-muted-foreground">
-        {tender.buyer ?? 'No buyer'}
+        {tender.buyer ?? t('board.noBuyer')}
       </p>
       <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
         <span className="tabular-nums">
           {formatValue(tender.estimatedValue, tender.currency)}
         </span>
-        <span>{tender.regime ? REGIME_LABEL[tender.regime] : '—'}</span>
+        <span>{tender.regime ? t(`regime.${tender.regime}`) : '—'}</span>
       </div>
       <p className="mt-1 text-xs text-muted-foreground tabular-nums">
-        Due {formatDate(tender.submissionDeadlineAt)}
+        {t('board.due', { date: formatDate(tender.submissionDeadlineAt) })}
       </p>
     </Link>
   );

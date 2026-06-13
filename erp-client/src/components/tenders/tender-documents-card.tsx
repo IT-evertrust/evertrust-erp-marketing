@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { useTranslations } from 'next-intl';
 import { Download, Upload } from 'lucide-react';
 import type { DocumentDto } from '@evertrust/shared';
 import { useTenderDocuments, useUploadTenderDocument } from '@/hooks/use-tenders';
@@ -34,14 +35,15 @@ import { formatBytes, formatDateTime } from '@/lib/tender-format';
 // size, uploaded) with a Download link, plus an Upload action gated by
 // tenders:write. Downloads go straight to the API URL (cookie auth rides along).
 export function TenderDocumentsCard({ tenderId }: { tenderId: string }) {
+  const t = useTranslations('tenders');
   const documents = useTenderDocuments(tenderId);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">TYPE 1 Documents</CardTitle>
+        <CardTitle className="text-base">{t('documents.title')}</CardTitle>
         <CardDescription>
-          Source tender documents. OCR runs in a later phase.
+          {t('documents.description')}
         </CardDescription>
         <Can permission="tenders:write">
           <CardAction>
@@ -60,7 +62,7 @@ export function TenderDocumentsCard({ tenderId }: { tenderId: string }) {
           </ul>
         ) : (
           <p className="text-sm text-muted-foreground">
-            No documents uploaded yet.
+            {t('documents.empty')}
           </p>
         )}
       </CardContent>
@@ -69,6 +71,7 @@ export function TenderDocumentsCard({ tenderId }: { tenderId: string }) {
 }
 
 function DocumentRow({ doc }: { doc: DocumentDto }) {
+  const t = useTranslations('tenders');
   return (
     <li className="flex items-center justify-between gap-4 py-3 first:pt-0 last:pb-0">
       <div className="min-w-0">
@@ -84,7 +87,7 @@ function DocumentRow({ doc }: { doc: DocumentDto }) {
         {/* Plain anchor to the API download URL; the httpOnly cookie authorizes it. */}
         <a href={api.documents.downloadUrl(doc.id)}>
           <Download />
-          Download
+          {t('documents.download')}
         </a>
       </Button>
     </li>
@@ -94,6 +97,7 @@ function DocumentRow({ doc }: { doc: DocumentDto }) {
 // Upload dialog: choose a file + optional kind, then POST multipart. type is
 // fixed to TYPE1 for this card (the canonical Phase 4 upload).
 function UploadDialog({ tenderId }: { tenderId: string }) {
+  const t = useTranslations('tenders');
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
@@ -102,19 +106,19 @@ function UploadDialog({ tenderId }: { tenderId: string }) {
   function submit() {
     const file = fileRef.current?.files?.[0];
     if (!file) {
-      toast.error('Choose a file to upload.');
+      toast.error(t('documents.chooseFileError'));
       return;
     }
     upload.mutate(
       { file, input: { type: 'TYPE1', kind: kind.trim() || undefined } },
       {
         onSuccess: (doc) => {
-          toast.success(`Uploaded ${doc.originalName}.`);
+          toast.success(t('documents.uploadedToast', { name: doc.originalName }));
           setOpen(false);
           setKind('');
           if (fileRef.current) fileRef.current.value = '';
         },
-        onError: (error) => toast.error(error.message ?? 'Upload failed.'),
+        onError: (error) => toast.error(error.message ?? t('documents.uploadError')),
       },
     );
   }
@@ -124,19 +128,19 @@ function UploadDialog({ tenderId }: { tenderId: string }) {
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
           <Upload />
-          Upload
+          {t('documents.upload')}
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Upload document</DialogTitle>
+          <DialogTitle>{t('documents.uploadTitle')}</DialogTitle>
           <DialogDescription>
-            Attach a TYPE 1 source document (PDF, image, Word/Excel, or XML).
+            {t('documents.uploadDescription')}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="file">File</Label>
+            <Label htmlFor="file">{t('documents.fileLabel')}</Label>
             <Input
               id="file"
               type="file"
@@ -145,22 +149,22 @@ function UploadDialog({ tenderId }: { tenderId: string }) {
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="kind">Kind (optional)</Label>
+            <Label htmlFor="kind">{t('documents.kindLabel')}</Label>
             <Input
               id="kind"
               value={kind}
               maxLength={200}
               onChange={(e) => setKind(e.target.value)}
-              placeholder="e.g. LV, cover letter"
+              placeholder={t('documents.kindPlaceholder')}
             />
           </div>
         </div>
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button type="button" onClick={submit} disabled={upload.isPending}>
-            {upload.isPending ? 'Uploading…' : 'Upload'}
+            {upload.isPending ? t('documents.uploading') : t('documents.upload')}
           </Button>
         </DialogFooter>
       </DialogContent>

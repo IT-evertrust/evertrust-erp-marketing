@@ -1,3 +1,6 @@
+'use client';
+
+import { useTranslations } from 'next-intl';
 import { ShieldCheck } from 'lucide-react';
 import { LoginForm } from '@/components/auth/login-form';
 
@@ -5,6 +8,8 @@ import { LoginForm } from '@/components/auth/login-form';
 // nothing hits the API at build time. The surface is a centered branded lockup
 // over a faint token-based radial wash — restyle only; auth lives in <LoginForm>.
 export default function LoginPage() {
+  const t = useTranslations('login');
+
   return (
     <main className="relative flex min-h-svh items-center justify-center overflow-hidden bg-background p-4">
       {/* Ambient depth, all token-based (no new colours / CSS): a faint blueprint
@@ -34,7 +39,7 @@ export default function LoginPage() {
           <div>
             <h1 className="text-xl font-semibold tracking-tight">Evertrust ERP</h1>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              Tender operations platform
+              {t('brand.tagline')}
             </p>
           </div>
         </div>
@@ -42,7 +47,7 @@ export default function LoginPage() {
         <LoginForm />
 
         <p className="text-xs text-muted-foreground">
-          Evertrust GmbH · Authorized access only
+          {t('brand.footer')}
         </p>
       </div>
     </main>

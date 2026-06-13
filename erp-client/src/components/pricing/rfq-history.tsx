@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import type { RfqDto } from '@evertrust/shared';
 import { useTenderRfqs } from '@/hooks/use-rfq';
 import { Badge } from '@/components/ui/badge';
@@ -14,14 +15,11 @@ const RFQ_STATUS_CLASS: Record<RfqDto['status'], string> = {
   FAILED: 'bg-rose-500/15 text-rose-300 border-rose-500/25',
 };
 
-function plural(n: number, word: string): string {
-  return `${n} ${word}${n === 1 ? '' : 's'}`;
-}
-
 // The RFQs dispatched for a tender (newest-first). Each row shows the outcome,
 // what was asked (supplier + line counts), an optional note (or the failure detail)
 // and when. Replies themselves land as price observations on the lines, not here.
 export function RfqHistory({ tenderId }: { tenderId: string }) {
+  const t = useTranslations('tenders');
   const rfqs = useTenderRfqs(tenderId);
 
   if (rfqs.isLoading) {
@@ -30,7 +28,7 @@ export function RfqHistory({ tenderId }: { tenderId: string }) {
   if (!rfqs.data || rfqs.data.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        No RFQs sent yet. Use “Request quotes” to ask suppliers for prices.
+        {t('pricing.rfq.empty')}
       </p>
     );
   }
@@ -43,12 +41,12 @@ export function RfqHistory({ tenderId }: { tenderId: string }) {
             variant="outline"
             className={cn('shrink-0', RFQ_STATUS_CLASS[r.status])}
           >
-            {r.status}
+            {t(`pricing.rfq.status.${r.status}`)}
           </Badge>
           <div className="min-w-0">
             <div className="truncate">
-              {plural(r.supplierIds.length, 'supplier')} ·{' '}
-              {plural(r.lineItemIds.length, 'line')}
+              {t('pricing.rfq.suppliers', { count: r.supplierIds.length })} ·{' '}
+              {t('pricing.rfq.linesCount', { count: r.lineItemIds.length })}
             </div>
             {r.note ? (
               <div className="truncate text-xs text-muted-foreground">

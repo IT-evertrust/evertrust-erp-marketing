@@ -96,6 +96,8 @@ import {
   AssignNicheIndustryDto,
   NicheDto,
   NicheListItemDto,
+  CreateNicheDto,
+  UpdateNicheDto,
   NicheTargetDto,
   CreateNicheTargetDto,
   UpdateNicheTargetDto,
@@ -596,6 +598,30 @@ export const api = {
         method: 'PATCH',
         body: AssignNicheIndustryDto.parse({ industryId }),
         schema: NicheDto,
+      }),
+
+    // Create a niche directly (deduped by org + slugify(name) server-side; a slug
+    // clash is a 409). `industryId` optionally assigns the grouping parent.
+    create: (input: z.infer<typeof CreateNicheDto>) =>
+      request<NicheDto>('/niches', {
+        method: 'POST',
+        body: CreateNicheDto.parse(input),
+        schema: NicheDto,
+      }),
+
+    // Rename a niche (409 on a sibling slug clash in the same org).
+    rename: (id: string, input: z.infer<typeof UpdateNicheDto>) =>
+      request<NicheDto>(`/niches/${id}`, {
+        method: 'PATCH',
+        body: UpdateNicheDto.parse(input),
+        schema: NicheDto,
+      }),
+
+    // Delete a niche (409 if it still has campaigns or prospects).
+    remove: (id: string) =>
+      request<ClearResultDto>(`/niches/${id}`, {
+        method: 'DELETE',
+        schema: ClearResultDto,
       }),
   },
 

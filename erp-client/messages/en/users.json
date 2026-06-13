@@ -1,0 +1,215 @@
+{
+  "title": "Team & access",
+  "description": "Everyone in your workspace — roles, departments, and what they can do.",
+  "layout": {
+    "flat": "Flat",
+    "grouped": "Grouped"
+  },
+  "addMember": "Add member",
+  "stats": {
+    "members": "Members",
+    "active": "Active",
+    "admins": "Admins",
+    "departments": "Departments"
+  },
+  "searchPlaceholder": "Search name or email…",
+  "allRoles": "All roles",
+  "allDepartments": "All departments",
+  "statusFilter": {
+    "all": "all",
+    "active": "active",
+    "inactive": "inactive"
+  },
+  "countSummary": "{filtered} of {total} members",
+  "loadError": "Could not load users: {message}",
+  "table": {
+    "member": "Member",
+    "role": "Role",
+    "department": "Department",
+    "position": "Position",
+    "access": "Access",
+    "status": "Status",
+    "joined": "Joined",
+    "actions": "Actions"
+  },
+  "noMembers": "No members match your filters.",
+  "noDepartment": "No department",
+  "fullAccess": "Full access",
+  "permsCount": "<b>{count}</b>/{total} perms",
+  "status": {
+    "active": "Active",
+    "deactivated": "Deactivated",
+    "inactive": "Inactive"
+  },
+  "toggle": {
+    "protectedSuperAdmin": "Super Admin — protected",
+    "protectedSelf": "You can’t deactivate yourself",
+    "deactivate": "Deactivate member",
+    "reactivate": "Reactivate member",
+    "ariaDeactivate": "Deactivate",
+    "ariaReactivate": "Reactivate"
+  },
+  "toast": {
+    "deactivated": "{name} deactivated",
+    "reactivated": "{name} reactivated"
+  },
+  "menu": {
+    "viewDetails": "View details",
+    "editAccess": "Edit access",
+    "protectedSuperAdmin": "Protected (Super Admin)",
+    "protectedSelf": "Protected (you)",
+    "deactivate": "Deactivate member",
+    "reactivate": "Reactivate member",
+    "delete": "Delete permanently"
+  },
+  "create": {
+    "title": "Add user",
+    "description": "Create a teammate and set their initial password — there’s no self sign-up.",
+    "name": "Name",
+    "email": "Email",
+    "initialPassword": "Initial password",
+    "passwordPlaceholder": "At least 8 characters",
+    "passwordHint": "Use at least 8 characters.",
+    "phone": "Phone",
+    "phoneOptional": "(optional)",
+    "role": "Role",
+    "position": "Position",
+    "department": "Department",
+    "none": "— None —",
+    "footnote": "Share the initial password with the new user so they can log in. Permissions follow the role and can be tuned after creation.",
+    "cancel": "Cancel",
+    "creating": "Creating…",
+    "submit": "Create user",
+    "createdToast": "Created {name}.",
+    "createError": "Could not create the user."
+  },
+  "editAccess": {
+    "title": "Edit — {name}",
+    "role": "Role",
+    "position": "Position",
+    "department": "Department",
+    "none": "—",
+    "permsSuperAdmin": "Permissions · Super Admin has full access",
+    "permsEffective": "Permissions · effective",
+    "resetDefaults": "Reset to role defaults",
+    "cancel": "Cancel",
+    "saving": "Saving…",
+    "submit": "Save changes",
+    "savedToast": "Changes saved"
+  },
+  "details": {
+    "role": "Role",
+    "department": "Department",
+    "position": "Position",
+    "status": "Status",
+    "joined": "Joined",
+    "access": "Access",
+    "fullAccess": "Full access",
+    "permsCount": "{count}/{total} permissions",
+    "grantedPermissions": "Granted permissions",
+    "allPermissions": "All permissions",
+    "none": "None"
+  },
+  "delete": {
+    "title": "Delete member?",
+    "description": "Permanently remove <b>{name}</b> ({email})? This can’t be undone and erases their history. In almost every case <b>Deactivate</b> is the right choice — it revokes access but keeps the audit trail. (Members with linked records can’t be deleted.)",
+    "deactivateInstead": "Deactivate instead",
+    "cancel": "Cancel",
+    "deleting": "Deleting…",
+    "delete": "Delete permanently",
+    "deletedToast": "{name} deleted",
+    "deactivatedToast": "{name} deactivated"
+  },
+  "editProfile": {
+    "title": "Edit {name}",
+    "name": "Name",
+    "role": "Role",
+    "position": "Position",
+    "department": "Department",
+    "phone": "Phone",
+    "none": "— None —",
+    "roleLocked": "🔒 Super Admin role is locked",
+    "footnote": "Email is changed by a Super Admin on the Users page; permissions are edited there too.",
+    "cancel": "Cancel",
+    "saving": "Saving…",
+    "submit": "Save changes",
+    "savedToast": "Saved changes to {name}.",
+    "saveError": "Could not save changes."
+  },
+  "profile": {
+    "back": "Users",
+    "loadError": "Could not load this profile: {message}",
+    "notFound": "User not found. They may have been removed, or this is a stale link.",
+    "active": "Active",
+    "inactive": "Inactive",
+    "memberSince": "Member since {date}",
+    "editProfile": "Edit profile",
+    "tiles": {
+      "campaignsLaunched": "Campaigns launched",
+      "stagesRun": "Stages run",
+      "actionsLogged": "Actions logged",
+      "permissions": "Permissions",
+      "granted": "granted"
+    },
+    "tabs": {
+      "access": "Access",
+      "account": "Account",
+      "activity": "Activity"
+    },
+    "rolePlacement": "Role & placement",
+    "role": "Role",
+    "department": "Department",
+    "position": "Position",
+    "locked": "🔒 locked",
+    "effectivePermissions": "Effective permissions ({count})",
+    "editAccess": "Edit access",
+    "account": "Account",
+    "accountRow": {
+      "email": "Email",
+      "phone": "Phone",
+      "password": "Password",
+      "status": "Status",
+      "role": "Role",
+      "memberSince": "Member since",
+      "userId": "User ID"
+    },
+    "change": "Change",
+    "passwordNote": "Changing the password sets a new one immediately — there’s no email reset flow, so share it securely.",
+    "noActivity": "No recorded activity yet.",
+    "passwordDialog": {
+      "title": "Set a new password",
+      "newPassword": "New password",
+      "placeholder": "At least 8 characters",
+      "hint": "Use at least 8 characters.",
+      "cancel": "Cancel",
+      "saving": "Saving…",
+      "submit": "Set password",
+      "updatedToast": "Password updated for {name}.",
+      "error": "Could not set the password."
+    }
+  },
+  "role": {
+    "SUPER_ADMIN": "Super Admin",
+    "ADMIN": "Admin",
+    "MANAGER": "Manager",
+    "EMPLOYEE": "Employee"
+  },
+  "department": {
+    "OPERATIONS": "Operations",
+    "IT": "IT",
+    "CONSULTING": "Consulting",
+    "MARKETING": "Marketing",
+    "BUSINESS": "Business",
+    "HR": "HR"
+  },
+  "position": {
+    "CEO": "CEO",
+    "CTO": "CTO",
+    "CFO": "CFO",
+    "COO": "COO",
+    "DEPT_MANAGER": "Dept. Manager",
+    "EXECUTIVE": "Executive",
+    "OFFICER": "Officer",
+    "SPECIALIST": "Specialist"
+  }
+}

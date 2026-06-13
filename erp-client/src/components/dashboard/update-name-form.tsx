@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
+import { useTranslations } from 'next-intl';
 import { UpdateMyNameDto } from '@evertrust/shared';
 import type { MeDto } from '@evertrust/shared';
 import { useUpdateMyName } from '@/hooks/use-auth';
@@ -28,6 +29,7 @@ import { Input } from '@/components/ui/input';
 // Demo audited mutation: PATCH /users/me. The cache update lives in useUpdateMyName,
 // so on success the displayed name refreshes everywhere without a refetch.
 export function UpdateNameForm({ user }: { user: MeDto }) {
+  const t = useTranslations('dashboard');
   const update = useUpdateMyName();
   const form = useForm<UpdateMyNameDto>({
     resolver: zodResolver(UpdateMyNameDto),
@@ -41,20 +43,22 @@ export function UpdateNameForm({ user }: { user: MeDto }) {
 
   function onSubmit(values: UpdateMyNameDto) {
     if (values.name === user.name) {
-      toast.info('Name is unchanged.');
+      toast.info(t('profile.unchanged'));
       return;
     }
     update.mutate(values, {
-      onSuccess: (updated) => toast.success(`Name updated to “${updated.name}”.`),
-      onError: (error) => toast.error(error.message ?? 'Could not update your name.'),
+      onSuccess: (updated) =>
+        toast.success(t('profile.updated', { name: updated.name })),
+      onError: (error) =>
+        toast.error(error.message ?? t('profile.updateError')),
     });
   }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Profile</CardTitle>
-        <CardDescription>Update your display name. This action is audited.</CardDescription>
+        <CardTitle>{t('profile.title')}</CardTitle>
+        <CardDescription>{t('profile.description')}</CardDescription>
       </CardHeader>
       <CardContent>
         <Form {...form}>
@@ -64,7 +68,7 @@ export function UpdateNameForm({ user }: { user: MeDto }) {
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Display name</FormLabel>
+                  <FormLabel>{t('profile.nameLabel')}</FormLabel>
                   <FormControl>
                     <Input autoComplete="name" {...field} />
                   </FormControl>
@@ -74,7 +78,7 @@ export function UpdateNameForm({ user }: { user: MeDto }) {
             />
             <div className="flex justify-end">
               <Button type="submit" disabled={update.isPending}>
-                {update.isPending ? 'Saving…' : 'Save changes'}
+                {update.isPending ? t('profile.saving') : t('profile.save')}
               </Button>
             </div>
           </form>

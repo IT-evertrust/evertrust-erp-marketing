@@ -1885,6 +1885,25 @@ export const NicheDto = z.object({
 });
 export type NicheDto = z.infer<typeof NicheDto>;
 
+// Body for POST /niches (JWT) — create a niche directly (the niches-management
+// view, vs. the find-or-create the AIM launch does). Deduped by (org,
+// slugify(name)) server-side — a slug clash is a 409. `industryId` optionally
+// assigns the grouping parent on create (null/omitted = unassigned); a non-null
+// id must belong to the caller's org or the create 404s. Grouping/search only.
+export const CreateNicheDto = z.object({
+  name: z.string().min(1).max(120),
+  industryId: z.string().uuid().nullable().optional(),
+});
+export type CreateNicheDto = z.infer<typeof CreateNicheDto>;
+
+// Body for PATCH /niches/:id (JWT) — rename a niche. A slug clash with a sibling
+// niche in the same org is a 409. (Industry assignment is a separate route:
+// PATCH /niches/:id/industry.)
+export const UpdateNicheDto = z.object({
+  name: z.string().min(1).max(120),
+});
+export type UpdateNicheDto = z.infer<typeof UpdateNicheDto>;
+
 // Read shape of a niche_target archetype row.
 export const NicheTargetDto = z.object({
   id: z.string().uuid(),

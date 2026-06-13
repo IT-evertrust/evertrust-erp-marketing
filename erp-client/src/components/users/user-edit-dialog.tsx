@@ -1,13 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import {
-  DEPARTMENT_LABELS,
   Department,
-  POSITION_LABELS,
   Position,
-  ROLE_LABELS,
   UserRole,
   type AdminUserDto,
   type UpdateUserDto,
@@ -47,6 +45,7 @@ export function UserEditDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useTranslations('users');
   const update = useUpdateUser();
   const [name, setName] = useState(user.name);
   const [phone, setPhone] = useState(user.phone ?? '');
@@ -76,10 +75,10 @@ export function UserEditDialog({
       { id: user.id, patch },
       {
         onSuccess: () => {
-          toast.success(`Saved changes to ${user.name}.`);
+          toast.success(t('editProfile.savedToast', { name: user.name }));
           onOpenChange(false);
         },
-        onError: (e) => toast.error(e.message ?? 'Could not save changes.'),
+        onError: (e) => toast.error(e.message ?? t('editProfile.saveError')),
       },
     );
   }
@@ -88,13 +87,13 @@ export function UserEditDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Edit {user.name}</DialogTitle>
+          <DialogTitle>{t('editProfile.title', { name: user.name })}</DialogTitle>
           <DialogDescription>{user.email}</DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="edit-name">Name</Label>
+            <Label htmlFor="edit-name">{t('editProfile.name')}</Label>
             <Input
               id="edit-name"
               value={name}
@@ -103,7 +102,7 @@ export function UserEditDialog({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label>Role</Label>
+            <Label>{t('editProfile.role')}</Label>
             <Select
               value={role}
               disabled={roleLocked}
@@ -115,20 +114,20 @@ export function UserEditDialog({
               <SelectContent>
                 {UserRole.options.map((r) => (
                   <SelectItem key={r} value={r}>
-                    {ROLE_LABELS[r]}
+                    {t(`role.${r}`)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             {roleLocked ? (
               <p className="text-xs text-amber-600 dark:text-amber-400">
-                🔒 Super Admin role is locked
+                {t('editProfile.roleLocked')}
               </p>
             ) : null}
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label>Position</Label>
+            <Label>{t('editProfile.position')}</Label>
             <Select
               value={position ?? NONE}
               onValueChange={(v) =>
@@ -139,10 +138,10 @@ export function UserEditDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={NONE}>— None —</SelectItem>
+                <SelectItem value={NONE}>{t('editProfile.none')}</SelectItem>
                 {Position.options.map((p) => (
                   <SelectItem key={p} value={p}>
-                    {POSITION_LABELS[p]}
+                    {t(`position.${p}`)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -150,7 +149,7 @@ export function UserEditDialog({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label>Department</Label>
+            <Label>{t('editProfile.department')}</Label>
             <Select
               value={department ?? NONE}
               onValueChange={(v) =>
@@ -161,10 +160,10 @@ export function UserEditDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={NONE}>— None —</SelectItem>
+                <SelectItem value={NONE}>{t('editProfile.none')}</SelectItem>
                 {Department.options.map((d) => (
                   <SelectItem key={d} value={d}>
-                    {DEPARTMENT_LABELS[d]}
+                    {t(`department.${d}`)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -172,7 +171,7 @@ export function UserEditDialog({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="edit-phone">Phone</Label>
+            <Label htmlFor="edit-phone">{t('editProfile.phone')}</Label>
             <Input
               id="edit-phone"
               type="tel"
@@ -183,17 +182,16 @@ export function UserEditDialog({
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Email is changed by a Super Admin on the Users page; permissions are
-            edited there too.
+            {t('editProfile.footnote')}
           </p>
         </div>
 
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('editProfile.cancel')}
           </Button>
           <Button type="button" onClick={save} disabled={update.isPending}>
-            {update.isPending ? 'Saving…' : 'Save changes'}
+            {update.isPending ? t('editProfile.saving') : t('editProfile.submit')}
           </Button>
         </DialogFooter>
       </DialogContent>

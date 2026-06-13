@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useMarketingReport } from '@/hooks/use-arsenal';
 import { useMarketingDrafts } from '@/hooks/use-marketing';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -9,18 +10,19 @@ import { cn } from '@/lib/utils';
 // Emails → Replies → Meetings are REAL arsenal_runs counts (null shows "—" until n8n
 // reports them via the run callback); "Drafts to review" is the live RAG-draft queue.
 export function MarketingFunnelBar() {
+  const t = useTranslations('marketing');
   const report = useMarketingReport('week', null);
   const f = report.data?.funnel;
   const loading = report.isLoading;
   const draftsQ = useMarketingDrafts();
   const draftCount = draftsQ.data?.count ?? null;
 
-  const cells: { label: string; value: number | null; accent?: boolean }[] = [
-    { label: 'Leads', value: f?.leadsFound ?? null },
-    { label: 'Emails', value: f?.emailsSent ?? null },
-    { label: 'Replies', value: f?.repliesHandled ?? null },
-    { label: 'Meetings', value: f?.meetingsBooked ?? null },
-    { label: 'Drafts to review', value: draftCount, accent: true },
+  const cells: { id: string; label: string; value: number | null; accent?: boolean }[] = [
+    { id: 'leads', label: t('funnel.leads'), value: f?.leadsFound ?? null },
+    { id: 'emails', label: t('funnel.emails'), value: f?.emailsSent ?? null },
+    { id: 'replies', label: t('funnel.replies'), value: f?.repliesHandled ?? null },
+    { id: 'meetings', label: t('funnel.meetings'), value: f?.meetingsBooked ?? null },
+    { id: 'drafts', label: t('funnel.draftsToReview'), value: draftCount, accent: true },
   ];
 
   return (
@@ -29,7 +31,7 @@ export function MarketingFunnelBar() {
         const lit = c.accent && (c.value ?? 0) > 0;
         return (
           <div
-            key={c.label}
+            key={c.id}
             className={cn(
               'rounded-xl border bg-card px-3.5 py-2.5',
               lit && 'border-amber-500/40 bg-amber-500/5',

@@ -1,12 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { AlarmClock, Building2, Loader2, Plus, Sparkles, Trophy } from 'lucide-react';
 import {
-  DEPARTMENT_LABELS,
-  KPI_CATEGORY_LABELS,
-  SCORE_ZONE_META,
   bonusTierForScore,
+  type Department,
   type KpiCategory,
   type PerformanceOverviewDto,
   type ScorecardDto,
@@ -53,10 +52,16 @@ const ZONE: Record<
   RED: { hex: '#f87171', text: 'text-red-400', chip: 'bg-red-500/15 text-red-400' },
 };
 const CATS: KpiCategory[] = ['OUTPUT', 'QUALITY', 'SPEED', 'COMPLIANCE', 'REVENUE'];
+// next-intl's typed `t` is parameterised; a loose alias keeps the helper
+// signatures readable without importing the generated message shape.
+type T = ReturnType<typeof useTranslations>;
 const initials = (n: string) =>
   n.split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
-const deptLabel = (d: ScorecardDto['department']) =>
-  d ? DEPARTMENT_LABELS[d] : 'Unassigned';
+const deptLabel = (d: ScorecardDto['department'], t: T) =>
+  d ? t(`department.${d as Department}`) : t('unassigned');
+// bonusTierForScore returns a localisable pct (100/75/50/0); map it to a key.
+const bonusKey = (pct: number) =>
+  pct >= 100 ? 'full' : pct >= 75 ? 'pct75' : pct >= 50 ? 'pct50' : 'none';
 
 function Ring({ score, size = 60 }: { score: number; size?: number }) {
   const z = ZONE[scoreZone(score)];
@@ -82,6 +87,7 @@ function scoreZone(s: number): ScorecardZone {
 }
 
 export function PerformanceView() {
+  const t = useTranslations('performance');
   const scorecards = useScorecards('WEEKLY');
   const overview = useOverview('WEEKLY');
   const [selected, setSelected] = useState<ScorecardDto | null>(null);
@@ -105,20 +111,20 @@ export function PerformanceView() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="Performance"
-        description="KPI scorecards from real ERP data — 0–100, color-zoned. KPIs without a data source show “—”, never estimated."
+        title={t('title')}
+        description={t('description')}
       />
 
       {scorecards.isError ? (
         <p className="text-sm text-destructive">
-          Could not load scorecards: {scorecards.error.message}
+          {t('loadError', { message: scorecards.error.message })}
         </p>
       ) : null}
 
       <Tabs value={tab} onValueChange={onTab} className="flex flex-col gap-5">
         <TabsList>
-          <TabsTrigger value="scorecards">Scorecards</TabsTrigger>
-          <TabsTrigger value="executive">Executive</TabsTrigger>
+          <TabsTrigger value="scorecards">{t('tabs.scorecards')}</TabsTrigger>
+          <TabsTrigger value="executive">{t('tabs.executive')}</TabsTrigger>
         </TabsList>
 
         {/* ---- Layout B: leaderboard + scorecard drawer ---- */}
@@ -132,7 +138,7 @@ export function PerformanceView() {
               <Can permission="performance:write">
                 <div className="flex justify-end">
                   <Button size="sm" variant="outline" onClick={() => setRecordOpen(true)}>
-                    <Plus /> Record KPI
+                    <Plus /> {t('recordKpi')}
                   </Button>
                 </div>
               </Can>
@@ -141,13 +147,13 @@ export function PerformanceView() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-10">#</TableHead>
-                      <TableHead>Employee</TableHead>
-                      <TableHead>Team</TableHead>
-                      <TableHead>Score</TableHead>
-                      <TableHead>Zone</TableHead>
-                      <TableHead className="hidden md:table-cell">Categories</TableHead>
-                      <TableHead>Bonus</TableHead>
+                      <TableHead className="w-10">{t('table.rank')}</TableHead>
+                      <TableHead>{t('table.employee')}</TableHead>
+                      <TableHead>{t('table.team')}</TableHead>
+                      <TableHead>{t('table.score')}</TableHead>
+                      <TableHead>{t('table.zone')}</TableHead>
+                      <TableHead className="hidden md:table-cell">{t('table.categories')}</TableHead>
+                      <TableHead>{t('table.bonus')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -181,14 +187,14 @@ export function PerformanceView() {
                             </div>
                           </TableCell>
                           <TableCell className="text-[12.5px] text-muted-foreground">
-                            {deptLabel(c.department)}
+                            {deptLabel(c.department, t)}
                           </TableCell>
                           <TableCell className={cn('text-base font-bold tabular-nums', z.text)}>
                             {c.composite}
                           </TableCell>
                           <TableCell>
                             <span className={cn('rounded-full px-2.5 py-0.5 text-[10.5px] font-bold', z.chip)}>
-                              {SCORE_ZONE_META[c.zone].label}
+                              {t(`zone.${c.zone}`)}
                             </span>
                           </TableCell>
                           <TableCell className="hidden md:table-cell">
@@ -198,7 +204,7 @@ export function PerformanceView() {
                                 return (
                                   <span
                                     key={cat}
-                                    title={`${KPI_CATEGORY_LABELS[cat]}: ${v ?? '—'}`}
+                                    title={`${t(`category.${cat}`)}: ${v ?? '—'}`}
                                     className="w-2 rounded-sm bg-muted"
                                     style={{ height: 22 }}
                                   >
@@ -216,7 +222,7 @@ export function PerformanceView() {
                             </div>
                           </TableCell>
                           <TableCell className="text-[12.5px] text-muted-foreground">
-                            {bonusTierForScore(c.composite).label}
+                            {t(`bonus.${bonusKey(bonusTierForScore(c.composite).pct)}`)}
                           </TableCell>
                         </TableRow>
                       );
@@ -247,6 +253,7 @@ export function PerformanceView() {
 }
 
 function Callouts({ cards }: { cards: ScorecardDto[] }) {
+  const t = useTranslations('performance');
   const top = cards.slice(0, 3);
   const bottom = cards.slice(-2).reverse();
   const Chip = ({ c }: { c: ScorecardDto }) => {
@@ -264,13 +271,13 @@ function Callouts({ cards }: { cards: ScorecardDto[] }) {
     <div className="grid gap-3 md:grid-cols-2">
       <div className="rounded-xl border border-l-2 border-l-emerald-500 bg-card p-4">
         <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          <Trophy className="size-3.5 text-emerald-400" /> Top performers
+          <Trophy className="size-3.5 text-emerald-400" /> {t('callouts.topPerformers')}
         </div>
         <div className="flex flex-wrap gap-2">{top.map((c) => <Chip key={c.userId} c={c} />)}</div>
       </div>
       <div className="rounded-xl border border-l-2 border-l-red-500 bg-card p-4">
         <div className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-          <AlarmClock className="size-3.5 text-red-400" /> Needs review
+          <AlarmClock className="size-3.5 text-red-400" /> {t('callouts.needsReview')}
         </div>
         <div className="flex flex-wrap gap-2">{bottom.map((c) => <Chip key={c.userId} c={c} />)}</div>
       </div>
@@ -285,6 +292,7 @@ function ScorecardDialog({
   card: ScorecardDto | null;
   onOpenChange: (o: boolean) => void;
 }) {
+  const t = useTranslations('performance');
   return (
     <Dialog open={!!card} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[88vh] overflow-auto sm:max-w-lg">
@@ -296,10 +304,10 @@ function ScorecardDialog({
                 <div>
                   <DialogTitle>{card.userName}</DialogTitle>
                   <DialogDescription>
-                    {[card.position, deptLabel(card.department)].filter(Boolean).join(' · ')}
+                    {[card.position, deptLabel(card.department, t)].filter(Boolean).join(' · ')}
                   </DialogDescription>
                   <span className={cn('mt-1.5 inline-block rounded-full px-2.5 py-0.5 text-[11px] font-bold', ZONE[card.zone].chip)}>
-                    {SCORE_ZONE_META[card.zone].label} · {bonusTierForScore(card.composite).label}
+                    {t(`zone.${card.zone}`)} · {t(`bonus.${bonusKey(bonusTierForScore(card.composite).pct)}`)}
                   </span>
                 </div>
               </div>
@@ -307,14 +315,14 @@ function ScorecardDialog({
 
             <div className="mt-1">
               <div className="mb-2 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
-                KPI categories
+                {t('scorecardDialog.kpiCategories')}
               </div>
               <div className="flex flex-col gap-1.5">
                 {CATS.map((cat) => {
                   const v = card.categoryScores?.[cat];
                   return (
                     <div key={cat} className="grid grid-cols-[90px_1fr_30px] items-center gap-2 text-[12px]">
-                      <span className="text-muted-foreground">{KPI_CATEGORY_LABELS[cat]}</span>
+                      <span className="text-muted-foreground">{t(`category.${cat}`)}</span>
                       <span className="h-1.5 overflow-hidden rounded-full bg-muted">
                         <span
                           className="block h-full rounded-full"
@@ -330,20 +338,20 @@ function ScorecardDialog({
 
             <div className="mt-3">
               <div className="mb-1 text-[10.5px] font-semibold uppercase tracking-wide text-muted-foreground">
-                KPIs · this week vs target
+                {t('scorecardDialog.kpisHeading')}
               </div>
               <div className="flex flex-col">
                 {card.kpis.map((k) => (
                   <div key={k.key} className="flex items-center gap-2.5 border-b py-2 text-[12.5px] last:border-0">
                     <span className={cn('w-16 shrink-0 rounded text-center text-[9px] font-bold', srcChip(k.source))}>
-                      {k.source === 'NA' ? 'NO DATA' : k.source}
+                      {k.source === 'NA' ? t('scorecardDialog.noData') : k.source}
                     </span>
                     <span className="flex-1">{k.label}</span>
                     <span className={cn('font-bold tabular-nums', k.value == null && 'text-muted-foreground')}>
                       {k.value ?? '—'}
                     </span>
                     <span className="w-16 text-right text-[11px] text-muted-foreground">
-                      target {k.target ?? '—'}
+                      {t('scorecardDialog.target', { value: k.target ?? '—' })}
                     </span>
                   </div>
                 ))}
@@ -364,6 +372,7 @@ function srcChip(s: string): string {
 }
 
 function ExecutiveTab({ data }: { data: PerformanceOverviewDto }) {
+  const t = useTranslations('performance');
   const Kpi = ({ n, l, tone }: { n: number | string; l: string; tone?: string }) => (
     <div className="rounded-xl border bg-card px-4 py-3.5">
       <div className={cn('text-2xl font-bold tabular-nums', tone)}>{n}</div>
@@ -373,16 +382,16 @@ function ExecutiveTab({ data }: { data: PerformanceOverviewDto }) {
   return (
     <div className="flex flex-col gap-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Kpi n={data.companyAvg} l="Company avg score" />
-        <Kpi n={data.members} l="Members scored" />
-        <Kpi n={data.highPerformers} l="High performers" tone="text-emerald-400" />
-        <Kpi n={data.needsAttention} l="Need attention" tone="text-red-400" />
+        <Kpi n={data.companyAvg} l={t('executive.companyAvg')} />
+        <Kpi n={data.members} l={t('executive.membersScored')} />
+        <Kpi n={data.highPerformers} l={t('executive.highPerformers')} tone="text-emerald-400" />
+        <Kpi n={data.needsAttention} l={t('executive.needAttention')} tone="text-red-400" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-xl border bg-card p-4">
           <div className="mb-3 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            <Building2 className="size-3.5" /> Department health
+            <Building2 className="size-3.5" /> {t('executive.departmentHealth')}
           </div>
           <div className="grid gap-2.5 sm:grid-cols-2">
             {data.departments.map((d) => {
@@ -393,7 +402,7 @@ function ExecutiveTab({ data }: { data: PerformanceOverviewDto }) {
                   <div className="mt-1 flex items-end gap-2">
                     <span className={cn('text-xl font-bold tabular-nums', z.text)}>{d.avg}</span>
                     <span className="mb-0.5 text-[11px] text-muted-foreground">
-                      avg · {d.count} · top {d.topName?.split(' ')[0] ?? '—'}
+                      {t('executive.deptMeta', { count: d.count, top: d.topName?.split(' ')[0] ?? '—' })}
                     </span>
                   </div>
                   <span className="mt-2 block h-1.5 overflow-hidden rounded-full bg-muted">
@@ -407,7 +416,7 @@ function ExecutiveTab({ data }: { data: PerformanceOverviewDto }) {
 
         <div className="rounded-xl border bg-card p-4">
           <div className="mb-3 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            <AlarmClock className="size-3.5" /> Needs attention
+            <AlarmClock className="size-3.5" /> {t('executive.needsAttention')}
           </div>
           <div className="flex flex-col gap-2">
             {data.attention.map((c) => {
@@ -419,7 +428,7 @@ function ExecutiveTab({ data }: { data: PerformanceOverviewDto }) {
                   </span>
                   <div className="flex-1">
                     <div className="text-[13px] font-medium">{c.userName}</div>
-                    <div className="text-[11px] text-muted-foreground">{deptLabel(c.department)}</div>
+                    <div className="text-[11px] text-muted-foreground">{deptLabel(c.department, t)}</div>
                   </div>
                   <span className={cn('text-base font-bold tabular-nums', z.text)}>{c.composite}</span>
                 </div>
@@ -435,6 +444,7 @@ function ExecutiveTab({ data }: { data: PerformanceOverviewDto }) {
 }
 
 function BriefPanel() {
+  const t = useTranslations('performance');
   const brief = useBrief('WEEKLY');
   const gen = useGenerateBrief('WEEKLY');
   const data = brief.data;
@@ -444,11 +454,11 @@ function BriefPanel() {
     <div className="rounded-xl border border-violet-500/25 bg-violet-500/[0.04] p-4">
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-violet-400">
-          <Sparkles className="size-3.5" /> AI Management brief
+          <Sparkles className="size-3.5" /> {t('brief.title')}
         </div>
         {data?.generatedAt ? (
           <span className="text-[11px] text-muted-foreground">
-            generated {new Date(data.generatedAt).toLocaleString()}
+            {t('brief.generatedAt', { date: new Date(data.generatedAt).toLocaleString() })}
           </span>
         ) : null}
         <Can permission="performance:write">
@@ -458,19 +468,18 @@ function BriefPanel() {
             className="ml-auto"
             onClick={() => gen.mutate()}
             disabled={gen.isPending || !configured}
-            title={configured ? '' : 'Set ANTHROPIC_API_KEY to enable'}
+            title={configured ? '' : t('brief.enableTooltip')}
           >
             {gen.isPending ? <Loader2 className="animate-spin" /> : <Sparkles />}
-            {summary ? 'Regenerate' : 'Generate brief'}
+            {summary ? t('brief.regenerate') : t('brief.generate')}
           </Button>
         </Can>
       </div>
       {!configured ? (
         <p className="text-[12.5px] leading-relaxed text-muted-foreground">
-          The AI brief isn’t configured — set <code className="rounded bg-muted px-1">ANTHROPIC_API_KEY</code> on
-          the API to enable the Claude-generated narrative (top movers, deviations, missed deadlines,
-          revenue opportunities, recommended action). Until then the computed rollup above is the
-          source of truth — no invented summary.
+          {t.rich('brief.notConfigured', {
+            code: (chunks) => <code className="rounded bg-muted px-1">{chunks}</code>,
+          })}
         </p>
       ) : summary ? (
         <>
@@ -482,14 +491,14 @@ function BriefPanel() {
           </ul>
           <div className="mt-3 rounded-lg border bg-card p-3 text-[12.5px]">
             <div className="text-[10.5px] font-semibold uppercase tracking-wide text-violet-400">
-              Top action
+              {t('brief.topAction')}
             </div>
             {summary.topAction}
           </div>
         </>
       ) : (
         <p className="text-[12.5px] text-muted-foreground">
-          No brief yet — click “Generate brief” to summarize the current scorecards via Claude.
+          {t('brief.empty')}
         </p>
       )}
       {gen.isError ? (
@@ -500,12 +509,12 @@ function BriefPanel() {
 }
 
 function EmptyState() {
+  const t = useTranslations('performance');
   return (
     <div className="rounded-xl border border-dashed bg-card/40 p-10 text-center">
-      <p className="text-sm font-medium">No scorecards for this period yet.</p>
+      <p className="text-sm font-medium">{t('emptyState.title')}</p>
       <p className="mt-1 text-[12.5px] text-muted-foreground">
-        Scorecards appear once KPI values are recorded for the week (auto-collected from ERP data or
-        entered by a manager).
+        {t('emptyState.description')}
       </p>
     </div>
   );

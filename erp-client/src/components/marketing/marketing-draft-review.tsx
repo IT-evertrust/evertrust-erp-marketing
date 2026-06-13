@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { RefreshCw } from 'lucide-react';
 import type { MarketingDraftDto } from '@evertrust/shared';
@@ -39,6 +40,7 @@ function keyOf(d: MarketingDraftDto, i: number) {
 }
 
 export function MarketingDraftReview() {
+  const t = useTranslations('marketing');
   const drafts = useMarketingDrafts();
   const send = useSendDraft();
   const scan = useScanLeads();
@@ -61,7 +63,7 @@ export function MarketingDraftReview() {
   const header = (
     <div className="flex flex-wrap items-center justify-between gap-2">
       <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
-        RAG draft review
+        {t('draftReview.heading')}
       </span>
       <Can permission="campaigns:write">
         <Button
@@ -71,7 +73,7 @@ export function MarketingDraftReview() {
           disabled={scan.isPending}
         >
           <RefreshCw className={cn('size-4', scan.isPending && 'animate-spin')} />
-          {scan.isPending ? 'Scanning…' : 'Sync from leads'}
+          {scan.isPending ? t('draftReview.syncing') : t('draftReview.sync')}
         </Button>
       </Can>
     </div>
@@ -89,15 +91,16 @@ export function MarketingDraftReview() {
     if (drafts.isError) {
       return (
         <Card className="p-6 text-sm text-muted-foreground">
-          Could not load drafts: {drafts.error.message}
+          {t('draftReview.loadError', { message: drafts.error.message })}
         </Card>
       );
     }
     if (drafts.data && !drafts.data.configured) {
       return (
         <Card className="p-6 text-sm text-muted-foreground">
-          Draft Review isn&rsquo;t connected yet — set <code>N8N_API_URL</code>{' '}
-          on the API so it can read the RAG Agent workflow.
+          {t.rich('draftReview.notConnected', {
+            code: (chunks) => <code>{chunks}</code>,
+          })}
         </Card>
       );
     }
@@ -105,9 +108,9 @@ export function MarketingDraftReview() {
       return (
         <Card className="flex flex-col items-center justify-center gap-2 p-10 text-center text-sm text-muted-foreground">
           <span className="text-2xl">✓</span>
-          No drafts awaiting review. Hit <strong>Sync from leads</strong> to scan
-          every campaign&rsquo;s leads sheet for unsure replies, or wait for the
-          RAG Agent&rsquo;s hourly run.
+          {t.rich('draftReview.empty', {
+            strong: (chunks) => <strong>{chunks}</strong>,
+          })}
         </Card>
       );
     }
@@ -122,7 +125,7 @@ export function MarketingDraftReview() {
 
     function onSend() {
       if (!d.draftId || !d.clientEmail) {
-        toast.error('This draft has no Gmail draft id — it can’t be sent from here.');
+        toast.error(t('draftReview.noDraftId'));
         return;
       }
       send.mutate(
@@ -137,10 +140,12 @@ export function MarketingDraftReview() {
         {
           onSuccess: (r) => {
             if (r.ok) {
-              toast.success(`Sent to ${d.company ?? d.clientEmail}.`);
+              toast.success(
+                t('draftReview.sent', { target: d.company ?? d.clientEmail ?? '' }),
+              );
               setSelected(null);
             } else {
-              toast.error(r.error ?? 'Send failed.');
+              toast.error(r.error ?? t('draftReview.sendFailed'));
             }
           },
           onError: (e) => toast.error(e.message),
@@ -153,7 +158,7 @@ export function MarketingDraftReview() {
         {/* queue */}
         <Card className="h-fit overflow-hidden p-0">
           <div className="flex items-center justify-between border-b px-4 py-3 text-[11px] uppercase tracking-wider text-muted-foreground">
-            <span>Awaiting review</span>
+            <span>{t('draftReview.awaitingReview')}</span>
             <span className="text-amber-500">{list.length}</span>
           </div>
           {list.map((dr, i) => {
@@ -168,7 +173,7 @@ export function MarketingDraftReview() {
                 )}
               >
                 <div className="text-[13px] font-semibold">
-                  {dr.company ?? dr.clientEmail ?? 'Unknown'}
+                  {dr.company ?? dr.clientEmail ?? t('draftReview.unknown')}
                 </div>
                 {dr.leadQuestion ? (
                   <div className="truncate text-[11.8px] text-muted-foreground">
@@ -188,7 +193,7 @@ export function MarketingDraftReview() {
                   ) : null}
                   {!dr.sendable ? (
                     <span className="rounded-full bg-muted px-2 py-0.5 text-[10.5px] font-medium text-muted-foreground">
-                      not sendable
+                      {t('draftReview.notSendable')}
                     </span>
                   ) : null}
                 </div>
@@ -201,10 +206,10 @@ export function MarketingDraftReview() {
         <Card className="p-5">
           <div className="mb-1 flex flex-wrap items-center gap-2">
             <h2 className="text-[17px] font-semibold">
-              {d.company ?? d.clientEmail ?? 'Unknown'}
+              {d.company ?? d.clientEmail ?? t('draftReview.unknown')}
             </h2>
             <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-bold text-amber-500">
-              ✉ Gmail draft · not sent
+              {t('draftReview.gmailDraftBadge')}
             </span>
             {d.source ? (
               <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
@@ -217,7 +222,7 @@ export function MarketingDraftReview() {
             {d.unsureArea ? (
               <>
                 {' '}
-                · unsure area:{' '}
+                · {t('draftReview.unsureAreaLabel')}:{' '}
                 <span className="font-semibold capitalize text-foreground">
                   {d.unsureArea}
                 </span>
@@ -228,7 +233,7 @@ export function MarketingDraftReview() {
           {d.leadQuestion || d.unsureSection || d.explanation ? (
             <>
               <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                Context — why this needs a reply
+                {t('draftReview.contextHeading')}
               </p>
               <div className="rounded-xl border bg-muted/30 px-4 py-3">
                 {d.leadQuestion ? (
@@ -239,13 +244,17 @@ export function MarketingDraftReview() {
                 <div className="mt-3 grid grid-cols-[130px_1fr] gap-x-3 gap-y-1.5 text-[12.5px]">
                   {d.unsureSection ? (
                     <>
-                      <div className="text-muted-foreground">Unsure about</div>
+                      <div className="text-muted-foreground">
+                        {t('draftReview.unsureAbout')}
+                      </div>
                       <div>{d.unsureSection}</div>
                     </>
                   ) : null}
                   {d.explanation ? (
                     <>
-                      <div className="text-muted-foreground">Why</div>
+                      <div className="text-muted-foreground">
+                        {t('draftReview.why')}
+                      </div>
                       <div>{d.explanation}</div>
                     </>
                   ) : null}
@@ -255,38 +264,37 @@ export function MarketingDraftReview() {
           ) : null}
 
           <p className="mb-2 mt-4 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-            Drafted reply — edit before sending
+            {t('draftReview.draftedReply')}
           </p>
           <Input
             ref={subjectRef}
             className="mb-2"
             defaultValue={d.subject ?? ''}
             key={`${curKey}-subj`}
-            placeholder="Subject"
+            placeholder={t('draftReview.subjectPlaceholder')}
           />
           <Textarea
             ref={bodyRef}
             className="min-h-[200px] whitespace-pre-wrap"
             defaultValue={d.body ?? ''}
             key={`${curKey}-body`}
-            placeholder="Reply body"
+            placeholder={t('draftReview.bodyPlaceholder')}
           />
 
           {!d.sendable ? (
             <div className="mt-2.5 rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
-              ⚠ This draft predates draft-id capture, so it can&rsquo;t be sent
-              from the ERP. Newer drafts carry a Gmail draft id and are sendable.
+              {t('draftReview.notSendableWarning')}
             </div>
           ) : null}
 
           <div className="mt-3.5 flex flex-wrap items-center gap-2">
             <Can permission="campaigns:write">
               <Button onClick={onSend} disabled={sending || !d.sendable}>
-                {sending ? 'Sending…' : '✓ Approve & send'}
+                {sending ? t('draftReview.sending') : t('draftReview.approveSend')}
               </Button>
             </Can>
             <span className="ml-auto text-[11.5px] text-muted-foreground">
-              n8n sends the final text on approve · then deletes the draft
+              {t('draftReview.sendHint')}
             </span>
           </div>
         </Card>

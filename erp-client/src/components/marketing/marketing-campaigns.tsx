@@ -2,9 +2,9 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { ArrowRight, ChevronDown, ExternalLink, Files } from 'lucide-react';
 import {
-  ARSENAL_STAGE_META,
   isArsenalRunOk,
   type ArsenalRunDto,
   type CampaignDto,
@@ -38,6 +38,7 @@ import { DeleteCampaignButton } from '@/components/growth/delete-campaign-button
 // as lifecycle-pill cards with a real per-campaign mini funnel and an expandable
 // per-stage activity log.
 export function MarketingCampaigns() {
+  const t = useTranslations('marketing');
   const campaigns = useCampaigns();
   const runs = useArsenalRuns();
   const report = useMarketingReport('week', null);
@@ -59,31 +60,31 @@ export function MarketingCampaigns() {
   }, [runList]);
 
   const active = list.filter((c) => c.lifecycle === 'ACTIVE').length;
-  const tiles: { label: string; value: number | null }[] = [
-    { label: 'Campaigns', value: list.length },
-    { label: 'Active', value: active },
-    { label: 'Leads', value: f?.leadsFound ?? null },
-    { label: 'Replies', value: f?.repliesHandled ?? null },
-    { label: 'Meetings', value: f?.meetingsBooked ?? null },
+  const tiles: { key: string; value: number | null }[] = [
+    { key: 'campaigns', value: list.length },
+    { key: 'active', value: active },
+    { key: 'leads', value: f?.leadsFound ?? null },
+    { key: 'replies', value: f?.repliesHandled ?? null },
+    { key: 'meetings', value: f?.meetingsBooked ?? null },
   ];
 
   return (
     <div className="flex flex-col gap-5">
       {/* KPI tiles */}
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
-        {tiles.map((t) => (
-          <div key={t.label} className="rounded-xl border bg-card px-3.5 py-2.5">
+        {tiles.map((tile) => (
+          <div key={tile.key} className="rounded-xl border bg-card px-3.5 py-2.5">
             <div className="text-lg font-bold tabular-nums">
               {campaigns.isLoading ? (
                 <Skeleton className="h-6 w-8" />
-              ) : t.value === null ? (
+              ) : tile.value === null ? (
                 <span className="text-muted-foreground/50">—</span>
               ) : (
-                t.value
+                tile.value
               )}
             </div>
             <div className="text-[10.5px] uppercase tracking-wide text-muted-foreground/70">
-              {t.label}
+              {t(`campaigns.tiles.${tile.key}`)}
             </div>
           </div>
         ))}
@@ -92,10 +93,10 @@ export function MarketingCampaigns() {
       {/* header */}
       <div>
         <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
-          Deployed by Growth Engine — track &amp; drill in
+          {t('campaigns.deployedLabel')}
         </p>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          Each card shows the live funnel and stage activity — expand to drill in.
+          {t('campaigns.deployedHint')}
         </p>
       </div>
 
@@ -104,12 +105,11 @@ export function MarketingCampaigns() {
         <Skeleton className="h-24 w-full" />
       ) : campaigns.isError ? (
         <p className="text-sm text-destructive">
-          Could not load campaigns: {campaigns.error.message}
+          {t('campaigns.loadError', { message: campaigns.error.message })}
         </p>
       ) : list.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No campaigns yet — open the <span className="font-medium">Growth Engine</span>{' '}
-          tab and click AIM to launch one.
+          {t.rich('campaigns.empty', { b: (chunks) => <span className="font-medium">{chunks}</span> })}
         </p>
       ) : (
         <ul className="flex flex-col gap-2.5">
@@ -139,15 +139,16 @@ function CampaignCard({
   open: boolean;
   onToggle: () => void;
 }) {
+  const t = useTranslations('marketing');
   const pill = CAMPAIGN_LIFECYCLE_BADGE[c.lifecycle];
   // Per-campaign funnel from the report endpoint (REAL; null/"—" until n8n reports).
   const cReport = useMarketingReport('week', c.id);
   const cf = cReport.data?.funnel;
-  const mini: { k: string; v: number | null }[] = [
-    { k: 'Leads', v: cf?.leadsFound ?? null },
-    { k: 'Emails', v: cf?.emailsSent ?? null },
-    { k: 'Replies', v: cf?.repliesHandled ?? null },
-    { k: 'Mtg', v: cf?.meetingsBooked ?? null },
+  const mini: { k: string; label: string; v: number | null }[] = [
+    { k: 'leads', label: t('campaigns.mini.leads'), v: cf?.leadsFound ?? null },
+    { k: 'emails', label: t('campaigns.mini.emails'), v: cf?.emailsSent ?? null },
+    { k: 'replies', label: t('campaigns.mini.replies'), v: cf?.repliesHandled ?? null },
+    { k: 'meetings', label: t('campaigns.mini.meetings'), v: cf?.meetingsBooked ?? null },
   ];
   const shown = runs.slice(0, 8);
   const [filesOpen, setFilesOpen] = useState(false);
@@ -177,12 +178,12 @@ function CampaignCard({
             pill.className,
           )}
         >
-          {pill.label}
+          {t(`lifecycle.${c.lifecycle}`)}
         </span>
         <span className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-xs text-muted-foreground">
           {mini.map((m) => (
             <span key={m.k}>
-              {m.k}{' '}
+              {m.label}{' '}
               <b className="text-foreground tabular-nums">
                 {m.v === null ? '—' : m.v}
               </b>
@@ -194,26 +195,26 @@ function CampaignCard({
             <RunStageButton
               stage="LEAD_SATELLITE"
               campaignId={c.id}
-              label="Run stage"
+              label={t('campaigns.runStage')}
               variant="outline"
               size="sm"
             />
           </Can>
           <Button variant="outline" size="sm" onClick={() => setFilesOpen(true)}>
             <Files />
-            Details
+            {t('common.details')}
           </Button>
           {c.driveFolderUrl ? (
             <Button asChild variant="outline" size="sm">
               <a href={c.driveFolderUrl} target="_blank" rel="noreferrer">
                 <ExternalLink />
-                Open
+                {t('common.open')}
               </a>
             </Button>
           ) : null}
           <Button asChild variant="outline" size="sm">
             <Link href={`/marketing/${c.id}`}>
-              Manage
+              {t('common.manage')}
               <ArrowRight />
             </Link>
           </Button>
@@ -227,8 +228,7 @@ function CampaignCard({
         <div className="border-t bg-background/50 px-3.5 py-2.5">
           {shown.length === 0 ? (
             <p className="py-1 text-xs text-muted-foreground">
-              No stage activity yet — this campaign&apos;s prep stages (Lead Satellite,
-              Ammo Forge) appear here once they run.
+              {t('campaigns.activityEmpty')}
             </p>
           ) : (
             <ul className="flex flex-col gap-1.5">
@@ -241,7 +241,7 @@ function CampaignCard({
                     )}
                   />
                   <span className="font-medium text-foreground">
-                    {ARSENAL_STAGE_META[r.stage].label}
+                    {t(`stage.${r.stage}`)}
                   </span>
                   <span className="text-muted-foreground">{timeAgo(r.createdAt)}</span>
                   {r.detail ? (
@@ -263,17 +263,18 @@ function CampaignCard({
   );
 }
 
-// Friendly file-type label from a Drive mimeType.
-function fileType(m: string | null): string {
-  if (!m) return 'File';
-  if (m.includes('spreadsheet')) return 'Sheet';
-  if (m.includes('document')) return 'Doc';
-  if (m.includes('presentation')) return 'Slides';
-  if (m.includes('folder')) return 'Folder';
-  if (m.includes('pdf')) return 'PDF';
-  if (m.startsWith('text/')) return 'Text';
-  if (m.startsWith('image/')) return 'Image';
-  return m.split('/').pop() || 'File';
+// Friendly file-type key from a Drive mimeType (translated at the call site).
+// Returns a key from campaigns.fileType.*, or a raw mime subtype as a fallback.
+function fileType(m: string | null): { key: string | null; raw?: string } {
+  if (!m) return { key: 'file' };
+  if (m.includes('spreadsheet')) return { key: 'sheet' };
+  if (m.includes('document')) return { key: 'doc' };
+  if (m.includes('presentation')) return { key: 'slides' };
+  if (m.includes('folder')) return { key: 'folder' };
+  if (m.includes('pdf')) return { key: 'pdf' };
+  if (m.startsWith('text/')) return { key: 'text' };
+  if (m.startsWith('image/')) return { key: 'image' };
+  return { key: null, raw: m.split('/').pop() || undefined };
 }
 
 // Details dialog: a table of every file in the campaign's Drive folder; each row
@@ -287,52 +288,51 @@ function CampaignFilesDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
+  const t = useTranslations('marketing');
   const q = useCampaignFiles(campaign.id, open);
   const files = q.data?.files ?? [];
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{campaign.name || campaign.project} — files</DialogTitle>
+          <DialogTitle>{t('campaigns.files.title', { name: campaign.name || campaign.project })}</DialogTitle>
           <DialogDescription>
-            Files generated for this campaign (niche analysis, templates, …). Click
-            a row to open it.
+            {t('campaigns.files.description')}
           </DialogDescription>
         </DialogHeader>
         {q.isLoading ? (
           <Skeleton className="h-40 w-full" />
         ) : q.isError ? (
           <p className="text-sm text-destructive">
-            Could not load files: {q.error.message}
+            {t('campaigns.files.loadError', { message: q.error.message })}
           </p>
         ) : q.data && !q.data.configured ? (
           <p className="text-sm text-muted-foreground">
-            File listing isn&rsquo;t connected yet (set <code>N8N_API_URL</code> on
-            the API).
+            {t.rich('campaigns.files.notConnected', { code: (chunks) => <code>{chunks}</code> })}
           </p>
         ) : files.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No files generated for this campaign yet — the niche analysis and
-            templates appear here once the workflows run.
+            {t('campaigns.files.empty')}
           </p>
         ) : (
           <div className="max-h-[60vh] overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead className="w-20">Type</TableHead>
-                  <TableHead className="w-28">Modified</TableHead>
+                  <TableHead>{t('campaigns.files.colName')}</TableHead>
+                  <TableHead className="w-20">{t('campaigns.files.colType')}</TableHead>
+                  <TableHead className="w-28">{t('campaigns.files.colModified')}</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {files.map((f) => {
+                  const ft = fileType(f.mimeType);
                   const cells = (
                     <>
                       <TableCell className="font-medium">{f.name}</TableCell>
                       <TableCell className="text-muted-foreground">
-                        {fileType(f.mimeType)}
+                        {ft.key ? t(`campaigns.fileType.${ft.key}`) : (ft.raw ?? t('campaigns.fileType.file'))}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {f.modifiedTime ? timeAgo(f.modifiedTime) : '—'}

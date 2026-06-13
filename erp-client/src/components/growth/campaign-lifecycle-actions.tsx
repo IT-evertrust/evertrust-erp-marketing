@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { Archive, MoreHorizontal, Pause, Play } from 'lucide-react';
 import type { CampaignDto, UpdateCampaignLifecycleDto } from '@evertrust/shared';
@@ -18,30 +19,38 @@ type LifecycleTarget = UpdateCampaignLifecycleDto['lifecycle'];
 // The lifecycle transitions offered for a campaign, by its current state. ARCHIVED
 // is terminal (no actions). DRAFT can't be paused (it hasn't launched), so it only
 // offers Archive. The change is optimistic (the badge flips immediately).
+type LifecycleAction = {
+  target: LifecycleTarget;
+  labelKey: 'pause' | 'resume' | 'archive';
+  successKey: 'pausedToast' | 'resumedToast' | 'archivedToast';
+  errorKey: 'pauseError' | 'resumeError' | 'archiveError';
+  icon: typeof Play;
+};
+
 export function CampaignLifecycleActions({ campaign: c }: { campaign: CampaignDto }) {
+  const t = useTranslations('marketing');
   const setLifecycle = useSetCampaignLifecycle();
   const label = c.name || c.project;
 
-  const actions: { target: LifecycleTarget; label: string; icon: typeof Play }[] = [];
+  const actions: LifecycleAction[] = [];
   if (c.lifecycle === 'ACTIVE') {
-    actions.push({ target: 'PAUSED', label: 'Pause', icon: Pause });
+    actions.push({ target: 'PAUSED', labelKey: 'pause', successKey: 'pausedToast', errorKey: 'pauseError', icon: Pause });
   }
   if (c.lifecycle === 'PAUSED') {
-    actions.push({ target: 'ACTIVE', label: 'Resume', icon: Play });
+    actions.push({ target: 'ACTIVE', labelKey: 'resume', successKey: 'resumedToast', errorKey: 'resumeError', icon: Play });
   }
   if (c.lifecycle !== 'ARCHIVED') {
-    actions.push({ target: 'ARCHIVED', label: 'Archive', icon: Archive });
+    actions.push({ target: 'ARCHIVED', labelKey: 'archive', successKey: 'archivedToast', errorKey: 'archiveError', icon: Archive });
   }
 
   if (actions.length === 0) return null;
 
-  function run(target: LifecycleTarget, actionLabel: string) {
+  function run(a: LifecycleAction) {
     setLifecycle.mutate(
-      { id: c.id, lifecycle: target },
+      { id: c.id, lifecycle: a.target },
       {
-        onSuccess: () => toast.success(`${actionLabel} “${label}”.`),
-        onError: (e) =>
-          toast.error(e.message ?? `Could not ${actionLabel.toLowerCase()} the campaign.`),
+        onSuccess: () => toast.success(t(`actions.${a.successKey}`, { name: label })),
+        onError: (e) => toast.error(e.message ?? t(`actions.${a.errorKey}`)),
       },
     );
   }
@@ -53,7 +62,7 @@ export function CampaignLifecycleActions({ campaign: c }: { campaign: CampaignDt
           variant="ghost"
           size="icon"
           className="shrink-0 text-muted-foreground"
-          aria-label={`Campaign actions for ${label}`}
+          aria-label={t('actions.campaignActions', { name: label })}
           disabled={setLifecycle.isPending}
         >
           <MoreHorizontal />
@@ -68,10 +77,10 @@ export function CampaignLifecycleActions({ campaign: c }: { campaign: CampaignDt
               {destructive && i > 0 ? <DropdownMenuSeparator /> : null}
               <DropdownMenuItem
                 variant={destructive ? 'destructive' : 'default'}
-                onSelect={() => run(a.target, a.label)}
+                onSelect={() => run(a)}
               >
                 <Icon />
-                {a.label}
+                {t(`actions.${a.labelKey}`)}
               </DropdownMenuItem>
             </div>
           );

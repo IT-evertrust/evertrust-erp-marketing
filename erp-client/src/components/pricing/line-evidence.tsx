@@ -1,6 +1,7 @@
 'use client';
 
 import { toast } from 'sonner';
+import { useTranslations } from 'next-intl';
 import { Trash2 } from 'lucide-react';
 import type { PriceObservationDto } from '@evertrust/shared';
 import {
@@ -13,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatDateTime } from '@/lib/tender-format';
-import { PRICE_SOURCE_LABEL, formatMoney } from '@/lib/pricing-format';
+import { formatMoney } from '@/lib/pricing-format';
 import { AddObservationDialog } from './add-observation-dialog';
 
 // Expanded per-line price evidence: lists the line's observations (source,
@@ -29,6 +30,7 @@ export function LineEvidence({
   lineId: string;
   currency: string;
 }) {
+  const t = useTranslations('tenders');
   const observations = useLineItemObservations(lineId);
   const suppliers = useSuppliers();
 
@@ -42,7 +44,7 @@ export function LineEvidence({
     <div className="flex flex-col gap-3 rounded-md border bg-muted/30 p-4">
       <div className="flex items-center justify-between gap-4">
         <h4 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          Price evidence
+          {t('pricing.evidence.title')}
         </h4>
         <Can permission="pricing:write">
           <AddObservationDialog tenderId={tenderId} lineId={lineId} />
@@ -66,7 +68,7 @@ export function LineEvidence({
         </ul>
       ) : (
         <p className="text-sm text-muted-foreground">
-          No price evidence yet. Add an observation to back this line.
+          {t('pricing.evidence.empty')}
         </p>
       )}
     </div>
@@ -86,13 +88,14 @@ function ObservationRow({
   currency: string;
   supplierName: string | null;
 }) {
+  const t = useTranslations('tenders');
   const del = useDeleteObservation(tenderId, lineId);
 
   function remove() {
     del.mutate(obs.id, {
-      onSuccess: () => toast.success('Observation removed.'),
+      onSuccess: () => toast.success(t('pricing.evidence.removedToast')),
       onError: (error) =>
-        toast.error(error.message ?? 'Could not remove observation.'),
+        toast.error(error.message ?? t('pricing.evidence.removeError')),
     });
   }
 
@@ -100,7 +103,7 @@ function ObservationRow({
     <li className="flex items-start justify-between gap-4 py-3 first:pt-0 last:pb-0">
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="secondary">{PRICE_SOURCE_LABEL[obs.source]}</Badge>
+          <Badge variant="secondary">{t(`pricing.priceSource.${obs.source}`)}</Badge>
           <span className="font-medium tabular-nums">
             {formatMoney(obs.price, obs.currency || currency)}
           </span>
@@ -122,8 +125,8 @@ function ObservationRow({
           size="icon-sm"
           onClick={remove}
           disabled={del.isPending}
-          aria-label="Remove observation"
-          title="Remove observation"
+          aria-label={t('pricing.evidence.removeObservation')}
+          title={t('pricing.evidence.removeObservation')}
         >
           <Trash2 />
         </Button>

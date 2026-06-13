@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { Trash2 } from 'lucide-react';
 import type { AdminUserDto } from '@evertrust/shared';
@@ -23,13 +24,14 @@ export function DeleteUserDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
 }) {
+  const t = useTranslations('users');
   const del = useDeleteUser();
   const update = useUpdateUser();
 
   const doDelete = () =>
     del.mutate(user.id, {
       onSuccess: () => {
-        toast.success(`${user.name} deleted`);
+        toast.success(t('delete.deletedToast', { name: user.name }));
         onOpenChange(false);
       },
       // API returns 409 with a clear message when the user has linked records.
@@ -41,7 +43,7 @@ export function DeleteUserDialog({
       { id: user.id, patch: { active: false } },
       {
         onSuccess: () => {
-          toast.success(`${user.name} deactivated`);
+          toast.success(t('delete.deactivatedToast', { name: user.name }));
           onOpenChange(false);
         },
         onError: (e) => toast.error(e.message),
@@ -52,23 +54,24 @@ export function DeleteUserDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Delete member?</DialogTitle>
+          <DialogTitle>{t('delete.title')}</DialogTitle>
           <DialogDescription>
-            Permanently remove <b className="text-foreground">{user.name}</b> ({user.email})? This
-            can&rsquo;t be undone and erases their history. In almost every case{' '}
-            <b className="text-foreground">Deactivate</b> is the right choice — it revokes access but
-            keeps the audit trail. (Members with linked records can&rsquo;t be deleted.)
+            {t.rich('delete.description', {
+              name: user.name,
+              email: user.email,
+              b: (chunks) => <b className="text-foreground">{chunks}</b>,
+            })}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="flex-row items-center justify-between gap-2 sm:justify-between">
           <Button variant="outline" onClick={doDeactivate} disabled={update.isPending}>
-            Deactivate instead
+            {t('delete.deactivateInstead')}
           </Button>
           <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('delete.cancel')}</Button>
             <Button variant="destructive" onClick={doDelete} disabled={del.isPending}>
               <Trash2 className="size-4" />
-              {del.isPending ? 'Deleting…' : 'Delete permanently'}
+              {del.isPending ? t('delete.deleting') : t('delete.delete')}
             </Button>
           </div>
         </DialogFooter>

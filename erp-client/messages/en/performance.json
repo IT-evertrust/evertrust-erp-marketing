@@ -1,0 +1,96 @@
+{
+  "title": "Performance",
+  "description": "KPI scorecards from real ERP data — 0–100, color-zoned. KPIs without a data source show “—”, never estimated.",
+  "loadError": "Could not load scorecards: {message}",
+  "tabs": {
+    "scorecards": "Scorecards",
+    "executive": "Executive"
+  },
+  "recordKpi": "Record KPI",
+  "table": {
+    "rank": "#",
+    "employee": "Employee",
+    "team": "Team",
+    "score": "Score",
+    "zone": "Zone",
+    "categories": "Categories",
+    "bonus": "Bonus"
+  },
+  "unassigned": "Unassigned",
+  "callouts": {
+    "topPerformers": "Top performers",
+    "needsReview": "Needs review"
+  },
+  "scorecardDialog": {
+    "kpiCategories": "KPI categories",
+    "kpisHeading": "KPIs · this week vs target",
+    "noData": "NO DATA",
+    "target": "target {value}"
+  },
+  "executive": {
+    "companyAvg": "Company avg score",
+    "membersScored": "Members scored",
+    "highPerformers": "High performers",
+    "needAttention": "Need attention",
+    "departmentHealth": "Department health",
+    "needsAttention": "Needs attention",
+    "deptMeta": "avg · {count} · top {top}"
+  },
+  "brief": {
+    "title": "AI Management brief",
+    "generatedAt": "generated {date}",
+    "enableTooltip": "Set ANTHROPIC_API_KEY to enable",
+    "regenerate": "Regenerate",
+    "generate": "Generate brief",
+    "notConfigured": "The AI brief isn’t configured — set <code>ANTHROPIC_API_KEY</code> on the API to enable the Claude-generated narrative (top movers, deviations, missed deadlines, revenue opportunities, recommended action). Until then the computed rollup above is the source of truth — no invented summary.",
+    "topAction": "Top action",
+    "empty": "No brief yet — click “Generate brief” to summarize the current scorecards via Claude."
+  },
+  "emptyState": {
+    "title": "No scorecards for this period yet.",
+    "description": "Scorecards appear once KPI values are recorded for the week (auto-collected from ERP data or entered by a manager)."
+  },
+  "recordDialog": {
+    "title": "Record a KPI value",
+    "description": "For KPIs with no automatic source (manager-entered). Auto-collected KPIs aren’t listed — they come from real ERP data.",
+    "employee": "Employee",
+    "select": "Select…",
+    "kpi": "KPI",
+    "pickEmployeeFirst": "Pick an employee first",
+    "kpiOptionTarget": " (target {target})",
+    "value": "Value",
+    "valuePlaceholder": "e.g. 92%  ·  8  ·  €1.2M",
+    "pickError": "Pick an employee and a KPI.",
+    "recordedToast": "Recorded {label} for {name}",
+    "cancel": "Cancel",
+    "saving": "Saving…",
+    "submit": "Record value"
+  },
+  "zone": {
+    "GREEN": "High performer",
+    "YELLOW": "Meets expectations",
+    "ORANGE": "Needs improvement",
+    "RED": "Immediate review"
+  },
+  "bonus": {
+    "full": "Full bonus",
+    "pct75": "75% bonus",
+    "pct50": "50% bonus",
+    "none": "No bonus"
+  },
+  "category": {
+    "OUTPUT": "Output",
+    "QUALITY": "Quality",
+    "SPEED": "Speed",
+    "COMPLIANCE": "Compliance",
+    "REVENUE": "Revenue"
+  },
+  "department": {
+    "OPERATIONS": "Operations",
+    "IT": "IT",
+    "CONSULTING": "Consulting",
+    "MARKETING": "Marketing",
+    "BUSINESS": "Business",
+    "HR": "HR"
+  }
+}

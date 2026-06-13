@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { RotateCcw } from 'lucide-react';
 import {
@@ -48,6 +49,7 @@ export function EditUserDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
 }) {
+  const t = useTranslations('users');
   const update = useUpdateUser();
   const isSA = user.role === 'SUPER_ADMIN';
   const [role, setRole] = useState<UserRole>(user.role);
@@ -82,7 +84,7 @@ export function EditUserDialog({
       },
       {
         onSuccess: () => {
-          toast.success('Changes saved');
+          toast.success(t('editAccess.savedToast'));
           onOpenChange(false);
         },
         onError: (e) => toast.error(e.message),
@@ -94,13 +96,13 @@ export function EditUserDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[86vh] overflow-auto sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Edit — {user.name}</DialogTitle>
+          <DialogTitle>{t('editAccess.title', { name: user.name })}</DialogTitle>
           <DialogDescription>{user.email}</DialogDescription>
         </DialogHeader>
 
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-            Role
+            {t('editAccess.role')}
             <select
               disabled={isSA}
               value={role}
@@ -108,33 +110,33 @@ export function EditUserDialog({
               className="h-9 rounded-md border bg-card px-2 text-sm text-foreground disabled:opacity-60"
             >
               {(Object.keys(ROLE_LABELS) as UserRole[]).map((r) => (
-                <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                <option key={r} value={r}>{t(`role.${r}`)}</option>
               ))}
             </select>
           </label>
           <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-            Position
+            {t('editAccess.position')}
             <select
               value={position}
               onChange={(e) => setPosition(e.target.value as Position | '')}
               className="h-9 rounded-md border bg-card px-2 text-sm text-foreground"
             >
-              <option value="">—</option>
+              <option value="">{t('editAccess.none')}</option>
               {(Object.keys(POSITION_LABELS) as Position[]).map((p) => (
-                <option key={p} value={p}>{POSITION_LABELS[p]}</option>
+                <option key={p} value={p}>{t(`position.${p}`)}</option>
               ))}
             </select>
           </label>
           <label className="col-span-2 flex flex-col gap-1 text-xs text-muted-foreground">
-            Department
+            {t('editAccess.department')}
             <select
               value={department}
               onChange={(e) => setDepartment(e.target.value as Department | '')}
               className="h-9 rounded-md border bg-card px-2 text-sm text-foreground"
             >
-              <option value="">—</option>
+              <option value="">{t('editAccess.none')}</option>
               {(Object.keys(DEPARTMENT_LABELS) as Department[]).map((d) => (
-                <option key={d} value={d}>{DEPARTMENT_LABELS[d]}</option>
+                <option key={d} value={d}>{t(`department.${d}`)}</option>
               ))}
             </select>
           </label>
@@ -142,11 +144,11 @@ export function EditUserDialog({
 
         <div className="mt-2 flex items-center justify-between">
           <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            Permissions {isSA ? '· Super Admin has full access' : '· effective'}
+            {isSA ? t('editAccess.permsSuperAdmin') : t('editAccess.permsEffective')}
           </p>
           {!isSA ? (
             <Button variant="ghost" size="sm" onClick={resetDefaults}>
-              <RotateCcw className="size-3.5" /> Reset to role defaults
+              <RotateCcw className="size-3.5" /> {t('editAccess.resetDefaults')}
             </Button>
           ) : null}
         </div>
@@ -174,9 +176,9 @@ export function EditUserDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>{t('editAccess.cancel')}</Button>
           <Button onClick={save} disabled={update.isPending}>
-            {update.isPending ? 'Saving…' : 'Save changes'}
+            {update.isPending ? t('editAccess.saving') : t('editAccess.submit')}
           </Button>
         </DialogFooter>
       </DialogContent>

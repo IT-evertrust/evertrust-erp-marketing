@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { useTranslations } from 'next-intl';
 import { Check, Pencil, X } from 'lucide-react';
 import { useUpdateLineItem } from '@/hooks/use-pricing';
 import { useCanState } from '@/lib/permissions';
@@ -25,6 +26,7 @@ export function BidEpCell({
   bidEp: string | null;
   currency: string;
 }) {
+  const t = useTranslations('tenders');
   const { allowed } = useCanState('tenders:write');
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(bidEp ?? '');
@@ -43,7 +45,7 @@ export function BidEpCell({
   function save() {
     const trimmed = value.trim();
     if (trimmed && !Number.isFinite(Number(trimmed))) {
-      toast.error('Unit price must be a number.');
+      toast.error(t('pricing.bidEp.numberError'));
       return;
     }
     // No-op if unchanged.
@@ -55,11 +57,11 @@ export function BidEpCell({
       { lineId, input: { bidEp: trimmed === '' ? undefined : trimmed } },
       {
         onSuccess: () => {
-          toast.success('Unit price updated.');
+          toast.success(t('pricing.bidEp.updatedToast'));
           setEditing(false);
         },
         onError: (error) =>
-          toast.error(error.message ?? 'Could not update unit price.'),
+          toast.error(error.message ?? t('pricing.bidEp.updateError')),
       },
     );
   }
@@ -76,7 +78,7 @@ export function BidEpCell({
         type="button"
         onClick={start}
         className="group inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 tabular-nums hover:bg-accent"
-        title="Edit unit price"
+        title={t('pricing.bidEp.editTitle')}
       >
         {formatMoney(bidEp, currency)}
         <Pencil className="size-3 opacity-0 transition-opacity group-hover:opacity-60" />
@@ -106,7 +108,7 @@ export function BidEpCell({
         size="icon-sm"
         onClick={save}
         disabled={update.isPending}
-        aria-label="Save unit price"
+        aria-label={t('pricing.bidEp.save')}
       >
         <Check />
       </Button>
@@ -116,7 +118,7 @@ export function BidEpCell({
         size="icon-sm"
         onClick={cancel}
         disabled={update.isPending}
-        aria-label="Cancel"
+        aria-label={t('pricing.bidEp.cancel')}
       >
         <X />
       </Button>

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import {
   AlarmClock,
   FileSearch,
@@ -33,7 +34,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/common/page-header';
 import { StatTile } from '@/components/common/stat-tile';
 import { EmptyState } from '@/components/common/empty-state';
-import { STATUS_LABEL, STATUS_ORDER } from '@/lib/tender-format';
+import { STATUS_ORDER } from '@/lib/tender-format';
 import { TendersTable } from './tenders-table';
 import { TendersBoard } from './tenders-board';
 
@@ -75,6 +76,7 @@ function summarize(tenders: TenderDto[]) {
 // the UNFILTERED list (its own cached query) so the pipeline summary stays whole
 // even when the table below is filtered down to one status.
 export function TendersView() {
+  const t = useTranslations('tenders');
   const [status, setStatus] = useState<TenderStatusT | undefined>(undefined);
   const { data, isLoading, isError, error } = useTenders(
     status ? { status } : undefined,
@@ -89,14 +91,14 @@ export function TendersView() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title="Tenders"
-        description="Track every tender from detection to award."
+        title={t('list.title')}
+        description={t('list.description')}
         actions={
           <Can permission="tenders:write">
             <Button asChild>
               <Link href="/tenders/new">
                 <Plus />
-                New tender
+                {t('list.newTender')}
               </Link>
             </Button>
           </Can>
@@ -112,35 +114,35 @@ export function TendersView() {
         ) : (
           <>
             <StatTile
-              label="Total tenders"
+              label={t('list.stats.total')}
               value={stats.total}
               icon={<FileSearch className="size-4" />}
             />
             <StatTile
-              label="In pipeline"
+              label={t('list.stats.open')}
               value={stats.open}
-              hint="Not yet submitted"
+              hint={t('list.stats.openHint')}
               accent="bg-sky-400"
               icon={<ListChecks className="size-4" />}
             />
             <StatTile
-              label="Submitted"
+              label={t('list.stats.submitted')}
               value={stats.submitted}
-              hint="Awaiting outcome"
+              hint={t('list.stats.submittedHint')}
               accent="bg-indigo-400"
               icon={<Send className="size-4" />}
             />
             <StatTile
-              label="Awarded"
+              label={t('list.stats.awarded')}
               value={stats.awarded}
-              hint="Won"
+              hint={t('list.stats.awardedHint')}
               accent="bg-emerald-400"
               icon={<Trophy className="size-4" />}
             />
             <StatTile
-              label="At risk"
+              label={t('list.stats.atRisk')}
               value={stats.atRisk}
-              hint="Deadline within 2 days"
+              hint={t('list.stats.atRiskHint')}
               accent={stats.atRisk > 0 ? 'bg-orange-400' : 'bg-emerald-400'}
               icon={<AlarmClock className="size-4" />}
             />
@@ -156,14 +158,14 @@ export function TendersView() {
               setStatus(v === ALL ? undefined : TenderStatus.parse(v))
             }
           >
-            <SelectTrigger className="w-48" aria-label="Filter by status">
-              <SelectValue placeholder="All statuses" />
+            <SelectTrigger className="w-48" aria-label={t('list.filterByStatus')}>
+              <SelectValue placeholder={t('list.allStatuses')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={ALL}>All statuses</SelectItem>
+              <SelectItem value={ALL}>{t('list.allStatuses')}</SelectItem>
               {STATUS_ORDER.map((s) => (
                 <SelectItem key={s} value={s}>
-                  {STATUS_LABEL[s]}
+                  {t(`status.${s}`)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -172,11 +174,11 @@ export function TendersView() {
           <TabsList>
             <TabsTrigger value="table">
               <Table2 />
-              Table
+              {t('list.tabTable')}
             </TabsTrigger>
             <TabsTrigger value="board">
               <LayoutGrid />
-              Board
+              {t('list.tabBoard')}
             </TabsTrigger>
           </TabsList>
         </div>
@@ -186,29 +188,33 @@ export function TendersView() {
         ) : isError ? (
           <EmptyState
             icon={<FileSearch />}
-            title="Could not load tenders"
+            title={t('list.loadError')}
             description={error.message}
           />
         ) : !data || data.length === 0 ? (
           <EmptyState
             icon={<FileSearch />}
-            title={status ? `No tenders in ${STATUS_LABEL[status]}` : 'No tenders yet'}
+            title={
+              status
+                ? t('list.emptyFilteredTitle', { status: t(`status.${status}`) })
+                : t('list.emptyTitle')
+            }
             description={
               status
-                ? 'Try a different status filter, or clear it to see the full pipeline.'
-                : 'Tenders detected from portals or added manually will show up here.'
+                ? t('list.emptyFilteredDescription')
+                : t('list.emptyDescription')
             }
             action={
               status ? (
                 <Button variant="outline" size="sm" onClick={() => setStatus(undefined)}>
-                  Clear filter
+                  {t('list.clearFilter')}
                 </Button>
               ) : (
                 <Can permission="tenders:write">
                   <Button asChild size="sm">
                     <Link href="/tenders/new">
                       <Plus />
-                      New tender
+                      {t('list.newTender')}
                     </Link>
                   </Button>
                 </Can>

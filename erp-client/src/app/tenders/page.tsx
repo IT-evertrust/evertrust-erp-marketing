@@ -3,12 +3,14 @@
 // Render on demand, never prerendered: protected per-tenant data fetched in the
 // browser (TanStack Query), so nothing touches the API at build time. Middleware
 // guards the route; useRequirePermission is the defence-in-depth second layer.
+import { useTranslations } from 'next-intl';
 import { useRequirePermission } from '@/lib/permissions';
 import { AppShell } from '@/components/shell/app-shell';
 import { TendersView } from '@/components/tenders/tenders-view';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function TendersPage() {
+  const t = useTranslations('tenders');
   const { allowed, isLoading } = useRequirePermission('tenders:read');
 
   return (
@@ -18,7 +20,7 @@ export default function TendersPage() {
       ) : allowed ? (
         <TendersView />
       ) : (
-        <p className="text-sm text-muted-foreground">Redirecting…</p>
+        <p className="text-sm text-muted-foreground">{t('common.redirecting')}</p>
       )}
     </AppShell>
   );

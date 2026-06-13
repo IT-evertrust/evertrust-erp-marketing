@@ -1,13 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import {
-  DEPARTMENT_LABELS,
   Department,
-  POSITION_LABELS,
   Position,
-  ROLE_LABELS,
   UserRole,
   type CreateUserDto,
 } from '@evertrust/shared';
@@ -46,6 +44,7 @@ export function UserCreateDialog({
   onOpenChange: (open: boolean) => void;
   onCreated?: (id: string) => void;
 }) {
+  const t = useTranslations('users');
   const { data: me } = useMe();
   const create = useCreateUser();
   const [name, setName] = useState('');
@@ -89,11 +88,11 @@ export function UserCreateDialog({
     };
     create.mutate(input, {
       onSuccess: (u) => {
-        toast.success(`Created ${u.name}.`);
+        toast.success(t('create.createdToast', { name: u.name }));
         onCreated?.(u.id);
         onOpenChange(false);
       },
-      onError: (e) => toast.error(e.message ?? 'Could not create the user.'),
+      onError: (e) => toast.error(e.message ?? t('create.createError')),
     });
   }
 
@@ -101,17 +100,16 @@ export function UserCreateDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Add user</DialogTitle>
+          <DialogTitle>{t('create.title')}</DialogTitle>
           <DialogDescription>
-            Create a teammate and set their initial password — there&apos;s no
-            self sign-up.
+            {t('create.description')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="c-name">Name</Label>
+              <Label htmlFor="c-name">{t('create.name')}</Label>
               <Input
                 id="c-name"
                 value={name}
@@ -119,7 +117,7 @@ export function UserCreateDialog({
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="c-email">Email</Label>
+              <Label htmlFor="c-email">{t('create.email')}</Label>
               <Input
                 id="c-email"
                 type="email"
@@ -131,23 +129,23 @@ export function UserCreateDialog({
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="c-pw">Initial password</Label>
+              <Label htmlFor="c-pw">{t('create.initialPassword')}</Label>
               <Input
                 id="c-pw"
                 type="password"
                 value={password}
-                placeholder="At least 8 characters"
+                placeholder={t('create.passwordPlaceholder')}
                 onChange={(e) => setPassword(e.target.value)}
               />
               {password && password.length < 8 ? (
                 <p className="text-xs text-amber-600 dark:text-amber-400">
-                  Use at least 8 characters.
+                  {t('create.passwordHint')}
                 </p>
               ) : null}
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="c-phone">
-                Phone <span className="text-muted-foreground">(optional)</span>
+                {t('create.phone')} <span className="text-muted-foreground">{t('create.phoneOptional')}</span>
               </Label>
               <Input
                 id="c-phone"
@@ -160,7 +158,7 @@ export function UserCreateDialog({
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="flex flex-col gap-1.5">
-              <Label>Role</Label>
+              <Label>{t('create.role')}</Label>
               <Select value={role} onValueChange={(v) => setRole(v as UserRole)}>
                 <SelectTrigger>
                   <SelectValue />
@@ -168,14 +166,14 @@ export function UserCreateDialog({
                 <SelectContent>
                   {roleOptions.map((r) => (
                     <SelectItem key={r} value={r}>
-                      {ROLE_LABELS[r]}
+                      {t(`role.${r}`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Position</Label>
+              <Label>{t('create.position')}</Label>
               <Select
                 value={position ?? NONE}
                 onValueChange={(v) =>
@@ -186,17 +184,17 @@ export function UserCreateDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NONE}>— None —</SelectItem>
+                  <SelectItem value={NONE}>{t('create.none')}</SelectItem>
                   {Position.options.map((p) => (
                     <SelectItem key={p} value={p}>
-                      {POSITION_LABELS[p]}
+                      {t(`position.${p}`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label>Department</Label>
+              <Label>{t('create.department')}</Label>
               <Select
                 value={department ?? NONE}
                 onValueChange={(v) =>
@@ -207,10 +205,10 @@ export function UserCreateDialog({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NONE}>— None —</SelectItem>
+                  <SelectItem value={NONE}>{t('create.none')}</SelectItem>
                   {Department.options.map((d) => (
                     <SelectItem key={d} value={d}>
-                      {DEPARTMENT_LABELS[d]}
+                      {t(`department.${d}`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -219,21 +217,20 @@ export function UserCreateDialog({
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Share the initial password with the new user so they can log in.
-            Permissions follow the role and can be tuned after creation.
+            {t('create.footnote')}
           </p>
         </div>
 
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('create.cancel')}
           </Button>
           <Button
             type="button"
             onClick={submit}
             disabled={!valid || create.isPending}
           >
-            {create.isPending ? 'Creating…' : 'Create user'}
+            {create.isPending ? t('create.creating') : t('create.submit')}
           </Button>
         </DialogFooter>
       </DialogContent>

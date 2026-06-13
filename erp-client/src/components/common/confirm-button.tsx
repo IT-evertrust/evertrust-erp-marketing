@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
+import { useTranslations } from 'next-intl';
 import { Loader2 } from 'lucide-react';
 import {
   Dialog,
@@ -19,7 +20,7 @@ export function ConfirmButton({
   trigger,
   title,
   description,
-  confirmLabel = 'Confirm',
+  confirmLabel,
   pending = false,
   onConfirm,
 }: {
@@ -30,6 +31,7 @@ export function ConfirmButton({
   pending?: boolean;
   onConfirm: () => void;
 }) {
+  const t = useTranslations('common');
   const [open, setOpen] = useState(false);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -41,7 +43,7 @@ export function ConfirmButton({
         </DialogHeader>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-            Cancel
+            {t('cancel')}
           </Button>
           <Button
             type="button"
@@ -53,7 +55,7 @@ export function ConfirmButton({
             }}
           >
             {pending ? <Loader2 className="animate-spin" /> : null}
-            {confirmLabel}
+            {confirmLabel ?? t('confirm')}
           </Button>
         </DialogFooter>
       </DialogContent>

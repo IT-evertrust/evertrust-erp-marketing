@@ -1,12 +1,10 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { useTranslations } from 'next-intl';
 import { ShieldCheck } from 'lucide-react';
 import {
-  DEPARTMENT_LABELS,
-  POSITION_LABELS,
   PERMISSIONS,
-  ROLE_LABELS,
   effectivePermissions,
   type AdminUserDto,
 } from '@evertrust/shared';
@@ -27,6 +25,7 @@ export function UserDetailsDialog({
   open: boolean;
   onOpenChange: (o: boolean) => void;
 }) {
+  const t = useTranslations('users');
   const isSA = user.role === 'SUPER_ADMIN';
   const perms = effectivePermissions(user.role, user.permissions ?? null);
   const Field = ({ k, v }: { k: string; v: ReactNode }) => (
@@ -44,23 +43,23 @@ export function UserDetailsDialog({
           <DialogDescription>{user.email}</DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3">
-          <Field k="Role" v={ROLE_LABELS[user.role]} />
-          <Field k="Department" v={user.department ? DEPARTMENT_LABELS[user.department] : '—'} />
-          <Field k="Position" v={user.position ? POSITION_LABELS[user.position] : '—'} />
-          <Field k="Status" v={user.active ? 'Active' : 'Deactivated'} />
-          <Field k="Joined" v={new Date(user.createdAt).toLocaleDateString()} />
+          <Field k={t('details.role')} v={t(`role.${user.role}`)} />
+          <Field k={t('details.department')} v={user.department ? t(`department.${user.department}`) : '—'} />
+          <Field k={t('details.position')} v={user.position ? t(`position.${user.position}`) : '—'} />
+          <Field k={t('details.status')} v={user.active ? t('status.active') : t('status.deactivated')} />
+          <Field k={t('details.joined')} v={new Date(user.createdAt).toLocaleDateString()} />
           <Field
-            k="Access"
-            v={isSA ? 'Full access' : `${perms.length}/${PERMISSIONS.length} permissions`}
+            k={t('details.access')}
+            v={isSA ? t('details.fullAccess') : t('details.permsCount', { count: perms.length, total: PERMISSIONS.length })}
           />
         </div>
         <div className="mt-3 text-[10.5px] uppercase tracking-wide text-muted-foreground">
-          Granted permissions
+          {t('details.grantedPermissions')}
         </div>
         <div className="flex flex-wrap gap-1.5">
           {isSA ? (
             <span className="inline-flex items-center gap-1 text-[12.5px] text-emerald-500">
-              <ShieldCheck className="size-3.5" /> All permissions
+              <ShieldCheck className="size-3.5" /> {t('details.allPermissions')}
             </span>
           ) : perms.length ? (
             perms.map((p) => (
@@ -69,7 +68,7 @@ export function UserDetailsDialog({
               </span>
             ))
           ) : (
-            <span className="text-sm text-muted-foreground">None</span>
+            <span className="text-sm text-muted-foreground">{t('details.none')}</span>
           )}
         </div>
       </DialogContent>

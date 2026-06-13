@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import type { CreateSupplierDto, SupplierDto } from '@evertrust/shared';
 import { useCreateSupplier, useUpdateSupplier } from '@/hooks/use-suppliers';
@@ -67,6 +68,7 @@ export function SupplierDialog({
   supplier?: SupplierDto;
   trigger: ReactNode;
 }) {
+  const t = useTranslations('suppliers');
   const [open, setOpen] = useState(false);
   const isEdit = Boolean(supplier);
   const create = useCreateSupplier();
@@ -78,11 +80,11 @@ export function SupplierDialog({
   function onSubmit(values: SupplierFormValues) {
     const payload = toPayload(values);
     const onSuccess = () => {
-      toast.success(isEdit ? 'Supplier updated.' : 'Supplier created.');
+      toast.success(isEdit ? t('toast.updated') : t('toast.created'));
       setOpen(false);
     };
     const onError = (error: Error) =>
-      toast.error(error.message ?? 'Could not save supplier.');
+      toast.error(error.message ?? t('toast.saveError'));
 
     if (supplier) update.mutate(payload, { onSuccess, onError });
     else create.mutate(payload, { onSuccess, onError });
@@ -93,11 +95,11 @@ export function SupplierDialog({
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{isEdit ? 'Edit supplier' : 'New supplier'}</DialogTitle>
+          <DialogTitle>{isEdit ? t('dialog.titleEdit') : t('dialog.titleNew')}</DialogTitle>
           <DialogDescription>
             {isEdit
-              ? 'Update this supplier in the registry.'
-              : 'Add a supplier to the registry.'}
+              ? t('dialog.descriptionEdit')
+              : t('dialog.descriptionNew')}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -108,12 +110,12 @@ export function SupplierDialog({
             <FormField
               control={form.control}
               name="name"
-              rules={{ required: 'Name is required.' }}
+              rules={{ required: t('dialog.nameRequired') }}
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Name</FormLabel>
+                  <FormLabel>{t('dialog.fields.name.label')}</FormLabel>
                   <FormControl>
-                    <Input placeholder="Supplier name" {...field} />
+                    <Input placeholder={t('dialog.fields.name.placeholder')} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -124,11 +126,11 @@ export function SupplierDialog({
               name="niches"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Niches</FormLabel>
+                  <FormLabel>{t('dialog.fields.niches.label')}</FormLabel>
                   <FormControl>
-                    <Input placeholder="HVAC, road works" {...field} />
+                    <Input placeholder={t('dialog.fields.niches.placeholder')} {...field} />
                   </FormControl>
-                  <FormDescription>Comma-separated.</FormDescription>
+                  <FormDescription>{t('dialog.commaSeparated')}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -138,11 +140,11 @@ export function SupplierDialog({
               name="capabilities"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Capabilities</FormLabel>
+                  <FormLabel>{t('dialog.fields.capabilities.label')}</FormLabel>
                   <FormControl>
-                    <Input placeholder="installation, maintenance" {...field} />
+                    <Input placeholder={t('dialog.fields.capabilities.placeholder')} {...field} />
                   </FormControl>
-                  <FormDescription>Comma-separated.</FormDescription>
+                  <FormDescription>{t('dialog.commaSeparated')}</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -152,9 +154,9 @@ export function SupplierDialog({
               name="fitScore"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Fit score</FormLabel>
+                  <FormLabel>{t('dialog.fields.fitScore.label')}</FormLabel>
                   <FormControl>
-                    <Input inputMode="decimal" placeholder="0.00–1.00" {...field} />
+                    <Input inputMode="decimal" placeholder={t('dialog.fields.fitScore.placeholder')} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -165,9 +167,9 @@ export function SupplierDialog({
               name="contact"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Contact</FormLabel>
+                  <FormLabel>{t('dialog.fields.contact.label')}</FormLabel>
                   <FormControl>
-                    <Input placeholder="name@supplier.example" {...field} />
+                    <Input placeholder={t('dialog.fields.contact.placeholder')} {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -175,10 +177,10 @@ export function SupplierDialog({
             />
             <DialogFooter>
               <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
-                Cancel
+                {t('dialog.cancel')}
               </Button>
               <Button type="submit" disabled={pending}>
-                {pending ? 'Saving…' : isEdit ? 'Save changes' : 'Create supplier'}
+                {pending ? t('dialog.saving') : isEdit ? t('dialog.saveChanges') : t('dialog.create')}
               </Button>
             </DialogFooter>
           </form>

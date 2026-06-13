@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { useTranslations } from 'next-intl';
 import { AlertTriangle } from 'lucide-react';
 import type { PricingSignal, TenderPricingDto } from '@evertrust/shared';
 import { useSetMargin } from '@/hooks/use-pricing';
@@ -20,7 +21,6 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { cn } from '@/lib/utils';
 import {
   PRICING_STATUS_BADGE_CLASS,
-  SIGNAL_LABEL,
   SIGNAL_TEXT_CLASS,
   formatMoney,
 } from '@/lib/pricing-format';
@@ -44,18 +44,19 @@ export function TotalsPanel({
   tenderId: string;
   pricing: TenderPricingDto;
 }) {
+  const t = useTranslations('tenders');
   const isFinal = pricing.status === 'FINAL';
 
   return (
     <Card className="lg:sticky lg:top-6">
       <CardHeader>
         <CardTitle className="flex items-center justify-between text-base">
-          Totals
+          {t('pricing.totals.title')}
           <Badge
             variant="outline"
             className={cn('font-medium', PRICING_STATUS_BADGE_CLASS[pricing.status])}
           >
-            {pricing.status}
+            {t(`pricing.totals.status.${pricing.status}`)}
           </Badge>
         </CardTitle>
       </CardHeader>
@@ -63,8 +64,9 @@ export function TotalsPanel({
         {pricing.highRisk ? (
           <Alert variant="destructive">
             <AlertTriangle />
-            <AlertTitle>High-risk pricing</AlertTitle>
+            <AlertTitle>{t('pricing.totals.highRiskTitle')}</AlertTitle>
             <AlertDescription>
+              {/* Risk reasons are produced server-side and rendered verbatim. */}
               <ul className="list-disc pl-4">
                 {pricing.riskReasons.map((r) => (
                   <li key={r}>{r}</li>
@@ -75,7 +77,7 @@ export function TotalsPanel({
         ) : null}
 
         <div className="flex items-center justify-between text-sm">
-          <span className="text-muted-foreground">Subtotal</span>
+          <span className="text-muted-foreground">{t('pricing.totals.subtotal')}</span>
           <span className="font-medium tabular-nums">
             {formatMoney(pricing.subtotal, pricing.currency)}
           </span>
@@ -90,7 +92,7 @@ export function TotalsPanel({
         <Separator />
 
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium">Final price</span>
+          <span className="text-sm font-medium">{t('pricing.totals.finalPrice')}</span>
           <span className="text-lg font-semibold tabular-nums">
             {formatMoney(pricing.finalPrice, pricing.currency)}
           </span>
@@ -109,7 +111,7 @@ export function TotalsPanel({
           permission="pricing:approve"
           fallback={
             <p className="text-center text-xs text-muted-foreground">
-              Finalizing requires the pricing:approve permission.
+              {t('pricing.totals.finalizeNoPermission')}
             </p>
           }
         >
@@ -132,6 +134,7 @@ function MarginField({
   marginPct: number;
   disabled: boolean;
 }) {
+  const t = useTranslations('tenders');
   const [value, setValue] = useState(String(marginPct));
   const setMargin = useSetMargin(tenderId);
 
@@ -144,7 +147,7 @@ function MarginField({
     const trimmed = value.trim();
     const n = Number(trimmed);
     if (trimmed === '' || !Number.isFinite(n)) {
-      toast.error('Margin must be a number.');
+      toast.error(t('pricing.totals.marginError'));
       setValue(String(marginPct));
       return;
     }
@@ -153,7 +156,7 @@ function MarginField({
       { marginPct: n },
       {
         onError: (error) => {
-          toast.error(error.message ?? 'Could not update margin.');
+          toast.error(error.message ?? t('pricing.totals.marginUpdateError'));
           setValue(String(marginPct));
         },
       },
@@ -163,7 +166,7 @@ function MarginField({
   return (
     <div className="flex items-center justify-between gap-4">
       <Label htmlFor="margin" className="text-sm text-muted-foreground">
-        Margin %
+        {t('pricing.totals.marginLabel')}
       </Label>
       <Can
         permission="pricing:write"
@@ -200,6 +203,7 @@ function MarginField({
 // Per-signal histogram (REAL_QUOTES / MIXED / ESTIMATE_ONLY counts), color-coded
 // to match the RYG mapping.
 function SignalSummary({ pricing }: { pricing: TenderPricingDto }) {
+  const t = useTranslations('tenders');
   return (
     <div className="grid grid-cols-3 gap-2">
       {SIGNAL_ORDER.map((signal) => (
@@ -216,7 +220,7 @@ function SignalSummary({ pricing }: { pricing: TenderPricingDto }) {
             {pricing.signalCounts[signal]}
           </div>
           <div className="text-[11px] leading-tight text-muted-foreground">
-            {SIGNAL_LABEL[signal]}
+            {t(`pricing.signal.${signal}`)}
           </div>
         </div>
       ))}

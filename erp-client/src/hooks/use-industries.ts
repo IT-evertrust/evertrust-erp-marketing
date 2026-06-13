@@ -73,3 +73,38 @@ export function useAssignNicheIndustry() {
     onSuccess: invalidate,
   });
 }
+
+// Create a niche directly (deduped by org + slugify(name) server-side; a slug
+// clash is a 409). `industryId` optionally assigns the grouping parent. Refreshes
+// the niche list and the industries' nicheCounts.
+export function useCreateNiche() {
+  const invalidate = useInvalidateGrouping();
+  return useMutation<
+    NicheDto,
+    ApiError,
+    { name: string; industryId: string | null }
+  >({
+    mutationFn: ({ name, industryId }) =>
+      api.niches.create({ name, industryId }),
+    onSuccess: invalidate,
+  });
+}
+
+// Rename a niche (409 on a sibling slug clash in the same org).
+export function useRenameNiche() {
+  const invalidate = useInvalidateGrouping();
+  return useMutation<NicheDto, ApiError, { id: string; name: string }>({
+    mutationFn: ({ id, name }) => api.niches.rename(id, { name }),
+    onSuccess: invalidate,
+  });
+}
+
+// Delete a niche (409 if it still has campaigns or prospects). Refreshes the niche
+// list and the industries' nicheCounts.
+export function useDeleteNiche() {
+  const invalidate = useInvalidateGrouping();
+  return useMutation<{ deleted: number }, ApiError, string>({
+    mutationFn: (id) => api.niches.remove(id),
+    onSuccess: invalidate,
+  });
+}

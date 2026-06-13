@@ -1,0 +1,19 @@
+{
+  "dashboard": "Dashboard",
+  "marketing": "Marketing",
+  "niches": "Nischen",
+  "drafts": "Antwortentwürfe",
+  "suppressions": "Sperrliste",
+  "keyAccount": "Key Account",
+  "sales": "Vertrieb",
+  "performance": "Leistung",
+  "users": "Benutzer",
+  "general": "Allgemein",
+  "configuration": "Konfiguration",
+  "group": {
+    "Acquisition": "Akquise",
+    "Management": "Verwaltung",
+    "Administration": "Administration",
+    "Settings": "Einstellungen"
+  }
+}

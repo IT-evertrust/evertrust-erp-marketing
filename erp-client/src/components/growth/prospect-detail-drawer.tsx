@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { Loader2 } from 'lucide-react';
 import type { ProspectStatus } from '@evertrust/shared';
 import { toast } from 'sonner';
@@ -25,7 +26,6 @@ import { Separator } from '@/components/ui/separator';
 import { formatDateTime } from '@/lib/tender-format';
 import {
   PROSPECT_STATUS_CLASS,
-  PROSPECT_STATUS_LABEL,
   PROSPECT_STATUS_ORDER,
 } from '@/lib/growth-format';
 import { OutreachThread } from './outreach-thread';
@@ -40,6 +40,7 @@ export function ProspectDetailDrawer({
   prospectId: string | null;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useTranslations('marketing');
   const q = useProspectDetail(prospectId);
   const setStatus = useUpdateProspectStatus();
   const p = q.data;
@@ -51,8 +52,8 @@ export function ProspectDetailDrawer({
       { id: prospectId, patch: { status } },
       {
         onSuccess: () =>
-          toast.success(`Status set to ${PROSPECT_STATUS_LABEL[status]}.`),
-        onError: (e) => toast.error(e.message ?? 'Could not update the status.'),
+          toast.success(t('prospects.statusSet', { status: t(`status.${status}`) })),
+        onError: (e) => toast.error(e.message ?? t('prospects.statusError')),
       },
     );
   }
@@ -68,10 +69,10 @@ export function ProspectDetailDrawer({
         ) : q.isError ? (
           <>
             <DialogHeader>
-              <DialogTitle>Could not load prospect</DialogTitle>
+              <DialogTitle>{t('prospects.loadErrorTitle')}</DialogTitle>
               <DialogDescription>
                 {q.error.status === 404
-                  ? 'This prospect does not exist or is not in your organization.'
+                  ? t('prospects.notFound')
                   : q.error.message}
               </DialogDescription>
             </DialogHeader>
@@ -85,14 +86,14 @@ export function ProspectDetailDrawer({
                   variant="outline"
                   className={PROSPECT_STATUS_CLASS[p.status]}
                 >
-                  {PROSPECT_STATUS_LABEL[p.status]}
+                  {t(`status.${p.status}`)}
                 </Badge>
                 {p.emailVerified ? (
                   <Badge
                     variant="outline"
                     className="border-emerald-500/30 bg-emerald-500/10 text-[10px] text-emerald-400"
                   >
-                    verified
+                    {t('prospects.verified')}
                   </Badge>
                 ) : null}
               </DialogTitle>
@@ -100,23 +101,23 @@ export function ProspectDetailDrawer({
             </DialogHeader>
 
             <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-              <Field label="Campaign" value={p.campaignName} />
-              <Field label="Niche target" value={p.nicheTargetName} />
-              <Field label="Website" value={p.website} />
+              <Field label={t('prospects.field.campaign')} value={p.campaignName} />
+              <Field label={t('prospects.field.nicheTarget')} value={p.nicheTargetName} />
+              <Field label={t('prospects.field.website')} value={p.website} />
               <Field
-                label="Location"
+                label={t('prospects.field.location')}
                 value={[p.city, p.country].filter(Boolean).join(', ') || null}
               />
-              <Field label="Follow-ups" value={String(p.followupCount)} />
+              <Field label={t('prospects.field.followups')} value={String(p.followupCount)} />
               <Field
-                label="Last contacted"
+                label={t('prospects.field.lastContacted')}
                 value={p.lastContactedAt ? formatDateTime(p.lastContactedAt) : null}
               />
               <Field
-                label="Snooze until"
+                label={t('prospects.field.snoozeUntil')}
                 value={p.snoozeUntil ? formatDateTime(p.snoozeUntil) : null}
               />
-              <Field label="Detected" value={formatDateTime(p.createdAt)} />
+              <Field label={t('prospects.field.detected')} value={formatDateTime(p.createdAt)} />
             </dl>
 
             {p.sourceUrl ? (
@@ -126,13 +127,13 @@ export function ProspectDetailDrawer({
                 rel="noopener noreferrer"
                 className="w-fit text-sm text-sky-400 hover:underline"
               >
-                Source page
+                {t('prospects.sourcePage')}
               </a>
             ) : null}
 
             <Can permission="campaigns:write">
               <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Status</span>
+                <span className="text-sm text-muted-foreground">{t('prospects.statusLabel')}</span>
                 <Select
                   value={p.status}
                   onValueChange={onStatusChange}
@@ -144,7 +145,7 @@ export function ProspectDetailDrawer({
                   <SelectContent>
                     {PROSPECT_STATUS_ORDER.map((s) => (
                       <SelectItem key={s} value={s}>
-                        {PROSPECT_STATUS_LABEL[s]}
+                        {t(`status.${s}`)}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -159,7 +160,7 @@ export function ProspectDetailDrawer({
 
             <div className="flex flex-col gap-2">
               <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Conversation
+                {t('prospects.conversation')}
               </span>
               <OutreachThread prospectId={p.id} />
             </div>

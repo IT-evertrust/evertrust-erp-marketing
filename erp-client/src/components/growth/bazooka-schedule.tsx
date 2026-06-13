@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { AlarmClock } from 'lucide-react';
 import { BAZOOKA_TIMEZONES, DEFAULT_BAZOOKA_TIMEZONE } from '@evertrust/shared';
@@ -27,6 +28,7 @@ import {
 // The send fires at that wall-clock time in the chosen zone (DST-correct), so the
 // schedule is explicit rather than tied to the opaque server clock.
 export function BazookaSchedule() {
+  const t = useTranslations('marketing');
   const settings = useArsenalSettings();
   const update = useUpdateArsenalSettings();
   const [time, setTime] = useState('');
@@ -42,15 +44,15 @@ export function BazookaSchedule() {
 
   function save() {
     if (!time) {
-      toast.error('Pick a time (or use Turn off).');
+      toast.error(t('bazooka.pickTime'));
       return;
     }
     update.mutate(
       { bazookaDailyAt: time, bazookaTimezone: timeZone },
       {
         onSuccess: () =>
-          toast.success(`Daily Bazooka send set to ${time} (${timeZone}).`),
-        onError: (e) => toast.error(e.message ?? 'Could not save.'),
+          toast.success(t('bazooka.saved', { time, timezone: timeZone })),
+        onError: (e) => toast.error(e.message ?? t('bazooka.saveError')),
       },
     );
   }
@@ -59,8 +61,8 @@ export function BazookaSchedule() {
     update.mutate(
       { bazookaDailyAt: null, bazookaTimezone: timeZone },
       {
-        onSuccess: () => toast.success('Daily Bazooka send turned off.'),
-        onError: (e) => toast.error(e.message ?? 'Could not save.'),
+        onSuccess: () => toast.success(t('bazooka.turnedOff')),
+        onError: (e) => toast.error(e.message ?? t('bazooka.saveError')),
       },
     );
   }
@@ -78,30 +80,32 @@ export function BazookaSchedule() {
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-medium">Daily Reach Bazooka send</p>
+            <p className="text-sm font-medium">{t('bazooka.title')}</p>
             {settings.isLoading ? null : savedTime ? (
               <Badge
                 variant="outline"
                 className="border-emerald-500/30 bg-emerald-500/10 font-medium text-emerald-700 dark:text-emerald-400"
               >
-                On · {savedTime} · {zoneCity(savedTz)}
+                {t('bazooka.onBadge', {
+                  time: savedTime,
+                  city: savedTz ? zoneCity(savedTz) : t('bazooka.serverTime'),
+                })}
               </Badge>
             ) : (
               <Badge variant="outline" className="text-muted-foreground">
-                Off
+                {t('bazooka.off')}
               </Badge>
             )}
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            An <em>extra</em> daily send fired by the ERP, independent of n8n.
+            {t.rich('bazooka.extraNote', { em: (chunks) => <em>{chunks}</em> })}
           </p>
           <p className="mt-1.5 flex items-start gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-400">
             <span aria-hidden>⚠</span>
             <span>
-              Reach Bazooka already sends <strong>daily at 08:00</strong> on n8n&apos;s
-              own schedule. Turning this on sends a <strong>second</strong> batch —
-              leave it <strong>Off</strong> unless you&apos;ve disabled n8n&apos;s
-              schedule.
+              {t.rich('bazooka.warning', {
+                strong: (chunks) => <strong>{chunks}</strong>,
+              })}
             </span>
           </p>
 
@@ -112,7 +116,7 @@ export function BazookaSchedule() {
                   htmlFor="bazooka-daily-at"
                   className="text-xs text-muted-foreground"
                 >
-                  Time
+                  {t('bazooka.time')}
                 </Label>
                 <Input
                   id="bazooka-daily-at"
@@ -127,11 +131,11 @@ export function BazookaSchedule() {
                   htmlFor="bazooka-timezone"
                   className="text-xs text-muted-foreground"
                 >
-                  Timezone
+                  {t('bazooka.timezone')}
                 </Label>
                 <Select value={timeZone} onValueChange={setTimeZone}>
                   <SelectTrigger id="bazooka-timezone" className="w-[190px]">
-                    <SelectValue placeholder="Timezone" />
+                    <SelectValue placeholder={t('bazooka.timezone')} />
                   </SelectTrigger>
                   <SelectContent>
                     {BAZOOKA_TIMEZONES.map((tz) => (
@@ -148,7 +152,7 @@ export function BazookaSchedule() {
                 onClick={save}
                 disabled={update.isPending || !dirty}
               >
-                {update.isPending ? 'Saving…' : 'Save'}
+                {update.isPending ? t('bazooka.saving') : t('bazooka.save')}
               </Button>
               {savedTime ? (
                 <Button
@@ -159,7 +163,7 @@ export function BazookaSchedule() {
                   disabled={update.isPending}
                   className="text-muted-foreground"
                 >
-                  Turn off
+                  {t('bazooka.turnOff')}
                 </Button>
               ) : null}
             </div>

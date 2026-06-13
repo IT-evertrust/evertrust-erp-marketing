@@ -1,0 +1,81 @@
+{
+  "header": {
+    "title": "Schlüsselkunde",
+    "description": "Bewegen Sie heiße Leads durch die Pipeline — prüfen, Termine buchen und zu Kunden überführen."
+  },
+  "kpi": {
+    "hotLeads": "Heiße Leads",
+    "meetingsBooked": "Gebuchte Termine",
+    "customers": "Kunden",
+    "leadToCustomer": "Lead → Kunde",
+    "liveCampaigns": "Aktive Kampagnen"
+  },
+  "toolbar": {
+    "allTiers": "Alle Stufen",
+    "searchPlaceholder": "Unternehmen, E-Mail, Nische suchen…",
+    "allCampaigns": "Alle Kampagnen",
+    "sync": "Aus n8n synchronisieren",
+    "syncing": "Wird synchronisiert…",
+    "syncTitle": "Heiße Leads + überführte Kunden aus n8n importieren",
+    "runPipeline": "Pipeline ausführen",
+    "runPipelineTitle": "Die Hot-Leads-Pipeline in n8n auslösen",
+    "addLead": "Lead hinzufügen",
+    "clearLeads": "Leads löschen",
+    "clearTitle": "Alle Leads löschen?",
+    "clearDescription": "Löscht jeden heißen Lead in diesem CRM (verknüpfte Kunden bleiben erhalten). Testdaten-Zurücksetzung — dies kann nicht rückgängig gemacht werden.",
+    "clearConfirm": "Leads löschen"
+  },
+  "status": {
+    "loadError": "Leads konnten nicht geladen werden: {message}",
+    "syncFailed": "Synchronisierung fehlgeschlagen: {message}",
+    "syncResult": "Aus n8n synchronisiert — {imported, plural, one {# Lead} other {# Leads}}, {customers, plural, one {# neuer Kunde} other {# neue Kunden}} ({scanned} geprüft).",
+    "syncNotConfigured": "n8n-API nicht konfiguriert — N8N_API_URL / N8N_API_KEY zum Synchronisieren setzen.",
+    "pipelineNotConfigured": "Hot-Leads-Pipeline-Webhook nicht konfiguriert (N8N_HOT_LEADS_PIPELINE_WEBHOOK_URL setzen)."
+  },
+  "stage": {
+    "INTERESTED": "Interessiert",
+    "MEETING_SCHEDULED": "Termin vereinbart",
+    "ONGOING": "Laufend",
+    "CUSTOMER": "Kunde",
+    "ARCHIVED": "Archiviert"
+  },
+  "columns": {
+    "INTERESTED": "Neue + erwärmende Antworten",
+    "MEETING_SCHEDULED": "Termine im Kalender",
+    "ONGOING": "Laufende Deals",
+    "CUSTOMER": "Ins CRM überführt",
+    "addLead": "+ Lead hinzufügen"
+  },
+  "card": {
+    "sourceN8n": "n8n",
+    "sourceManual": "manuell"
+  },
+  "add": {
+    "title": "Heißen Lead hinzufügen",
+    "description": "Fügen Sie einen Lead manuell hinzu. Er landet in der Spalte „Interessiert“.",
+    "emailLabel": "E-Mail *",
+    "emailPlaceholder": "kontakt@unternehmen.com",
+    "companyLabel": "Unternehmen",
+    "nicheLabel": "Nische",
+    "tierLabel": "Stufe",
+    "tierPlaceholder": "AAA",
+    "noteLabel": "Notiz",
+    "cancel": "Abbrechen",
+    "submit": "Lead hinzufügen"
+  },
+  "detail": {
+    "hotReason": "Grund (heiß)",
+    "leadStatus": "Lead-Status",
+    "companyType": "Unternehmenstyp",
+    "country": "Land",
+    "city": "Stadt",
+    "sourceCampaign": "Quell-Kampagne",
+    "meetingDate": "Termindatum",
+    "detected": "Erkannt",
+    "website": "Website",
+    "noContracts": "Für diesen Lead wurden noch keine Verträge erstellt.",
+    "stage": "Phase",
+    "alreadyCustomer": "Bereits Kunde",
+    "convert": "In Kunde umwandeln"
+  }
+}

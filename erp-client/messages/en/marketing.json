@@ -1,0 +1,403 @@
+{
+  "header": {
+    "title": "Marketing",
+    "description": "Run the Growth Engine, track what's deployed, review RAG drafts, and read the report."
+  },
+  "tabs": {
+    "growth": "Growth Engine",
+    "campaigns": "Campaigns",
+    "drafts": "Draft review",
+    "report": "Report"
+  },
+  "lifecycle": {
+    "DRAFT": "Draft",
+    "ACTIVE": "Active",
+    "PAUSED": "Paused",
+    "ARCHIVED": "Archived"
+  },
+  "stage": {
+    "LEAD_SATELLITE": "Lead Satellite",
+    "AMMO_FORGE": "Ammo Forge",
+    "REACH_BAZOOKA": "Reach Bazooka",
+    "REPLY_GLOCK": "Reply Glock",
+    "SLEEPER_GRENADE": "Sleeper Grenade"
+  },
+  "stageWhat": {
+    "LEAD_SATELLITE": "Pull leads from public sources into the campaign",
+    "AMMO_FORGE": "Write the outreach docs / emails",
+    "REACH_BAZOOKA": "Send the outbound batch, track replies (the daily send)",
+    "REPLY_GLOCK": "Sort & answer replies, book meetings",
+    "SLEEPER_GRENADE": "Sweep not-interested → snooze → re-email"
+  },
+  "metric": {
+    "leadsFound": "Leads found",
+    "templatesForged": "Templates forged",
+    "emailsSent": "Emails sent",
+    "repliesHandled": "Replies",
+    "meetingsBooked": "Meetings booked",
+    "leadsSwept": "Leads swept"
+  },
+  "runStatus": {
+    "DISPATCHED": "Dispatched",
+    "SUCCESS": "Success",
+    "FAILED": "Failed",
+    "ERROR": "Error"
+  },
+  "status": {
+    "NEW": "New",
+    "EMAILED": "Emailed",
+    "REPLIED": "Replied",
+    "INTERESTED": "Interested",
+    "MEETING_SCHEDULED": "Meeting scheduled",
+    "NOT_INTERESTED": "Not interested",
+    "RE_ENGAGED": "Re-engaged",
+    "DO_NOT_CONTACT": "Do not contact"
+  },
+  "verdict": {
+    "INTERESTED": "Interested",
+    "NOT_INTERESTED": "Not interested",
+    "SNOOZE": "Snooze",
+    "MEETING_REQUEST": "Meeting request",
+    "UNSURE": "Unsure",
+    "AUTO_REPLY": "Auto-reply",
+    "BOUNCE": "Bounce"
+  },
+  "contract": {
+    "GENERATED": "Generated",
+    "SENT": "Sent",
+    "SIGNED": "Signed",
+    "FAILED": "Failed"
+  },
+  "common": {
+    "cancel": "Cancel",
+    "open": "Open",
+    "details": "Details",
+    "manage": "Manage"
+  },
+  "campaigns": {
+    "tiles": {
+      "campaigns": "Campaigns",
+      "active": "Active",
+      "leads": "Leads",
+      "replies": "Replies",
+      "meetings": "Meetings"
+    },
+    "mini": {
+      "leads": "Leads",
+      "emails": "Emails",
+      "replies": "Replies",
+      "meetings": "Mtg"
+    },
+    "deployedLabel": "Deployed by Growth Engine — track & drill in",
+    "deployedHint": "Each card shows the live funnel and stage activity — expand to drill in.",
+    "loadError": "Could not load campaigns: {message}",
+    "empty": "No campaigns yet — open the <b>Growth Engine</b> tab and click AIM to launch one.",
+    "runStage": "Run stage",
+    "activityEmpty": "No stage activity yet — this campaign's prep stages (Lead Satellite, Ammo Forge) appear here once they run.",
+    "files": {
+      "title": "{name} — files",
+      "description": "Files generated for this campaign (niche analysis, templates, …). Click a row to open it.",
+      "loadError": "Could not load files: {message}",
+      "notConnected": "File listing isn't connected yet (set <code>N8N_API_URL</code> on the API).",
+      "empty": "No files generated for this campaign yet — the niche analysis and templates appear here once the workflows run.",
+      "colName": "Name",
+      "colType": "Type",
+      "colModified": "Modified"
+    },
+    "fileType": {
+      "file": "File",
+      "sheet": "Sheet",
+      "doc": "Doc",
+      "slides": "Slides",
+      "folder": "Folder",
+      "pdf": "PDF",
+      "text": "Text",
+      "image": "Image"
+    }
+  },
+  "report": {
+    "period": {
+      "day": "Day",
+      "week": "Week",
+      "month": "Month"
+    },
+    "window": {
+      "day": "Last 24 hours",
+      "week": "Last 7 days",
+      "month": "Last 30 days"
+    },
+    "allCampaigns": "All campaigns",
+    "syncTitle": "Import recent runs + counts from n8n's execution history",
+    "syncing": "Syncing…",
+    "syncFromN8n": "Sync from n8n",
+    "clearRuns": "Clear runs",
+    "clearTitle": "Clear all run activity?",
+    "clearDescription": "Deletes every arsenal run (Live activity + this report). Test-data reset — this can't be undone.",
+    "loadError": "Could not load the report: {message}",
+    "syncError": "Sync failed: {message}",
+    "synced": "Synced from n8n — imported {count, plural, one {# run} other {# runs}} (scanned {scanned}).",
+    "syncNotConfigured": "n8n API not configured — set N8N_API_URL / N8N_API_KEY to sync.",
+    "section": {
+      "funnel": "Funnel",
+      "ragFunnel": "RAG draft funnel",
+      "draftOutcomes": "Draft outcomes & response timing",
+      "tenderAttribution": "Tender attribution — what this activity is advancing",
+      "perStage": "Per stage · this period"
+    },
+    "funnel": {
+      "leadsFound": "Leads found",
+      "emailsSent": "Emails sent",
+      "replies": "Replies",
+      "meetings": "Meetings",
+      "hint": "Amber = awaiting n8n. Each lights up once the stage reports a <code>metrics</code> count via the run callback.",
+      "awaiting": "awaiting n8n"
+    },
+    "ragSteps": {
+      "unsure": "Unsure",
+      "drafted": "Drafted",
+      "approved": "Approved",
+      "sent": "Sent",
+      "replied": "Replied"
+    },
+    "ragHint": "Lights up once the RAG Agent workflow reports drafted / approved / sent counts.",
+    "outcomes": {
+      "title": "Outcomes (30d)",
+      "rowSent": "Sent",
+      "rowEditedSent": "Edited → sent",
+      "rowDiscarded": "Discarded",
+      "rowApprovalRate": "Approval rate",
+      "rowAvgEdits": "Avg edits / draft"
+    },
+    "timing": {
+      "title": "Response timing",
+      "rowUnsureReady": "Unsure → draft ready",
+      "rowDraftSent": "Draft → sent",
+      "rowStale": "Stale drafts (>24h)",
+      "rowFastest": "Fastest send"
+    },
+    "draftOutcomesHint": "Populated once RAG-draft outcomes are tracked end-to-end.",
+    "tenderAttributionText": "No campaign → tender links yet. Once outbound leads graduate into tenders, this shows which tenders each campaign is advancing and their € value.",
+    "stageRuns": "{runs} runs · {pct} ok",
+    "stageErrors": "{count, plural, one {# error} other {# errors}}",
+    "metricAwaiting": "— awaiting n8n"
+  },
+  "drafts": {
+    "title": "Reply drafts",
+    "description": "RAG-suggested replies awaiting a human. Copy the draft into your reply, or open the prospect for the full thread.",
+    "loadError": "Could not load reply drafts: {message}",
+    "emptyTitle": "No drafts awaiting review",
+    "emptyDescription": "When the reply classifier drafts a suggested response, it appears here for approval.",
+    "now": "now {verdict}",
+    "nowTitle": "The prospect's current verdict has since changed",
+    "copied": "Draft copied to clipboard.",
+    "copyError": "Could not copy — your browser blocked clipboard access.",
+    "copyDraft": "Copy draft",
+    "openProspect": "Open prospect",
+    "showConversation": "Show conversation",
+    "hideConversation": "Hide conversation"
+  },
+  "suppressions": {
+    "title": "Suppressions",
+    "description": "The org-wide do-not-contact list. The arsenal never emails a suppressed address. Un-suppress to allow contact again.",
+    "loadError": "Could not load suppressions: {message}",
+    "emptyTitle": "No suppressions",
+    "emptyDescription": "Addresses land here when a prospect unsubscribes, bounces, or is marked do-not-contact.",
+    "colEmail": "Email",
+    "colReason": "Reason",
+    "colAdded": "Added",
+    "colAction": "Action",
+    "unsuppress": "Un-suppress",
+    "unsuppressed": "Un-suppressed {email}.",
+    "unsuppressError": "Could not un-suppress.",
+    "confirmTitle": "Un-suppress {email}?",
+    "confirmDescription": "The arsenal will be allowed to contact this address again. This cannot be undone from here."
+  },
+  "detail": {
+    "back": "Back to Marketing",
+    "loadErrorTitle": "Could not load campaign",
+    "notFound": "This campaign does not exist or is not in your organization.",
+    "nicheCampaign": "Niche campaign",
+    "tabs": {
+      "overview": "Overview",
+      "targets": "Targets",
+      "prospects": "Prospects",
+      "contracts": "Contracts"
+    },
+    "field": {
+      "project": "Project",
+      "niche": "Niche",
+      "region": "Region",
+      "country": "Country",
+      "sender": "Sender",
+      "gmailLabel": "Gmail label",
+      "whatsapp": "WhatsApp",
+      "activated": "Activated",
+      "created": "Created"
+    },
+    "openDriveFolder": "Open Drive folder",
+    "targetsTitle": "Niche targets",
+    "targetsDescription": "The segments the arsenal scrapes for this campaign's niche. Toggle, edit, or add manual targets.",
+    "prospectsTitle": "Prospects",
+    "prospectsDescription": "The cold-outreach board for this campaign. Click a row for the conversation timeline.",
+    "contractsTitle": "Campaign contracts",
+    "contractsEmpty": "No contracts generated for this campaign yet."
+  },
+  "prospects": {
+    "all": "All",
+    "searchPlaceholder": "Search email or company…",
+    "allStatuses": "All statuses",
+    "loadError": "Could not load prospects: {message}",
+    "emptyFiltered": "No prospects match these filters.",
+    "empty": "No prospects yet — the Lead Satellite populates this board as it scrapes.",
+    "colCompany": "Company",
+    "colEmail": "Email",
+    "colLocation": "Location",
+    "colStatus": "Status",
+    "colLastContacted": "Last contacted",
+    "previous": "Previous",
+    "next": "Next",
+    "pageRange": "{from}–{to} of {total}",
+    "rowActions": "Actions for {name}",
+    "markNotInterested": "Mark not interested",
+    "doNotContact": "Do not contact",
+    "archivedToast": "Archived “{name}”.",
+    "suppressedToast": "Suppressed “{name}”.",
+    "statusError": "Could not update the status.",
+    "statusSet": "Status set to {status}.",
+    "verified": "verified",
+    "field": {
+      "campaign": "Campaign",
+      "nicheTarget": "Niche target",
+      "website": "Website",
+      "location": "Location",
+      "followups": "Follow-ups",
+      "lastContacted": "Last contacted",
+      "snoozeUntil": "Snooze until",
+      "detected": "Detected"
+    },
+    "sourcePage": "Source page",
+    "statusLabel": "Status",
+    "conversation": "Conversation",
+    "loadErrorTitle": "Could not load prospect",
+    "notFound": "This prospect does not exist or is not in your organization."
+  },
+  "contracts": {
+    "title": "Contracts",
+    "emptyHint": "No contracts generated yet.",
+    "loadError": "Could not load contracts: {message}",
+    "colStatus": "Status",
+    "colTerm": "Term",
+    "colCreated": "Created",
+    "colSigned": "Signed",
+    "colDrive": "Drive"
+  },
+  "thread": {
+    "loadError": "Could not load the conversation: {message}",
+    "empty": "No messages yet — the outreach ledger is empty for this prospect.",
+    "sent": "Sent",
+    "received": "Received"
+  },
+  "actions": {
+    "pause": "Pause",
+    "resume": "Resume",
+    "archive": "Archive",
+    "campaignActions": "Campaign actions for {name}",
+    "pausedToast": "Paused “{name}”.",
+    "resumedToast": "Resumed “{name}”.",
+    "archivedToast": "Archived “{name}”.",
+    "pauseError": "Could not pause the campaign.",
+    "resumeError": "Could not resume the campaign.",
+    "archiveError": "Could not archive the campaign.",
+    "deleteAria": "Delete {name}",
+    "deleteTitle": "Delete campaign?",
+    "deleteDescription": "Removes <b>{name}</b> from the ERP. The Google Drive folder and its leads are <strong>not</strong> deleted — only this record and its run history link.",
+    "delete": "Delete",
+    "deleting": "Deleting…",
+    "deleted": "Deleted “{name}”.",
+    "deleteFailed": "Could not delete the campaign.",
+    "runNow": "Run now",
+    "retry": "Retry",
+    "run": "Run {stage}",
+    "dispatching": "Dispatching…",
+    "dispatched": "{stage} dispatched.",
+    "runFailed": "{stage} failed: {detail}",
+    "runError": "Could not run {stage}.",
+    "unknown": "unknown",
+    "syncWithDrive": "Sync with Drive",
+    "syncing": "Syncing…",
+    "syncOk": "Synced with Drive",
+    "syncInDrive": "{count} in Drive",
+    "syncArchived": "{count} archived (folder deleted)",
+    "syncRestored": "{count} restored",
+    "syncUntracked": "{count} untracked in Drive",
+    "syncFailed": "Drive sync failed",
+    "syncFailedHint": "Check that the CAMPAIGNS LIST workflow is active.",
+    "running": "running"
+  },
+  "board": {
+    "title": "Campaigns",
+    "synced": "synced {time}",
+    "loadError": "Could not load campaigns: {message}",
+    "empty": "You haven't aimed yet — click <b>AIM</b> to launch your first campaign.",
+    "globalStages": "Global stages · all campaigns",
+    "global": "global",
+    "noActivity": "no activity",
+    "activityEmpty": "No activity yet — this campaign's prep stages (Lead Satellite, Ammo Forge) will appear here once they run.",
+    "globalActivityEmpty": "Nothing yet — Reach Bazooka / Reply Glock / Sleeper runs show here.",
+    "olderActivity": "+{count, plural, one {# older activity} other {# older activities}}",
+    "draft": "draft",
+    "launched": "launched {time}",
+    "runningInN8n": "running in n8n…",
+    "idle": "idle"
+  },
+  "bazooka": {
+    "title": "Daily Reach Bazooka send",
+    "onBadge": "On · {time} · {city}",
+    "off": "Off",
+    "extraNote": "An <em>extra</em> daily send fired by the ERP, independent of n8n.",
+    "warning": "Reach Bazooka already sends <strong>daily at 08:00</strong> on n8n's own schedule. Turning this on sends a <strong>second</strong> batch — leave it <strong>Off</strong> unless you've disabled n8n's schedule.",
+    "time": "Time",
+    "timezone": "Timezone",
+    "save": "Save",
+    "saving": "Saving…",
+    "turnOff": "Turn off",
+    "pickTime": "Pick a time (or use Turn off).",
+    "saved": "Daily Bazooka send set to {time} ({timezone}).",
+    "turnedOff": "Daily Bazooka send turned off.",
+    "saveError": "Could not save.",
+    "serverTime": "server time"
+  },
+  "funnel": {
+    "leads": "Leads",
+    "emails": "Emails",
+    "replies": "Replies",
+    "meetings": "Meetings",
+    "draftsToReview": "Drafts to review"
+  },
+  "draftReview": {
+    "heading": "RAG draft review",
+    "sync": "Sync from leads",
+    "syncing": "Scanning…",
+    "loadError": "Could not load drafts: {message}",
+    "notConnected": "Draft Review isn’t connected yet — set <code>N8N_API_URL</code> on the API so it can read the RAG Agent workflow.",
+    "empty": "No drafts awaiting review. Hit <strong>Sync from leads</strong> to scan every campaign’s leads sheet for unsure replies, or wait for the RAG Agent’s hourly run.",
+    "noDraftId": "This draft has no Gmail draft id — it can’t be sent from here.",
+    "sent": "Sent to {target}.",
+    "sendFailed": "Send failed.",
+    "awaitingReview": "Awaiting review",
+    "unknown": "Unknown",
+    "notSendable": "not sendable",
+    "gmailDraftBadge": "✉ Gmail draft · not sent",
+    "unsureAreaLabel": "unsure area",
+    "contextHeading": "Context — why this needs a reply",
+    "unsureAbout": "Unsure about",
+    "why": "Why",
+    "draftedReply": "Drafted reply — edit before sending",
+    "subjectPlaceholder": "Subject",
+    "bodyPlaceholder": "Reply body",
+    "notSendableWarning": "⚠ This draft predates draft-id capture, so it can’t be sent from the ERP. Newer drafts carry a Gmail draft id and are sendable.",
+    "sending": "Sending…",
+    "approveSend": "✓ Approve & send",
+    "sendHint": "n8n sends the final text on approve · then deletes the draft"
+  }
+}

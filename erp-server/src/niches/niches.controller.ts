@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Inject,
   NotFoundException,
@@ -15,6 +16,7 @@ import type { Request } from 'express';
 import { eq } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 import type {
+  ClearResultDto,
   NicheDto,
   NicheListItemDto,
   NicheTargetBulkResultDto,
@@ -30,8 +32,10 @@ import { OrgId } from '../common/tenant';
 import { NichesService } from './niches.service';
 import {
   AssignNicheIndustryBodyDto,
+  CreateNicheBodyDto,
   CreateNicheTargetBodyDto,
   NicheTargetBulkBodyDto,
+  UpdateNicheBodyDto,
 } from './niches.dto';
 
 type NicheTargetRow = typeof schema.nicheTargets.$inferSelect;
@@ -71,6 +75,26 @@ export class NichesController {
   @Get()
   list(@OrgId() orgId: string): Promise<NicheListItemDto[]> {
     return this.niches.listWithCounts(orgId);
+  }
+
+  // Create a niche directly (JWT — the niches-management view, vs. the find-or-create
+  // the AIM launch does). org-scoped + audited. A slug clash → 409; a non-null
+  // industryId not in the org → 404. Returns the niche read shape.
+  @RequirePermissions('campaigns:write')
+  @Post()
+  async create(
+    @OrgId() orgId: string,
+    @Body() body: CreateNicheBodyDto,
+    @Req() req: Request,
+  ): Promise<NicheDto> {
+    const row = await this.niches.createNiche(orgId, body.name, body.industryId);
+    setAuditContext(req, {
+      entity: 'niches',
+      entityId: row.id,
+      action: 'CREATE',
+      after: { name: row.name, slug: row.slug, industryId: row.industryId },
+    });
+    return { id: row.id, name: row.name, slug: row.slug };
   }
 
   // A niche's targets for the management view — enabled AND disabled. org-scoped
@@ -128,6 +152,47 @@ export class NichesController {
       after: { industryId: row.industryId },
     });
     return { id: row.id, name: row.name, slug: row.slug };
+  }
+
+  // Rename a niche (JWT). org-scoped (404 if missing / cross-org) + audited. A slug
+  // clash with a sibling niche → 409. Declared AFTER PATCH :id/industry so the more
+  // specific industry route is matched first (Nest resolves in declaration order).
+  @RequirePermissions('campaigns:write')
+  @Patch(':id')
+  async rename(
+    @OrgId() orgId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateNicheBodyDto,
+    @Req() req: Request,
+  ): Promise<NicheDto> {
+    const row = await this.niches.renameNiche(orgId, id, body.name);
+    setAuditContext(req, {
+      entity: 'niches',
+      entityId: row.id,
+      action: 'UPDATE',
+      after: { name: row.name, slug: row.slug },
+    });
+    return { id: row.id, name: row.name, slug: row.slug };
+  }
+
+  // Delete a niche (JWT). org-scoped (404 if missing / cross-org) + audited. BLOCKED
+  // with a 409 when the niche still has campaigns or prospects ("reassign or archive
+  // them first"); otherwise its own niche_targets are cleared, then the niche row.
+  @RequirePermissions('campaigns:write')
+  @Delete(':id')
+  async remove(
+    @OrgId() orgId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: Request,
+  ): Promise<ClearResultDto> {
+    const row = await this.niches.deleteNiche(orgId, id);
+    setAuditContext(req, {
+      entity: 'niches',
+      entityId: row.id,
+      action: 'DELETE',
+      after: { name: row.name },
+    });
+    return { deleted: 1 };
   }
 
   // ---- MACHINE route — @Public() + ArsenalTokenGuard ------------------------
