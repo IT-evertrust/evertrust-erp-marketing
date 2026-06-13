@@ -5,7 +5,9 @@ import {
   Inbox,
   LayoutDashboard,
   LineChart,
+  Settings,
   ShieldOff,
+  SlidersHorizontal,
   Target,
   Users,
 } from 'lucide-react';
@@ -39,4 +41,9 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { href: '/sales', label: 'Sales', icon: Headset, permission: 'campaigns:read', group: 'Acquisition' },
   { href: '/performance', label: 'Performance', icon: Gauge, permission: 'performance:read', group: 'Management' },
   { href: '/users', label: 'Users', icon: Users, permission: 'users:manage', group: 'Administration' },
+  // Settings: General is open to every authed user (permission: null); Configuration
+  // is admin-only (admin:config, held by SUPER_ADMIN + ADMIN) — the sidebar hides it
+  // for everyone else.
+  { href: '/settings/general', label: 'General', icon: Settings, permission: null, group: 'Settings' },
+  { href: '/settings/configuration', label: 'Configuration', icon: SlidersHorizontal, permission: 'admin:config', group: 'Settings' },
 ];

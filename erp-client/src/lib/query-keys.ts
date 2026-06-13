@@ -6,6 +6,9 @@ import type { ListTendersQuery } from '@evertrust/shared';
 export const queryKeys = {
   me: ['me'] as const,
 
+  // Public API health probe (status/db) — the Configuration integrations panel.
+  health: ['health'] as const,
+
   // Org user directory (assignee picker).
   users: {
     all: ['users'] as const,

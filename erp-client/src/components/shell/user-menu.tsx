@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Building2, LogOut, UserRound } from 'lucide-react';
+import { Building2, LogOut, Settings, UserRound } from 'lucide-react';
 import { DEPARTMENT_LABELS, ROLE_LABELS, type MeDto } from '@evertrust/shared';
 import { useLogout } from '@/hooks/use-auth';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -62,6 +62,12 @@ export function UserMenu({ user }: { user: MeDto }) {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
+          <DropdownMenuItem asChild>
+            <Link href="/settings/general">
+              <Settings />
+              Settings
+            </Link>
+          </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link href={`/users/${user.id}`}>
               <UserRound />
