@@ -192,6 +192,45 @@
     }
   },
   "growth": {
+    "engine": {
+      "title": "Growth engine",
+      "status": {
+        "active": "{count, plural, =0 {No active campaigns} one {# active} other {# active}}",
+        "nextSend": "next send",
+        "manual": "manual"
+      },
+      "sync": "Sync",
+      "syncing": "Syncing…",
+      "syncHint": "Import recent runs + counts from n8n's execution history.",
+      "funnel": {
+        "title": "Outcome funnel",
+        "description": "What the engine produced this week, from leads to booked meetings.",
+        "leads": "Leads found",
+        "emails": "Emails sent",
+        "replies": "Replies",
+        "meetings": "Meetings"
+      },
+      "pipeline": {
+        "heading": "Pipeline — the arsenal sequence",
+        "running": "running…",
+        "last": "last {ago}",
+        "noRuns": "no runs yet",
+        "run": "Run"
+      },
+      "phase": {
+        "target": "Target",
+        "arm": "Arm",
+        "fire": "Fire",
+        "catch": "Catch",
+        "revive": "Revive"
+      },
+      "niches": {
+        "title": "Top niches by industry",
+        "description": "The niches with the most live prospects right now.",
+        "unassigned": "Unassigned",
+        "empty": "No prospects yet"
+      }
+    },
     "niches": {
       "header": {
         "title": "Niches",

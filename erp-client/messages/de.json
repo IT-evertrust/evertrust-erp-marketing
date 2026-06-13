@@ -192,6 +192,45 @@
     }
   },
   "growth": {
+    "engine": {
+      "title": "Growth Engine",
+      "status": {
+        "active": "{count, plural, =0 {Keine aktiven Kampagnen} one {# aktiv} other {# aktiv}}",
+        "nextSend": "nächster Versand",
+        "manual": "manuell"
+      },
+      "sync": "Synchronisieren",
+      "syncing": "Synchronisiere…",
+      "syncHint": "Aktuelle Läufe + Zählungen aus dem n8n-Ausführungsverlauf importieren.",
+      "funnel": {
+        "title": "Ergebnis-Funnel",
+        "description": "Was die Engine diese Woche erzeugt hat — von Leads bis zu gebuchten Terminen.",
+        "leads": "Leads gefunden",
+        "emails": "E-Mails gesendet",
+        "replies": "Antworten",
+        "meetings": "Termine"
+      },
+      "pipeline": {
+        "heading": "Pipeline — die Arsenal-Sequenz",
+        "running": "läuft…",
+        "last": "zuletzt {ago}",
+        "noRuns": "noch keine Läufe",
+        "run": "Ausführen"
+      },
+      "phase": {
+        "target": "Zielen",
+        "arm": "Laden",
+        "fire": "Feuern",
+        "catch": "Fangen",
+        "revive": "Wiederbeleben"
+      },
+      "niches": {
+        "title": "Top-Nischen nach Branche",
+        "description": "Die Nischen mit den meisten aktiven Interessenten im Moment.",
+        "unassigned": "Nicht zugeordnet",
+        "empty": "Noch keine Interessenten"
+      }
+    },
     "niches": {
       "header": {
         "title": "Nischen",
