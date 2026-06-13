@@ -265,6 +265,25 @@ describe('CampaignsService — machine config + list', () => {
     expect(list.map((c) => c.id)).toEqual([active.campaign.id]);
     expect(list[0]!.nicheId).toBe(active.campaign.nicheId);
   });
+
+  // REGRESSION (Drive→Postgres migration): CampaignDto gained `nicheName`, but the
+  // Postgres service returned raw campaign rows with no niche join — so every
+  // campaign shipped WITHOUT nicheName and the web client rejected /campaigns with
+  // "Unexpected response shape from API." list/get/create/lifecycle must each carry
+  // the joined niche display name (the campaigns table stores only nicheId).
+  it('joins the niche display name onto campaigns (CampaignDto.nicheName)', async () => {
+    const { service } = seed(''); // DRAFT, no webhook
+    const { campaign } = await service.create(ORG_A, DTO, USER);
+    expect(campaign.nicheName).toBe('LED'); // create()
+
+    expect((await service.get(ORG_A, campaign.id)).nicheName).toBe('LED'); // get()
+
+    const [listed] = await service.list(ORG_A);
+    expect(listed!.nicheName).toBe('LED'); // list()
+
+    const { after } = await service.updateLifecycle(ORG_A, campaign.id, 'ACTIVE');
+    expect(after.nicheName).toBe('LED'); // updateLifecycle()
+  });
 });
 
 describe('CampaignsService — tenant isolation + delete', () => {

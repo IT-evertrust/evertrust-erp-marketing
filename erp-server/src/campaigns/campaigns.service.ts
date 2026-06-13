@@ -25,12 +25,19 @@ import { AppConfigService } from '../config/app-config.service';
 type CampaignRow = typeof schema.campaigns.$inferSelect;
 type CampaignPatch = Partial<typeof schema.campaigns.$inferInsert>;
 
+// A campaign row enriched with its niche's display name. CampaignDto requires
+// nicheName, but the campaigns table only stores nicheId — so reads join the niche
+// name on (see withNiche). Skipping that join is what made the web client reject
+// /campaigns with "Unexpected response shape from API" after the Drive→Postgres
+// migration (the DTO gained nicheName; the Postgres service never populated it).
+type CampaignWithNiche = CampaignRow & { nicheName: string | null };
+
 // The result of the create() launch: the persisted campaign + an optional deploy
 // error. lifecycle ACTIVE = the AIM webhook fired OK; DRAFT + deployError = the
 // webhook was unset or failed and the operator must activate/retry later. There is
 // NO FAILED lifecycle — a failed launch stays DRAFT, surfaced via deployError.
 export interface CampaignLaunchResult {
-  campaign: CampaignRow;
+  campaign: CampaignWithNiche;
   deployError: string | null;
 }
 
@@ -66,19 +73,42 @@ export class CampaignsService {
     private readonly niches: NichesService,
   ) {}
 
+  // The niche's display name, or null if the id is unknown (CampaignDto.nicheName).
+  // Equality lookup (not inArray) keeps parity with getConfig and the test fake-db.
+  private async nicheNameFor(nicheId: string): Promise<string | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.niches)
+      .where(eq(schema.niches.id, nicheId))
+      .limit(1);
+    return rows[0]?.name ?? null;
+  }
+
+  // Join each campaign's niche display name (CampaignDto.nicheName) onto the raw
+  // rows — the campaigns table stores only nicheId. Distinct niche ids are looked
+  // up once each, so N campaigns cost one query per distinct niche, not per row.
+  private async withNiche(rows: CampaignRow[]): Promise<CampaignWithNiche[]> {
+    if (rows.length === 0) return [];
+    const nameById = new Map<string, string | null>();
+    for (const id of new Set(rows.map((r) => r.nicheId))) {
+      nameById.set(id, await this.nicheNameFor(id));
+    }
+    return rows.map((r) => ({ ...r, nicheName: nameById.get(r.nicheId) ?? null }));
+  }
+
   // The tenant's campaigns, newest-first. ARCHIVED rows are kept (attribution) but
   // hidden from the default list.
-  async list(orgId: string): Promise<CampaignRow[]> {
+  async list(orgId: string): Promise<CampaignWithNiche[]> {
     const rows = await this.db
       .select()
       .from(schema.campaigns)
       .where(tenantScope(orgId, schema.campaigns))
       .orderBy(desc(schema.campaigns.createdAt));
-    return rows.filter((r) => r.lifecycle !== 'ARCHIVED');
+    return this.withNiche(rows.filter((r) => r.lifecycle !== 'ARCHIVED'));
   }
 
   // One campaign within the tenant. 404 if missing or in another org.
-  async get(orgId: string, id: string): Promise<CampaignRow> {
+  async get(orgId: string, id: string): Promise<CampaignWithNiche> {
     const rows = await this.db
       .select()
       .from(schema.campaigns)
@@ -88,7 +118,7 @@ export class CampaignsService {
       .limit(1);
     const row = rows[0];
     if (!row) throw new NotFoundException('Campaign not found');
-    return row;
+    return { ...row, nicheName: await this.nicheNameFor(row.nicheId) };
   }
 
   // Launch ("Lock & Load"): find-or-create the niche, persist the campaign DRAFT,
@@ -127,7 +157,7 @@ export class CampaignsService {
     // webhook is set); the operator activates it later once AIM is wired.
     if (!webhookUrl) {
       return {
-        campaign: row,
+        campaign: { ...row, nicheName: niche.name },
         deployError:
           'AIM webhook is not configured (set N8N_AIM_WEBHOOK_URL); campaign saved as DRAFT.',
       };
@@ -145,7 +175,7 @@ export class CampaignsService {
       .where(eq(schema.campaigns.id, row.id))
       .returning();
     row = updated[0] ?? row;
-    return { campaign: row, deployError };
+    return { campaign: { ...row, nicheName: niche.name }, deployError };
   }
 
   // Move a campaign through its lifecycle (PATCH /campaigns/:id/lifecycle). Rejects
@@ -155,7 +185,7 @@ export class CampaignsService {
     orgId: string,
     id: string,
     next: CampaignLifecycle,
-  ): Promise<{ before: CampaignRow; after: CampaignRow }> {
+  ): Promise<{ before: CampaignWithNiche; after: CampaignWithNiche }> {
     const before = await this.get(orgId, id);
     const allowed = LIFECYCLE_TRANSITIONS[before.lifecycle];
     if (!allowed.includes(next)) {
@@ -170,7 +200,13 @@ export class CampaignsService {
       .set(patch)
       .where(eq(schema.campaigns.id, id))
       .returning();
-    return { before, after: updated[0] ?? before };
+    // A lifecycle move never changes the niche, so reuse the name already joined
+    // onto `before` instead of a second lookup.
+    const updatedRow = updated[0];
+    const after: CampaignWithNiche = updatedRow
+      ? { ...updatedRow, nicheName: before.nicheName }
+      : before;
+    return { before, after };
   }
 
   // Machine view of a campaign (GET /campaigns/:id/config): the launch inputs + the
