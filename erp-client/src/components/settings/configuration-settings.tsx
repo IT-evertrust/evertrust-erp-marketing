@@ -1,11 +1,21 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import type { LucideIcon } from 'lucide-react';
-import { ArrowRight, Copy, ShieldOff, Target, Users, X } from 'lucide-react';
+import {
+  ArrowRight,
+  Copy,
+  ImageOff,
+  ShieldOff,
+  Target,
+  Trash2,
+  Upload,
+  Users,
+  X,
+} from 'lucide-react';
 import type {
   DefaultTemplateDto,
   OutreachTone,
@@ -16,10 +26,13 @@ import type {
 } from '@evertrust/shared';
 import {
   useClearIngestToken,
+  useClearSignatureImage,
   useLeadStats,
   useRotateIngestToken,
+  useSetSignatureImageUrl,
   useTestN8n,
   useUpdateWorkflowConfig,
+  useUploadSignatureImage,
   useWorkflowConfig,
 } from '@/hooks/use-arsenal';
 import { timeAgo } from '@/lib/arsenal-sequence';
@@ -413,6 +426,174 @@ function isValidUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+// Configuration > Templates — the per-org signature image. Unlike the other
+// template fields this isn't part of the save-bar diff: upload / use-link / remove
+// are immediate-action mutations (like the ingest-token controls), each refetching
+// the config so the preview reflects the resolved URL. `url` is the current value
+// from the resolved config (null = none set). Gate at the call site with <Can>.
+function SignatureImageControl({ url }: { url: string | null }) {
+  const t = useTranslations('settings');
+  const upload = useUploadSignatureImage();
+  const setLink = useSetSignatureImageUrl();
+  const clear = useClearSignatureImage();
+
+  // Hidden file input, driven by the visible Upload button.
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [link, setLink_] = useState('');
+  // The preview can 404 (a broken hotlink / dead Drive share) — track that so we
+  // fall back to the empty state instead of a broken-image glyph.
+  const [imgError, setImgError] = useState(false);
+
+  const busy = upload.isPending || setLink.isPending || clear.isPending;
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    // Reset the input so picking the same file twice still fires onChange.
+    e.target.value = '';
+    if (!file) return;
+    setImgError(false);
+    upload.mutate(file, {
+      onSuccess: () => toast.success(t('config.signatureImage.toastUploaded')),
+      onError: (err) =>
+        toast.error(err.message || t('config.signatureImage.toastError')),
+    });
+  }
+
+  function handleUseLink() {
+    const value = link.trim();
+    if (value === '') return;
+    if (!isValidUrl(value)) {
+      toast.error(t('config.signatureImage.invalidUrl'));
+      return;
+    }
+    setImgError(false);
+    setLink.mutate(value, {
+      onSuccess: () => {
+        setLink_('');
+        toast.success(t('config.signatureImage.toastLinked'));
+      },
+      onError: (err) =>
+        toast.error(err.message || t('config.signatureImage.toastError')),
+    });
+  }
+
+  function handleRemove() {
+    clear.mutate(undefined, {
+      onSuccess: () => toast.success(t('config.signatureImage.toastRemoved')),
+      onError: (err) =>
+        toast.error(err.message || t('config.signatureImage.toastError')),
+    });
+  }
+
+  const showImage = url != null && !imgError;
+
+  return (
+    <div className="flex flex-col gap-3 border-t pt-4">
+      <div className="flex flex-col gap-1">
+        <Label>{t('config.signatureImage.label')}</Label>
+        <p className="text-xs text-muted-foreground">
+          {t('config.signatureImage.helper')}
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-start gap-4">
+        {/* Preview tile — the image, or a muted empty state. */}
+        <div className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/30">
+          {showImage ? (
+            // eslint-disable-next-line @next/next/no-img-element -- remote hotlink (Drive/served), not a local asset; next/image isn't configured for these hosts.
+            <img
+              src={url}
+              alt={t('config.signatureImage.previewAlt')}
+              className="size-full object-contain"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <div className="flex flex-col items-center gap-1 px-2 text-center">
+              <ImageOff className="size-5 text-muted-foreground" />
+              <span className="text-[10px] leading-tight text-muted-foreground">
+                {url != null
+                  ? t('config.signatureImage.brokenPreview')
+                  : t('config.signatureImage.empty')}
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex min-w-0 flex-1 flex-col gap-3">
+          {/* Upload (hidden file input) + Remove (only when one is set). */}
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFile}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={busy}
+            >
+              <Upload className="size-4" />
+              {upload.isPending
+                ? t('config.signatureImage.uploading')
+                : t('config.signatureImage.upload')}
+            </Button>
+            {url != null ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground"
+                onClick={handleRemove}
+                disabled={busy}
+              >
+                <Trash2 className="size-4" />
+                {clear.isPending
+                  ? t('config.signatureImage.removing')
+                  : t('config.signatureImage.remove')}
+              </Button>
+            ) : null}
+          </div>
+
+          {/* Paste a Drive/image URL → Use link. */}
+          <div className="flex max-w-md items-center gap-2">
+            <Input
+              type="url"
+              inputMode="url"
+              autoComplete="off"
+              spellCheck={false}
+              className="text-xs"
+              placeholder={t('config.signatureImage.linkPlaceholder')}
+              value={link}
+              onChange={(e) => setLink_(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleUseLink();
+                }
+              }}
+              disabled={busy}
+              aria-label={t('config.signatureImage.linkLabel')}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleUseLink}
+              disabled={busy || link.trim() === ''}
+            >
+              {setLink.isPending
+                ? t('config.signatureImage.linking')
+                : t('config.signatureImage.useLink')}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // Configuration: the editable Growth-Engine control panel, admin-only (the route
@@ -992,6 +1173,15 @@ export function ConfigurationSettings() {
                   placeholder={t('config.templates.signaturePlaceholder')}
                 />
               </div>
+
+              {/* Per-org signature image (immediate-action; not part of the save
+                  diff). admin:config is already enforced by the route, but gate it
+                  here too for parity with the rest of the editing surface. */}
+              <Can permission="admin:config">
+                <SignatureImageControl
+                  url={data.templates.signatureImageUrl ?? null}
+                />
+              </Can>
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">

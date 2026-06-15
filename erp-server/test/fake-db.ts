@@ -86,6 +86,12 @@ const COLUMN_TO_KEY: Record<string, string> = {
   gmail_thread_id: 'gmailThreadId',
   message_id: 'messageId',
   customer_id: 'customerId',
+  // signature_assets (per-org signature image storage). id/organization_id already
+  // mapped above; these cover the remaining columns so a WHERE/insert over the table
+  // round-trips correctly in the fake.
+  mime_type: 'mimeType',
+  data_base64: 'dataBase64',
+  byte_size: 'byteSize',
 };
 
 function rowMatches(row: Record<string, unknown>, cond: ParsedCondition): boolean {

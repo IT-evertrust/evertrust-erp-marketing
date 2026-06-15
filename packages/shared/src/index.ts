@@ -2521,10 +2521,32 @@ export type DefaultTemplateDto = z.infer<typeof DefaultTemplateDto>;
 export const WorkflowTemplatesDto = z.object({
   default: DefaultTemplateDto.nullable(),
   signature: z.string().nullable(),
+  // Per-org signature image. Optional + nullable for backward compatibility:
+  // omitted/null = no signature image set. Stored as a hotlinkable image URL —
+  // run `driveImageUrl()` on a pasted Google Drive share link before persisting.
+  signatureImageUrl: z.string().url().nullable().optional(),
   tone: OutreachTone.nullable(),
   language: TemplateLanguage.nullable(),
 });
 export type WorkflowTemplatesDto = z.infer<typeof WorkflowTemplatesDto>;
+
+// Normalize a Google Drive share link into a hotlinkable image URL of the form
+// `https://lh3.googleusercontent.com/d/<FILE_ID>`. Handles the common Drive share
+// shapes (`/file/d/<id>/view`, `open?id=<id>`, `uc?id=<id>`) and an already-correct
+// lh3 URL. If no Drive file id can be extracted (any other URL — e.g. a same-origin
+// `/public/signature-image/<uuid>` path or an arbitrary https URL), the input is
+// returned UNCHANGED (trimmed). Pure + total: never throws, no I/O.
+export function driveImageUrl(input: string): string {
+  const trimmed = (input ?? '').trim();
+  // Match the file id across every supported Drive/lh3 shape. Drive file ids are
+  // URL-safe base64 (letters, digits, '-' and '_'); take the first match found.
+  const id =
+    trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)?.[1] ??
+    trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/)?.[1] ??
+    trimmed.match(/lh3\.googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/)?.[1] ??
+    null;
+  return id ? `https://lh3.googleusercontent.com/d/${id}` : trimmed;
+}
 
 // Configuration > Leads — lead-generation governance. The caps are raw stored
 // values (null = unset = no cap). `defaultRegions` is the stored array (never null —
@@ -2612,6 +2634,11 @@ const DefaultRegions = z.array(
 const UpdateTemplates = z.object({
   default: DefaultTemplateDto.nullable().optional(),
   signature: z.string().nullable().optional(),
+  // null clears the signature image, omit leaves it unchanged. Empty string → null
+  // so a cleared form input reads as "clear" rather than failing URL validation.
+  signatureImageUrl: z
+    .preprocess((v) => (v === '' ? null : v), z.string().url().nullable())
+    .optional(),
   tone: OutreachTone.nullable().optional(),
   language: TemplateLanguage.nullable().optional(),
 });

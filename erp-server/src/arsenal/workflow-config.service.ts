@@ -243,6 +243,7 @@ export class WorkflowConfigService {
       templates: {
         default: (row.defaultTemplate ?? null) as DefaultTemplateDto | null,
         signature: clean(row.signature) ?? null,
+        signatureImageUrl: clean(row.signatureImageUrl) ?? null,
         tone: (clean(row.tone) ?? null) as OutreachTone | null,
         language: (clean(row.templateLanguage) ?? null) as TemplateLanguage | null,
       },
@@ -342,6 +343,7 @@ export class WorkflowConfigService {
       const t = patch.templates;
       if ('default' in t) prefs.defaultTemplate = t.default ?? null;
       if ('signature' in t) prefs.signature = t.signature ?? null;
+      if ('signatureImageUrl' in t) prefs.signatureImageUrl = t.signatureImageUrl ?? null;
       if ('tone' in t) prefs.tone = t.tone ?? null;
       if ('language' in t) prefs.templateLanguage = t.language ?? null;
     }
@@ -373,6 +375,15 @@ export class WorkflowConfigService {
       await this.persistOrg(orgId, prefs);
     }
     return this.getEffective(orgId);
+  }
+
+  // Set (or clear, with url=null) the PER-ORG signature image URL on org_config.
+  // Used by SignatureAssetsService so an upload / Drive-link / clear writes the same
+  // org_config.signatureImageUrl column the templates group resolves from — keeping
+  // the signature image a PER-ORG pref, never global infra. Returns nothing; callers
+  // read it back via getEffective() / getAutomation().
+  async setSignatureImageUrl(orgId: string, url: string | null): Promise<void> {
+    await this.persistOrg(orgId, { signatureImageUrl: url });
   }
 
   // Set (or clear, with hash=null) the ingest-token SHA-256 hash + its set-at

@@ -190,3 +190,40 @@ export function useClearIngestToken() {
     },
   });
 }
+
+// The signature-image endpoints return only the resolved URL, so we invalidate the
+// config query (rather than seed it) to pull the freshly-resolved templates group.
+type SignatureImageResult = { signatureImageUrl: string | null };
+
+// Upload a signature image file (multipart → POST).
+export function useUploadSignatureImage() {
+  const queryClient = useQueryClient();
+  return useMutation<SignatureImageResult, ApiError, File>({
+    mutationFn: (file) => api.arsenal.uploadSignatureImage(file),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.arsenal.config() });
+    },
+  });
+}
+
+// Point the signature image at a pasted URL (Drive share link or image URL).
+export function useSetSignatureImageUrl() {
+  const queryClient = useQueryClient();
+  return useMutation<SignatureImageResult, ApiError, string>({
+    mutationFn: (url) => api.arsenal.setSignatureImageUrl(url),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.arsenal.config() });
+    },
+  });
+}
+
+// Clear the signature image (DELETE).
+export function useClearSignatureImage() {
+  const queryClient = useQueryClient();
+  return useMutation<SignatureImageResult, ApiError, void>({
+    mutationFn: () => api.arsenal.clearSignatureImage(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.arsenal.config() });
+    },
+  });
+}

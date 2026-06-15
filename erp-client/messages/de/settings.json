@@ -119,6 +119,26 @@
       "languageDe": "Deutsch",
       "unset": "— Nicht gesetzt"
     },
+    "signatureImage": {
+      "label": "Signaturbild",
+      "helper": "Ein Bild, das an die Signatur gesendeter E-Mails angehängt wird — Datei hochladen oder einen Google-Drive- bzw. Bildlink einfügen.",
+      "empty": "Kein Bild",
+      "brokenPreview": "Nicht ladbar",
+      "previewAlt": "Vorschau des Signaturbilds",
+      "upload": "Hochladen",
+      "uploading": "Wird hochgeladen…",
+      "remove": "Entfernen",
+      "removing": "Wird entfernt…",
+      "linkLabel": "Bild-URL",
+      "linkPlaceholder": "https://drive.google.com/… oder eine Bild-URL",
+      "useLink": "Link verwenden",
+      "linking": "Wird gespeichert…",
+      "invalidUrl": "Bitte eine gültige URL eingeben.",
+      "toastUploaded": "Signaturbild hochgeladen.",
+      "toastLinked": "Signaturbild aktualisiert.",
+      "toastRemoved": "Signaturbild entfernt.",
+      "toastError": "Signaturbild konnte nicht aktualisiert werden."
+    },
     "leads": {
       "title": "Leads",
       "description": "Wie Lead Satellite sucht und wie die Ansprache getaktet wird.",

@@ -119,6 +119,26 @@
       "languageDe": "Deutsch",
       "unset": "— Not set"
     },
+    "signatureImage": {
+      "label": "Signature image",
+      "helper": "An image appended to the signature of sent emails — upload a file or paste a Google Drive / image link.",
+      "empty": "No image",
+      "brokenPreview": "Can't load",
+      "previewAlt": "Signature image preview",
+      "upload": "Upload",
+      "uploading": "Uploading…",
+      "remove": "Remove",
+      "removing": "Removing…",
+      "linkLabel": "Image URL",
+      "linkPlaceholder": "https://drive.google.com/… or an image URL",
+      "useLink": "Use link",
+      "linking": "Saving…",
+      "invalidUrl": "Enter a valid URL.",
+      "toastUploaded": "Signature image uploaded.",
+      "toastLinked": "Signature image updated.",
+      "toastRemoved": "Signature image removed.",
+      "toastError": "Could not update the signature image."
+    },
     "leads": {
       "title": "Leads",
       "description": "How Lead Satellite hunts and how outreach is paced.",

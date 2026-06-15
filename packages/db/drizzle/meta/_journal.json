@@ -190,6 +190,13 @@
       "when": 1780574000000,
       "tag": "0026_org_config_split",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1780575000000,
+      "tag": "0027_signature_assets",
+      "breakpoints": true
     }
   ]
 }

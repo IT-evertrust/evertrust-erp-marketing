@@ -194,6 +194,13 @@ type RequestOptions = {
   signal?: AbortSignal;
 };
 
+// Response of the signature-image endpoints (POST upload, POST {url}, DELETE).
+// The server returns only the resolved URL ({ signatureImageUrl }) — null after a
+// clear. There is no shared DTO for this small response, so it's validated here.
+const SignatureImageResultDto = z.object({
+  signatureImageUrl: z.string().url().nullable(),
+});
+
 // Single choke point for every API call:
 //  - always credentials:'include' so the httpOnly access_token cookie rides along
 //    (cross-origin; the API enables CORS with credentials),
@@ -918,6 +925,39 @@ export const api = {
         method: 'DELETE',
         schema: WorkflowConfigDto,
       }),
+
+    // Upload a signature image (multipart). Stores the bytes server-side and points
+    // the per-org pref at an absolute hotlinkable URL; returns just that URL. The
+    // caller invalidates the config query so the resolved templates pick it up.
+    uploadSignatureImage: (file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      return uploadRequest<z.infer<typeof SignatureImageResultDto>>(
+        '/arsenal/config/signature-image',
+        form,
+        SignatureImageResultDto,
+      );
+    },
+
+    // Point the signature image at a pasted URL (a Google Drive share link or any
+    // image URL). The server normalizes Drive links to a hotlinkable form.
+    setSignatureImageUrl: (url: string) =>
+      request<z.infer<typeof SignatureImageResultDto>>(
+        '/arsenal/config/signature-image',
+        {
+          method: 'POST',
+          body: { url },
+          schema: SignatureImageResultDto,
+        },
+      ),
+
+    // Clear the signature image (nulls the per-org pref). Already-sent emails keep
+    // resolving their embedded hotlink — this only affects future sends.
+    clearSignatureImage: () =>
+      request<z.infer<typeof SignatureImageResultDto>>(
+        '/arsenal/config/signature-image',
+        { method: 'DELETE', schema: SignatureImageResultDto },
+      ),
   },
 
   // ---- Sales Agent: meetings (Read.ai analyses synced from n8n) ----

@@ -250,6 +250,7 @@ describe('CampaignsService — machine config + list', () => {
     expect(cfg.automation.templates).toEqual({
       default: null,
       signature: null,
+      signatureImageUrl: null,
       tone: null,
       language: null,
     });

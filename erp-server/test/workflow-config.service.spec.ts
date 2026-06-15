@@ -155,6 +155,7 @@ describe('WorkflowConfigService — templates + leads groups', () => {
     expect(eff.templates).toEqual({
       default: null,
       signature: null,
+      signatureImageUrl: null,
       tone: null,
       language: null,
     });
@@ -194,6 +195,7 @@ describe('WorkflowConfigService — templates + leads groups', () => {
     expect(eff.templates).toEqual({
       default: template,
       signature: 'Best, EverTrust',
+      signatureImageUrl: null,
       tone: 'formal',
       language: 'de',
     });
