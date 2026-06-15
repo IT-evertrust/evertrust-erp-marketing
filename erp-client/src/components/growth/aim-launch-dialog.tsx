@@ -34,9 +34,9 @@ import {
 } from '@/components/ui/select';
 
 // The AIM "Lock & Load" form, keyed by the CreateCampaignDto fields. Target is
-// gone (target archetypes now live on niche_targets, derived per-niche); the old
-// "State / City" is renamed Region (still free text — a city/voivodeship the Lead
-// Satellite expands into searches); niche is pick-or-create (existing or new name).
+// gone (target archetypes now live on niche_targets, derived per-niche); Region
+// is a fixed zone (REGION_OPTIONS) the Lead Satellite seeds its city searches
+// from; niche is pick-or-create (existing or new name).
 type FormState = {
   name: string;
   nicheName: string;
@@ -48,11 +48,27 @@ type FormState = {
   sender: CampaignSender;
 };
 
+// AIM Region zones (strict dropdown). Values are sent to n8n as-is and seed the
+// Lead Satellite's city searches, so they stay stable English strings.
+// "Anywhere" is the catch-all default (omitted from the Gmail label).
+// "Near border (DE-PL)" targets the German–Polish border — we run German tenders,
+// so near-border means BOTH sides of the DE/PL border (the n8n Lead Satellite
+// expands it into border-city searches).
+const REGION_OPTIONS = [
+  'Anywhere',
+  'North',
+  'South',
+  'East',
+  'West',
+  'Central',
+  'Near border (DE-PL)',
+] as const;
+
 const EMPTY_FORM: FormState = {
   name: '',
   nicheName: '',
   country: '',
-  region: '',
+  region: 'Anywhere',
   project: '',
   gmailLabel: '',
   whatsappNumber: '',
@@ -266,17 +282,25 @@ export function AimLaunchDialog() {
             />
           </div>
 
-          {/* Region — free text (was "State / City"); the Lead Satellite expands
-              it into per-city searches, e.g. "Warszawa, Kraków" or "Mazowieckie" */}
+          {/* Region — a fixed zone the Lead Satellite seeds its city searches
+              from. "Near border (DE-PL)" = the German–Polish border (both sides). */}
           <div className="grid gap-2">
             <Label htmlFor={`${fieldId}-region`}>{t('regionLabel')}</Label>
-            <Input
-              id={`${fieldId}-region`}
+            <Select
               value={form.region}
-              placeholder={t('regionPlaceholder')}
-              maxLength={120}
-              onChange={(e) => set('region', e.target.value)}
-            />
+              onValueChange={(v) => set('region', v)}
+            >
+              <SelectTrigger id={`${fieldId}-region`} className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {REGION_OPTIONS.map((opt) => (
+                  <SelectItem key={opt} value={opt}>
+                    {opt}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Project */}
