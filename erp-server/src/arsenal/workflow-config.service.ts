@@ -1,12 +1,14 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { count, eq } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
+import { DEFAULT_SENDERS } from '@evertrust/shared';
 import type {
   ArsenalStage,
   DefaultSender,
   DefaultTemplateDto,
   LeadStatsDto,
+  OrgSenderDto,
   OutreachTone,
   TemplateLanguage,
   TestN8nResultDto,
@@ -19,6 +21,24 @@ import { DB, type DbClient } from '../db/db.tokens';
 import { tenantScope } from '../common/tenant';
 import { AppConfigService } from '../config/app-config.service';
 import type { Env } from '../config/env.schema';
+import { SendersService } from './senders.service';
+
+// The resolved Growth-Engine automation block merged into the machine campaign config:
+// the effective Templates + Leads groups (PER-ORG) PLUS the resolved sender list, the
+// resolved default sender's EMAIL (so n8n can set the From directly), and the resolved
+// salesCalendarId. The senders/default-email/calendar fields extend the base
+// templates+leads shape the outreach workflows already poll.
+export interface ResolvedAutomation {
+  templates: WorkflowTemplatesDto;
+  leads: WorkflowLeadsDto;
+  // The org's resolved sender list (its own senders, or DEFAULT_SENDERS when none).
+  senders: OrgSenderDto[];
+  // The resolved default sender's EMAIL (the from-address n8n should send as), or null
+  // when nothing resolves (no senders at all — should not happen given DEFAULT_SENDERS).
+  defaultSenderEmail: string | null;
+  // The org's resolved sales calendar id (org_config ?? env ?? null).
+  salesCalendarId: string | null;
+}
 
 type WorkflowConfigRow = typeof schema.workflowConfig.$inferSelect;
 type OrgConfigRow = typeof schema.orgConfig.$inferSelect;
@@ -80,6 +100,7 @@ export class WorkflowConfigService {
   constructor(
     @Inject(DB) private readonly db: DbClient,
     private readonly config: AppConfigService,
+    private readonly senders: SendersService,
   ) {}
 
   private cache: { row: WorkflowConfigRow | null; at: number } | null = null;
@@ -141,6 +162,14 @@ export class WorkflowConfigService {
     return clean(stored) ?? clean(this.config.get(STAGE_WEBHOOK_ENV[stage]));
   }
 
+  // The org's RESOLVED sender list (its own org_senders rows, or the product
+  // DEFAULT_SENDERS when it has none). A thin passthrough to SendersService so callers
+  // that already depend on WorkflowConfigService (e.g. CampaignsService' create-time
+  // sender-key validation) don't have to inject SendersService directly.
+  resolveSenders(orgId: string): Promise<OrgSenderDto[]> {
+    return this.senders.resolve(orgId);
+  }
+
   // The effective AIM ("deploy campaign") webhook URL, or undefined when unset.
   async getAimWebhook(): Promise<string | undefined> {
     const row = await this.row();
@@ -171,6 +200,7 @@ export class WorkflowConfigService {
     const row = await this.row();
     const orgRow = await this.orgRow(orgId);
     const env = this.config;
+    const { senders, fromOrg } = await this.senders.resolveDetailed(orgId);
 
     const field = (stored: string | null | undefined, envVal: string | undefined) => {
       const overridden = clean(stored) !== undefined;
@@ -216,14 +246,51 @@ export class WorkflowConfigService {
       ingestTokenSetAt: row?.ingestTokenSetAt
         ? row.ingestTokenSetAt.toISOString()
         : null,
-      // defaultSender is now a PER-ORG pref (org_config), no env fallback.
-      defaultSender: (clean(orgRow.defaultSender) ?? null) as DefaultSender | null,
+      // defaultSender is now a PER-ORG pref (org_config), no env fallback. It is the
+      // KEY of the org's default sender (the resolved sender list carries the address).
+      defaultSender: this.resolveDefaultSenderKey(orgRow, senders, fromOrg) as
+        | DefaultSender
+        | null,
+      // The resolved per-org sender list (the org's own rows, or DEFAULT_SENDERS).
+      senders,
+      // org_config ?? env SALES_CALENDAR_ID ?? null.
+      salesCalendarId: this.resolveSalesCalendarId(orgRow),
       followupOffsetDays: row?.followupOffsetDays ?? null,
       finalPushOffsetDays: row?.finalPushOffsetDays ?? null,
       // Templates + Leads share one resolver with getAutomation() (see below) so the
       // /arsenal/config read and the machine campaign config never drift. PER-ORG.
       ...this.resolveAutomation(orgRow),
     };
+  }
+
+  // The KEY of the org's default sender. The org's OWN sender flagged isDefault wins
+  // (only authoritative when the list is the org's own rows, NOT the product fallback);
+  // else the stored org_config.defaultSender free-text key; else the first resolved
+  // sender's key; else null. `fromOrg` distinguishes a real org list from the
+  // DEFAULT_SENDERS fallback so an explicit defaultSender pref isn't overridden by the
+  // product list's baked-in isDefault flag.
+  private resolveDefaultSenderKey(
+    orgRow: OrgConfigRow,
+    senders: OrgSenderDto[],
+    fromOrg: boolean,
+  ): string | null {
+    if (fromOrg) {
+      const flagged = senders.find((s) => s.isDefault);
+      if (flagged) return flagged.key;
+    }
+    const stored = clean(orgRow.defaultSender);
+    if (stored) return stored;
+    return senders[0]?.key ?? null;
+  }
+
+  // The org's effective sales calendar id: org_config.salesCalendarId ?? env
+  // SALES_CALENDAR_ID ?? null (the product default is the LAST fallback).
+  private resolveSalesCalendarId(orgRow: OrgConfigRow): string | null {
+    return (
+      clean(orgRow.salesCalendarId) ??
+      clean(this.config.get('SALES_CALENDAR_ID')) ??
+      null
+    );
   }
 
   // The effective Templates + Leads groups for a PER-ORG org_config row — the single
@@ -259,16 +326,30 @@ export class WorkflowConfigService {
     };
   }
 
-  // The effective Templates + Leads groups for ONE org (org_config), merged into the
-  // machine GET /campaigns/:id/config by CampaignsService so the outreach workflows
-  // pick up the baseline copy + lead governance without a new HTTP node. Identical
-  // resolution to getEffective()'s templates/leads (same org row + the same gate
-  // defaults) via the shared resolveAutomation() helper.
-  async getAutomation(orgId: string): Promise<{
-    templates: WorkflowTemplatesDto;
-    leads: WorkflowLeadsDto;
-  }> {
-    return this.resolveAutomation(await this.orgRow(orgId));
+  // The effective automation block for ONE org, merged into the machine GET
+  // /campaigns/:id/config by CampaignsService so the outreach workflows pick up the
+  // baseline copy + lead governance + the org's senders/default-from-address/sales
+  // calendar without a new HTTP node. Templates + Leads resolve identically to
+  // getEffective() (same org row + the same gate defaults) via resolveAutomation();
+  // the senders/defaultSenderEmail/salesCalendarId fields use the same resolvers
+  // getEffective() does, so the admin read and the machine config never drift.
+  async getAutomation(orgId: string): Promise<ResolvedAutomation> {
+    const orgRow = await this.orgRow(orgId);
+    const { senders, fromOrg } = await this.senders.resolveDetailed(orgId);
+    const defaultKey = this.resolveDefaultSenderKey(orgRow, senders, fromOrg);
+    // The from-address n8n should send as: the resolved default sender's email, or the
+    // first resolved sender's email when no key resolves (defensive — should not occur
+    // given DEFAULT_SENDERS), else null.
+    const defaultSenderEmail =
+      senders.find((s) => s.key === defaultKey)?.email ??
+      senders[0]?.email ??
+      null;
+    return {
+      ...this.resolveAutomation(orgRow),
+      senders,
+      defaultSenderEmail,
+      salesCalendarId: this.resolveSalesCalendarId(orgRow),
+    };
   }
 
   // ----- lead stats (GET /arsenal/lead-stats) ------------------------------
@@ -334,7 +415,27 @@ export class WorkflowConfigService {
 
     // --- PER-ORG prefs → org_config(orgId) ---
     const prefs: Partial<typeof schema.orgConfig.$inferInsert> = {};
-    if ('defaultSender' in patch) prefs.defaultSender = patch.defaultSender ?? null;
+    if ('defaultSender' in patch) {
+      const ds = clean(patch.defaultSender);
+      // A non-empty defaultSender must reference one of the org's resolved sender
+      // keys (its own rows, or the DEFAULT_SENDERS fallback) — otherwise the config
+      // would advertise a default that silently resolves to a different address.
+      // A blank/cleared value resets it to the resolver's own default.
+      if (ds !== undefined) {
+        const keys = (await this.senders.resolve(orgId)).map((s) => s.key);
+        if (!keys.includes(ds)) {
+          throw new BadRequestException(
+            `Unknown sender '${ds}'. Add it under senders before making it the default.`,
+          );
+        }
+      }
+      prefs.defaultSender = ds ?? null;
+    }
+    // The sales calendar id is a PER-ORG pref (value sets / null clears → env/product
+    // default). The senders LIST is managed via the dedicated CRUD endpoints, not here.
+    if ('salesCalendarId' in patch) {
+      prefs.salesCalendarId = patch.salesCalendarId ?? null;
+    }
 
     // Templates group — each sub-field independent: a value sets it, null clears it,
     // an omitted key is left unchanged. `default` is stored as the jsonb object (or

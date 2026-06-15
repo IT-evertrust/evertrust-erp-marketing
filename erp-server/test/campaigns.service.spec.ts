@@ -1,9 +1,10 @@
 import {
+  BadRequestException,
   NotFoundException,
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { schema } from '@evertrust/db';
-import type { CreateCampaignDto } from '@evertrust/shared';
+import { DEFAULT_SENDERS, type CreateCampaignDto } from '@evertrust/shared';
 import { CampaignsService } from '../src/campaigns/campaigns.service';
 import { NichesService } from '../src/niches/niches.service';
 import type { AppConfigService } from '../src/config/app-config.service';
@@ -157,6 +158,29 @@ describe('CampaignsService — launch (create + AIM deploy)', () => {
     expect(campaign.lifecycle).toBe('DRAFT');
     expect(deployError).toContain('not configured');
   });
+
+  // WHY: the campaign sender must be one of the org's RESOLVED sender keys. With no
+  // org_senders rows the org falls back to DEFAULT_SENDERS, so an unknown key is 400
+  // (no campaign persisted), while the legacy 'info'/'hanna' keys stay valid.
+  it('rejects an unknown sender key (400) and never persists the campaign', async () => {
+    const { service, campaigns } = seed('');
+    await expect(
+      service.create(ORG_A, { ...DTO, sender: 'nobody' }, USER),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(campaigns.rows).toHaveLength(0);
+  });
+
+  it('keeps the legacy DEFAULT_SENDERS keys valid (info + hanna)', async () => {
+    const { service } = seed('');
+    const a = await service.create(ORG_A, { ...DTO, sender: 'info' }, USER);
+    expect(a.campaign.sender).toBe('info');
+    const b = await service.create(
+      ORG_A,
+      { ...DTO, project: 'P-hanna', sender: 'hanna' },
+      USER,
+    );
+    expect(b.campaign.sender).toBe('hanna');
+  });
 });
 
 describe('CampaignsService — lifecycle transitions', () => {
@@ -263,6 +287,15 @@ describe('CampaignsService — machine config + list', () => {
       dedupDays: null,
       requireNicheAnalysis: true,
     });
+
+    // The per-org senders + the resolved default sender EMAIL + the org sales calendar
+    // ride along on the same automation block (the seam n8n reads). With no org_senders
+    // rows the list is the product DEFAULT_SENDERS and the default From is info@.
+    expect(cfg.automation.senders).toEqual(DEFAULT_SENDERS);
+    expect(cfg.automation.defaultSenderEmail).toBe('info@evertrust-germany.de');
+    // No org_config + no SALES_CALENDAR_ID env → the org sales calendar resolves null
+    // (distinct from the campaign's OWN salesCalendarId at cfg.salesCalendarId).
+    expect(cfg.automation.salesCalendarId).toBeNull();
   });
 
   it('getConfig 404s for an unknown campaign id', async () => {

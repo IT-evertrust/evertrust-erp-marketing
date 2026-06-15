@@ -7,9 +7,12 @@ import { toast } from 'sonner';
 import type { LucideIcon } from 'lucide-react';
 import {
   ArrowRight,
+  Check,
   Copy,
   ImageOff,
+  Plus,
   ShieldOff,
+  Star,
   Target,
   Trash2,
   Upload,
@@ -18,6 +21,7 @@ import {
 } from 'lucide-react';
 import type {
   DefaultTemplateDto,
+  OrgSenderDto,
   OutreachTone,
   TemplateLanguage,
   TestN8nResultDto,
@@ -28,11 +32,14 @@ import {
   useClearIngestToken,
   useClearSignatureImage,
   useLeadStats,
+  useOrgSenders,
+  useRemoveSender,
   useRotateIngestToken,
   useSetSignatureImageUrl,
   useTestN8n,
   useUpdateWorkflowConfig,
   useUploadSignatureImage,
+  useUpsertSender,
   useWorkflowConfig,
 } from '@/hooks/use-arsenal';
 import { timeAgo } from '@/lib/arsenal-sequence';
@@ -120,7 +127,10 @@ type TemplateBlockForm = { subject: string; body: string };
 type FormState = {
   webhooks: Record<WebhookKey, string>;
   n8nApiUrl: string;
-  defaultSender: '' | 'info' | 'hanna';
+  // A per-org sender KEY ('' = clear → resolve to the org/product default). The
+  // options come from the resolved senders list, not a fixed enum.
+  defaultSender: string;
+  salesCalendarId: string;
   followupOffsetDays: string;
   finalPushOffsetDays: string;
   templates: {
@@ -165,6 +175,7 @@ function toForm(c: WorkflowConfigDto): FormState {
     },
     n8nApiUrl: c.n8nApiUrl.value ?? '',
     defaultSender: c.defaultSender ?? '',
+    salesCalendarId: c.salesCalendarId ?? '',
     followupOffsetDays:
       c.followupOffsetDays == null ? '' : String(c.followupOffsetDays),
     finalPushOffsetDays:
@@ -596,6 +607,244 @@ function SignatureImageControl({ url }: { url: string | null }) {
   );
 }
 
+// The blank add-sender row. Key + email are required; label optional; isDefault
+// promotes the new sender to the org's fallback on save.
+type SenderDraft = { key: string; email: string; label: string; isDefault: boolean };
+const EMPTY_SENDER_DRAFT: SenderDraft = {
+  key: '',
+  email: '',
+  label: '',
+  isDefault: false,
+};
+
+// Configuration > Senders — the per-org outreach mailbox list. Like the signature
+// image, these are immediate-action mutations (add / set-default / remove), each
+// re-resolving the senders + config queries via the hooks. The campaign sender
+// picker reads from the same resolved list. Gate at the call site with <Can>.
+function SendersControl() {
+  const t = useTranslations('settings');
+  const senders = useOrgSenders();
+  const upsert = useUpsertSender();
+  const remove = useRemoveSender();
+
+  const [draft, setDraft] = useState<SenderDraft>(EMPTY_SENDER_DRAFT);
+  // Which sender key is mid-mutation, so we can disable just that row's controls.
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
+
+  const list = senders.data ?? [];
+  const busy = upsert.isPending || remove.isPending;
+
+  function setField<K extends keyof SenderDraft>(key: K, value: SenderDraft[K]) {
+    setDraft((d) => ({ ...d, [key]: value }));
+  }
+
+  // Add (or update) a sender from the draft row. Key + a valid email are required.
+  function handleAdd() {
+    const key = draft.key.trim();
+    const email = draft.email.trim();
+    const label = draft.label.trim();
+    if (key === '' || email === '') {
+      toast.error(t('config.senders.missingFields'));
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error(t('config.senders.invalidEmail'));
+      return;
+    }
+    setPendingKey(key);
+    upsert.mutate(
+      { key, email, label: label === '' ? null : label, isDefault: draft.isDefault },
+      {
+        onSuccess: () => {
+          setDraft(EMPTY_SENDER_DRAFT);
+          toast.success(t('config.senders.toastAdded'));
+        },
+        onError: (err) => toast.error(err.message || t('config.senders.toastError')),
+        onSettled: () => setPendingKey(null),
+      },
+    );
+  }
+
+  // Promote an existing sender to the org default (re-upserts with isDefault: true;
+  // the server unsets the flag on the others).
+  function handleSetDefault(s: OrgSenderDto) {
+    if (s.isDefault) return;
+    setPendingKey(s.key);
+    upsert.mutate(
+      { key: s.key, email: s.email, label: s.label ?? null, isDefault: true },
+      {
+        onSuccess: () => toast.success(t('config.senders.toastDefaultSet')),
+        onError: (err) => toast.error(err.message || t('config.senders.toastError')),
+        onSettled: () => setPendingKey(null),
+      },
+    );
+  }
+
+  // Remove a sender. The button is disabled for the last remaining one; the server
+  // also guards (409) in case of a race.
+  function handleRemove(s: OrgSenderDto) {
+    setPendingKey(s.key);
+    remove.mutate(s.key, {
+      onSuccess: () => toast.success(t('config.senders.toastRemoved')),
+      onError: (err) => toast.error(err.message || t('config.senders.toastError')),
+      onSettled: () => setPendingKey(null),
+    });
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('config.senders.title')}</CardTitle>
+        <CardDescription>{t('config.senders.description')}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-6">
+        {senders.isLoading ? (
+          <Skeleton className="h-24 w-full rounded-lg" />
+        ) : list.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {t('config.senders.empty')}
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {list.map((s) => {
+              const rowBusy = busy && pendingKey === s.key;
+              return (
+                <div
+                  key={s.key}
+                  className="flex items-center gap-3 rounded-lg border p-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-sm font-medium">
+                        {s.label?.trim() ? s.label : s.key}
+                      </span>
+                      {s.isDefault ? (
+                        <Badge
+                          variant="outline"
+                          className="border-emerald-500/30 bg-emerald-500/10 font-medium text-emerald-700 dark:text-emerald-400"
+                        >
+                          {t('config.senders.defaultBadge')}
+                        </Badge>
+                      ) : null}
+                    </div>
+                    <p className="truncate font-mono text-xs text-muted-foreground">
+                      {s.email}
+                    </p>
+                  </div>
+                  {s.isDefault ? null : (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="shrink-0 text-muted-foreground"
+                      onClick={() => handleSetDefault(s)}
+                      disabled={busy}
+                    >
+                      <Star className="size-4" />
+                      {t('config.senders.makeDefault')}
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => handleRemove(s)}
+                    // Refuse to remove the last sender (the server guards too).
+                    disabled={busy || list.length <= 1}
+                    aria-label={t('config.senders.removeAria', {
+                      sender: s.label?.trim() ? s.label : s.key,
+                    })}
+                    title={
+                      list.length <= 1
+                        ? t('config.senders.removeLastBlocked')
+                        : undefined
+                    }
+                  >
+                    {rowBusy && remove.isPending ? (
+                      <span className="size-4 animate-pulse rounded-full bg-muted-foreground/40" />
+                    ) : (
+                      <Trash2 className="size-4" />
+                    )}
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Add row — key + email (+ optional label), with a "set as default" toggle. */}
+        <div className="flex flex-col gap-3 border-t pt-4">
+          <Label>{t('config.senders.addTitle')}</Label>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <Input
+              value={draft.key}
+              onChange={(e) => setField('key', e.target.value)}
+              placeholder={t('config.senders.keyPlaceholder')}
+              aria-label={t('config.senders.keyLabel')}
+              maxLength={60}
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <Input
+              type="email"
+              inputMode="email"
+              value={draft.email}
+              onChange={(e) => setField('email', e.target.value)}
+              placeholder={t('config.senders.emailPlaceholder')}
+              aria-label={t('config.senders.emailLabel')}
+              maxLength={200}
+              autoComplete="off"
+              spellCheck={false}
+              className="font-mono text-xs"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAdd();
+                }
+              }}
+            />
+            <Input
+              value={draft.label}
+              onChange={(e) => setField('label', e.target.value)}
+              placeholder={t('config.senders.labelPlaceholder')}
+              aria-label={t('config.senders.labelLabel')}
+              maxLength={120}
+              autoComplete="off"
+            />
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={draft.isDefault}
+                onChange={(e) => setField('isDefault', e.target.checked)}
+                className="size-4 rounded border-input accent-emerald-500"
+              />
+              {t('config.senders.setDefaultOnAdd')}
+            </label>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleAdd}
+              disabled={
+                busy || draft.key.trim() === '' || draft.email.trim() === ''
+              }
+            >
+              {upsert.isPending && pendingKey === draft.key.trim() ? (
+                <Check className="size-4" />
+              ) : (
+                <Plus className="size-4" />
+              )}
+              {t('config.senders.add')}
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // Configuration: the editable Growth-Engine control panel, admin-only (the route
 // gates on admin:config). Webhook URLs + the n8n base URL are editable overrides;
 // secrets (n8n API key, ingest token) are status-only, never inputs.
@@ -635,6 +884,23 @@ export function ConfigurationSettings() {
 
   const dirty =
     !!form && !!baseline && JSON.stringify(form) !== JSON.stringify(baseline);
+
+  // Default-sender Select options, derived from the resolved senders so the cadence
+  // picker tracks the org's mailbox list (not a fixed info/hanna enum). Each option
+  // shows "Label (email)" (or the email). Always includes the current explicit
+  // override so a legacy key still renders a valid choice.
+  const senderOptions = useMemo(() => {
+    const list = data?.senders ?? [];
+    const opts = list.map((s) => ({
+      key: s.key,
+      label: s.label?.trim() ? `${s.label} (${s.email})` : s.email,
+    }));
+    const current = form?.defaultSender ?? '';
+    if (current !== '' && !opts.some((o) => o.key === current)) {
+      opts.push({ key: current, label: current });
+    }
+    return opts;
+  }, [data?.senders, form?.defaultSender]);
 
   function setWebhook(key: WebhookKey, value: string) {
     setForm((f) => (f ? { ...f, webhooks: { ...f.webhooks, [key]: value } } : f));
@@ -699,6 +965,10 @@ export function ConfigurationSettings() {
     }
     if (f.defaultSender !== base.defaultSender) {
       patch.defaultSender = f.defaultSender === '' ? null : f.defaultSender;
+    }
+    if (f.salesCalendarId !== base.salesCalendarId) {
+      patch.salesCalendarId =
+        f.salesCalendarId.trim() === '' ? null : f.salesCalendarId.trim();
     }
     if (f.followupOffsetDays !== base.followupOffsetDays) {
       patch.followupOffsetDays =
@@ -1038,10 +1308,7 @@ export function ConfigurationSettings() {
                 <Select
                   value={form.defaultSender === '' ? 'default' : form.defaultSender}
                   onValueChange={(v) =>
-                    setField(
-                      'defaultSender',
-                      v === 'default' ? '' : (v as 'info' | 'hanna'),
-                    )
+                    setField('defaultSender', v === 'default' ? '' : v)
                   }
                 >
                   <SelectTrigger id="default-sender" className="max-w-sm">
@@ -1051,14 +1318,30 @@ export function ConfigurationSettings() {
                     <SelectItem value="default">
                       {t('config.cadence.senderDefault')}
                     </SelectItem>
-                    <SelectItem value="info">
-                      {t('config.cadence.senderInfo')}
-                    </SelectItem>
-                    <SelectItem value="hanna">
-                      {t('config.cadence.senderHanna')}
-                    </SelectItem>
+                    {senderOptions.map((opt) => (
+                      <SelectItem key={opt.key} value={opt.key}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="sales-calendar-id">
+                  {t('config.cadence.salesCalendarLabel')}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  {t('config.cadence.salesCalendarHelper')}
+                </p>
+                <Input
+                  id="sales-calendar-id"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="max-w-md font-mono text-xs"
+                  placeholder={t('config.cadence.salesCalendarPlaceholder')}
+                  value={form.salesCalendarId}
+                  onChange={(e) => setField('salesCalendarId', e.target.value)}
+                />
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
@@ -1100,6 +1383,13 @@ export function ConfigurationSettings() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Senders — the per-org outreach mailbox list (immediate-action CRUD,
+              not part of the save-bar diff). The route already gates on admin:config;
+              gate here too for parity with the rest of the editing surface. */}
+          <Can permission="admin:config">
+            <SendersControl />
+          </Can>
 
           {/* Daily send — the existing ERP-side daily Bazooka control. */}
           <Card>

@@ -103,6 +103,13 @@ export const EnvSchema = z.object({
   N8N_RAG_DRAFTS_WEBHOOK_URL: z.string().default(''),
   N8N_RAG_SEND_WEBHOOK_URL: z.string().default(''),
   N8N_RAG_SCAN_WEBHOOK_URL: z.string().default(''),
+
+  // Growth Engine: the PRODUCT-DEFAULT sales calendar id meetings are booked into
+  // (an opaque provider id, e.g. a Google Calendar id). It is the LAST fallback for
+  // an org's sales calendar — org_config.salesCalendarId wins, then this env var,
+  // then null. Blank = no product default (an org with no override resolves to null,
+  // and the workflow uses its own built-in default calendar).
+  SALES_CALENDAR_ID: z.string().default(''),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

@@ -4,6 +4,7 @@ import {
   Controller,
   Delete,
   Get,
+  Param,
   Post,
   Put,
   Req,
@@ -16,6 +17,7 @@ import { z } from 'zod';
 import type { Request } from 'express';
 import type {
   LeadStatsDto,
+  OrgSenderDto,
   RotateIngestTokenResultDto,
   TestN8nResultDto,
   WorkflowConfigDto,
@@ -24,11 +26,12 @@ import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { OrgId } from '../common/tenant';
 import { setAuditContext } from '../common/audit-context';
 import { WorkflowConfigService } from './workflow-config.service';
+import { SendersService } from './senders.service';
 import {
   MAX_SIGNATURE_BYTES,
   SignatureAssetsService,
 } from './signature-assets.service';
-import { UpdateWorkflowConfigBodyDto } from './arsenal.dto';
+import { UpdateWorkflowConfigBodyDto, UpsertOrgSenderBodyDto } from './arsenal.dto';
 
 // The JSON body shape for the link-based path: { url: <a valid URL> }. Validated
 // manually (not the global ZodValidationPipe) because this route also accepts a
@@ -67,6 +70,7 @@ export class WorkflowConfigController {
   constructor(
     private readonly workflowConfig: WorkflowConfigService,
     private readonly signatureAssets: SignatureAssetsService,
+    private readonly senders: SendersService,
   ) {}
 
   // The resolved config for the Configuration UI: GLOBAL infra (override ?? env) +
@@ -104,6 +108,51 @@ export class WorkflowConfigController {
       after,
     });
     return after;
+  }
+
+  // The caller org's RESOLVED sender list (its own org_senders rows, or the product
+  // DEFAULT_SENDERS when it has none). Read-only → not audited.
+  @RequirePermissions('admin:config')
+  @Get('arsenal/config/senders')
+  listSenders(@OrgId() orgId: string): Promise<OrgSenderDto[]> {
+    return this.senders.list(orgId);
+  }
+
+  // Upsert a PER-ORG sender on (organizationId, key). When isDefault is set, the flag
+  // is cleared on the org's other senders in the same write so at most one default
+  // exists. Returns the resolved list. Audited.
+  @RequirePermissions('admin:config')
+  @Post('arsenal/config/senders')
+  async upsertSender(
+    @Body() body: UpsertOrgSenderBodyDto,
+    @OrgId() orgId: string,
+    @Req() req: Request,
+  ): Promise<OrgSenderDto[]> {
+    const senders = await this.senders.upsert(orgId, body);
+    setAuditContext(req, {
+      entity: 'org_senders',
+      action: 'UPSERT',
+      after: { key: body.key, email: body.email, isDefault: body.isDefault ?? false },
+    });
+    return senders;
+  }
+
+  // Remove a PER-ORG sender by its key. Guarded: the last remaining sender cannot be
+  // deleted (409). Returns the resolved list. Audited.
+  @RequirePermissions('admin:config')
+  @Delete('arsenal/config/senders/:key')
+  async deleteSender(
+    @Param('key') key: string,
+    @OrgId() orgId: string,
+    @Req() req: Request,
+  ): Promise<OrgSenderDto[]> {
+    const senders = await this.senders.remove(orgId, key);
+    setAuditContext(req, {
+      entity: 'org_senders',
+      action: 'DELETE',
+      after: { key },
+    });
+    return senders;
   }
 
   // Probe the n8n public API with the resolved base URL + env key. Read-only (never

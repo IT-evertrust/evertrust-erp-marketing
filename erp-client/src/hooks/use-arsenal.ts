@@ -16,8 +16,9 @@ import type {
   LeadStatsDto,
   TestN8nResultDto,
   RotateIngestTokenResultDto,
+  OrgSenderDto,
 } from '@evertrust/shared';
-import { ApiError, api } from '@/lib/api';
+import { ApiError, api, type UpsertOrgSenderBody } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
 
 // Arsenal trigger hooks. Recent runs is the ERP→n8n hand-off history; the run
@@ -154,6 +155,43 @@ export function useUpdateWorkflowConfig() {
         queryKey: queryKeys.arsenal.executions(),
       });
       void queryClient.invalidateQueries({ queryKey: queryKeys.arsenal.runs() });
+    },
+  });
+}
+
+// The org's resolved email senders (its own rows, or DEFAULT_SENDERS when none).
+// Backs the Configuration > Senders editor and the AIM campaign sender picker.
+export function useOrgSenders() {
+  return useQuery<OrgSenderDto[], ApiError>({
+    queryKey: queryKeys.arsenal.senders(),
+    queryFn: ({ signal }) => api.arsenal.listSenders(signal),
+    refetchOnWindowFocus: true,
+  });
+}
+
+// Seed both the senders list AND the config cache from the upsert result (the
+// config carries the resolved `senders` array + the derived defaultSender), so the
+// editor reflects the change without a refetch.
+export function useUpsertSender() {
+  const queryClient = useQueryClient();
+  return useMutation<OrgSenderDto[], ApiError, UpsertOrgSenderBody>({
+    mutationFn: (input) => api.arsenal.upsertSender(input),
+    onSuccess: (senders) => {
+      queryClient.setQueryData(queryKeys.arsenal.senders(), senders);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.arsenal.config() });
+    },
+  });
+}
+
+// Remove a sender by key. Surfaces the server guards (409 last-sender, 400 unknown)
+// to the caller as an ApiError. Same cache fan-out as the upsert.
+export function useRemoveSender() {
+  const queryClient = useQueryClient();
+  return useMutation<OrgSenderDto[], ApiError, string>({
+    mutationFn: (key) => api.arsenal.removeSender(key),
+    onSuccess: (senders) => {
+      queryClient.setQueryData(queryKeys.arsenal.senders(), senders);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.arsenal.config() });
     },
   });
 }

@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import { schema } from '@evertrust/db';
+import { DEFAULT_SENDERS } from '@evertrust/shared';
 import { WorkflowConfigService } from '../src/arsenal/workflow-config.service';
+import { SendersService } from '../src/arsenal/senders.service';
 import type { AppConfigService } from '../src/config/app-config.service';
 import { FakeTable, makeFakeDb } from './fake-db';
 
@@ -30,6 +32,7 @@ const PREF_KEYS = new Set([
   'tone',
   'templateLanguage',
   'defaultSender',
+  'salesCalendarId',
   'maxLeadsPerRun',
   'maxPerNiche',
   'dailySendCap',
@@ -39,7 +42,11 @@ const PREF_KEYS = new Set([
   'requireNicheAnalysis',
 ]);
 
-function make(env: Record<string, string> = {}, row?: Record<string, unknown>) {
+function make(
+  env: Record<string, string> = {},
+  row?: Record<string, unknown>,
+  senderRows: Record<string, unknown>[] = [],
+) {
   const infraVals: Record<string, unknown> = {};
   const prefVals: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(row ?? {})) {
@@ -54,16 +61,19 @@ function make(env: Record<string, string> = {}, row?: Record<string, unknown>) {
   const orgConfig = new FakeTable(
     hasPref ? [{ id: 'oc1', organizationId: ORG, ...prefVals }] : [],
   );
+  const orgSenders = new FakeTable(senderRows);
   const { db } = makeFakeDb(
     new Map<unknown, FakeTable>([
       [schema.workflowConfig, workflowConfig],
       [schema.orgConfig, orgConfig],
+      [schema.orgSenders, orgSenders],
     ]),
   );
   return {
-    service: new WorkflowConfigService(db, makeConfig(env)),
+    service: new WorkflowConfigService(db, makeConfig(env), new SendersService(db)),
     workflowConfig,
     orgConfig,
+    orgSenders,
   };
 }
 
@@ -257,6 +267,123 @@ describe('WorkflowConfigService — templates + leads groups', () => {
   });
 });
 
+describe('WorkflowConfigService — senders resolution', () => {
+  it('getEffective falls back to DEFAULT_SENDERS when the org has none', async () => {
+    const { service } = make(ENV); // no org_senders rows
+    const eff = await service.getEffective(ORG);
+    expect(eff.senders).toEqual(DEFAULT_SENDERS);
+    // The product default's flagged sender isn't authoritative for a fallback list,
+    // but with no org pref the resolved default key is the first DEFAULT_SENDERS key.
+    expect(eff.defaultSender).toBe('info');
+  });
+
+  it('getEffective surfaces the org rows + the flagged isDefault as the default key', async () => {
+    const { service } = make(ENV, undefined, [
+      {
+        id: 's1',
+        organizationId: ORG,
+        senderKey: 'sales',
+        email: 'sales@acme.test',
+        label: 'Sales',
+        isDefault: false,
+        __seq: 1,
+      },
+      {
+        id: 's2',
+        organizationId: ORG,
+        senderKey: 'ceo',
+        email: 'ceo@acme.test',
+        label: null,
+        isDefault: true,
+        __seq: 2,
+      },
+    ]);
+    const eff = await service.getEffective(ORG);
+    expect(eff.senders).toEqual([
+      { key: 'sales', email: 'sales@acme.test', label: 'Sales', isDefault: false },
+      { key: 'ceo', email: 'ceo@acme.test', label: null, isDefault: true },
+    ]);
+    // The org's OWN flagged sender wins as the default key.
+    expect(eff.defaultSender).toBe('ceo');
+  });
+
+  it('an explicit org_config.defaultSender wins over a DEFAULT_SENDERS flag (no org rows)', async () => {
+    const { service } = make(ENV, { defaultSender: 'hanna' }); // no org_senders
+    const eff = await service.getEffective(ORG);
+    expect(eff.senders).toEqual(DEFAULT_SENDERS);
+    expect(eff.defaultSender).toBe('hanna');
+  });
+
+  it('getAutomation carries the resolved senders, the default sender EMAIL, and the calendar', async () => {
+    const { service } = make(ENV, { salesCalendarId: 'cal-org-1' }, [
+      {
+        id: 's1',
+        organizationId: ORG,
+        senderKey: 'ceo',
+        email: 'ceo@acme.test',
+        label: null,
+        isDefault: true,
+        __seq: 1,
+      },
+    ]);
+    const auto = await service.getAutomation(ORG);
+    expect(auto.senders).toEqual([
+      { key: 'ceo', email: 'ceo@acme.test', label: null, isDefault: true },
+    ]);
+    // n8n sets the From from this resolved EMAIL (the flagged default's address).
+    expect(auto.defaultSenderEmail).toBe('ceo@acme.test');
+    expect(auto.salesCalendarId).toBe('cal-org-1');
+    // Templates + Leads still resolve identically to getEffective().
+    expect(auto.templates).toEqual({
+      default: null,
+      signature: null,
+      signatureImageUrl: null,
+      tone: null,
+      language: null,
+    });
+  });
+
+  it('getAutomation default email falls back to DEFAULT_SENDERS when the org has none', async () => {
+    const { service } = make(ENV); // no org_senders, no org_config
+    const auto = await service.getAutomation(ORG);
+    expect(auto.senders).toEqual(DEFAULT_SENDERS);
+    // info is the first DEFAULT_SENDERS entry → its email is the resolved From.
+    expect(auto.defaultSenderEmail).toBe('info@evertrust-germany.de');
+  });
+});
+
+describe('WorkflowConfigService — salesCalendarId resolution', () => {
+  it('getEffective: org_config value wins over the env product default', async () => {
+    const { service } = make(
+      { ...ENV, SALES_CALENDAR_ID: 'env-cal' },
+      { salesCalendarId: 'org-cal' },
+    );
+    expect((await service.getEffective(ORG)).salesCalendarId).toBe('org-cal');
+  });
+
+  it('getEffective: falls back to the env SALES_CALENDAR_ID when org_config is unset', async () => {
+    const { service } = make({ ...ENV, SALES_CALENDAR_ID: 'env-cal' });
+    expect((await service.getEffective(ORG)).salesCalendarId).toBe('env-cal');
+  });
+
+  it('getEffective: null when neither org_config nor env is set', async () => {
+    const { service } = make(ENV); // no SALES_CALENDAR_ID env
+    expect((await service.getEffective(ORG)).salesCalendarId).toBeNull();
+  });
+
+  it('update: sets the per-org salesCalendarId, then null clears it back to env', async () => {
+    const { service, orgConfig } = make({ ...ENV, SALES_CALENDAR_ID: 'env-cal' });
+    let eff = await service.update({ salesCalendarId: 'org-cal' }, ORG);
+    expect(eff.salesCalendarId).toBe('org-cal');
+    // It is a PER-ORG pref — lands on org_config, not the global singleton.
+    expect(orgConfig.rows).toHaveLength(1);
+
+    eff = await service.update({ salesCalendarId: null }, ORG);
+    // Cleared → falls back to the env product default.
+    expect(eff.salesCalendarId).toBe('env-cal');
+  });
+});
+
 describe('WorkflowConfigService.getLeadStats', () => {
   const ORG = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
   const OTHER = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
@@ -287,7 +414,7 @@ describe('WorkflowConfigService.getLeadStats', () => {
         [schema.workflowConfig, workflowConfig],
       ]),
     );
-    return new WorkflowConfigService(db, makeConfig(ENV));
+    return new WorkflowConfigService(db, makeConfig(ENV), new SendersService(db));
   }
 
   it('counts leads/prospects/suppressions scoped to the org', async () => {

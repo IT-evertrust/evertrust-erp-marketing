@@ -2,6 +2,7 @@ import { SQL } from 'drizzle-orm';
 import type { DbClient } from '../src/db/db.tokens';
 import type { AppConfigService } from '../src/config/app-config.service';
 import { WorkflowConfigService } from '../src/arsenal/workflow-config.service';
+import { SendersService } from '../src/arsenal/senders.service';
 
 // ---------------------------------------------------------------------------
 // In-memory, tenant-aware fake of the Drizzle client — enough surface for the
@@ -92,6 +93,10 @@ const COLUMN_TO_KEY: Record<string, string> = {
   mime_type: 'mimeType',
   data_base64: 'dataBase64',
   byte_size: 'byteSize',
+  // org_senders (per-org email senders). id/organization_id already mapped above;
+  // sender_key is the second half of the (organization_id, sender_key) unique lookup.
+  sender_key: 'senderKey',
+  is_default: 'isDefault',
 };
 
 function rowMatches(row: Record<string, unknown>, cond: ParsedCondition): boolean {
@@ -309,12 +314,14 @@ export function makeFakeDb(
 
 // A real WorkflowConfigService over the fake db + a config stub. With no seeded
 // workflow_config row (the table auto-vivifies to []), every resolver falls back to
-// env (the config stub) — so consumers behave exactly as they did pre-resolver. Use
-// in specs that construct the four resolver-consuming services (arsenal, campaigns,
+// env (the config stub) — so consumers behave exactly as they did pre-resolver. The
+// SendersService it now depends on is constructed over the SAME fake db, so the org
+// sender list resolves to the product DEFAULT_SENDERS until a spec seeds org_senders.
+// Use in specs that construct the resolver-consuming services (arsenal, campaigns,
 // n8n-executions, n8n-backfill) so their changed constructors get a working resolver.
 export function makeWorkflowConfig(
   db: DbClient,
   config: AppConfigService,
 ): WorkflowConfigService {
-  return new WorkflowConfigService(db, config);
+  return new WorkflowConfigService(db, config, new SendersService(db));
 }

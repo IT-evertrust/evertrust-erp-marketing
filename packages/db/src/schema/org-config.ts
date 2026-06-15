@@ -44,6 +44,9 @@ export const orgConfig = pgTable(
     templateLanguage: text('template_language'),
     // Default Gmail sending alias for this org (mirrors campaigns.sender — text).
     defaultSender: text('default_sender'),
+    // Calendar this org books sales meetings into. Opaque provider id (e.g. a
+    // Google Calendar id). Null = fall back to the product default.
+    salesCalendarId: text('sales_calendar_id'),
     // --- Lead governance (per-org) ---
     maxLeadsPerRun: integer('max_leads_per_run'),
     maxPerNiche: integer('max_per_niche'),

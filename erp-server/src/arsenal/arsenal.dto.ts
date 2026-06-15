@@ -1,4 +1,5 @@
 import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
 import {
   ArsenalCallbackDto as ArsenalCallbackSchema,
   RunArsenalDto as RunArsenalSchema,
@@ -16,3 +17,16 @@ export class ArsenalCallbackBodyDto extends createZodDto(ArsenalCallbackSchema) 
 export class UpdateWorkflowConfigBodyDto extends createZodDto(
   UpdateWorkflowConfigSchema,
 ) {}
+
+// POST /arsenal/config/senders body — upsert a PER-ORG sender keyed by its stable
+// org-scoped `key`. `email` must be valid; `label` + `isDefault` are optional. Defined
+// locally (not in @evertrust/shared) because it is a server-side write contract for
+// the admin CRUD; the resolved READ shape (OrgSenderDto) lives in shared. The
+// service layer re-validates key/email regardless of the call path.
+export const UpsertOrgSenderSchema = z.object({
+  key: z.string().min(1).max(120),
+  email: z.string().email().max(320),
+  label: z.string().max(120).nullable().optional(),
+  isDefault: z.boolean().optional(),
+});
+export class UpsertOrgSenderBodyDto extends createZodDto(UpsertOrgSenderSchema) {}

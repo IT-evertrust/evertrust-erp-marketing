@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -19,7 +20,10 @@ import { DB, type DbClient } from '../db/db.tokens';
 import { tenantScope } from '../common/tenant';
 import { driveFolderUrl } from '../common/machine-audit';
 import { NichesService } from '../niches/niches.service';
-import { WorkflowConfigService } from '../arsenal/workflow-config.service';
+import {
+  type ResolvedAutomation,
+  WorkflowConfigService,
+} from '../arsenal/workflow-config.service';
 
 type CampaignRow = typeof schema.campaigns.$inferSelect;
 type CampaignPatch = Partial<typeof schema.campaigns.$inferInsert>;
@@ -39,6 +43,16 @@ export interface CampaignLaunchResult {
   campaign: CampaignWithNiche;
   deployError: string | null;
 }
+
+// The machine campaign config with the WIDENED automation block. The shared
+// CampaignConfigDto.automation only declares { templates, leads } (it stays
+// backward-compatible for the web client), but the machine route additionally carries
+// the resolved senders, the default sender's EMAIL, and the resolved org sales
+// calendar — the seam n8n reads. This type reflects what getConfig() actually returns
+// (it is assignable to CampaignConfigDto since it only ADDS fields).
+export type CampaignConfigResult = Omit<CampaignConfigDto, 'automation'> & {
+  automation: ResolvedAutomation;
+};
 
 // Shape of the AIM "deploy campaign" n8n webhook response. The NEW AIM workflow no
 // longer returns Drive refs at launch (the folder is created lazily by Ammo Forge),
@@ -130,6 +144,18 @@ export class CampaignsService {
     dto: CreateCampaignDto,
     userId: string,
   ): Promise<CampaignLaunchResult> {
+    // The campaign's sender must be one of the org's RESOLVED sender keys (its own
+    // org_senders, or the product DEFAULT_SENDERS when it has none — so legacy
+    // 'info'/'hanna' stay valid for an org that never customized its senders). The DTO
+    // defaults sender to 'info' on the wire, so an omitted sender resolves here.
+    const sender = dto.sender ?? 'info';
+    const senders = await this.workflowConfig.resolveSenders(orgId);
+    if (!senders.some((s) => s.key === sender)) {
+      throw new BadRequestException(
+        `Unknown sender '${sender}'. Configure it under Configuration → Senders first.`,
+      );
+    }
+
     const niche = await this.niches.findOrCreate(orgId, dto.nicheName);
 
     const inserted = await this.db
@@ -144,7 +170,7 @@ export class CampaignsService {
         gmailLabel: dto.gmailLabel,
         salesCalendarId: dto.salesCalendarId,
         whatsappNumber: dto.whatsappNumber,
-        sender: dto.sender ?? 'info',
+        sender,
         lifecycle: 'DRAFT',
       })
       .returning();
@@ -212,7 +238,7 @@ export class CampaignsService {
   // resolved niche with its ENABLED targets. Used by the arsenal stages to build
   // their search queries. 404 if the campaign id is unknown. NOT org-scoped (a
   // machine caller has no tenant; the ingest token is the trust boundary).
-  async getConfig(id: string): Promise<CampaignConfigDto> {
+  async getConfig(id: string): Promise<CampaignConfigResult> {
     const rows = await this.db
       .select()
       .from(schema.campaigns)
@@ -254,8 +280,10 @@ export class CampaignsService {
           searchHint: t.searchHint,
         })),
       },
-      // PER-ORG Growth-Engine automation knobs (effective Templates + Leads from the
-      // campaign org's org_config) merged into the route the outreach workflows poll.
+      // PER-ORG Growth-Engine automation knobs merged into the route the outreach
+      // workflows poll: the effective Templates + Leads from the campaign org's
+      // org_config, PLUS the org's resolved sender list, the default sender's EMAIL
+      // (so n8n can set the From directly), and the resolved org sales calendar id.
       // Machine call (no caller org) → resolve the org from the campaign row.
       automation: await this.workflowConfig.getAutomation(c.organizationId),
     };

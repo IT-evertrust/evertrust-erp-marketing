@@ -1091,6 +1091,27 @@ export const CAMPAIGN_SENDER_LABELS: Record<CampaignSender, string> = {
   hanna: 'hanna@evertrust-germany.de',
 };
 
+// One outreach sender mailbox for an organization. `key` is the stable per-org
+// identifier the campaign's `sender` field and the config `defaultSender` reference
+// (validated against the org's sender keys at the service layer, NOT in the DTO);
+// `email` is the real Gmail identity BAZOOKA sends from; `label` is an optional
+// display name; `isDefault` marks the org's fallback sender.
+export const OrgSenderDto = z.object({
+  key: z.string().min(1),
+  email: z.string().email(),
+  label: z.string().nullable().optional(),
+  isDefault: z.boolean(),
+});
+export type OrgSenderDto = z.infer<typeof OrgSenderDto>;
+
+// The product-default sender list. The API falls back to this when an organization
+// has no senders of its own configured — the same two legacy Gmail identities the
+// team has always sent from, so existing 'info'/'hanna' references stay resolvable.
+export const DEFAULT_SENDERS: OrgSenderDto[] = [
+  { key: 'info', email: 'info@evertrust-germany.de', label: 'Info', isDefault: true },
+  { key: 'hanna', email: 'hanna@evertrust-germany.de', label: 'Hanna', isDefault: false },
+];
+
 export const CreateCampaignDto = z.object({
   name: z.string().max(60).optional(),
   // The campaign's niche by DISPLAY name; the API find-or-creates the niche row
@@ -1104,11 +1125,11 @@ export const CreateCampaignDto = z.object({
   gmailLabel: z.string().min(1).max(120),
   salesCalendarId: z.string().min(1).max(200),
   whatsappNumber: z.string().min(1).max(40),
-  // Which mailbox BAZOOKA sends this campaign's outreach from. Optional on the wire
-  // (defaults to info@) so older clients + existing campaigns stay on info@.
-  sender: z
-    .enum([...CAMPAIGN_SENDERS] as [CampaignSender, ...CampaignSender[]])
-    .default('info'),
+  // Which mailbox BAZOOKA sends this campaign's outreach from — a per-org sender KEY
+  // (validated against the org's senders at the service layer, not here). Optional on
+  // the wire (defaults to 'info') so older clients + existing campaigns stay on info@.
+  // Legacy 'info'/'hanna' keys remain valid strings.
+  sender: z.string().min(1).default('info'),
 });
 export type CreateCampaignDto = z.infer<typeof CreateCampaignDto>;
 
@@ -2484,9 +2505,10 @@ export const ConfigFieldDto = z.object({
 });
 export type ConfigFieldDto = z.infer<typeof ConfigFieldDto>;
 
-// The default Gmail sending alias. Mirrors campaigns.sender (plain text, not a
-// pgEnum) — constrained to the two real Gmail identities the team sends from.
-export const DefaultSender = z.enum(['info', 'hanna']);
+// The org's default Gmail sending alias. Mirrors campaigns.sender (plain text, not a
+// pgEnum) — a per-org sender KEY, validated against the org's senders at the service
+// layer rather than in the DTO. Legacy 'info'/'hanna' keys remain valid strings.
+export const DefaultSender = z.string().min(1);
 export type DefaultSender = z.infer<typeof DefaultSender>;
 
 // Outreach tone + template language. Stored as plain text on workflow_config (the
@@ -2585,6 +2607,11 @@ export const WorkflowConfigDto = z.object({
   ingestTokenSource: z.enum(['rotated', 'env', 'none']),
   ingestTokenSetAt: z.string().nullable(),
   defaultSender: DefaultSender.nullable(),
+  // The resolved per-org sender list (the org's own senders, or DEFAULT_SENDERS when
+  // it has none). Managed via dedicated sender CRUD endpoints, not the PUT body below.
+  senders: z.array(OrgSenderDto),
+  // The org's default Google Calendar id sales bookings land on (null = unset).
+  salesCalendarId: z.string().nullable(),
   followupOffsetDays: z.number().int().nullable(),
   finalPushOffsetDays: z.number().int().nullable(),
   // Configuration > Templates / Leads — see WorkflowTemplatesDto / WorkflowLeadsDto
@@ -2616,6 +2643,14 @@ const NullableOffsetDays = z.preprocess(
 const NullableCap = z.preprocess(
   (v) => (v === '' ? null : v),
   z.number().int().min(0, 'Must be 0 or more').nullable(),
+);
+
+// A nullable free-text override (e.g. the sales calendar id): a non-empty string sets
+// it, an empty string OR null clears it, omit leaves it unchanged. Empty-string→null
+// so a cleared form input reads as "clear".
+const NullableText = z.preprocess(
+  (v) => (v === '' ? null : v),
+  z.string().nullable(),
 );
 
 // Default target regions: an array of NON-EMPTY strings, each trimmed. Blank/
@@ -2672,6 +2707,9 @@ export const UpdateWorkflowConfigDto = z.object({
     .optional(),
   n8nApiUrl: NullableUrlOverride.optional(),
   defaultSender: DefaultSender.nullable().optional(),
+  // The org's default sales calendar id. Empty string OR null clears it, omit leaves
+  // it unchanged. The senders LIST is managed via dedicated CRUD endpoints, not here.
+  salesCalendarId: NullableText.optional(),
   followupOffsetDays: NullableOffsetDays.optional(),
   finalPushOffsetDays: NullableOffsetDays.optional(),
   templates: UpdateTemplates.optional(),
