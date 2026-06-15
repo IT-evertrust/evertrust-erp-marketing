@@ -15,18 +15,21 @@ export const HealthDto = z.object({
 });
 export type HealthDto = z.infer<typeof HealthDto>;
 
-// User role mirrors the `user_role` pgEnum in @evertrust/db. Four authority
-// tiers, highest → lowest: SUPER_ADMIN (full control incl. user management),
-// ADMIN (everything except managing users), MANAGER (lead-level: pricing
-// approval, approvals decisions, campaign launches), EMPLOYEE (operational read
-// + day-to-day write). Authority is enforced via permissions, never the role
-// literal — see ROLE_PERMISSIONS. Kept as a literal union here so
-// @evertrust/shared has no dependency on the DB package.
-export const UserRole = z.enum(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'EMPLOYEE']);
+// User role mirrors the `user_role` pgEnum in @evertrust/db. Five authority
+// tiers, highest → lowest: OWNER (platform owner — the ONLY cross-org role:
+// full control PLUS access to every org's users on the admin surface),
+// SUPER_ADMIN (full control within its OWN org, incl. user management), ADMIN
+// (everything except managing users), MANAGER (lead-level: pricing approval,
+// approvals decisions, campaign launches), EMPLOYEE (operational read +
+// day-to-day write). Authority is enforced via permissions, never the role
+// literal — see ROLE_PERMISSIONS; the cross-org reach is gated by isOwner().
+// Kept as a literal union here so @evertrust/shared has no dependency on the DB.
+export const UserRole = z.enum(['OWNER', 'SUPER_ADMIN', 'ADMIN', 'MANAGER', 'EMPLOYEE']);
 export type UserRole = z.infer<typeof UserRole>;
 
 // Human-readable role labels for UI display (SSOT so api + web never drift).
 export const ROLE_LABELS: Record<UserRole, string> = {
+  OWNER: 'Owner',
   SUPER_ADMIN: 'Super Admin',
   ADMIN: 'Admin',
   MANAGER: 'Manager',
@@ -122,7 +125,11 @@ export const PermissionEnum = z.enum(
 // ADMIN is SUPER_ADMIN minus users:manage; MANAGER and EMPLOYEE are explicit
 // allow-lists. Changing access policy means changing this table, nothing else.
 export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
-  // Super Admin (CEO / owner): every permission, including user management.
+  // Owner (platform owner): every permission, AND the only role whose reach
+  // crosses the org boundary — but ONLY over the Users admin surface (see
+  // isOwner / users.service). All other data stays tenant-scoped for an Owner.
+  OWNER: [...PERMISSIONS],
+  // Super Admin (CEO / org owner): every permission, within its OWN org only.
   SUPER_ADMIN: [...PERMISSIONS],
   // Admin: everything except managing other users.
   ADMIN: PERMISSIONS.filter((p) => p !== 'users:manage'),
@@ -179,14 +186,23 @@ export function hasPermission(role: UserRole, perm: Permission): boolean {
 }
 
 // A user's EFFECTIVE permissions: their explicit per-user set when customized,
-// otherwise their role's defaults. SUPER_ADMIN ALWAYS holds every permission
-// (full control, not editable) so the org can never be locked out of admin.
+// otherwise their role's defaults. OWNER and SUPER_ADMIN ALWAYS hold every
+// permission (full control, not editable) so the org can never be locked out of
+// admin.
 export function effectivePermissions(
   role: UserRole,
   stored: readonly string[] | null | undefined,
 ): Permission[] {
-  if (role === 'SUPER_ADMIN') return [...PERMISSIONS];
+  if (role === 'OWNER' || role === 'SUPER_ADMIN') return [...PERMISSIONS];
   return stored ? ([...stored] as Permission[]) : permissionsForRole(role);
+}
+
+// True for the platform Owner — the only role whose authority crosses the org
+// boundary. That reach is confined to the Users admin surface (list/edit/reset/
+// delete users in any org); all other data stays tenant-scoped even for an
+// Owner. Granting the Owner role is itself Owner-only (enforced in the API).
+export function isOwner(role: UserRole): boolean {
+  return role === 'OWNER';
 }
 
 // ---- Organization (tenant) contract ----
@@ -552,6 +568,11 @@ export const AdminUserDto = z.object({
   permissions: z.array(PermissionEnum).nullable(),
   active: z.boolean(),
   createdAt: z.string(),
+  // The owning organization. Surfaced so the Owner's cross-org user list can
+  // show which org each user belongs to. Optional for rolling-deploy safety
+  // (an older API may omit them); for non-Owners every row is the caller's org.
+  organizationId: z.string().uuid().optional(),
+  organizationName: z.string().nullable().optional(),
 });
 export type AdminUserDto = z.infer<typeof AdminUserDto>;
 

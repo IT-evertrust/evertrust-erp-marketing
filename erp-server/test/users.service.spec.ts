@@ -12,6 +12,7 @@ const ORG_B = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 const ALICE = 'a1111111-1111-1111-1111-111111111111';
 const BOB = 'b2222222-2222-2222-2222-222222222222';
 const MALLORY = 'c3333333-3333-3333-3333-333333333333';
+const OWNER_ID = 'd4444444-4444-4444-4444-444444444444';
 
 // Seeds a users table across two orgs. Alice (Super Admin/CEO) + Bob (Employee,
 // no dept/position) in ORG_A; Mallory in ORG_B — used to prove tenant isolation.
@@ -419,5 +420,86 @@ describe('UsersService — deleteUser', () => {
     await expect(
       service.deleteUser(ORG_A, ALICE, MALLORY),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+// The OWNER role is the ONE cross-org seam — and only over user administration.
+// It is passed to the service as the trailing actorRole; absent/any-other role
+// stays tenant-confined exactly as the tests above prove.
+describe('UsersService — OWNER cross-org (users admin)', () => {
+  it('an Owner lists users across ALL orgs', async () => {
+    const { service } = seed();
+    const rows = await service.listAllForOrg(ORG_A, 'OWNER');
+    expect(rows.map((r) => r.id).sort()).toEqual([ALICE, BOB, MALLORY].sort());
+  });
+
+  it('a non-Owner list stays confined to its own org', async () => {
+    const { service } = seed();
+    const rows = await service.listAllForOrg(ORG_A, 'SUPER_ADMIN');
+    expect(rows.find((r) => r.id === MALLORY)).toBeUndefined();
+  });
+
+  it('an Owner can update a user in another org (cross-org)', async () => {
+    const { service } = seed();
+    const { after } = await service.updateUser(
+      ORG_A,
+      OWNER_ID,
+      MALLORY,
+      { name: 'Mallory II' },
+      'OWNER',
+    );
+    expect(after.name).toBe('Mallory II');
+  });
+
+  it('a non-Owner still 404s on a cross-org user', async () => {
+    const { service } = seed();
+    await expect(
+      service.updateUser(ORG_A, ALICE, MALLORY, { name: 'x' }, 'SUPER_ADMIN'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('only an Owner can GRANT the Owner role (create + update)', async () => {
+    const { service } = seed();
+    await expect(
+      service.createUser(ORG_A, {
+        name: 'Wannabe',
+        email: 'w@x.de',
+        password: 'Password123!',
+        role: 'OWNER',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.updateUser(ORG_A, ALICE, BOB, { role: 'OWNER' }, 'SUPER_ADMIN'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    const created = await service.createUser(
+      ORG_A,
+      {
+        name: 'Owner Two',
+        email: 'owner2@x.de',
+        password: 'Password123!',
+        role: 'OWNER',
+      },
+      'OWNER',
+    );
+    expect(created.role).toBe('OWNER');
+  });
+
+  it('an Owner can reset a password and delete cross-org', async () => {
+    const { service, users } = seed();
+    await service.setPassword(ORG_A, 'OWNER', MALLORY, 'NewStrongPass1');
+    await service.deleteUser(ORG_A, OWNER_ID, MALLORY, 'OWNER');
+    expect(users.rows.some((u) => u.id === MALLORY)).toBe(false);
+  });
+
+  it('protects an Owner target from non-Owner modify/delete', async () => {
+    const { service, users } = seed();
+    const bob = users.rows.find((u) => u.id === BOB)!;
+    bob.role = 'OWNER';
+    await expect(
+      service.updateUser(ORG_A, ALICE, BOB, { name: 'x' }, 'SUPER_ADMIN'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.deleteUser(ORG_A, ALICE, BOB, 'SUPER_ADMIN'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

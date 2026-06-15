@@ -4,6 +4,7 @@ import { pgEnum } from 'drizzle-orm/pg-core';
 // model maps to exactly one of these. Enum names are snake_case + `_enum`.
 
 export const userRoleEnum = pgEnum('user_role', [
+  'OWNER',
   'SUPER_ADMIN',
   'ADMIN',
   'MANAGER',

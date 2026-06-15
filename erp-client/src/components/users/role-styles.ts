@@ -9,9 +9,14 @@ export const ROLE_STYLES: Record<
   UserRole,
   { dot: string; tint: string; blurb: string }
 > = {
-  SUPER_ADMIN: {
+  OWNER: {
     dot: 'bg-amber-400',
     tint: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+    blurb: 'Platform owner — manages users across all organizations.',
+  },
+  SUPER_ADMIN: {
+    dot: 'bg-violet-400',
+    tint: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
     blurb: 'Full control — including user management.',
   },
   ADMIN: {
@@ -33,6 +38,7 @@ export const ROLE_STYLES: Record<
 
 // Authority order, highest → lowest, for the tiles.
 export const ROLE_ORDER: UserRole[] = [
+  'OWNER',
   'SUPER_ADMIN',
   'ADMIN',
   'MANAGER',

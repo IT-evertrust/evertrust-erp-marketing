@@ -34,7 +34,8 @@ const NONE = '__none__';
 
 // Create a teammate. This ERP has no public sign-up, so an admin (users:manage)
 // sets the initial password here; the API creates the user + an argon2
-// credential. Only a Super Admin can grant the SUPER_ADMIN role.
+// credential. You can only grant a role at or below your own tier — SUPER_ADMIN
+// needs an Owner or Super Admin; OWNER is Owner-only.
 export function UserCreateDialog({
   open,
   onOpenChange,
@@ -67,10 +68,15 @@ export function UserCreateDialog({
     }
   }, [open]);
 
-  const canCreateSuperAdmin = me?.role === 'SUPER_ADMIN';
-  const roleOptions = UserRole.options.filter(
-    (r) => r !== 'SUPER_ADMIN' || canCreateSuperAdmin,
-  );
+  // Mirror the API rule: you can only grant a role at or below your own tier.
+  // OWNER is grantable only by an Owner; SUPER_ADMIN by an Owner or Super Admin.
+  const canCreateOwner = me?.role === 'OWNER';
+  const canCreateSuperAdmin = me?.role === 'OWNER' || me?.role === 'SUPER_ADMIN';
+  const roleOptions = UserRole.options.filter((r) => {
+    if (r === 'OWNER') return canCreateOwner;
+    if (r === 'SUPER_ADMIN') return canCreateSuperAdmin;
+    return true;
+  });
   const valid =
     name.trim() !== '' &&
     /\S+@\S+\.\S+/.test(email) &&

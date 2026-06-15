@@ -25,6 +25,7 @@
   "table": {
     "member": "Mitglied",
     "role": "Rolle",
+    "org": "Org",
     "department": "Abteilung",
     "position": "Position",
     "access": "Zugriff",
@@ -43,6 +44,7 @@
   },
   "toggle": {
     "protectedSuperAdmin": "Super-Admin — geschützt",
+    "protectedOwner": "Owner — geschützt",
     "protectedSelf": "Sie können sich nicht selbst deaktivieren",
     "deactivate": "Mitglied deaktivieren",
     "reactivate": "Mitglied reaktivieren",
@@ -57,6 +59,7 @@
     "viewDetails": "Details anzeigen",
     "editAccess": "Zugriff bearbeiten",
     "protectedSuperAdmin": "Geschützt (Super-Admin)",
+    "protectedOwner": "Geschützt (Owner)",
     "protectedSelf": "Geschützt (Sie)",
     "deactivate": "Mitglied deaktivieren",
     "reactivate": "Mitglied reaktivieren",
@@ -90,6 +93,7 @@
     "department": "Abteilung",
     "none": "—",
     "permsSuperAdmin": "Berechtigungen · Super-Admin hat vollen Zugriff",
+    "permsFullAccess": "Berechtigungen · {role} hat vollen Zugriff",
     "permsEffective": "Berechtigungen · effektiv",
     "resetDefaults": "Auf Rollenstandard zurücksetzen",
     "cancel": "Abbrechen",
@@ -128,7 +132,7 @@
     "department": "Abteilung",
     "phone": "Telefon",
     "none": "— Keine —",
-    "roleLocked": "🔒 Die Rolle Super-Admin ist gesperrt",
+    "roleLocked": "🔒 Die Rolle {role} ist gesperrt",
     "footnote": "Die E-Mail wird von einem Super-Admin auf der Benutzerseite geändert; Berechtigungen werden ebenfalls dort bearbeitet.",
     "cancel": "Abbrechen",
     "saving": "Wird gespeichert…",
@@ -189,6 +193,7 @@
     }
   },
   "role": {
+    "OWNER": "Owner",
     "SUPER_ADMIN": "Super-Admin",
     "ADMIN": "Admin",
     "MANAGER": "Manager",

@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import type { AdminUserDto, UserStatsDto } from '@evertrust/shared';
+import { isOwner } from '@evertrust/shared';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/auth.types';
@@ -26,7 +27,9 @@ import {
 // Admin surface. RBAC is permission-based: the global PermissionsGuard 403s any
 // principal whose role lacks the required permission. `admin:config` is held by
 // Super Admin + Admin; `users:manage` (the user-management routes) by Super
-// Admin only. Every route is tenant-scoped to the caller's organization.
+// Admin + Owner. Routes are tenant-scoped to the caller's org — EXCEPT for an
+// Owner, the one cross-org role, who administers users in EVERY org (granting
+// the Owner role is itself Owner-only; enforced here and in the service).
 @Controller('admin')
 export class AdminController {
   constructor(private readonly users: UsersService) {}
@@ -41,8 +44,11 @@ export class AdminController {
   // caller's org. Super Admin only (users:manage).
   @RequirePermissions('users:manage')
   @Get('users')
-  listUsers(@OrgId() orgId: string): Promise<AdminUserDto[]> {
-    return this.users.listAllForOrg(orgId);
+  listUsers(
+    @OrgId() orgId: string,
+    @CurrentUser() actingUser: AuthUser,
+  ): Promise<AdminUserDto[]> {
+    return this.users.listAllForOrg(orgId, actingUser.role);
   }
 
   // Change a user's role / position / department from the management table.
@@ -59,7 +65,11 @@ export class AdminController {
   ): Promise<AdminUserDto> {
     // Email is the login identity — only a Super Admin may change it. Name and
     // the placement fields stay open to any users:manage holder.
-    if (body.email !== undefined && actingUser.role !== 'SUPER_ADMIN') {
+    if (
+      body.email !== undefined &&
+      actingUser.role !== 'SUPER_ADMIN' &&
+      !isOwner(actingUser.role)
+    ) {
       throw new ForbiddenException(
         'Only a Super Admin can change a user’s email',
       );
@@ -70,6 +80,7 @@ export class AdminController {
       actingUser.id,
       id,
       body,
+      actingUser.role,
     );
 
     setAuditContext(req, {
@@ -101,13 +112,20 @@ export class AdminController {
     @Body() body: CreateUserBodyDto,
     @Req() req: Request,
   ): Promise<AdminUserDto> {
-    if (body.role === 'SUPER_ADMIN' && actingUser.role !== 'SUPER_ADMIN') {
+    if (
+      body.role === 'SUPER_ADMIN' &&
+      actingUser.role !== 'SUPER_ADMIN' &&
+      !isOwner(actingUser.role)
+    ) {
       throw new ForbiddenException(
         'Only a Super Admin can create a Super Admin',
       );
     }
+    if (body.role === 'OWNER' && !isOwner(actingUser.role)) {
+      throw new ForbiddenException('Only an Owner can create an Owner');
+    }
 
-    const created = await this.users.createUser(orgId, body);
+    const created = await this.users.createUser(orgId, body, actingUser.role);
 
     setAuditContext(req, {
       entity: 'users',
@@ -132,9 +150,10 @@ export class AdminController {
   @Get('users/:id/stats')
   getStats(
     @OrgId() orgId: string,
+    @CurrentUser() actingUser: AuthUser,
     @Param('id') id: string,
   ): Promise<UserStatsDto> {
-    return this.users.getStats(orgId, id);
+    return this.users.getStats(orgId, id, actingUser.role);
   }
 
   // Admin password reset (no public reset flow). users:manage; only a Super
@@ -167,7 +186,12 @@ export class AdminController {
     @Param('id') id: string,
     @Req() req: Request,
   ): Promise<{ id: string }> {
-    const before = await this.users.deleteUser(orgId, actingUser.id, id);
+    const before = await this.users.deleteUser(
+      orgId,
+      actingUser.id,
+      id,
+      actingUser.role,
+    );
 
     setAuditContext(req, {
       entity: 'users',

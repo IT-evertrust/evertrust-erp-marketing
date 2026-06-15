@@ -25,6 +25,7 @@
   "table": {
     "member": "Member",
     "role": "Role",
+    "org": "Org",
     "department": "Department",
     "position": "Position",
     "access": "Access",
@@ -43,6 +44,7 @@
   },
   "toggle": {
     "protectedSuperAdmin": "Super Admin — protected",
+    "protectedOwner": "Owner — protected",
     "protectedSelf": "You can’t deactivate yourself",
     "deactivate": "Deactivate member",
     "reactivate": "Reactivate member",
@@ -57,6 +59,7 @@
     "viewDetails": "View details",
     "editAccess": "Edit access",
     "protectedSuperAdmin": "Protected (Super Admin)",
+    "protectedOwner": "Protected (Owner)",
     "protectedSelf": "Protected (you)",
     "deactivate": "Deactivate member",
     "reactivate": "Reactivate member",
@@ -90,6 +93,7 @@
     "department": "Department",
     "none": "—",
     "permsSuperAdmin": "Permissions · Super Admin has full access",
+    "permsFullAccess": "Permissions · {role} has full access",
     "permsEffective": "Permissions · effective",
     "resetDefaults": "Reset to role defaults",
     "cancel": "Cancel",
@@ -128,7 +132,7 @@
     "department": "Department",
     "phone": "Phone",
     "none": "— None —",
-    "roleLocked": "🔒 Super Admin role is locked",
+    "roleLocked": "🔒 {role} role is locked",
     "footnote": "Email is changed by a Super Admin on the Users page; permissions are edited there too.",
     "cancel": "Cancel",
     "saving": "Saving…",
@@ -189,6 +193,7 @@
     }
   },
   "role": {
+    "OWNER": "Owner",
     "SUPER_ADMIN": "Super Admin",
     "ADMIN": "Admin",
     "MANAGER": "Manager",
