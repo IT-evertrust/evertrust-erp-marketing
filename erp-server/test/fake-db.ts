@@ -199,6 +199,13 @@ export function makeFakeDb(
     },
 
     // INSERT: db.insert(table).values(v).returning()
+    //   ...optionally with .onConflictDoNothing({ target }) before .returning().
+    // The row is pushed EAGERLY in values() (so callers that `await` the insert
+    // WITHOUT .returning() still persist it, matching Drizzle). onConflictDoNothing
+    // is a fake of the unique constraint: the fake has no index machinery, so it
+    // checks the target column against the rows that EXISTED BEFORE this insert and,
+    // on a duplicate, rolls the just-pushed row back (returning [] like DO NOTHING).
+    // Used by WorkflowConfigService.orgRow's find-or-create.
     insert(table: unknown) {
       const ft = tableFor(table);
       return {
@@ -212,10 +219,26 @@ export function makeFakeDb(
           if ('updatedAt' in v || 'updatedAt' in row) {
             row.updatedAt = (v.updatedAt as unknown) ?? row.createdAt;
           }
-          ft.rows.push(row);
+          // Snapshot the pre-insert rows so onConflictDoNothing can detect a duplicate
+          // against state BEFORE this insert, then push eagerly.
+          const before = ft.rows;
+          ft.rows = [...before, row];
           return {
             returning() {
               return Promise.resolve([{ ...row }]);
+            },
+            onConflictDoNothing(arg?: { target?: unknown }) {
+              const target = arg?.target as { name?: string } | undefined;
+              const col = target?.name;
+              if (col) {
+                const key = COLUMN_TO_KEY[col] ?? col;
+                if (before.some((r) => r[key] === row[key])) {
+                  // Duplicate on the conflict target → undo the push, return nothing.
+                  ft.rows = before;
+                  return { returning: () => Promise.resolve([] as Row[]) };
+                }
+              }
+              return { returning: () => Promise.resolve([{ ...row }]) };
             },
           };
         },

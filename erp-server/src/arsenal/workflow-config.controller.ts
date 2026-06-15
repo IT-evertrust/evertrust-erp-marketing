@@ -27,11 +27,13 @@ import { UpdateWorkflowConfigBodyDto } from './arsenal.dto';
 export class WorkflowConfigController {
   constructor(private readonly workflowConfig: WorkflowConfigService) {}
 
-  // The resolved config (stored override ?? env per field) for the Configuration UI.
+  // The resolved config for the Configuration UI: GLOBAL infra (override ?? env) +
+  // the caller org's PER-ORG prefs (templates/leads/default sender). `@OrgId()` pulls
+  // req.user.organizationId off the JWT.
   @RequirePermissions('admin:config')
   @Get('arsenal/config')
-  get(): Promise<WorkflowConfigDto> {
-    return this.workflowConfig.getEffective();
+  get(@OrgId() orgId: string): Promise<WorkflowConfigDto> {
+    return this.workflowConfig.getEffective(orgId);
   }
 
   // Org-scoped counts (leads / prospects / suppressions) for the Configuration
@@ -42,15 +44,18 @@ export class WorkflowConfigController {
     return this.workflowConfig.getLeadStats(orgId);
   }
 
-  // Apply a partial override (a value sets it, null/"" clears it back to env, an
-  // omitted field is unchanged); returns the freshly resolved config. Audited.
+  // Apply a partial override (a value sets it, null/"" clears it back to env/default,
+  // an omitted field is unchanged); INFRA fields write the global singleton, PREF
+  // fields write the caller org's org_config row. Returns the freshly resolved config.
+  // Audited.
   @RequirePermissions('admin:config')
   @Put('arsenal/config')
   async update(
     @Body() body: UpdateWorkflowConfigBodyDto,
+    @OrgId() orgId: string,
     @Req() req: Request,
   ): Promise<WorkflowConfigDto> {
-    const after = await this.workflowConfig.update(body);
+    const after = await this.workflowConfig.update(body, orgId);
     setAuditContext(req, {
       entity: 'workflow_config',
       action: 'UPDATE',
@@ -86,9 +91,12 @@ export class WorkflowConfigController {
   // ARSENAL_INGEST_TOKEN. Returns the freshly resolved config (mirrors PUT). Audited.
   @RequirePermissions('admin:config')
   @Delete('arsenal/config/ingest-token')
-  async clearIngestToken(@Req() req: Request): Promise<WorkflowConfigDto> {
+  async clearIngestToken(
+    @OrgId() orgId: string,
+    @Req() req: Request,
+  ): Promise<WorkflowConfigDto> {
     await this.workflowConfig.clearIngestToken();
-    const after = await this.workflowConfig.getEffective();
+    const after = await this.workflowConfig.getEffective(orgId);
     setAuditContext(req, {
       entity: 'workflow_config',
       action: 'CLEAR_TOKEN',

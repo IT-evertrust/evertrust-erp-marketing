@@ -24,10 +24,13 @@ function seed() {
   const leads = new FakeTable([]);
   const niches = new FakeTable([]);
   const auditLog = new FakeTable([]);
-  // GLOBAL workflow_config: left empty here so getAutomation() falls back to the
-  // safe defaults (dedupDays null → 3-day cooldown, respectSuppressions true).
-  // Tests that exercise the knobs push a row onto this table.
+  // GLOBAL workflow_config (infra only now) — left empty. The PER-ORG lead governance
+  // (dedupDays, respectSuppressions, ...) lives on org_config: left empty here so
+  // getAutomation(orgId) falls back to the safe defaults (dedupDays null → 3-day
+  // cooldown, respectSuppressions true). Tests that exercise the knobs push a row onto
+  // org_config for ORG_A.
   const workflowConfig = new FakeTable([]);
+  const orgConfig = new FakeTable([]);
   const { db } = makeFakeDb(
     new Map<unknown, FakeTable>([
       [schema.campaigns, campaigns],
@@ -37,6 +40,7 @@ function seed() {
       [schema.niches, niches],
       [schema.auditLog, auditLog],
       [schema.workflowConfig, workflowConfig],
+      [schema.orgConfig, orgConfig],
     ]),
   );
   const leadsService = new LeadsService(db, config, new NichesService(db));
@@ -49,6 +53,7 @@ function seed() {
     prospects,
     suppressions,
     workflowConfig,
+    orgConfig,
   };
 }
 
@@ -148,9 +153,14 @@ describe('ProspectsService — send-list + snooze filters', () => {
 
   it('sendList honours a custom automation.leads.dedupDays cooldown', async () => {
     // A prospect last contacted 4 days ago: eligible under the default 3-day
-    // cooldown, but a dedupDays=7 override must now exclude it (the knob bites).
-    const { service, prospects, workflowConfig } = seed();
-    workflowConfig.rows.push({ id: 'wc1', dedupDays: 7, __seq: 1 });
+    // cooldown, but a dedupDays=7 override (PER-ORG) must now exclude it.
+    const { service, prospects, orgConfig } = seed();
+    orgConfig.rows.push({
+      id: 'oc1',
+      organizationId: ORG_A,
+      dedupDays: 7,
+      __seq: 1,
+    });
     const fourDaysAgo = new Date(Date.now() - 4 * 86_400_000);
     const base = { organizationId: ORG_A, campaignId: CAMP, followupCount: 0 };
     prospects.rows.push(
@@ -171,8 +181,13 @@ describe('ProspectsService — send-list + snooze filters', () => {
   });
 
   it('sendList stops excluding suppressed prospects when respectSuppressions is false', async () => {
-    const { service, prospects, suppressions, workflowConfig } = seed();
-    workflowConfig.rows.push({ id: 'wc1', respectSuppressions: false, __seq: 1 });
+    const { service, prospects, suppressions, orgConfig } = seed();
+    orgConfig.rows.push({
+      id: 'oc1',
+      organizationId: ORG_A,
+      respectSuppressions: false,
+      __seq: 1,
+    });
     const base = { organizationId: ORG_A, campaignId: CAMP, followupCount: 0 };
     // list() orders by createdAt desc, which the fake emulates via __seq desc — so
     // the newer __seq lands first. p-new (seq 2) precedes p-supp (seq 1).

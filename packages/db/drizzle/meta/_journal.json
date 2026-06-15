@@ -183,6 +183,13 @@
       "when": 1780573000000,
       "tag": "0025_org_config",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1780574000000,
+      "tag": "0026_org_config_split",
+      "breakpoints": true
     }
   ]
 }

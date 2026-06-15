@@ -215,30 +215,51 @@ export class ProspectsService {
     }
 
     if (filters.sendList) {
-      // Admin-tunable lead governance (GLOBAL workflow_config). dedupDays null →
-      // the built-in default cooldown; respectSuppressions defaults true.
-      const { leads } = await this.workflowConfig.getAutomation();
-      const cooldownMs =
-        (leads.dedupDays ?? FOLLOWUP_COOLDOWN_DEFAULT_DAYS) * 86_400_000;
+      // Admin-tunable lead governance is now PER-ORG (org_config). The send list is a
+      // machine pull that can span orgs, so resolve each prospect's org governance
+      // (dedupDays → cooldown, respectSuppressions → do-not-contact gate), memoized
+      // per org for the duration of this call. dedupDays null → the built-in default
+      // cooldown; respectSuppressions defaults true.
+      const govByOrg = new Map<
+        string,
+        { cooldownMs: number; respectSuppressions: boolean }
+      >();
+      const govFor = async (orgId: string) => {
+        const cached = govByOrg.get(orgId);
+        if (cached) return cached;
+        const { leads } = await this.workflowConfig.getAutomation(orgId);
+        const gov = {
+          cooldownMs:
+            (leads.dedupDays ?? FOLLOWUP_COOLDOWN_DEFAULT_DAYS) * 86_400_000,
+          respectSuppressions: leads.respectSuppressions,
+        };
+        govByOrg.set(orgId, gov);
+        return gov;
+      };
       // Active campaigns only.
       const activeCampaignIds = await this.activeCampaignIdSet();
-      // Suppressed (org,email) pairs — the do-not-contact gate. Only built when the
-      // gate is on (respectSuppressions); skipped entirely when an admin disables it.
-      const suppressed = leads.respectSuppressions
-        ? await this.suppressedKeySet()
-        : null;
-      rows = rows.filter((r) => {
-        if (!activeCampaignIds.has(r.campaignId)) return false;
-        if (!SEND_LIST_STATUSES.includes(r.status)) return false;
-        if (r.followupCount >= FOLLOWUP_CAP) return false;
+      // Suppressed (org,email) pairs — the do-not-contact gate. Built once and only
+      // consulted for prospects whose org has respectSuppressions on.
+      const suppressed = await this.suppressedKeySet();
+      const filtered: ProspectRow[] = [];
+      for (const r of rows) {
+        if (!activeCampaignIds.has(r.campaignId)) continue;
+        if (!SEND_LIST_STATUSES.includes(r.status)) continue;
+        if (r.followupCount >= FOLLOWUP_CAP) continue;
+        const gov = await govFor(r.organizationId);
         const lastMs = r.lastContactedAt
           ? new Date(r.lastContactedAt).getTime()
           : null;
-        if (lastMs !== null && now - lastMs < cooldownMs) return false;
-        if (suppressed && suppressed.has(`${r.organizationId}::${r.email}`))
-          return false;
-        return true;
-      });
+        if (lastMs !== null && now - lastMs < gov.cooldownMs) continue;
+        if (
+          gov.respectSuppressions &&
+          suppressed.has(`${r.organizationId}::${r.email}`)
+        ) {
+          continue;
+        }
+        filtered.push(r);
+      }
+      rows = filtered;
     }
 
     const limit = filters.limit && filters.limit > 0 ? filters.limit : undefined;

@@ -254,9 +254,10 @@ export class CampaignsService {
           searchHint: t.searchHint,
         })),
       },
-      // GLOBAL Growth-Engine automation knobs (effective Templates + Leads from
-      // workflow_config) merged into the route the outreach workflows already poll.
-      automation: await this.workflowConfig.getAutomation(),
+      // PER-ORG Growth-Engine automation knobs (effective Templates + Leads from the
+      // campaign org's org_config) merged into the route the outreach workflows poll.
+      // Machine call (no caller org) → resolve the org from the campaign row.
+      automation: await this.workflowConfig.getAutomation(c.organizationId),
     };
   }
 
