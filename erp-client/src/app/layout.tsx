@@ -3,6 +3,7 @@ import { Fraunces, IBM_Plex_Mono, Inter } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 import './globals.css';
+import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { Providers } from './providers';
 
@@ -47,6 +48,7 @@ export default async function RootLayout({
           <Providers>{children}</Providers>
         </NextIntlClientProvider>
         <SpeedInsights />
+        <Analytics />
       </body>
     </html>
   );
