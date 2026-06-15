@@ -1,0 +1,9 @@
+psycopg[binary]>=3.1
+
+[dev]
+pytest>=8.0
+
+[live]
+openai>=1.30
+google-api-python-client>=2.120
+google-auth-oauthlib>=1.2

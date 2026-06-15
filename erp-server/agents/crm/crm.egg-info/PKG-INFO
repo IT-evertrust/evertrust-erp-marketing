@@ -1,0 +1,8 @@
+Metadata-Version: 2.4
+Name: crm
+Version: 0.1.0
+Summary: CRM — hot-leads intake + customer graduation (port of n8n s65rZ9hiuvVCbKu5 + Dddp6wSvw3rwEsOw)
+Requires-Python: >=3.11
+Requires-Dist: psycopg[binary]>=3.1
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0; extra == "dev"

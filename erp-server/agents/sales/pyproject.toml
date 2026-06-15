@@ -1,0 +1,13 @@
+[project]
+name = "sales"
+version = "0.1.0"
+description = "SALES AGENT — sales-meeting transcript scorer (port of n8n sgQ2Nqa8MZgn0wdp 'ACTIVATE - SALES AGENT')"
+requires-python = ">=3.11"
+dependencies = ["psycopg[binary]>=3.1"]
+
+[project.optional-dependencies]
+live = ["openai>=1.30", "httpx>=0.27"]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools.packages.find]
+include = ["sales*"]

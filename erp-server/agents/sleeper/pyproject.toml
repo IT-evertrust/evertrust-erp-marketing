@@ -1,0 +1,13 @@
+[project]
+name = "sleeper"
+version = "0.1.0"
+description = "SLEEPER GRENADE — snooze/suppression sweep (Python port of n8n workflow 4GgPmoulQDgDWtej, bugs fixed)"
+requires-python = ">=3.11"
+dependencies = ["psycopg[binary]>=3.1"]
+
+[project.optional-dependencies]
+live = ["httpx>=0.27"]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools.packages.find]
+include = ["sleeper*"]

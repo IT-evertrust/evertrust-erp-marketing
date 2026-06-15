@@ -1,0 +1,20 @@
+[project]
+name = "rag"
+version = "0.1.0"
+description = "RAG AGENT — unsure-lead reply drafter (Python port of n8n workflow Ehl6IeZviaycfkSo)"
+requires-python = ">=3.11"
+dependencies = [
+    "psycopg[binary]>=3.1",
+]
+
+[project.optional-dependencies]
+live = [
+    "openai>=1.30",
+    "httpx>=0.27",
+    "google-api-python-client>=2.120",
+    "google-auth-oauthlib>=1.2",
+]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools.packages.find]
+include = ["rag*"]

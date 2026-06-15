@@ -1,0 +1,15 @@
+pyproject.toml
+crm/__init__.py
+crm/__main__.py
+crm/cli.py
+crm/db.py
+crm/pipeline.py
+crm/settings.py
+crm.egg-info/PKG-INFO
+crm.egg-info/SOURCES.txt
+crm.egg-info/dependency_links.txt
+crm.egg-info/requires.txt
+crm.egg-info/top_level.txt
+crm/domain/__init__.py
+crm/domain/state.py
+tests/test_state.py

@@ -1,0 +1,13 @@
+[project]
+name = "contractmaker"
+version = "0.1.0"
+description = "CONTRACTMAKER — meeting log + signing detection + contract generation (port of n8n ojHoD5ef3lG15YSi)"
+requires-python = ">=3.11"
+dependencies = ["psycopg[binary]>=3.1"]
+
+[project.optional-dependencies]
+live = ["openai>=1.30", "google-api-python-client>=2.120", "google-auth-oauthlib>=1.2"]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools.packages.find]
+include = ["contractmaker*"]

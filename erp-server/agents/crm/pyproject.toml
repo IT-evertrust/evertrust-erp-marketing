@@ -1,0 +1,12 @@
+[project]
+name = "crm"
+version = "0.1.0"
+description = "CRM — hot-leads intake + customer graduation (port of n8n s65rZ9hiuvVCbKu5 + Dddp6wSvw3rwEsOw)"
+requires-python = ">=3.11"
+dependencies = ["psycopg[binary]>=3.1"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools.packages.find]
+include = ["crm*"]
