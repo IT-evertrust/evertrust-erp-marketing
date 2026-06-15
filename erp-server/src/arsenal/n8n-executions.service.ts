@@ -7,15 +7,19 @@ import type {
 import { AppConfigService } from '../config/app-config.service';
 import { WorkflowConfigService } from './workflow-config.service';
 
-// Stage -> n8n workflow id (the live REACH ARSENAL ids, verified by the read-only
-// audit). AIM is excluded — it's the launch, not an arsenal stage; its status comes
-// from the campaign's deploy state, not executions.
+// Stage -> n8n workflow id for the Postgres-era ("PG") arsenal — the workflows
+// the ERP drives now. Used ONLY to read each stage's run status from the n8n
+// executions API (see getStatuses); AIM is excluded (its status comes from the
+// campaign's deploy state, not executions). Verified against the live n8n on
+// 2026-06-15. NOTE: only LEAD_SATELLITE's PG workflow is active today; the other
+// four PG rebuilds exist but are still INACTIVE (they send real email — turned on
+// when supervised), so those stages read IDLE until activated in n8n.
 export const STAGE_WORKFLOW_ID: Record<ArsenalStage, string> = {
-  LEAD_SATELLITE: 'fvilklqj7XAOLlLL',
-  AMMO_FORGE: 'n2kA3j6uupUAe42A',
-  REACH_BAZOOKA: 'qVvT6WLTYxtfubUg',
-  REPLY_GLOCK: 'Vi9x1RhdRIaePZPQ',
-  SLEEPER_GRENADE: '4GgPmoulQDgDWtej',
+  LEAD_SATELLITE: 'dCGzrlpaxpxJanbJ', // "EVERTRUST - LEAD SATELLITE copy 6 (PG)" — ACTIVE
+  AMMO_FORGE: 'rDLhY3sqi6U9xK6t', // "EVERTRUST - AMMO FORGE (PG) v2" — inactive
+  REACH_BAZOOKA: 'zyCTVLpZj3YyR2qV', // "EVERTRUST - REACH BAZOOKA (PG) v2" — inactive
+  REPLY_GLOCK: '5QkBzSzK1UdxiE96', // "EVERTRUST - REPLY GLOCK (PG) v2" — inactive
+  SLEEPER_GRENADE: 'cZDGIoudM6yg17kV', // "EVERTRUST - SLEEPER GRENADE (PG)" — inactive
 };
 
 // Minimal shape of an n8n public-API execution (GET /api/v1/executions).
