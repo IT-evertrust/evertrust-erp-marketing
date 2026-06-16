@@ -1,50 +1,21 @@
 'use client';
 
-import type { ReactNode } from 'react';
-import Link from 'next/link';
-import { useQueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
+import { useTranslations, useFormatter } from 'next-intl';
 import {
-  AlarmClock,
-  AlertTriangle,
-  Briefcase,
+  Activity,
   CalendarCheck,
-  CheckCircle2,
-  Contact,
   Crosshair,
   Filter,
-  FileText,
-  Layers,
-  RefreshCw,
-  Trophy,
-  Unlink,
+  Megaphone,
+  MessageSquare,
+  TrendingUp,
+  Users,
 } from 'lucide-react';
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  LabelList,
-} from 'recharts';
-import { useTranslations } from 'next-intl';
-import {
-  DEPARTMENT_LABELS,
-  ROLE_LABELS,
-  type TenderDto,
-  type TenderStatus,
-  type CampaignLifecycle,
-} from '@evertrust/shared';
+import type { CampaignDto, MeetingDto } from '@evertrust/shared';
 import { useMe } from '@/hooks/use-auth';
-import { useTenders, useDeadlineRisk } from '@/hooks/use-tenders';
 import { useCampaigns } from '@/hooks/use-campaigns';
 import { useMeetings } from '@/hooks/use-meetings';
-import { useLeads } from '@/hooks/use-leads';
-import { useCustomers } from '@/hooks/use-customers';
 import { AppShell } from '@/components/shell/app-shell';
 import { Can } from '@/components/auth/can';
 import { LogoutButton } from '@/components/auth/logout-button';
@@ -56,77 +27,26 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageHeader } from '@/components/common/page-header';
-import { StatTile } from '@/components/common/stat-tile';
-import { DeadlineAtRiskCard } from '@/components/tenders/deadline-at-risk-card';
+import { EmptyState } from '@/components/common/empty-state';
 import { AimLaunchDialog } from '@/components/growth/aim-launch-dialog';
+import { StatTile, type StatAccent } from '@/components/rean/stat-tile';
+import { Funnel, type FunnelStage } from '@/components/rean/funnel';
+import { MiniBarChart, type MiniBar } from '@/components/rean/mini-bar-chart';
 
-function isOpen(t: TenderDto): boolean {
-  return (
-    t.status !== 'SUBMITTED' && t.status !== 'AWARDED' && t.status !== 'LOST'
-  );
-}
-
-// Tender lifecycle stages (enum + colour) — the SAME closed set as the shared
-// TenderStatus enum, so the pipeline chart can't drift from the state machine.
-// Labels are resolved at render from the tenderPipeline.stages.* messages.
-const TENDER_STAGES: ReadonlyArray<[TenderStatus, string]> = [
-  ['NOT_STARTED', '#64748b'],
-  ['PIC_PRICING', '#38bdf8'],
-  ['CUSTOMER_PRICING', '#22d3ee'],
-  ['DOCUMENTS', '#a78bfa'],
-  ['SUBMITTED', '#34d399'],
-  ['AWARDED', '#fbbf24'],
-  ['LOST', '#f87171'],
-];
-// Campaign lifecycle stages (enum + colour) — the SAME closed set as the shared
-// CampaignLifecycle enum, so the donut can't drift. Colours match the lifecycle
-// badge palette (active emerald, paused amber, draft slate, archived gray).
-// Labels are resolved at render from the campaignStatus.states.* messages.
-const CAMPAIGN_STATES: ReadonlyArray<[CampaignLifecycle, string]> = [
-  ['ACTIVE', '#34d399'],
-  ['PAUSED', '#fbbf24'],
-  ['DRAFT', '#64748b'],
-  ['ARCHIVED', '#9ca3af'],
-];
-
-// Dark tooltip matching the app theme.
-function ChartTip({
-  active,
-  payload,
-  label,
-}: {
-  active?: boolean;
-  payload?: Array<{ name?: string; value?: number; payload?: { fill?: string } }>;
-  label?: string;
-}) {
-  if (!active || !payload?.length) return null;
-  return (
-    <div className="rounded-md border bg-popover px-2.5 py-1.5 text-xs shadow-md">
-      {label ? <div className="text-muted-foreground">{label}</div> : null}
-      {payload.map((p, i) => (
-        <div key={i} className="font-medium">
-          {p.name}: {p.value}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// The landing cockpit: a greeting, a live KPI row, the acquisition→pipeline
-// charts, a needs-attention queue and the deadline-at-risk frame. Every number
-// comes from a hook a module already fetches — no decorative/fabricated values —
-// and every tile/chart is gated by the same read permission as its source.
+// The R.E.A.N. dashboard — the "report" surface: funnel KPIs + live activity
+// across Reach → Engage → Activate → Nurture. Every number is derived from the
+// two hooks the modules already fetch (campaigns + meetings); there is no
+// historical/analytics backend yet, so deltas are intentionally NOT fabricated
+// and time-series panels fall back to a real "no data" state.
 export function DashboardView() {
   const t = useTranslations('dashboard');
   const { data: user, isLoading, isError, error } = useMe();
-  const queryClient = useQueryClient();
 
   return (
     <AppShell>
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-6 font-sans">
         {isLoading ? (
           <DashboardSkeleton />
         ) : isError ? (
@@ -149,9 +69,7 @@ export function DashboardView() {
         ) : user ? (
           <>
             <PageHeader
-              title={t('header.welcome', {
-                name: user.name.split(/\s+/)[0] || user.name,
-              })}
+              title={t('header.title')}
               description={
                 <>
                   {t('header.subtitle')}
@@ -166,51 +84,15 @@ export function DashboardView() {
                 </>
               }
               actions={
-                <div className="flex items-center gap-2">
-                  <Can permission="campaigns:write">
-                    <AimLaunchDialog />
-                  </Can>
-                  <Badge variant="secondary">{ROLE_LABELS[user.role]}</Badge>
-                  {user.department ? (
-                    <Badge variant="outline">
-                      {DEPARTMENT_LABELS[user.department]}
-                    </Badge>
-                  ) : null}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => void queryClient.invalidateQueries()}
-                  >
-                    <RefreshCw className="size-4" />
-                    {t('header.refresh')}
-                  </Button>
-                </div>
+                <Can permission="campaigns:write">
+                  <AimLaunchDialog />
+                </Can>
               }
             />
 
-            <StatRow />
-
-            <div className="grid gap-6 lg:grid-cols-3">
-              <Can permission="campaigns:read">
-                <AcquisitionFunnelCard />
-              </Can>
-              <NeedsAttentionCard />
-            </div>
-
-            <div className="grid gap-6 lg:grid-cols-3">
-              <Can permission="tenders:read">
-                <TenderPipelineCard />
-              </Can>
-              <Can permission="campaigns:read">
-                <CampaignStatusCard />
-              </Can>
-            </div>
-
-            <Can permission="tenders:read">
-              <DeadlineAtRiskCard />
+            <Can permission="campaigns:read">
+              <Overview />
             </Can>
-
-            <p className="text-xs text-muted-foreground">{t('footnote')}</p>
           </>
         ) : null}
       </div>
@@ -218,298 +100,319 @@ export function DashboardView() {
   );
 }
 
-// ---- KPI tiles (all real counts) ----
-function StatRow() {
+// ---- Derived R.E.A.N. metrics (all real counts) ----
+// Reach     = every campaign we've launched (top of funnel)
+// Engage    = currently-active campaigns (in-flight outreach)
+// Activate  = meetings booked (a prospect engaged enough to take a call)
+// Nurture   = meetings that have been analyzed (moving toward a deal)
+type ReanMetrics = {
+  reach: number;
+  engaged: number;
+  activated: number;
+  nurtured: number;
+};
+
+function deriveMetrics(
+  campaigns: CampaignDto[],
+  meetings: MeetingDto[],
+): ReanMetrics {
+  return {
+    reach: campaigns.length,
+    engaged: campaigns.filter((c) => c.lifecycle === 'ACTIVE').length,
+    activated: meetings.length,
+    nurtured: meetings.filter((m) => m.analysis != null).length,
+  };
+}
+
+function Overview() {
   const t = useTranslations('dashboard');
-  const tenders = useTenders();
-  const atRisk = useDeadlineRisk();
   const campaigns = useCampaigns();
   const meetings = useMeetings();
-  const leads = useLeads();
-  const customers = useCustomers();
 
-  const tenderRows = tenders.data ?? [];
-  const openTenders = tenderRows.filter(isOpen).length;
-  const atRiskCount = atRisk.data?.length ?? 0;
-  const overdue =
-    atRisk.data?.filter((r) => r.risk.level === 'OVERDUE').length ?? 0;
-  const live = (campaigns.data ?? []).filter(
-    (c) => c.lifecycle === 'ACTIVE',
-  ).length;
-
-  const num = (loading: boolean, value: number) =>
-    loading ? <Skeleton className="h-6 w-8" /> : value;
+  const loading = campaigns.isLoading || meetings.isLoading;
+  const campaignRows = useMemo(() => campaigns.data ?? [], [campaigns.data]);
+  const meetingRows = useMemo(() => meetings.data ?? [], [meetings.data]);
+  const m = useMemo(
+    () => deriveMetrics(campaignRows, meetingRows),
+    [campaignRows, meetingRows],
+  );
 
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-      <Can permission="campaigns:read">
-        <StatTile
-          label={t('stats.campaigns.label')}
-          value={num(campaigns.isLoading, live)}
-          hint={
-            campaigns.isError
-              ? t('common.couldNotLoad')
-              : t('stats.campaigns.hint', {
-                  total: campaigns.data?.length ?? 0,
-                  live,
-                })
-          }
-          accent="bg-violet-400"
-          icon={<Crosshair className="size-4" />}
+    <>
+      <StatRow metrics={m} loading={loading} />
+
+      <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
+        <PipelineOverTimeCard meetings={meetingRows} loading={loading} />
+        <LiveActivityCard
+          campaigns={campaignRows}
+          meetings={meetingRows}
+          loading={loading}
         />
-      </Can>
-      <Can permission="campaigns:read">
+      </div>
+
+      <ConversionFunnelCard metrics={m} loading={loading} />
+
+      <p className="text-xs text-muted-foreground">{t('footnote')}</p>
+    </>
+  );
+}
+
+// ---- KPI tiles: the four R.E.A.N. stages (mockup .stats row) ----
+function StatRow({
+  metrics,
+  loading,
+}: {
+  metrics: ReanMetrics;
+  loading: boolean;
+}) {
+  const t = useTranslations('dashboard');
+
+  const tiles: Array<{
+    key: keyof ReanMetrics;
+    accent: StatAccent;
+    icon: React.ReactNode;
+    hint: string;
+  }> = [
+    {
+      key: 'reach',
+      accent: 'sky',
+      icon: <Megaphone className="size-4" />,
+      hint: t('rean.reach.hint'),
+    },
+    {
+      key: 'engaged',
+      accent: 'violet',
+      icon: <Crosshair className="size-4" />,
+      hint: t('rean.engaged.hint'),
+    },
+    {
+      key: 'activated',
+      accent: 'amber',
+      icon: <CalendarCheck className="size-4" />,
+      hint: t('rean.activated.hint'),
+    },
+    {
+      key: 'nurtured',
+      accent: 'emerald',
+      icon: <Users className="size-4" />,
+      hint: t('rean.nurtured.hint'),
+    },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 gap-3.5 md:grid-cols-4">
+      {tiles.map((tile) => (
         <StatTile
-          label={t('stats.hotLeads.label')}
-          value={num(leads.isLoading, leads.data?.length ?? 0)}
-          hint={
-            leads.isError ? t('common.couldNotLoad') : t('stats.hotLeads.hint')
+          key={tile.key}
+          label={t(`rean.${tile.key}.label`)}
+          value={
+            loading ? (
+              <Skeleton className="h-7 w-12" />
+            ) : (
+              metrics[tile.key].toLocaleString()
+            )
           }
-          accent="bg-sky-400"
-          icon={<Contact className="size-4" />}
+          hint={tile.hint}
+          accent={tile.accent}
+          icon={tile.icon}
         />
-      </Can>
-      <Can permission="campaigns:read">
-        <StatTile
-          label={t('stats.meetings.label')}
-          value={num(meetings.isLoading, meetings.data?.length ?? 0)}
-          hint={
-            meetings.isError
-              ? t('common.couldNotLoad')
-              : t('stats.meetings.hint')
-          }
-          accent="bg-amber-400"
-          icon={<CalendarCheck className="size-4" />}
-        />
-      </Can>
-      <Can permission="campaigns:read">
-        <StatTile
-          label={t('stats.customers.label')}
-          value={num(customers.isLoading, customers.data?.length ?? 0)}
-          hint={
-            customers.isError
-              ? t('common.couldNotLoad')
-              : t('stats.customers.hint')
-          }
-          accent="bg-emerald-400"
-          icon={<Trophy className="size-4" />}
-        />
-      </Can>
-      <Can permission="tenders:read">
-        <StatTile
-          label={t('stats.openTenders.label')}
-          value={num(tenders.isLoading, openTenders)}
-          hint={
-            tenders.isError
-              ? t('common.couldNotLoad')
-              : t('stats.openTenders.hint', { total: tenderRows.length })
-          }
-          accent="bg-sky-400"
-          icon={<FileText className="size-4" />}
-        />
-      </Can>
-      <Can permission="tenders:read">
-        <StatTile
-          label={t('stats.atRisk.label')}
-          value={num(atRisk.isLoading, atRiskCount)}
-          hint={
-            atRisk.isError
-              ? t('common.couldNotLoad')
-              : overdue > 0
-                ? t('stats.atRisk.overdue', { count: overdue })
-                : atRiskCount > 0
-                  ? t('stats.atRisk.withinWindow')
-                  : t('stats.atRisk.onTrack')
-          }
-          accent={atRiskCount > 0 ? 'bg-orange-400' : 'bg-emerald-400'}
-          icon={<AlarmClock className="size-4" />}
-        />
-      </Can>
+      ))}
     </div>
   );
 }
 
-// ---- Acquisition funnel (real: hot leads → meetings → customers won) ----
-function AcquisitionFunnelCard() {
+// ---- Pipeline over time (real: meetings bucketed by ISO week) ----
+function PipelineOverTimeCard({
+  meetings,
+  loading,
+}: {
+  meetings: MeetingDto[];
+  loading: boolean;
+}) {
   const t = useTranslations('dashboard');
-  const leads = useLeads();
-  const meetings = useMeetings();
-  const customers = useCustomers();
+  const format = useFormatter();
 
-  const loading = leads.isLoading || meetings.isLoading || customers.isLoading;
-  const stages = [
-    {
-      label: t('acquisition.stages.hotLeads'),
-      value: leads.data?.length ?? 0,
-      color: '#a78bfa',
-    },
-    {
-      label: t('acquisition.stages.meetings'),
-      value: meetings.data?.length ?? 0,
-      color: '#38bdf8',
-    },
-    {
-      label: t('acquisition.stages.customersWon'),
-      value: customers.data?.length ?? 0,
-      color: '#34d399',
-    },
-  ];
-  const max = Math.max(1, ...stages.map((s) => s.value));
-  const anyData = stages.some((s) => s.value > 0);
+  // Bucket the last 8 weeks of activity by the week-start (Monday). We use
+  // meetingDate when present, falling back to createdAt — both are real ISO
+  // strings from the API. No data point is invented; weeks with no meetings
+  // simply render an empty (zero-height) bar.
+  const bars = useMemo<MiniBar[]>(() => {
+    const WEEKS = 8;
+    const now = new Date();
+    const weekStart = (d: Date) => {
+      const x = new Date(d);
+      x.setHours(0, 0, 0, 0);
+      const dow = (x.getDay() + 6) % 7; // Mon=0
+      x.setDate(x.getDate() - dow);
+      return x;
+    };
+    const thisWeek = weekStart(now);
+    const buckets = Array.from({ length: WEEKS }, (_, i) => {
+      const start = new Date(thisWeek);
+      start.setDate(start.getDate() - (WEEKS - 1 - i) * 7);
+      return { start, count: 0 };
+    });
+    for (const mt of meetings) {
+      const raw = mt.meetingDate ?? mt.createdAt;
+      const when = raw ? new Date(raw) : null;
+      if (!when || Number.isNaN(when.getTime())) continue;
+      const ws = weekStart(when).getTime();
+      const bucket = buckets.find((b) => b.start.getTime() === ws);
+      if (bucket) bucket.count += 1;
+    }
+    return buckets.map((b) => ({
+      label: format.dateTime(b.start, { day: 'numeric', month: 'short' }),
+      value: b.count,
+      tone: 'emerald' as const,
+    }));
+  }, [meetings, format]);
+
+  const anyData = bars.some((b) => b.value > 0);
 
   return (
-    <Card className="lg:col-span-2">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Filter className="size-4 text-muted-foreground" />{' '}
-          {t('acquisition.title')}
+    <Card>
+      <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <TrendingUp className="size-4 text-muted-foreground" />
+          {t('pipeline.title')}
         </CardTitle>
-        <CardDescription>{t('acquisition.description')}</CardDescription>
+        <span className="text-[11.5px] text-muted-foreground">
+          {t('pipeline.range')}
+        </span>
       </CardHeader>
       <CardContent>
         {loading ? (
-          <Skeleton className="h-[180px] w-full" />
+          <Skeleton className="h-[200px] w-full" />
         ) : !anyData ? (
-          <EmptyChart label={t('acquisition.empty')} h={180} />
+          <EmptyState
+            icon={<TrendingUp />}
+            title={t('pipeline.empty.title')}
+            description={t('pipeline.empty.body')}
+          />
         ) : (
-          <div className="flex flex-col gap-4 py-2">
-            {stages.map((s, i) => {
-              const prev = i > 0 ? (stages[i - 1]?.value ?? null) : null;
-              const conv =
-                prev && prev > 0 ? Math.round((s.value / prev) * 100) : null;
-              return (
-                <div key={s.label} className="flex items-center gap-3">
-                  <div className="w-28 shrink-0 text-sm text-muted-foreground">
-                    {s.label}
-                  </div>
-                  <div className="relative h-7 flex-1 overflow-hidden rounded-md bg-muted/40">
-                    <div
-                      className="flex h-full items-center justify-end rounded-md px-2 text-xs font-semibold text-background transition-all"
-                      style={{
-                        width: `${Math.max(7, (s.value / max) * 100)}%`,
-                        background: s.color,
-                      }}
-                    >
-                      {s.value}
-                    </div>
-                  </div>
-                  <div className="w-14 shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-                    {conv !== null ? `${conv}%` : ''}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <>
+            <MiniBarChart bars={bars} height={200} />
+            <div className="mt-3 flex flex-wrap gap-3.5">
+              <span className="inline-flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
+                <i className="size-2 rounded-full bg-emerald-400" />
+                {t('pipeline.legend')}
+              </span>
+            </div>
+          </>
         )}
       </CardContent>
     </Card>
   );
 }
 
-// ---- Needs attention (real: deadline risk + unattributed meetings + failed campaigns) ----
-function NeedsAttentionCard() {
+// ---- Live activity (real: latest campaigns + meetings, newest first) ----
+type FeedItem = {
+  at: number;
+  tone: string;
+  body: React.ReactNode;
+};
+
+function LiveActivityCard({
+  campaigns,
+  meetings,
+  loading,
+}: {
+  campaigns: CampaignDto[];
+  meetings: MeetingDto[];
+  loading: boolean;
+}) {
   const t = useTranslations('dashboard');
-  const atRisk = useDeadlineRisk();
-  const meetings = useMeetings();
-  const campaigns = useCampaigns();
+  const format = useFormatter();
 
-  const loading =
-    atRisk.isLoading || meetings.isLoading || campaigns.isLoading;
+  const items = useMemo<FeedItem[]>(() => {
+    const feed: FeedItem[] = [];
 
-  const riskRows = atRisk.data ?? [];
-  const mostUrgent = riskRows[0];
-  const unattributed = (meetings.data ?? []).filter((m) => !m.campaignId);
+    for (const c of campaigns) {
+      const ts = Date.parse(c.activatedAt ?? c.createdAt);
+      if (Number.isNaN(ts)) continue;
+      const name = c.name?.trim() || c.project;
+      feed.push({
+        at: ts,
+        tone: c.lifecycle === 'ACTIVE' ? 'bg-violet-400' : 'bg-sky-400',
+        body: t.rich(
+          c.lifecycle === 'ACTIVE'
+            ? 'activity.campaignLaunched'
+            : 'activity.campaignCreated',
+          {
+            name,
+            b: (chunks) => <b className="font-semibold">{chunks}</b>,
+          },
+        ),
+      });
+    }
 
-  type Item = {
-    icon: ReactNode;
-    tone: string;
-    title: string;
-    sub: string;
-    href?: string;
-    cta?: string;
-  };
-  const items: Item[] = [];
-  if (riskRows.length > 0) {
-    items.push({
-      icon: <AlarmClock className="size-4" />,
-      tone: 'text-orange-400',
-      title: t('needsAttention.risk.title', { count: riskRows.length }),
-      sub: mostUrgent
-        ? t('needsAttention.risk.mostUrgent', { title: mostUrgent.tender.title })
-        : t('needsAttention.risk.fallback'),
-      href: mostUrgent ? `/tenders/${mostUrgent.tender.id}` : undefined,
-      cta: t('needsAttention.risk.cta'),
-    });
-  }
-  if (unattributed.length > 0) {
-    items.push({
-      icon: <Unlink className="size-4" />,
-      tone: 'text-amber-400',
-      title: t('needsAttention.unattributed.title', {
-        count: unattributed.length,
-      }),
-      sub: t('needsAttention.unattributed.sub'),
-      href: '/sales',
-      cta: t('needsAttention.unattributed.cta'),
-    });
-  }
+    for (const mt of meetings) {
+      const ts = Date.parse(mt.meetingDate ?? mt.createdAt);
+      if (Number.isNaN(ts)) continue;
+      const company = mt.clientCompany?.trim() || t('activity.aProspect');
+      const analyzed = mt.analysis != null;
+      feed.push({
+        at: ts,
+        tone: analyzed ? 'bg-emerald-400' : 'bg-amber-400',
+        body: t.rich(
+          analyzed ? 'activity.meetingAnalyzed' : 'activity.meetingBooked',
+          {
+            company,
+            b: (chunks) => <b className="font-semibold">{chunks}</b>,
+          },
+        ),
+      });
+    }
+
+    return feed.sort((a, b) => b.at - a.at).slice(0, 6);
+  }, [campaigns, meetings, t]);
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <AlertTriangle className="size-4 text-muted-foreground" />{' '}
-          {t('needsAttention.title')}
+      <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <Activity className="size-4 text-muted-foreground" />
+          {t('activity.title')}
         </CardTitle>
-        <CardDescription>
-          {loading
-            ? t('needsAttention.checking')
-            : items.length === 0
-              ? t('needsAttention.none')
-              : t('needsAttention.count', { count: items.length })}
-        </CardDescription>
+        <Badge
+          variant="outline"
+          className="gap-1.5 border-emerald-500/30 bg-emerald-500/10 text-emerald-500"
+        >
+          <span className="size-1.5 rounded-full bg-emerald-500" />
+          {t('activity.live')}
+        </Badge>
       </CardHeader>
       <CardContent>
         {loading ? (
-          <Skeleton className="h-[180px] w-full" />
-        ) : items.length === 0 ? (
-          <div className="flex h-[180px] flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
-            <CheckCircle2 className="size-7 text-emerald-400" />
-            {t('needsAttention.allClear')}
+          <div className="flex flex-col gap-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-10 w-full" />
+            ))}
           </div>
+        ) : items.length === 0 ? (
+          <EmptyState
+            icon={<MessageSquare />}
+            title={t('activity.empty.title')}
+            description={t('activity.empty.body')}
+          />
         ) : (
-          <ul className="flex flex-col gap-2">
-            {items.map((it, i) => {
-              const body = (
-                <div className="flex items-center gap-3 rounded-md border bg-card p-3 transition-colors hover:bg-muted/40">
-                  <span className={it.tone}>{it.icon}</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium">
-                      {it.title}
-                    </div>
-                    <div className="truncate text-xs text-muted-foreground">
-                      {it.sub}
-                    </div>
+          <ul className="flex flex-col">
+            {items.map((it, i) => (
+              <li
+                key={i}
+                className="flex gap-3 border-b border-border/60 py-2.5 last:border-0"
+              >
+                <span
+                  className={`mt-1.5 size-2.5 shrink-0 rounded-full ${it.tone}`}
+                />
+                <div className="min-w-0">
+                  <div className="text-[12.5px]">{it.body}</div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                    {format.relativeTime(it.at)}
                   </div>
-                  {it.cta ? (
-                    <span className="shrink-0 text-xs font-medium text-muted-foreground">
-                      {it.cta}
-                    </span>
-                  ) : null}
                 </div>
-              );
-              return (
-                <li key={i}>
-                  {it.href ? (
-                    <Link href={it.href} className="block">
-                      {body}
-                    </Link>
-                  ) : (
-                    body
-                  )}
-                </li>
-              );
-            })}
+              </li>
+            ))}
           </ul>
         )}
       </CardContent>
@@ -517,159 +420,76 @@ function NeedsAttentionCard() {
   );
 }
 
-// ---- Tender pipeline (bar, real) ----
-function TenderPipelineCard() {
+// ---- R.E.A.N. sequence conversion funnel (real, stage-to-stage) ----
+function ConversionFunnelCard({
+  metrics,
+  loading,
+}: {
+  metrics: ReanMetrics;
+  loading: boolean;
+}) {
   const t = useTranslations('dashboard');
-  const tenders = useTenders();
-  const rows = tenders.data ?? [];
-  const data = TENDER_STAGES.map(([s, fill]) => ({
-    stage: t(`tenderPipeline.stages.${s}`),
-    n: rows.filter((row) => row.status === s).length,
-    fill,
-  }));
-  const open = rows.filter(isOpen).length;
 
-  return (
-    <Card className="lg:col-span-2">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Layers className="size-4 text-muted-foreground" />{' '}
-          {t('tenderPipeline.title')}
-        </CardTitle>
-        <CardDescription>
-          {t('tenderPipeline.description', { count: open })}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {tenders.isLoading ? (
-          <Skeleton className="h-[220px] w-full" />
-        ) : rows.length === 0 ? (
-          <EmptyChart label={t('tenderPipeline.empty')} />
-        ) : (
-          <div className="h-[220px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data} margin={{ top: 8, right: 8, left: -20, bottom: 0 }}>
-                <CartesianGrid vertical={false} stroke="var(--border)" />
-                <XAxis
-                  dataKey="stage"
-                  tickLine={false}
-                  axisLine={false}
-                  tick={{ fill: 'var(--muted-foreground)', fontSize: 10 }}
-                  interval={0}
-                />
-                <YAxis
-                  tickLine={false}
-                  axisLine={false}
-                  width={28}
-                  allowDecimals={false}
-                  tick={{ fill: 'var(--muted-foreground)', fontSize: 11 }}
-                />
-                <Tooltip content={<ChartTip />} cursor={{ fill: 'rgba(255,255,255,.03)' }} />
-                <Bar
-                  dataKey="n"
-                  name={t('tenderPipeline.series')}
-                  radius={[6, 6, 0, 0]}
-                  maxBarSize={44}
-                >
-                  {data.map((d, i) => (
-                    <Cell key={i} fill={d.fill} />
-                  ))}
-                  <LabelList
-                    dataKey="n"
-                    position="top"
-                    fill="var(--muted-foreground)"
-                    fontSize={11}
-                  />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
+  const top = Math.max(1, metrics.reach);
+  const pct = (n: number) => Math.round((n / top) * 1000) / 10;
+  const stages: FunnelStage[] = [
+    {
+      label: t('rean.reach.label'),
+      percent: metrics.reach === 0 ? 0 : 100,
+      fill: `${metrics.reach === 0 ? 0 : 100}%`,
+      value: metrics.reach.toLocaleString(),
+      tone: 'sky',
+    },
+    {
+      label: t('rean.engaged.label'),
+      percent: pct(metrics.engaged),
+      fill: `${pct(metrics.engaged)}%`,
+      value: metrics.engaged.toLocaleString(),
+      tone: 'violet',
+    },
+    {
+      label: t('rean.activated.label'),
+      percent: pct(metrics.activated),
+      fill: `${pct(metrics.activated)}%`,
+      value: metrics.activated.toLocaleString(),
+      tone: 'amber',
+    },
+    {
+      label: t('rean.nurtured.label'),
+      percent: pct(metrics.nurtured),
+      fill: `${pct(metrics.nurtured)}%`,
+      value: metrics.nurtured.toLocaleString(),
+      tone: 'emerald',
+    },
+  ];
 
-// ---- Campaign status (donut, real) ----
-function CampaignStatusCard() {
-  const t = useTranslations('dashboard');
-  const campaigns = useCampaigns();
-  const rows = campaigns.data ?? [];
-  const data = CAMPAIGN_STATES.map(([s, fill]) => ({
-    name: t(`campaignStatus.states.${s}`),
-    value: rows.filter((c) => c.lifecycle === s).length,
-    fill,
-  })).filter((d) => d.value > 0);
+  const anyData = metrics.reach > 0 || metrics.activated > 0;
 
   return (
     <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Briefcase className="size-4 text-muted-foreground" />{' '}
-          {t('campaignStatus.title')}
+      <CardHeader className="flex-row items-center justify-between gap-3 space-y-0">
+        <CardTitle className="flex items-center gap-2 text-sm">
+          <Filter className="size-4 text-muted-foreground" />
+          {t('funnel.title')}
         </CardTitle>
-        <CardDescription>
-          {t('campaignStatus.description', { count: rows.length })}
-        </CardDescription>
+        <span className="text-[11.5px] text-muted-foreground">
+          {t('funnel.subtitle')}
+        </span>
       </CardHeader>
       <CardContent>
-        {campaigns.isLoading ? (
-          <Skeleton className="h-[220px] w-full" />
-        ) : rows.length === 0 ? (
-          <EmptyChart label={t('campaignStatus.empty')} />
+        {loading ? (
+          <Skeleton className="h-[140px] w-full" />
+        ) : !anyData ? (
+          <EmptyState
+            icon={<Filter />}
+            title={t('funnel.empty.title')}
+            description={t('funnel.empty.body')}
+          />
         ) : (
-          <div className="flex h-[220px] items-center gap-3">
-            <div className="h-full flex-1">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={data}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={48}
-                    outerRadius={78}
-                    paddingAngle={2}
-                    stroke="none"
-                  >
-                    {data.map((d, i) => (
-                      <Cell key={i} fill={d.fill} />
-                    ))}
-                  </Pie>
-                  <Tooltip content={<ChartTip />} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="flex flex-col gap-1.5 pr-2">
-              {data.map((d) => (
-                <div key={d.name} className="flex items-center gap-2 text-xs">
-                  <span
-                    className="size-2.5 rounded-sm"
-                    style={{ background: d.fill }}
-                  />
-                  <span className="text-muted-foreground">{d.name}</span>
-                  <span className="ml-auto font-semibold tabular-nums">
-                    {d.value}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
+          <Funnel stages={stages} />
         )}
       </CardContent>
     </Card>
-  );
-}
-
-function EmptyChart({ label, h = 220 }: { label: string; h?: number }) {
-  return (
-    <div
-      className="flex items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground"
-      style={{ height: h }}
-    >
-      {label}
-    </div>
   );
 }
 
@@ -680,19 +500,16 @@ function DashboardSkeleton() {
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-4 w-80" />
       </div>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton key={i} className="h-[92px] w-full rounded-lg" />
+      <div className="grid grid-cols-2 gap-3.5 md:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-[104px] w-full rounded-lg" />
         ))}
       </div>
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Skeleton className="h-[260px] w-full rounded-lg lg:col-span-2" />
-        <Skeleton className="h-[260px] w-full rounded-lg" />
-      </div>
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Skeleton className="h-[300px] w-full rounded-lg lg:col-span-2" />
+      <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
+        <Skeleton className="h-[300px] w-full rounded-lg" />
         <Skeleton className="h-[300px] w-full rounded-lg" />
       </div>
+      <Skeleton className="h-[220px] w-full rounded-lg" />
     </>
   );
 }

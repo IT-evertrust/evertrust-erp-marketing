@@ -1,0 +1,17 @@
+{
+  "title": "Berichte",
+  "description": "Geplante und Ad-hoc-Exporte über die Sequenz.",
+  "generate": "Bericht erstellen",
+  "comingSoon": "Demnächst",
+  "generateHint": "Die Berichterstellung ist noch nicht verfügbar — sie kommt in einer späteren Phase.",
+  "table": {
+    "report": "Bericht",
+    "period": "Zeitraum",
+    "created": "Erstellt",
+    "status": "Status"
+  },
+  "empty": {
+    "title": "Noch keine Berichte",
+    "description": "Erstellte Berichte erscheinen hier, sobald die Berichterstellung verfügbar ist."
+  }
+}

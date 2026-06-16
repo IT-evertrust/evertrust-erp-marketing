@@ -1,0 +1,40 @@
+{
+  "title": "Nurture",
+  "subtitle": "Move deals through the pipeline and assist with contracts to close.",
+  "campaignPlaceholder": "Select a campaign",
+  "loadError": "Could not load campaigns: {message}",
+  "tabs": {
+    "pipeline": "Sales Pipeline",
+    "contracts": "Contract Assist"
+  },
+  "noCampaigns": {
+    "title": "No campaigns yet",
+    "body": "Launch a campaign in Activate to start building a pipeline of prospects to nurture."
+  },
+  "pickCampaign": {
+    "title": "Pick a campaign",
+    "body": "Choose a campaign above to see its pipeline and contracts."
+  },
+  "pipeline": {
+    "columnEmpty": "No deals",
+    "verified": "verified",
+    "followups": "{count} follow-up sent",
+    "moveBack": "Move to previous stage",
+    "moveForward": "Move to next stage",
+    "movedToast": "{name} moved to {stage}"
+  },
+  "contracts": {
+    "listTitle": "Contracts",
+    "listEmpty": "No contracts generated for this campaign yet.",
+    "dealPlaceholder": "Select a deal",
+    "templatePlaceholder": "Select a template",
+    "template": {
+      "MSA": "MSA template",
+      "SOW": "SOW template",
+      "NDA": "NDA"
+    },
+    "generate": "Generate contract",
+    "comingSoonTitle": "Contract drafting is coming soon",
+    "comingSoonBody": "Pick a deal and a template to draft a contract. Automated drafting isn't wired up yet — generated contracts will appear in the list below once it is."
+  }
+}

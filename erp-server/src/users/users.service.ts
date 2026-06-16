@@ -149,8 +149,9 @@ export class UsersService {
   // Update a user's role/position/department, or (de)activate them. Tenant-scoped
   // on BOTH the prior read (audit `before` + 404) and the write, so an admin can
   // never touch a user outside their org. Guarded: a Super Admin's role cannot be
-  // changed, and you cannot deactivate yourself or a Super Admin. Only provided
-  // fields change; position/department may be set to null to clear them.
+  // changed, you cannot deactivate yourself or a Super Admin, and an org may have
+  // at most one Super Admin (promoting a 2nd one is a 409). Only provided fields
+  // change; position/department may be set to null to clear them.
   async updateUser(
     orgId: string,
     actingUserId: string,
@@ -178,13 +179,17 @@ export class UsersService {
         department: schema.users.department,
         active: schema.users.active,
         permissions: schema.users.permissions,
+        organizationId: schema.users.organizationId,
       })
       .from(schema.users)
       .where(scope)
       .limit(1);
 
-    const prev = existing[0];
-    if (!prev) throw new NotFoundException('User not found');
+    const row = existing[0];
+    if (!row) throw new NotFoundException('User not found');
+    // Keep `prev` as the prior-state shape for the audit `before` (org id is a
+    // lookup helper for the SA guard below, not part of the audited snapshot).
+    const { organizationId: prevOrgId, ...prev } = row;
 
     // The Owner is the top tier: only another Owner may modify an Owner (role,
     // status, permissions, identity). Mirrors the Super Admin protection below.
@@ -210,6 +215,15 @@ export class UsersService {
       if (prev.role === 'SUPER_ADMIN') {
         throw new ForbiddenException('A Super Admin cannot be deactivated');
       }
+    }
+
+    // One Super Admin per org: promoting a user to SUPER_ADMIN is rejected if
+    // ANOTHER user in the SAME org already holds it. Excludes the target user, so
+    // re-saving the existing sole SA as SUPER_ADMIN is idempotent (no false 409).
+    // Scoped to the TARGET user's org (prevOrgId), which is what matters when an
+    // Owner edits a user in another org. OWNER is never part of this check.
+    if (dto.role === 'SUPER_ADMIN' && prev.role !== 'SUPER_ADMIN') {
+      await this.assertSingleSuperAdmin(prevOrgId, userId);
     }
 
     // Self-lockout guard: you can never end up without user-management access on
@@ -302,6 +316,33 @@ export class UsersService {
     };
   }
 
+  // Org invariant: AT MOST ONE Super Admin per organization (the org's single
+  // owner). Org-scoped — counts SUPER_ADMINs WHERE organization_id = the target
+  // org, optionally excluding the user being updated (so re-saving the existing
+  // sole SA as SUPER_ADMIN is idempotent and never trips the guard). Throws 409
+  // when another user in the SAME org already holds the role. OWNER is the
+  // cross-org platform role and is deliberately NOT part of this check.
+  private async assertSingleSuperAdmin(
+    orgId: string,
+    excludeUserId?: string,
+  ): Promise<void> {
+    const existing = await this.db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(
+        and(
+          tenantScope(orgId, schema.users),
+          eq(schema.users.role, 'SUPER_ADMIN'),
+        ),
+      );
+    const conflict = existing.some((u) => u.id !== excludeUserId);
+    if (conflict) {
+      throw new ConflictException(
+        'This organization already has a Super Admin. Demote the current Super Admin before assigning another.',
+      );
+    }
+  }
+
   // Create a new user + their argon2 login credential, in one transaction. No
   // public register flow exists, so a users:manage admin sets the initial
   // password here. Email must be globally unique (409 on clash).
@@ -325,6 +366,11 @@ export class UsersService {
       .limit(1);
     if (existing[0]) {
       throw new ConflictException('That email is already in use');
+    }
+
+    // One Super Admin per org: reject creating a 2nd SA for this organization.
+    if (dto.role === 'SUPER_ADMIN') {
+      await this.assertSingleSuperAdmin(orgId);
     }
 
     const passwordHash = await argon2.hash(dto.password);

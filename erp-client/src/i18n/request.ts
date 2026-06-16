@@ -18,22 +18,24 @@ export const DEFAULT_LOCALE: Locale = 'en';
 // (top-level key === namespace), so `useTranslations('settings')` etc. resolve
 // unchanged. Add a namespace here AND create messages/{en,de}/<ns>.json for it.
 const NAMESPACES = [
-  // Existing
   'nav',
   'common',
   'settings',
   'growth',
-  // Planned (currently empty {} stubs — translators fill these in)
   'dashboard',
-  'tenders',
-  'suppliers',
-  'customers',
-  'sales',
-  'keyAccount',
   'performance',
   'users',
   'marketing',
   'login',
+  // R.E.A.N. redesign pages. Each owns its own namespace so page agents can fill
+  // them in parallel; the files start as empty objects until a page wires copy.
+  'analytics',
+  'reports',
+  'engage',
+  'nurture',
+  'activate',
+  // Placeholder pages rebuilt in a later phase.
+  'placeholders',
 ] as const;
 
 export default getRequestConfig(async () => {

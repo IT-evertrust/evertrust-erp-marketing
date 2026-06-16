@@ -300,6 +300,77 @@ describe('UsersService — createUser', () => {
   });
 });
 
+describe('UsersService — single Super Admin per org', () => {
+  // ORG_A already has ALICE (SUPER_ADMIN); ORG_B has only MALLORY (EMPLOYEE).
+
+  it('(a) createUser: a 2nd SUPER_ADMIN in an org that already has one is a 409', async () => {
+    const { service } = seed();
+    await expect(
+      service.createUser(ORG_A, {
+        name: 'Second SA',
+        email: 'second.sa@evertrust-germany.de',
+        password: 'Password123!',
+        role: 'SUPER_ADMIN',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('(a) updateUser: promoting a 2nd user to SUPER_ADMIN is a 409', async () => {
+    const { service } = seed();
+    await expect(
+      service.updateUser(ORG_A, ALICE, BOB, { role: 'SUPER_ADMIN' }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('is org-scoped: a SUPER_ADMIN may be created in a DIFFERENT org with none', async () => {
+    const { service } = seed();
+    const after = await service.createUser(ORG_B, {
+      name: 'Org B Owner',
+      email: 'owner@other.de',
+      password: 'Password123!',
+      role: 'SUPER_ADMIN',
+    });
+    expect(after.role).toBe('SUPER_ADMIN');
+  });
+
+  it('(b) re-saving the sole SUPER_ADMIN as SUPER_ADMIN is idempotent (no 409)', async () => {
+    const { service } = seed();
+    // ALICE is already the org's single SA — asserting the role again must pass,
+    // and other fields still apply.
+    const { after } = await service.updateUser(ORG_A, ALICE, ALICE, {
+      role: 'SUPER_ADMIN',
+      department: 'IT',
+    });
+    expect(after.role).toBe('SUPER_ADMIN');
+    expect(after.department).toBe('IT');
+  });
+
+  it('does NOT count OWNER toward the single-SA limit', async () => {
+    const { service, users } = seed();
+    // An OWNER (cross-org platform role) sits in ORG_B alongside MALLORY.
+    users.rows.push({
+      id: OWNER_ID,
+      organizationId: ORG_B,
+      name: 'Platform Owner',
+      email: 'owner@platform.de',
+      role: 'OWNER',
+      position: null,
+      department: null,
+      active: true,
+      createdAt: new Date('2026-01-04T00:00:00Z'),
+      __seq: 4,
+    });
+    // ORG_B has an OWNER but no SUPER_ADMIN, so creating an SA must still succeed.
+    const after = await service.createUser(ORG_B, {
+      name: 'Org B SA',
+      email: 'sa@other.de',
+      password: 'Password123!',
+      role: 'SUPER_ADMIN',
+    });
+    expect(after.role).toBe('SUPER_ADMIN');
+  });
+});
+
 describe('UsersService — setPassword (admin reset)', () => {
   it('upserts an argon2 credential for the user', async () => {
     const { service, creds } = seed();

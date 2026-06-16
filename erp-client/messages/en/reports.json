@@ -1,0 +1,17 @@
+{
+  "title": "Reports",
+  "description": "Scheduled and on-demand exports across the sequence.",
+  "generate": "Generate report",
+  "comingSoon": "Coming soon",
+  "generateHint": "Report generation isn’t available yet — it arrives in a later phase.",
+  "table": {
+    "report": "Report",
+    "period": "Period",
+    "created": "Created",
+    "status": "Status"
+  },
+  "empty": {
+    "title": "No reports yet",
+    "description": "Generated reports will appear here once report generation is available."
+  }
+}

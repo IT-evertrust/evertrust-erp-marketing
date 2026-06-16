@@ -1,0 +1,18 @@
+{
+  "comingSoon": {
+    "badge": "Demnächst",
+    "body": "Dieser Bereich wird im Rahmen des Redesigns neu aufgebaut und folgt in einer späteren Phase."
+  },
+  "activate": {
+    "title": "Aktivierung",
+    "description": "Schritt 3 der R.E.A.N.-Sequenz — aus angesprochenen Interessenten gebuchte Termine machen."
+  },
+  "nurture": {
+    "title": "Pflege",
+    "description": "Schritt 4 der R.E.A.N.-Sequenz — warme Beziehungen Richtung Abschluss begleiten."
+  },
+  "reports": {
+    "title": "Berichte",
+    "description": "Exportierbare Leistungs- und Outreach-Berichte über die gesamte R.E.A.N.-Sequenz."
+  }
+}

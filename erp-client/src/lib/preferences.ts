@@ -17,9 +17,8 @@ const DENSITY_KEY = 'pref:density';
 // stored value against it (so a stale/garbage key can never redirect off-app).
 export const LANDING_OPTIONS: { label: string; path: string }[] = [
   { label: 'Dashboard', path: '/dashboard' },
-  { label: 'Marketing', path: '/marketing' },
-  { label: 'Tenders', path: '/tenders' },
-  { label: 'Performance', path: '/performance' },
+  { label: 'Reach', path: '/marketing' },
+  { label: 'Analytics', path: '/performance' },
   { label: 'Users', path: '/users' },
 ];
 

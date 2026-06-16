@@ -1,15 +1,14 @@
 import {
-  Contact,
-  Gauge,
-  Headset,
-  Inbox,
+  BarChart3,
+  FileText,
+  Heart,
   LayoutDashboard,
-  LineChart,
+  MessageCircle,
+  Radio,
   Settings,
-  ShieldOff,
   SlidersHorizontal,
-  Target,
   Users,
+  Zap,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Permission } from '@evertrust/shared';
@@ -20,6 +19,9 @@ import type { Permission } from '@evertrust/shared';
 // the dashboard landing zone). `group` is the sidebar section label — items
 // sharing a group render together under it (kept contiguous + ordered here).
 // One source of truth for the nav.
+//
+// The middle four links are the R.E.A.N. sequence (Reach → Engage → Activate →
+// Nurture); `seq` is the small ordinal badge the sidebar renders for them.
 export type NavItem = {
   href: string;
   label: string;
@@ -32,21 +34,28 @@ export type NavItem = {
   permission: Permission | null;
   // Sidebar section heading; omit for top-level (ungrouped) items.
   group?: string;
+  // R.E.A.N. step number — rendered as a small ordinal badge in the rail.
+  seq?: number;
 };
 
 export const NAV_ITEMS: readonly NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', i18nKey: 'dashboard', icon: LayoutDashboard, permission: null },
-  { href: '/marketing', label: 'Marketing', i18nKey: 'marketing', icon: LineChart, permission: 'campaigns:read', group: 'Acquisition' },
-  { href: '/marketing/niches', label: 'Niches', i18nKey: 'niches', icon: Target, permission: 'campaigns:read', group: 'Acquisition' },
-  { href: '/marketing/drafts', label: 'Reply drafts', i18nKey: 'drafts', icon: Inbox, permission: 'campaigns:read', group: 'Acquisition' },
-  { href: '/marketing/suppressions', label: 'Suppressions', i18nKey: 'suppressions', icon: ShieldOff, permission: 'campaigns:read', group: 'Acquisition' },
-  { href: '/key-account', label: 'Key Account', i18nKey: 'keyAccount', icon: Contact, permission: 'campaigns:read', group: 'Acquisition' },
-  { href: '/sales', label: 'Sales', i18nKey: 'sales', icon: Headset, permission: 'campaigns:read', group: 'Acquisition' },
-  { href: '/performance', label: 'Performance', i18nKey: 'performance', icon: Gauge, permission: 'performance:read', group: 'Management' },
-  { href: '/users', label: 'Users', i18nKey: 'users', icon: Users, permission: 'users:manage', group: 'Administration' },
-  // Settings: General is open to every authed user (permission: null); Configuration
-  // is admin-only (admin:config, held by SUPER_ADMIN + ADMIN) — the sidebar hides it
-  // for everyone else.
-  { href: '/settings/general', label: 'General', i18nKey: 'general', icon: Settings, permission: null, group: 'Settings' },
-  { href: '/settings/configuration', label: 'Configuration', i18nKey: 'configuration', icon: SlidersHorizontal, permission: 'admin:config', group: 'Settings' },
+
+  // R.E.A.N. sequence: Reach → Engage → Activate → Nurture.
+  { href: '/marketing', label: 'Reach', i18nKey: 'reach', icon: Radio, permission: 'campaigns:read', group: 'rean', seq: 1 },
+  { href: '/marketing/drafts', label: 'Engage', i18nKey: 'engage', icon: MessageCircle, permission: 'campaigns:read', group: 'rean', seq: 2 },
+  { href: '/activate', label: 'Activate', i18nKey: 'activate', icon: Zap, permission: 'campaigns:read', group: 'rean', seq: 3 },
+  { href: '/nurture', label: 'Nurture', i18nKey: 'nurture', icon: Heart, permission: 'campaigns:read', group: 'rean', seq: 4 },
+
+  // Insights.
+  { href: '/performance', label: 'Analytics', i18nKey: 'analytics', icon: BarChart3, permission: 'campaigns:read', group: 'insights' },
+  { href: '/reports', label: 'Reports', i18nKey: 'reports', icon: FileText, permission: 'campaigns:read', group: 'insights' },
+
+  // Settings: General is open to every authed user (permission: null);
+  // Configuration is admin-only (admin:config, held by SUPER_ADMIN + ADMIN), and
+  // User management is users:manage (Super Admin) — the sidebar hides each link
+  // for anyone the API would reject.
+  { href: '/settings/general', label: 'General', i18nKey: 'general', icon: Settings, permission: null, group: 'settings' },
+  { href: '/settings/configuration', label: 'Configuration', i18nKey: 'configuration', icon: SlidersHorizontal, permission: 'admin:config', group: 'settings' },
+  { href: '/users', label: 'User management', i18nKey: 'userManagement', icon: Users, permission: 'users:manage', group: 'settings' },
 ];

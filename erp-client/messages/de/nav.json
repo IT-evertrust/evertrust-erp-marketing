@@ -1,19 +1,17 @@
 {
-  "dashboard": "Dashboard",
-  "marketing": "Marketing",
-  "niches": "Nischen",
-  "drafts": "Antwortentwürfe",
-  "suppressions": "Sperrliste",
-  "keyAccount": "Key Account",
-  "sales": "Vertrieb",
-  "performance": "Leistung",
-  "users": "Benutzer",
+  "dashboard": "Übersicht",
+  "reach": "Reichweite",
+  "engage": "Ansprache",
+  "activate": "Aktivierung",
+  "nurture": "Pflege",
+  "analytics": "Analysen",
+  "reports": "Berichte",
   "general": "Allgemein",
   "configuration": "Konfiguration",
+  "userManagement": "Benutzer",
   "group": {
-    "Acquisition": "Akquise",
-    "Management": "Verwaltung",
-    "Administration": "Administration",
-    "Settings": "Einstellungen"
+    "rean": "R.E.A.N. Sequenz",
+    "insights": "Auswertung",
+    "settings": "Einstellungen"
   }
 }

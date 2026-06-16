@@ -155,6 +155,26 @@ describe('GoogleAuthService — loginWithGoogle', () => {
     expect(authCredentials.rows).toHaveLength(0);
   });
 
+  it('(c-guard) a 2nd login to an org that already has a SUPER_ADMIN yields EMPLOYEE, never a 2nd SA', async () => {
+    // The seeded EverTrust org already has ALICE (SUPER_ADMIN). A second person
+    // on that domain must join as EMPLOYEE — the org's single SA is preserved.
+    const { service, users } = make(
+      fakeVerifier(
+        verified({ email: 'colleague@evertrust-germany.de', name: 'Colleague' }),
+      ),
+    );
+
+    const res = await service.loginWithGoogle('tok');
+
+    expect(res.user.role).toBe('EMPLOYEE');
+    expect(res.user.role).not.toBe('SUPER_ADMIN');
+    expect(res.user.organizationId).toBe(EVERTRUST_ORG);
+    // Exactly one SUPER_ADMIN in the org after the join (still ALICE).
+    const superAdmins = users.rows.filter((u) => u.role === 'SUPER_ADMIN');
+    expect(superAdmins).toHaveLength(1);
+    expect(superAdmins[0]?.id).toBe(ALICE);
+  });
+
   it('(c) a brand-new company domain creates the org + first user as SUPER_ADMIN', async () => {
     const { service, users, organizations } = make(
       fakeVerifier(verified({ email: 'founder@acme-widgets.com', name: 'F' })),

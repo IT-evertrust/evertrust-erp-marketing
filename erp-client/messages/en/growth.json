@@ -1,4 +1,97 @@
 {
+  "reach": {
+    "header": {
+      "title": "Reach",
+      "description": "Find prospects, generate first-touch emails, and launch outbound sequences."
+    },
+    "tabs": {
+      "campaigns": "Campaigns",
+      "scraper": "Lead Scraper",
+      "email": "Email Generator",
+      "sequence": "Sequence Sender"
+    },
+    "campaigns": {
+      "tiles": {
+        "campaigns": "Campaigns",
+        "active": "Active",
+        "leads": "Leads",
+        "replies": "Replies",
+        "meetings": "Meetings"
+      },
+      "createTitle": "Create campaign",
+      "createMeta": "campaigns · niches · org_senders",
+      "createHint": "Launch sets the Gmail sending alias (sender) + sales calendar, then the arsenal runs autonomously.",
+      "tableTitle": "Campaigns",
+      "count": "{count, plural, =0 {No campaigns} one {# campaign} other {# campaigns}}",
+      "col": {
+        "campaign": "Campaign",
+        "niche": "Niche",
+        "geo": "Geo",
+        "sender": "Sender",
+        "lifecycle": "Status",
+        "leads": "Leads"
+      },
+      "loadError": "Could not load campaigns: {message}",
+      "empty": "No campaigns yet. Use Launch campaign to create your first one.",
+      "manage": "Manage"
+    },
+    "scraper": {
+      "criteriaTitle": "Search criteria",
+      "criteriaMeta": "leads.campaignId",
+      "selectLabel": "Select a campaign to scrape leads for",
+      "selectPlaceholder": "Choose a campaign…",
+      "nicheLabel": "Niche · from campaign",
+      "geoLabel": "Geo · from campaign",
+      "senderLabel": "Sender · from campaign",
+      "targetsTitle": "Targets · the niche this campaign scrapes",
+      "targetsHint": "Leads attach to the selected campaign and appear under it in the Campaigns tab.",
+      "loadError": "Could not load campaigns: {message}",
+      "empty": {
+        "title": "No campaigns to scrape",
+        "description": "Launch a campaign first — the Lead Scraper attaches the leads it finds to it."
+      },
+      "pick": {
+        "title": "Pick a campaign",
+        "description": "Choose a campaign above to view and tune the niche targets the scraper runs for it."
+      }
+    },
+    "email": {
+      "comingSoonBadge": "Coming soon",
+      "composeTitle": "Compose",
+      "recipientLabel": "Recipient",
+      "templateLabel": "Template",
+      "toneLabel": "Tone",
+      "angleLabel": "Prompt / angle",
+      "anglePlaceholder": "Reference their new procurement initiative",
+      "generate": "Generate with AI",
+      "previewTitle": "Preview",
+      "previewBadge": "AI",
+      "previewPlaceholder": "Generated email appears here…",
+      "send": "Send",
+      "saveDraft": "Save draft",
+      "notWired": {
+        "title": "Email Generator isn't wired yet",
+        "description": "First-touch email generation runs through the Ammo Forge arsenal stage and per-campaign drafts. A standalone generator is coming in a later phase."
+      }
+    },
+    "sequence": {
+      "title": "Sequence: Q3 Outbound",
+      "comingSoonBadge": "Coming soon",
+      "enrolled": "{count} enrolled",
+      "addStep": "Add step",
+      "launch": "Launch sequence",
+      "launchToast": "Sequence launched — prospects enrolled.",
+      "notWired": {
+        "title": "Sequence Sender isn't wired yet",
+        "description": "Multi-step outbound sequences are sent by the REACH BAZOOKA arsenal stage on its own schedule. A standalone sequence builder is coming in a later phase."
+      },
+      "steps": {
+        "intro": { "title": "Intro email", "sub": "Sent immediately on enrollment", "badge": "62% open" },
+        "follow": { "title": "Follow-up", "sub": "Wait 3 days", "badge": "28% reply" },
+        "breakup": { "title": "Break-up email", "sub": "Wait 7 days", "badge": "queued" }
+      }
+    }
+  },
   "engine": {
     "title": "Growth engine",
     "status": {

@@ -1,4 +1,97 @@
 {
+  "reach": {
+    "header": {
+      "title": "Reichweite",
+      "description": "Interessenten finden, Erstkontakt-E-Mails erstellen und Outbound-Sequenzen starten."
+    },
+    "tabs": {
+      "campaigns": "Kampagnen",
+      "scraper": "Lead-Scraper",
+      "email": "E-Mail-Generator",
+      "sequence": "Sequenz-Sender"
+    },
+    "campaigns": {
+      "tiles": {
+        "campaigns": "Kampagnen",
+        "active": "Aktiv",
+        "leads": "Leads",
+        "replies": "Antworten",
+        "meetings": "Termine"
+      },
+      "createTitle": "Kampagne erstellen",
+      "createMeta": "campaigns · niches · org_senders",
+      "createHint": "Beim Start werden Gmail-Absender (sender) + Verkaufskalender gesetzt, danach läuft das Arsenal autonom.",
+      "tableTitle": "Kampagnen",
+      "count": "{count, plural, =0 {Keine Kampagnen} one {# Kampagne} other {# Kampagnen}}",
+      "col": {
+        "campaign": "Kampagne",
+        "niche": "Nische",
+        "geo": "Region",
+        "sender": "Absender",
+        "lifecycle": "Status",
+        "leads": "Leads"
+      },
+      "loadError": "Kampagnen konnten nicht geladen werden: {message}",
+      "empty": "Noch keine Kampagnen. Über „Kampagne starten“ die erste anlegen.",
+      "manage": "Verwalten"
+    },
+    "scraper": {
+      "criteriaTitle": "Suchkriterien",
+      "criteriaMeta": "leads.campaignId",
+      "selectLabel": "Kampagne zum Lead-Scraping auswählen",
+      "selectPlaceholder": "Kampagne wählen…",
+      "nicheLabel": "Nische · aus Kampagne",
+      "geoLabel": "Region · aus Kampagne",
+      "senderLabel": "Absender · aus Kampagne",
+      "targetsTitle": "Ziele · die Nische, die diese Kampagne scrapt",
+      "targetsHint": "Leads werden der gewählten Kampagne zugeordnet und erscheinen dort im Kampagnen-Tab.",
+      "loadError": "Kampagnen konnten nicht geladen werden: {message}",
+      "empty": {
+        "title": "Keine Kampagnen zum Scrapen",
+        "description": "Zuerst eine Kampagne starten — der Lead-Scraper ordnet die gefundenen Leads ihr zu."
+      },
+      "pick": {
+        "title": "Kampagne wählen",
+        "description": "Oben eine Kampagne wählen, um die Nischen-Ziele anzuzeigen und anzupassen, die der Scraper dafür ausführt."
+      }
+    },
+    "email": {
+      "comingSoonBadge": "Demnächst",
+      "composeTitle": "Verfassen",
+      "recipientLabel": "Empfänger",
+      "templateLabel": "Vorlage",
+      "toneLabel": "Tonfall",
+      "angleLabel": "Prompt / Aufhänger",
+      "anglePlaceholder": "Auf ihre neue Beschaffungsinitiative Bezug nehmen",
+      "generate": "Mit KI generieren",
+      "previewTitle": "Vorschau",
+      "previewBadge": "KI",
+      "previewPlaceholder": "Generierte E-Mail erscheint hier…",
+      "send": "Senden",
+      "saveDraft": "Entwurf speichern",
+      "notWired": {
+        "title": "E-Mail-Generator noch nicht angebunden",
+        "description": "Die Erstkontakt-E-Mail-Erstellung läuft über die Ammo-Forge-Arsenalstufe und kampagnenbezogene Entwürfe. Ein eigenständiger Generator folgt in einer späteren Phase."
+      }
+    },
+    "sequence": {
+      "title": "Sequenz: Q3 Outbound",
+      "comingSoonBadge": "Demnächst",
+      "enrolled": "{count} aufgenommen",
+      "addStep": "Schritt hinzufügen",
+      "launch": "Sequenz starten",
+      "launchToast": "Sequenz gestartet — Interessenten aufgenommen.",
+      "notWired": {
+        "title": "Sequenz-Sender noch nicht angebunden",
+        "description": "Mehrstufige Outbound-Sequenzen werden von der REACH-BAZOOKA-Arsenalstufe nach eigenem Zeitplan versendet. Ein eigenständiger Sequenz-Builder folgt in einer späteren Phase."
+      },
+      "steps": {
+        "intro": { "title": "Intro-E-Mail", "sub": "Sofort bei Aufnahme gesendet", "badge": "62% geöffnet" },
+        "follow": { "title": "Follow-up", "sub": "3 Tage warten", "badge": "28% Antwort" },
+        "breakup": { "title": "Abschluss-E-Mail", "sub": "7 Tage warten", "badge": "in Warteschlange" }
+      }
+    }
+  },
   "engine": {
     "title": "Growth Engine",
     "status": {

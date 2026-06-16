@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { useLocale, useTranslations } from 'next-intl';
 import { toast } from 'sonner';
-import { Languages, Monitor, Moon, Sun, Rows3, Rows4 } from 'lucide-react';
+import { Building2, Languages, Monitor, Moon, Sun, Rows3, Rows4 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { useMe } from '@/hooks/use-auth';
 import { PageHeader } from '@/components/common/page-header';
 import {
   Card,
@@ -15,6 +16,8 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -69,6 +72,7 @@ export function GeneralSettings() {
   const t = useTranslations('settings');
   const locale = useLocale();
   const router = useRouter();
+  const me = useMe();
   const { theme, setTheme } = useTheme();
   // next-themes only resolves the active theme on the client, so the selected value
   // is unknown during SSR / first paint. Gate the controls on `mounted` to avoid a
@@ -132,6 +136,61 @@ export function GeneralSettings() {
         title={t('general.header.title')}
         description={t('general.header.description')}
       />
+
+      {/* Organization profile — the org name is REAL (resolved from the signed-in
+          session via useMe). There is no org-update API yet, so the name is shown
+          read-only and the timezone is a placeholder default; both are flagged
+          "coming soon" rather than faking a save. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Building2 className="size-4 text-muted-foreground" />
+            {t('general.org.title')}
+          </CardTitle>
+          <CardDescription>{t('general.org.description')}</CardDescription>
+        </CardHeader>
+        <CardContent className="flex max-w-md flex-col gap-5">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="org-name">{t('general.org.nameLabel')}</Label>
+            {me.isLoading ? (
+              <Skeleton className="h-9 w-full rounded-md" />
+            ) : (
+              <Input
+                id="org-name"
+                value={me.data?.organizationName ?? ''}
+                placeholder={t('general.org.namePlaceholder')}
+                readOnly
+                aria-readonly
+              />
+            )}
+            <p className="text-xs text-muted-foreground">
+              {t('general.org.nameHint')}
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <Label htmlFor="org-timezone">{t('general.org.timezoneLabel')}</Label>
+              <Badge variant="secondary" className="text-[10px]">
+                {t('general.org.comingSoon')}
+              </Badge>
+            </div>
+            <Select value="Europe/Berlin" disabled>
+              <SelectTrigger id="org-timezone" className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Europe/Berlin">Europe/Berlin</SelectItem>
+                <SelectItem value="Europe/London">Europe/London</SelectItem>
+                <SelectItem value="UTC">UTC</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {t('general.org.timezoneHint')}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

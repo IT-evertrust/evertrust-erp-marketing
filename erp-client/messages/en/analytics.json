@@ -1,0 +1,30 @@
+{
+  "title": "Analytics",
+  "description": "Cross-stage performance and channel breakdowns.",
+  "period": {
+    "label": "Range",
+    "last30": "Last 30 days",
+    "quarter": "This quarter",
+    "ytd": "Year to date"
+  },
+  "repliesByWeek": {
+    "title": "Replies by week",
+    "noData": "No reply timeline yet — this lights up once weekly reply data is collected."
+  },
+  "channelMix": {
+    "title": "Channel mix",
+    "noData": "No channel breakdown yet — connect outreach channels to populate this."
+  },
+  "tiles": {
+    "avgReplyRate": "Avg. reply rate",
+    "meetingRate": "Meeting rate",
+    "winRate": "Win rate",
+    "avgDealSize": "Avg. deal size",
+    "noSource": "Awaiting a data source"
+  },
+  "scorecards": {
+    "title": "Team scorecards",
+    "description": "Live KPI scorecards from real ERP data — the analytics tiles above light up as their sources connect."
+  },
+  "loadError": "Could not load analytics: {message}"
+}

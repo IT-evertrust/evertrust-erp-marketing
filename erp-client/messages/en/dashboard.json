@@ -2,9 +2,7 @@
   "header": {
     "title": "Dashboard",
     "description": "Your Evertrust operations workspace.",
-    "welcome": "Welcome back, {name}",
-    "subtitle": "Acquisition → pipeline → won, at a glance",
-    "refresh": "Refresh"
+    "subtitle": "Funnel KPIs and live activity across the R.E.A.N. sequence"
   },
   "loadError": {
     "title": "Could not load your account",
@@ -14,89 +12,55 @@
   "common": {
     "couldNotLoad": "Could not load"
   },
-  "stats": {
-    "campaigns": {
-      "label": "Campaigns",
-      "hint": "{total} total · {live} live"
+  "rean": {
+    "reach": {
+      "label": "Reach",
+      "hint": "Campaigns launched"
     },
-    "hotLeads": {
-      "label": "Hot leads",
-      "hint": "Interested in pipeline"
+    "engaged": {
+      "label": "Engaged",
+      "hint": "Active campaigns in flight"
     },
-    "meetings": {
-      "label": "Meetings",
-      "hint": "Analyzed calls"
+    "activated": {
+      "label": "Activated",
+      "hint": "Meetings booked"
     },
-    "customers": {
-      "label": "Customers",
-      "hint": "Won accounts"
-    },
-    "openTenders": {
-      "label": "Open tenders",
-      "hint": "{total} total"
-    },
-    "atRisk": {
-      "label": "At deadline risk",
-      "overdue": "{count} overdue",
-      "withinWindow": "Within T-2 window",
-      "onTrack": "All on track"
+    "nurtured": {
+      "label": "Nurtured",
+      "hint": "Calls analyzed toward a deal"
     }
   },
-  "acquisition": {
-    "title": "Acquisition funnel",
-    "description": "Hot leads → meetings → customers won",
-    "empty": "No acquisition data yet",
-    "stages": {
-      "hotLeads": "Hot leads",
-      "meetings": "Meetings",
-      "customersWon": "Customers won"
+  "pipeline": {
+    "title": "Pipeline over time",
+    "range": "Last 8 weeks",
+    "legend": "Meetings booked",
+    "empty": {
+      "title": "No pipeline activity yet",
+      "body": "Booked meetings will chart here, week by week, as your campaigns land calls."
     }
   },
-  "needsAttention": {
-    "title": "Needs attention",
-    "checking": "Checking…",
-    "none": "Nothing needs attention",
-    "count": "{count, plural, one {# item to clear} other {# items to clear}}",
-    "allClear": "All clear — no deadlines at risk, every meeting attributed.",
-    "risk": {
-      "title": "{count, plural, one {# tender at deadline risk} other {# tenders at deadline risk}}",
-      "mostUrgent": "Most urgent: {title}",
-      "fallback": "Within the T-2 window",
-      "cta": "Open"
-    },
-    "unattributed": {
-      "title": "{count, plural, one {# unattributed meeting} other {# unattributed meetings}}",
-      "sub": "Sales · no campaign matched",
-      "cta": "Link"
+  "activity": {
+    "title": "Live activity",
+    "live": "live",
+    "aProspect": "a prospect",
+    "campaignCreated": "Campaign <b>{name}</b> created",
+    "campaignLaunched": "Campaign <b>{name}</b> went live",
+    "meetingBooked": "Meeting booked with <b>{company}</b>",
+    "meetingAnalyzed": "Call with <b>{company}</b> analyzed",
+    "empty": {
+      "title": "No activity yet",
+      "body": "Campaign launches and booked meetings show up here as they happen."
     }
   },
-  "tenderPipeline": {
-    "title": "Tender pipeline",
-    "description": "{count} open · by stage",
-    "empty": "No tenders yet",
-    "series": "Tenders",
-    "stages": {
-      "NOT_STARTED": "Not started",
-      "PIC_PRICING": "PIC pricing",
-      "CUSTOMER_PRICING": "Cust. pricing",
-      "DOCUMENTS": "Documents",
-      "SUBMITTED": "Submitted",
-      "AWARDED": "Awarded",
-      "LOST": "Lost"
+  "funnel": {
+    "title": "R.E.A.N. sequence conversion",
+    "subtitle": "Stage-to-stage",
+    "empty": {
+      "title": "No conversion data yet",
+      "body": "Launch a campaign and book a meeting to see the Reach → Engage → Activate → Nurture funnel."
     }
   },
-  "campaignStatus": {
-    "title": "Campaigns",
-    "description": "{count} total · by lifecycle",
-    "empty": "No campaigns yet",
-    "states": {
-      "ACTIVE": "Active",
-      "PAUSED": "Paused",
-      "DRAFT": "Draft",
-      "ARCHIVED": "Archived"
-    }
-  },
-  "footnote": "Every figure above is read live from operational data. Panels that need historical tracking — acquisition-over-time, reply topics and week-over-week trends — appear here once the Arsenal logs daily metrics to the ERP; they are deliberately not shown rather than fabricated.",
+  "footnote": "Every figure above is read live from operational data: Reach and Engaged from campaigns, Activated and Nurtured from synced meetings. Week-over-week deltas are deliberately not shown until the Arsenal logs historical metrics to the ERP — they are omitted rather than fabricated.",
   "profile": {
     "title": "Profile",
     "description": "Update your display name. This action is audited.",
