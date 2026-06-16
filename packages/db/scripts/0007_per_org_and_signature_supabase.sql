@@ -1,14 +1,15 @@
 -- =============================================================================
--- Supabase catch-up: per-org config split + signature images (branch head)
+-- Supabase catch-up: per-org config + signatures + senders/calendar (branch head)
 -- =============================================================================
 -- Brings a Supabase database up to the head of the
 -- feat/growth-engine-drive-to-postgres branch for the multi-tenant config work.
--- Folds in three Drizzle migrations so they can be pasted into the Supabase SQL
+-- Folds in four Drizzle migrations so they can be pasted into the Supabase SQL
 -- editor in ONE run:
---   0025_org_config        — the per-org org_config table
---   0026_org_config_split  — move customer prefs off the global workflow_config
---                            singleton into org_config (guarded backfill + drops)
---   0027_signature_assets  — per-org uploaded signature-image store
+--   0025_org_config            — the per-org org_config table
+--   0026_org_config_split      — move customer prefs off the global workflow_config
+--                                singleton into org_config (guarded backfill + drops)
+--   0027_signature_assets      — per-org uploaded signature-image store
+--   0028_org_senders_calendar  — per-org email senders + org_config.sales_calendar_id
 --
 -- Fully idempotent: re-running is a no-op. Safe to run after a partial apply.
 --
@@ -118,3 +119,27 @@ EXCEPTION
 END $$;
 
 CREATE INDEX IF NOT EXISTS "signature_assets_organization_id_idx" ON "signature_assets" USING btree ("organization_id");
+
+-- ----------------------------------------------------------------------------
+-- 0028 — per-org email senders + per-org sales calendar
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS "org_senders" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"organization_id" uuid NOT NULL,
+	"sender_key" text NOT NULL,
+	"email" text NOT NULL,
+	"label" text,
+	"is_default" boolean DEFAULT false NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+
+DO $$ BEGIN
+	ALTER TABLE "org_senders" ADD CONSTRAINT "org_senders_organization_id_organizations_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organizations"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+	WHEN duplicate_object THEN null;
+END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS "org_senders_organization_id_sender_key_uq" ON "org_senders" USING btree ("organization_id", "sender_key");
+CREATE INDEX IF NOT EXISTS "org_senders_organization_id_idx" ON "org_senders" USING btree ("organization_id");
+
+ALTER TABLE "org_config" ADD COLUMN IF NOT EXISTS "sales_calendar_id" text;
