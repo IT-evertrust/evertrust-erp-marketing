@@ -37,6 +37,7 @@ import {
   LineItemDto,
   ListTendersQuery,
   LoginDto,
+  GoogleLoginDto,
   LoginResponseDto,
   MarketingDraftListDto,
   MarketingReportDto,
@@ -111,6 +112,7 @@ import {
   ContractDto,
   ContractStatus,
   SuppressionListItemDto,
+  CalendarListResultDto,
 } from '@evertrust/shared';
 import { API_URL } from './env';
 
@@ -311,6 +313,17 @@ export const api = {
     request<LoginResponseDto>('/auth/login', {
       method: 'POST',
       body: LoginDto.parse(input),
+      schema: LoginResponseDto,
+    }),
+
+  // Google-only login: POST the Google ID token (the GIS credential) to the API,
+  // which verifies it and resolves/auto-provisions the user + org. Returns the same
+  // { accessToken, user } shape as the password path. 401 = invalid token, 403 =
+  // public/free email domain, 503 = GOOGLE_CLIENT_ID not configured on the API.
+  googleLogin: (idToken: string) =>
+    request<LoginResponseDto>('/auth/google', {
+      method: 'POST',
+      body: GoogleLoginDto.parse({ idToken }),
       schema: LoginResponseDto,
     }),
 
@@ -979,6 +992,14 @@ export const api = {
     listSenders: (signal?: AbortSignal) =>
       request<OrgSenderDto[]>('/arsenal/config/senders', {
         schema: OrgSenderListDto,
+        signal,
+      }),
+
+    // The org's Google calendars (live scan). { configured:false, calendars:[] } when no
+    // Google token is wired or the scan failed — the AIM dialog then uses the org default.
+    listCalendars: (signal?: AbortSignal) =>
+      request<CalendarListResultDto>('/arsenal/config/calendars', {
+        schema: CalendarListResultDto,
         signal,
       }),
 

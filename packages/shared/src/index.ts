@@ -212,6 +212,11 @@ export const OrganizationDto = z.object({
   id: z.string().uuid(),
   name: z.string(),
   slug: z.string(),
+  // The company email domain this org was auto-provisioned from (e.g.
+  // 'evertrust-germany.de'). NULL for orgs created by other means; OPTIONAL too,
+  // for rolling-deploy safety — older api/web that neither send nor expect it
+  // keep validating before the coordinated redeploy.
+  domain: z.string().nullable().optional(),
 });
 export type OrganizationDto = z.infer<typeof OrganizationDto>;
 
@@ -222,6 +227,89 @@ export const LoginDto = z.object({
   password: z.string().min(1),
 });
 export type LoginDto = z.infer<typeof LoginDto>;
+
+// Google-only login: the client posts the Google ID token (the JWT credential
+// returned by Google Identity Services); the API verifies it, then resolves or
+// auto-provisions the user + org. The legacy email/password LoginDto above stays
+// for backward compatibility.
+export const GoogleLoginDto = z.object({
+  idToken: z.string().min(1),
+});
+export type GoogleLoginDto = z.infer<typeof GoogleLoginDto>;
+
+// ---- Email-domain → org provisioning helpers (SSOT for api + web) ----
+// Personal / free / consumer mailbox providers. A login from one of these MUST
+// NOT auto-create a company organization (the domain is not a company). Lowercase.
+export const PUBLIC_EMAIL_DOMAINS: ReadonlySet<string> = new Set([
+  'gmail.com',
+  'googlemail.com',
+  'outlook.com',
+  'hotmail.com',
+  'live.com',
+  'yahoo.com',
+  'yahoo.de',
+  'icloud.com',
+  'aol.com',
+  'gmx.de',
+  'gmx.net',
+  'web.de',
+  'proton.me',
+  'protonmail.com',
+  't-online.de',
+]);
+
+// The domain part of an email address, lowercased + trimmed. Total + ''-safe:
+// returns '' for empty/malformed input (no '@', trailing '@', etc.). Never throws.
+export function companyEmailDomain(email: string): string {
+  if (typeof email !== 'string') return '';
+  const at = email.lastIndexOf('@');
+  if (at < 0) return '';
+  return email.slice(at + 1).trim().toLowerCase();
+}
+
+// True when the domain is a known personal/free mailbox provider (case-insensitive).
+export function isPublicEmailDomain(domain: string): boolean {
+  if (typeof domain !== 'string') return false;
+  return PUBLIC_EMAIL_DOMAINS.has(domain.trim().toLowerCase());
+}
+
+// Human-readable org display name derived from a domain. Strips the public suffix
+// (TLD) and titleizes the remaining label(s): 'evertrust-germany.de' -> 'Evertrust
+// Germany', 'acme.co.uk' -> 'Acme'. Total: falls back to the cleaned domain, then ''.
+export function orgNameFromDomain(domain: string): string {
+  const d = typeof domain === 'string' ? domain.trim().toLowerCase() : '';
+  if (!d) return '';
+  const labels = d.split('.').filter(Boolean);
+  if (labels.length === 0) return '';
+  // Drop the TLD (last label); for short second-level suffixes like 'co.uk' /
+  // 'com.au', drop that too so we titleize the actual company label.
+  const SECOND_LEVEL_SUFFIXES = new Set(['co', 'com', 'org', 'net', 'gov', 'ac']);
+  let core = labels.slice(0, -1);
+  const lastCore = core[core.length - 1];
+  if (core.length > 1 && lastCore !== undefined && SECOND_LEVEL_SUFFIXES.has(lastCore)) {
+    core = core.slice(0, -1);
+  }
+  if (core.length === 0) core = labels;
+  const titleize = (s: string) =>
+    s
+      .split(/[-_]+/)
+      .filter(Boolean)
+      .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+      .join(' ');
+  const name = core.map(titleize).filter(Boolean).join(' ').trim();
+  return name || d;
+}
+
+// URL-safe slug derived from a domain: lowercase, every run of non-alphanumeric
+// chars collapsed to a single '-', no leading/trailing '-'. 'evertrust-germany.de'
+// -> 'evertrust-germany-de'. Total: returns '' for empty/malformed input.
+export function orgSlugFromDomain(domain: string): string {
+  const d = typeof domain === 'string' ? domain.trim().toLowerCase() : '';
+  if (!d) return '';
+  return d
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
 
 // Public shape of a user returned to clients. Never includes the password hash.
 // organizationId is the tenant the user belongs to (carried into the JWT).
@@ -1032,7 +1120,7 @@ export const CampaignDto = z.object({
   region: z.string(),
   project: z.string(),
   gmailLabel: z.string(),
-  salesCalendarId: z.string(),
+  salesCalendarId: z.string().nullable(),
   whatsappNumber: z.string(),
   sender: z.string(),
   lifecycle: CampaignLifecycle,
@@ -1123,7 +1211,11 @@ export const CreateCampaignDto = z.object({
   region: z.string().min(1).max(120),
   project: z.string().min(1).max(200),
   gmailLabel: z.string().min(1).max(120),
-  salesCalendarId: z.string().min(1).max(200),
+  // Optional: the sales calendar moved to the org level (resolved as
+  // org_config.salesCalendarId ?? env SALES_CALENDAR_ID ?? null). When the AIM form's
+  // Calendar dropdown is connected, the chosen Google calendar id is sent here as a
+  // per-campaign override; otherwise it is omitted and resolved per-org at use-time.
+  salesCalendarId: z.string().max(200).optional(),
   whatsappNumber: z.string().min(1).max(40),
   // Which mailbox BAZOOKA sends this campaign's outreach from — a per-org sender KEY
   // (validated against the org's senders at the service layer, not here). Optional on
@@ -1132,6 +1224,26 @@ export const CreateCampaignDto = z.object({
   sender: z.string().min(1).default('info'),
 });
 export type CreateCampaignDto = z.infer<typeof CreateCampaignDto>;
+
+// A Google Calendar the org's connected account can see (GET /arsenal/config/calendars).
+// `id` is the opaque calendar id stored as a campaign's salesCalendarId; `summary` is the
+// human label the AIM dropdown shows; `primary` flags the account's main calendar (used
+// as the default selection when the org has no sales calendar configured yet).
+export const CalendarDto = z.object({
+  id: z.string(),
+  summary: z.string(),
+  primary: z.boolean(),
+});
+export type CalendarDto = z.infer<typeof CalendarDto>;
+
+// GET /arsenal/config/calendars result. `configured` is false when no Google token is
+// wired (GOOGLE_CALENDAR_TOKEN_JSON blank) or the live scan failed — the UI then degrades
+// to the org-default calendar (omitting salesCalendarId on launch) instead of blocking it.
+export const CalendarListResultDto = z.object({
+  configured: z.boolean(),
+  calendars: z.array(CalendarDto),
+});
+export type CalendarListResultDto = z.infer<typeof CalendarListResultDto>;
 
 // ---- Arsenal triggers (the "Run now" buttons + the daily scheduler) ----
 // The outbound stages the ERP can fire as n8n webhooks. AIM is excluded — it is
@@ -2036,7 +2148,7 @@ export const CampaignConfigDto = z.object({
   project: z.string(),
   sender: z.string(),
   gmailLabel: z.string(),
-  salesCalendarId: z.string(),
+  salesCalendarId: z.string().nullable(),
   whatsappNumber: z.string(),
   driveFolderId: z.string().nullable(),
   // Ammo Forge content blocks the outreach workflows fetch (coldEmail, etc.).

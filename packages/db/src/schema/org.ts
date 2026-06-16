@@ -13,9 +13,19 @@ export const organizations = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     name: text('name').notNull(),
     slug: text('slug').notNull(),
+    // Email domain used as the join key for Google-login org auto-provisioning:
+    // a new SSO user whose address ends in this domain joins THIS org instead of
+    // spawning a duplicate. NULLABLE — orgs without a configured domain don't
+    // auto-provision. The UNIQUE index permits many NULLs (Postgres treats NULLs
+    // as distinct), so any number of domain-less orgs may coexist while a given
+    // domain resolves to exactly one org.
+    domain: text('domain'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
-  (t) => [uniqueIndex('organizations_slug_uq').on(t.slug)],
+  (t) => [
+    uniqueIndex('organizations_slug_uq').on(t.slug),
+    uniqueIndex('organizations_domain_uq').on(t.domain),
+  ],
 );

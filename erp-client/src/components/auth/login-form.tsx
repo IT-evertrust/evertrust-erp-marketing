@@ -1,13 +1,6 @@
 'use client';
 
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
-import { LoginDto } from '@evertrust/shared';
-import { ApiError } from '@/lib/api';
-import { useLogin } from '@/hooks/use-auth';
-import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
@@ -15,36 +8,13 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
+import { GoogleSignInButton } from '@/components/auth/google-sign-in-button';
 
+// Google-only sign-in surface. The email/password form was removed — the backend
+// disabled POST /auth/login (403) and now only accepts POST /auth/google with a
+// Google ID token. All sign-in logic + error handling lives in <GoogleSignInButton>.
 export function LoginForm() {
   const t = useTranslations('login');
-  const login = useLogin();
-  const form = useForm<LoginDto>({
-    resolver: zodResolver(LoginDto),
-    defaultValues: { email: '', password: '' },
-  });
-
-  function onSubmit(values: LoginDto) {
-    login.mutate(values, {
-      onError: (error) => {
-        // 401 is the expected "wrong credentials" case; everything else is a real fault.
-        const message =
-          error instanceof ApiError && error.status === 401
-            ? t('form.errors.invalidCredentials')
-            : (error.message ?? t('form.errors.generic'));
-        toast.error(message);
-      },
-    });
-  }
 
   return (
     <Card className="w-full max-w-sm border-border/80 shadow-lg">
@@ -52,45 +22,11 @@ export function LoginForm() {
         <CardTitle className="text-xl">{t('form.title')}</CardTitle>
         <CardDescription>{t('form.description')}</CardDescription>
       </CardHeader>
-      <CardContent>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4">
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('form.emailLabel')}</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="email"
-                      autoComplete="email"
-                      placeholder="you@evertrust-germany.de"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('form.passwordLabel')}</FormLabel>
-                  <FormControl>
-                    <Input type="password" autoComplete="current-password" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <Button type="submit" className="w-full" disabled={login.isPending}>
-              {login.isPending ? t('form.submitting') : t('form.submit')}
-            </Button>
-          </form>
-        </Form>
+      <CardContent className="flex flex-col items-center gap-4">
+        <GoogleSignInButton />
+        <p className="text-center text-xs text-muted-foreground">
+          {t('form.companyHint')}
+        </p>
       </CardContent>
     </Card>
   );

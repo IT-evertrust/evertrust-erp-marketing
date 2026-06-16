@@ -6,13 +6,14 @@
   "form": {
     "title": "Sign in",
     "description": "Access the Evertrust operations console.",
-    "emailLabel": "Email",
-    "passwordLabel": "Password",
-    "submit": "Sign in",
     "submitting": "Signing in…",
-    "errors": {
-      "invalidCredentials": "Invalid email or password.",
-      "generic": "Sign in failed. Please try again."
-    }
+    "companyHint": "Use your company Google account to sign in."
+  },
+  "errors": {
+    "publicDomain": "Please use your company Google account, not a personal one.",
+    "invalidToken": "Google sign-in failed. Please try again.",
+    "notConfiguredTitle": "Sign-in unavailable",
+    "notConfigured": "Google sign-in is not configured. Contact your administrator.",
+    "generic": "Sign in failed. Please try again."
   }
 }

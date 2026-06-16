@@ -204,6 +204,20 @@
       "when": 1780576000000,
       "tag": "0028_org_senders_calendar",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1780577000000,
+      "tag": "0029_campaign_calendar_nullable",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1780578000000,
+      "tag": "0030_org_domain",
+      "breakpoints": true
     }
   ]
 }
