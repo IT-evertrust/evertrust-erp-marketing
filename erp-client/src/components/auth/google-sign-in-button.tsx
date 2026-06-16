@@ -8,7 +8,6 @@ import { ApiError } from '@/lib/api';
 import { useGoogleLogin } from '@/hooks/use-auth';
 import { GOOGLE_CLIENT_ID } from '@/lib/env';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
 
 const GSI_SRC = 'https://accounts.google.com/gsi/client';
 
@@ -36,37 +35,20 @@ function messageForError(
   return t('errors.generic');
 }
 
-// Official multi-colour Google "G", inline so the brand mark renders identically in
-// light and dark without an asset request. Sized by the Button's `[&_svg]:size-4`.
-function GoogleGlyph() {
-  return (
-    <svg viewBox="0 0 18 18" aria-hidden="true">
-      <path
-        fill="#4285F4"
-        d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.79 2.72v2.26h2.9c1.71-1.57 2.69-3.88 2.69-6.62z"
-      />
-      <path
-        fill="#34A853"
-        d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.81.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.96v2.33A9 9 0 0 0 9 18z"
-      />
-      <path
-        fill="#FBBC05"
-        d="M3.95 10.7a5.41 5.41 0 0 1 0-3.4V4.97H.96a9 9 0 0 0 0 8.06l2.99-2.33z"
-      />
-      <path
-        fill="#EA4335"
-        d="M9 3.58c1.32 0 2.51.45 3.44 1.35l2.58-2.59A9 9 0 0 0 .96 4.97L3.95 7.3C4.66 5.17 6.65 3.58 9 3.58z"
-      />
-    </svg>
-  );
-}
-
-// "Sign in with Google". We render Google's OFFICIAL GIS button but make it
-// transparent and lay it exactly over our own design-system button: Google's button
-// must handle the click itself (its iframe can't be triggered programmatically, and
-// id.prompt()/One-Tap is silently suppressed by FedCM cooldowns), so the real,
-// working control sits on top — invisibly — while our <Button> below provides the
-// look. The credential (ID token) arrives via initialize()'s callback → /auth/google.
+// Google Identity Services "Continue with Google".
+//
+// We render Google's OFFICIAL GIS button VISIBLY. An earlier version laid a custom
+// design-system button on top and made the real Google button transparent
+// (opacity-0) to "own the click" — but GIS's clickjacking protection silently
+// refuses to process a click on an obscured/transparent button, so it was dead. The
+// GIS button also can't be triggered programmatically (its iframe), and id.prompt()
+// / One-Tap is FedCM-cooldown-gated. So the working, supported control is the real
+// button, shown as-is. The credential (ID token) arrives via initialize()'s
+// callback → /auth/google.
+//
+// NOTE: GIS only renders on an Authorized JavaScript origin (the Google OAuth
+// client). On an unlisted origin (e.g. a random preview port) the button won't
+// appear — add the origin in Google Console.
 export function GoogleSignInButton() {
   const t = useTranslations('login');
   const login = useGoogleLogin();
@@ -89,9 +71,8 @@ export function GoogleSignInButton() {
     [login, t],
   );
 
-  // Track the wrapper's width so the (invisible) Google button is rendered at the
-  // same width and fully covers our visual button's click target. GIS needs an
-  // explicit pixel width (200–400).
+  // GIS needs an explicit pixel width (200–400); track the container so the button
+  // spans the card.
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
@@ -121,7 +102,7 @@ export function GoogleSignInButton() {
       size: 'large',
       text: 'continue_with',
       shape: 'pill',
-      logo_alignment: 'center',
+      logo_alignment: 'left',
       width,
     });
   }, [scriptReady, handleCredential, width]);
@@ -137,7 +118,6 @@ export function GoogleSignInButton() {
     );
   }
 
-  const busy = login.isPending;
   return (
     <div className="flex w-full flex-col items-center gap-3">
       <Script
@@ -145,44 +125,18 @@ export function GoogleSignInButton() {
         strategy="afterInteractive"
         onReady={() => setScriptReady(true)}
       />
-      <div ref={wrapRef} className="relative w-full">
-        {/* Visual control (design system). Decorative only: pointer-events-none +
-            aria-hidden so the real Google button overlaid on top owns the click and
-            the accessibility semantics. */}
-        <Button
-          type="button"
-          variant="outline"
-          tabIndex={-1}
-          aria-hidden="true"
-          disabled={busy}
-          className="pointer-events-none h-11 w-full gap-3 rounded-xl"
-        >
-          {busy ? (
-            <>
-              <span
-                aria-hidden="true"
-                className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent"
-              />
-              {t('form.submitting')}
-            </>
-          ) : (
-            <>
-              <GoogleGlyph />
-              {t('form.googleCta')}
-            </>
-          )}
-        </Button>
-        {/* The OFFICIAL GIS button — transparent, stretched over the visual button so
-            the user's real click lands on it. Hidden from view (opacity-0) and from
-            re-clicks while a sign-in is in flight. */}
-        <div
-          ref={slotRef}
-          aria-busy={!scriptReady}
-          className={`absolute inset-0 flex items-center justify-center opacity-0 [&_iframe]:!h-full ${
-            busy ? 'pointer-events-none' : ''
-          }`}
-        />
+      {/* GIS renders its real (clickable) button into this centered slot. min-h
+          reserves space so the card doesn't jump while the script loads. */}
+      <div
+        ref={wrapRef}
+        aria-busy={!scriptReady}
+        className="flex min-h-11 w-full justify-center"
+      >
+        <div ref={slotRef} />
       </div>
+      {login.isPending ? (
+        <p className="text-sm text-muted-foreground">{t('form.submitting')}</p>
+      ) : null}
     </div>
   );
 }
