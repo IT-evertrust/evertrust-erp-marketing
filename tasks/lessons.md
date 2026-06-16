@@ -13,7 +13,10 @@ Self-improvement log, per CLAUDE.md: after **any** correction from the user, add
 
 ## Lessons
 
-_No lessons recorded yet._
+### 2026-06-16 - Conflated "config built" with "feature wired end-to-end"
+- **Trigger:** Said the per-org sender/calendar was "already in place" and "works with Google for you." The user pushed back — the n8n workflows still send via the 2 hardcoded Gmail creds and poll those 2 inboxes. Only the ERP config layer + the `/campaigns/:id/config` seam were built; the n8n send/reply mechanics were unchanged (only Reply Glock's calendar *id* was rewired).
+- **Lesson:** "Built/committed in the ERP" and "exposed in the config endpoint" is NOT the same as "the consuming system actually uses it." A feature that spans ERP↔n8n is only "in place" when the CONSUMER (the n8n node / send path) is wired — not when the producer can emit the data.
+- **Rule going forward:** When reporting a cross-system feature's status, name the layer explicitly (produced/config vs consumed/wired) and never say "in place / works" for the whole feature unless the consumer has been changed AND verified. Default to under-claiming: give a what's-wired-vs-still-hardcoded table.
 
 ## Imported from evertrust-ERP (pre-migration gotchas, 2026-06-11)
 
