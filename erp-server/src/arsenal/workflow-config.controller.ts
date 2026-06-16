@@ -16,6 +16,7 @@ import { memoryStorage } from 'multer';
 import { z } from 'zod';
 import type { Request } from 'express';
 import type {
+  CalendarListResultDto,
   LeadStatsDto,
   OrgSenderDto,
   RotateIngestTokenResultDto,
@@ -27,6 +28,7 @@ import { OrgId } from '../common/tenant';
 import { setAuditContext } from '../common/audit-context';
 import { WorkflowConfigService } from './workflow-config.service';
 import { SendersService } from './senders.service';
+import { GoogleCalendarService } from './google-calendar.service';
 import {
   MAX_SIGNATURE_BYTES,
   SignatureAssetsService,
@@ -71,6 +73,7 @@ export class WorkflowConfigController {
     private readonly workflowConfig: WorkflowConfigService,
     private readonly signatureAssets: SignatureAssetsService,
     private readonly senders: SendersService,
+    private readonly calendars: GoogleCalendarService,
   ) {}
 
   // The resolved config for the Configuration UI: GLOBAL infra (override ?? env) +
@@ -116,6 +119,17 @@ export class WorkflowConfigController {
   @Get('arsenal/config/senders')
   listSenders(@OrgId() orgId: string): Promise<OrgSenderDto[]> {
     return this.senders.list(orgId);
+  }
+
+  // Live scan of the caller org's Google Calendars for the AIM Lock & Load Calendar
+  // dropdown. The service resolves the org's default connected Calendar account first
+  // (per-org token), falling back to the deployment-wide token for back-compat — so each
+  // tenant sees only its OWN calendars. The service never throws — `configured: false`
+  // means the UI degrades to the org-default calendar. Read-only → not audited.
+  @RequirePermissions('admin:config')
+  @Get('arsenal/config/calendars')
+  listCalendars(@OrgId() orgId: string): Promise<CalendarListResultDto> {
+    return this.calendars.listCalendars(orgId);
   }
 
   // Upsert a PER-ORG sender on (organizationId, key). When isDefault is set, the flag

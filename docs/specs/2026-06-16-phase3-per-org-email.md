@@ -10,6 +10,21 @@ Builds on the per-org config already shipped (`org_senders`, `defaultSenderEmail
 `salesCalendarId` exposed in `GET /campaigns/:id/config`). See the session diagrams:
 "per-org sending via transactional provider" + "capturing replies via inbound webhook".
 
+> **⚠️ Correction (2026-06-16) — supersedes the provider-for-cold-send assumption in §2 & §4.**
+> Research found transactional providers (Mailgun/Sinch, SendGrid, SES, Postmark) **prohibit
+> unsolicited / scraped-list email** in their AUPs — so a provider **cannot be the cold first-touch
+> send path** (EverTrust's scrape-then-cold pipeline would be suspended, and on shared IPs that hits
+> every tenant). **Revised model:** cold send = **per-tenant Google OAuth, `gmail.send` scope only**
+> (a *sensitive*, not *restricted*, scope → one-time OAuth verification but **no annual CASA audit**);
+> receive = the **Reply-To inbound webhook** below (no Gmail *read* scope — that is what keeps us out
+> of restricted-scope/CASA); calendar = **per-tenant Cal.com (EU, self-hosted) booking links**. Keep
+> the Mailgun-EU seam in §2–§4 **only for transactional / opt-in mail** (notifications, consented
+> nurture). **Legal:** German **UWG §7(2) No.3 requires prior express consent for B2B cold email** (no
+> legitimate-interest cure; fines to €300k) — get counsel; per-tenant own-mailbox sending is the most
+> defensible posture (customer is the sender; you are processor + DPA), but lawful basis is the
+> customer's documented responsibility. Read §2/§4 below as the *transactional* path; the cold path is
+> the `gmail.send` OAuth model. Full reasoning: the strangler roadmap doc.
+
 ---
 
 ## 1. Architecture (recap)

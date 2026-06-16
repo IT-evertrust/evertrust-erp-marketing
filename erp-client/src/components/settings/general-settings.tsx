@@ -86,7 +86,7 @@ export function GeneralSettings() {
   }, []);
 
   // Persist the chosen landing page; it takes effect on the next sign-in
-  // (useLogin redirects to getLandingPath()).
+  // (useGoogleLogin redirects to getLandingPath()).
   function handleLandingChange(path: string) {
     setLanding(path);
     setLandingPath(path);

@@ -2,6 +2,15 @@
 
 **Status:** planning · **Created:** 2026-06-15 · **Owner:** platform (OWNER role)
 
+> **Invariant — governs every change in this repo (mirrored in `CLAUDE.md` → Core Principles).**
+> EverTrust ERP is a scalable, sellable, **multi-tenant SaaS**: many customer organizations run
+> **simultaneously and fully isolated**. *Every step carries an organization* (`organizationId`,
+> plus name/branding wherever shown) — every row, query, scheduled job, queue task, agent
+> dispatch, and outbound call resolves a tenant. Every org owns its **own config + credentials**
+> (email senders/sending domain, sales calendar, WhatsApp, branding, tokens, webhook/agent URLs),
+> resolved **per-org (`org value ?? env default`)** — never a hardcoded EverTrust value, never one
+> org's creds reused for another. `OWNER` is the only cross-org role.
+
 ## 0. Summary
 The ERP is being turned into a sellable multi-tenant SaaS: each customer is an
 `organization` with its own users (any number, various roles) **and its own
@@ -27,7 +36,7 @@ plan. Evidence (file:line) from a three-way scan of `erp-server/`, `erp-client/`
 
 ## 3. Identity & branding (the "email / sender" surface)
 - [ ] **Per-org sender mailboxes.** Replace hardcoded `CAMPAIGN_SENDERS`/`CAMPAIGN_SENDER_LABELS`/`DefaultSender` (`info@`/`hanna@evertrust-germany.de`) at `packages/shared/src/index.ts:1087-1092, 2489` with an org alias→email list; make `sender` runtime-validated, not a compile-time enum. Cascades to `aim-launch-dialog.tsx`, `configuration-settings.tsx:110,862,873`, i18n sender labels.
-- [ ] **Per-org sales calendar.** `salesCalendarId: 'info@evertrust-germany.de'` hardcoded at `erp-client/src/components/growth/aim-launch-dialog.tsx:196` — **live cross-tenant leak**; source from org config.
+- [~] **Per-org sales calendar.** Was `salesCalendarId: 'info@evertrust-germany.de'` hardcoded in `aim-launch-dialog.tsx` — a **live cross-tenant leak**. PARTIALLY FIXED 2026-06-16: the AIM form now scans calendars via `GET /arsenal/config/calendars`, `campaigns.sales_calendar_id` is nullable, and it resolves per-org (`org_config.salesCalendarId ?? env`). Still **single-account** (one deployment-wide `GOOGLE_CALENDAR_TOKEN_JSON`) until per-org Google credentials land with Phase 3.
 - [ ] **Internal-domain rule** `'@evertrust-germany.de'` at `erp-server/src/meetings/meetings.extract.ts:13` → `org.internalDomains`.
 - [ ] **Frontend branding** — `layout.tsx:25`, `login/page.tsx:40`, `topbar.tsx:36`, `sidebar-nav.tsx:191/195` (EverTrust fallbacks) + EN/DE `login.json`/`dashboard.json` strings → org branding / neutral defaults (login is pre-auth → neutral or subdomain-themed).
 - [ ] **Signature image (the original ask)** — per-org field on the per-org config: upload (Postgres-stored, served at a public URL) **or** link (Drive→`lh3.googleusercontent.com/d/<id>`), with preview. Folds into Phase 1.
@@ -79,3 +88,27 @@ surface; verified high-impact findings in code (2026-06-15).
 **Orphans (ERP offers, these 8 workflows don't call):** `POST`/`PATCH`/`GET /contracts` — likely a separate contract/Hermes workflow; not a gap here.
 
 **Minor:** confirm `POST /campaigns/:id/templates` value types (n8n sends `{templates:{coldEmail,newsBrief}}`; controller reads `body.templates`, so the wrapper is correct).
+
+## 9. Orchestration platform (the n8n→ERP strangler) — org-scoped from day one
+The 2026-06-16 decision: replace n8n via a **strangler migration** in which the **ERP becomes the
+orchestration platform** (scheduler + queue + dispatch + observability) driving the merged Python
+agents (`erp-server/agents/`, hosted on the Mac mini) as workers. The multi-tenant invariant makes
+that platform **org-scoped by construction** — otherwise it re-bakes the single-tenant assumptions
+this whole doc is paying down:
+- **Scheduler iterates active orgs** (per-org cadence from `arsenal_settings`/`org_config`), not one
+  global cron. A run is keyed `(organizationId, stage)`.
+- **Every queue job carries `organizationId`** and runs in that tenant's context; `arsenal_runs`
+  rows are written with the org (already supported).
+- **Dispatch passes org context + resolves per-org credentials** to the agent (sender mailbox/domain,
+  calendar, WhatsApp, ingest token). Agents today inherit the 2-Gmail-credential ceiling — Phase 3's
+  `/outreach/send` seam is what makes the *send* path per-org; until then a stage only runs live for
+  the org(s) whose creds exist.
+- **Per-org agent URLs + ingest token** resolve from per-org `workflow_config` (§2), not a single env
+  `AGENT_*_URL` / global `ARSENAL_INGEST_TOKEN`.
+- **Record-from-response** (the orchestrated dispatch pattern) writes the org-scoped `arsenal_runs`
+  outcome from the agent's synchronous reply — no per-agent callback in the orchestrated model.
+
+See `docs/specs/2026-06-16-replace-n8n-assessment.md` (strangler order) and
+`docs/specs/2026-06-16-phase3-per-org-email.md` (per-org send/receive seam). The first sub-project
+(Platform + Sleeper pilot) must therefore be org-aware in its scheduler, jobs, and dispatch even
+while only one org's credentials exist.

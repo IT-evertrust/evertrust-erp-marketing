@@ -34,6 +34,21 @@ export const EnvSchema = z.object({
   // deep in the verifier, so the API is safe to boot before the ID is set.
   GOOGLE_CLIENT_ID: z.string().default(''),
 
+  // Per-org Google connect — the SEPARATE authorization-code flow (NOT the GIS
+  // login, which needs no secret). The OAuth web client's secret, used only to
+  // exchange an auth code for tokens server-side. Blank = connect is OFF.
+  GOOGLE_CLIENT_SECRET: z.string().default(''),
+  // The redirect URI registered for the connect web client — Google sends the auth
+  // code here (the API's /google/connect/callback). Blank = connect is OFF.
+  GOOGLE_OAUTH_REDIRECT_URI: z.string().default(''),
+  // Base64-encoded 32-byte (AES-256) key for encrypting Google refresh/access tokens
+  // at rest. Blank or wrong-length = connect is OFF (tokens are never stored plaintext).
+  GOOGLE_TOKEN_ENC_KEY: z.string().default(''),
+  // The web app's public base URL the OAuth callback redirects back to (e.g.
+  // https://app.evertrust-germany.de). Blank = the callback shows a minimal "you can
+  // close this tab" HTML page instead of redirecting.
+  APP_WEB_URL: z.string().default(''),
+
   // Comma-separated allowlist of browser origins for CORS. Empty = no CORS.
   CORS_ORIGINS: z.string().default(''),
 

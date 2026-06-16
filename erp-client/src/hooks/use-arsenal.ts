@@ -17,6 +17,9 @@ import type {
   TestN8nResultDto,
   RotateIngestTokenResultDto,
   OrgSenderDto,
+  CalendarListResultDto,
+  ConnectedGoogleAccountDto,
+  SetGoogleDefaultsDto,
 } from '@evertrust/shared';
 import { ApiError, api, type UpsertOrgSenderBody } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
@@ -169,6 +172,17 @@ export function useOrgSenders() {
   });
 }
 
+// The org's Google calendars (live scan). Backs the AIM campaign calendar picker.
+// `enabled` lets the dialog gate the scan on open. { configured:false } when no
+// Google token is wired — the dialog then falls back to the org default calendar.
+export function useOrgCalendars(enabled = true) {
+  return useQuery<CalendarListResultDto, ApiError>({
+    queryKey: queryKeys.arsenal.calendars(),
+    queryFn: ({ signal }) => api.arsenal.listCalendars(signal),
+    enabled,
+  });
+}
+
 // Seed both the senders list AND the config cache from the upsert result (the
 // config carries the resolved `senders` array + the derived defaultSender), so the
 // editor reflects the change without a refetch.
@@ -192,6 +206,40 @@ export function useRemoveSender() {
     onSuccess: (senders) => {
       queryClient.setQueryData(queryKeys.arsenal.senders(), senders);
       void queryClient.invalidateQueries({ queryKey: queryKeys.arsenal.config() });
+    },
+  });
+}
+
+// The org's connected Google (Gmail/Calendar) accounts. Backs the Configuration >
+// Connected Google accounts card. admin:config server-side — gate the card with <Can>.
+export function useGoogleAccounts() {
+  return useQuery<ConnectedGoogleAccountDto[], ApiError>({
+    queryKey: queryKeys.google.accounts(),
+    queryFn: ({ signal }) => api.google.list(signal),
+    refetchOnWindowFocus: true,
+  });
+}
+
+// Set the org-level default Gmail / Calendar account. The set-defaults endpoint
+// returns the resolved account list, so seed the cache directly (no refetch).
+export function useSetGoogleDefaults() {
+  const queryClient = useQueryClient();
+  return useMutation<ConnectedGoogleAccountDto[], ApiError, SetGoogleDefaultsDto>({
+    mutationFn: (input) => api.google.setDefaults(input),
+    onSuccess: (accounts) => {
+      queryClient.setQueryData(queryKeys.google.accounts(), accounts);
+    },
+  });
+}
+
+// Disconnect a Google account by id. Returns the resolved account list (same cache
+// seed as set-defaults). Surfaces server guards to the caller as an ApiError.
+export function useDisconnectGoogleAccount() {
+  const queryClient = useQueryClient();
+  return useMutation<ConnectedGoogleAccountDto[], ApiError, string>({
+    mutationFn: (id) => api.google.disconnect(id),
+    onSuccess: (accounts) => {
+      queryClient.setQueryData(queryKeys.google.accounts(), accounts);
     },
   });
 }

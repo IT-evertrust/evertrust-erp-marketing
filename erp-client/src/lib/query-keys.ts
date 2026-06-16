@@ -139,6 +139,13 @@ export const queryKeys = {
     unread: () => ['notifications', 'unread'] as const,
   },
 
+  // Per-org Google connect: the connected Gmail/Calendar accounts list
+  // (Configuration > Connected Google accounts card).
+  google: {
+    all: ['google'] as const,
+    accounts: () => ['google', 'accounts'] as const,
+  },
+
   // Arsenal: ERP→n8n stage trigger runs + editable settings.
   arsenal: {
     all: ['arsenal'] as const,
@@ -148,6 +155,8 @@ export const queryKeys = {
     config: () => ['arsenal', 'config'] as const,
     // The org's resolved email senders (Configuration > Senders + the AIM sender picker).
     senders: () => ['arsenal', 'senders'] as const,
+    // The org's Google calendars (live scan) for the AIM calendar picker.
+    calendars: () => ['arsenal', 'calendars'] as const,
     // Org-scoped lead/prospect/suppression tallies for the Configuration metric strip.
     leadStats: () => ['arsenal', 'lead-stats'] as const,
     // Phase 7+: live per-stage n8n execution status.

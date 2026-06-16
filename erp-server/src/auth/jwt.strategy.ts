@@ -38,6 +38,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   // user vanished or was deactivated. Attaches the EFFECTIVE permission set so
   // the PermissionsGuard enforces per-user access.
   async validate(payload: JwtPayload): Promise<AuthUser> {
+    // Reject any NON-SESSION token. Other short-lived JWTs are signed with the same
+    // JWT_SECRET (e.g. the Google-connect OAuth `state`, typ:'gconnect') and travel
+    // through URLs/browser history/3rd-party logs; a real session token never carries
+    // `typ`, so refusing tokens that do prevents them being replayed as a session.
+    if ((payload as { typ?: unknown }).typ !== undefined) {
+      throw new UnauthorizedException('Session is no longer valid');
+    }
+
     const rows = await this.db
       .select({
         id: schema.users.id,

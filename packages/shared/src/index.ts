@@ -1200,6 +1200,47 @@ export const DEFAULT_SENDERS: OrgSenderDto[] = [
   { key: 'hanna', email: 'hanna@evertrust-germany.de', label: 'Hanna', isDefault: false },
 ];
 
+// --- Per-org Google connect (OAuth authorization-code flow, distinct from GIS login) ---
+// The OAuth scopes requested when a user connects their company Google account. All are
+// SENSITIVE (one-time app verification) but NONE are RESTRICTED — so no annual CASA audit.
+// `gmail.readonly` (inbox read for replies) is intentionally absent: that is the increment-2
+// scope decision. `include_granted_scopes` makes adding it later incremental.
+export const GOOGLE_CONNECT_SCOPES: readonly string[] = [
+  'openid',
+  'email',
+  'profile',
+  'https://www.googleapis.com/auth/gmail.send',
+  'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/calendar.readonly',
+];
+
+export const GoogleAccountStatus = z.enum(['CONNECTED', 'REVOKED', 'ERROR']);
+export type GoogleAccountStatus = z.infer<typeof GoogleAccountStatus>;
+
+// A Google account a user in this org has connected. `role` is the connecting ERP user's
+// role (derived at read time, not stored). `isDefaultGmail`/`isDefaultCalendar` reflect the
+// org_config default pointers. No tokens are ever exposed in this DTO.
+export const ConnectedGoogleAccountDto = z.object({
+  id: z.string().uuid(),
+  email: z.string().email(),
+  displayName: z.string().nullable(),
+  role: UserRole,
+  scopes: z.array(z.string()),
+  status: GoogleAccountStatus,
+  isDefaultGmail: z.boolean(),
+  isDefaultCalendar: z.boolean(),
+  connectedAt: z.string(),
+});
+export type ConnectedGoogleAccountDto = z.infer<typeof ConnectedGoogleAccountDto>;
+
+// Set the org-level default Gmail / Calendar accounts. Each field optional: omit to leave
+// unchanged; null to clear. A non-null id must reference a google_accounts row in this org.
+export const SetGoogleDefaultsDto = z.object({
+  defaultGmailAccountId: z.string().uuid().nullable().optional(),
+  defaultCalendarAccountId: z.string().uuid().nullable().optional(),
+});
+export type SetGoogleDefaultsDto = z.infer<typeof SetGoogleDefaultsDto>;
+
 export const CreateCampaignDto = z.object({
   name: z.string().max(60).optional(),
   // The campaign's niche by DISPLAY name; the API find-or-creates the niche row

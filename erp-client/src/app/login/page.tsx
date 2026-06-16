@@ -1,19 +1,19 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { ShieldCheck } from 'lucide-react';
 import { LoginForm } from '@/components/auth/login-form';
 
-// Data fetching here is fully client-side (the login mutation runs on submit), so
-// nothing hits the API at build time. The surface is a centered branded lockup
-// over a faint token-based radial wash — restyle only; auth lives in <LoginForm>.
+// Data fetching here is fully client-side (the login mutation runs on the Google
+// credential callback), so nothing hits the API at build time. The surface is a
+// single sign-in panel over a faint token-based blueprint wash — restyle only; auth
+// lives in <LoginForm> / <GoogleSignInButton>.
 export default function LoginPage() {
   const t = useTranslations('login');
 
   return (
     <main className="relative flex min-h-svh items-center justify-center overflow-hidden bg-background p-4">
-      {/* Ambient depth, all token-based (no new colours / CSS): a faint blueprint
-          grid masked to the centre + two soft primary glows over the dark base. */}
+      {/* Ambient depth, all token-based (no new colours / CSS file): a faint blueprint
+          grid masked to the centre + two soft glows over the dark base. */}
       <div aria-hidden className="pointer-events-none absolute inset-0">
         <div
           className="absolute inset-0 opacity-[0.15]"
@@ -31,24 +31,9 @@ export default function LoginPage() {
         <div className="absolute -bottom-40 left-1/2 size-[30rem] -translate-x-1/2 rounded-full bg-muted-foreground/[0.06] blur-[140px]" />
       </div>
 
-      <div className="relative flex w-full max-w-sm flex-col items-center gap-8">
-        <div className="flex flex-col items-center gap-3 text-center">
-          <div className="flex size-11 items-center justify-center rounded-xl border bg-card text-foreground shadow-sm">
-            <ShieldCheck className="size-5" />
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight">Evertrust ERP</h1>
-            <p className="mt-0.5 text-sm text-muted-foreground">
-              {t('brand.tagline')}
-            </p>
-          </div>
-        </div>
-
+      <div className="relative flex w-full max-w-sm flex-col items-center gap-6">
         <LoginForm />
-
-        <p className="text-xs text-muted-foreground">
-          {t('brand.footer')}
-        </p>
+        <p className="text-xs text-muted-foreground">{t('brand.footer')}</p>
       </div>
     </main>
   );

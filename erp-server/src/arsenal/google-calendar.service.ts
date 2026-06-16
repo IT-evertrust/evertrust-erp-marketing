@@ -1,14 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OAuth2Client } from 'google-auth-library';
 import { AppConfigService } from '../config/app-config.service';
+import { GoogleAccountsService } from '../google/google-accounts.service';
 
-// Lists the Google Calendars the deployment's connected account can write to, for the
-// AIM Lock & Load form's Calendar dropdown.
+// Lists the Google Calendars an org can write to, for the AIM Lock & Load form's
+// Calendar dropdown.
 //
-// AUTH MODEL: a SINGLE deployment-wide Google `authorized_user` token, loaded from the
-// GOOGLE_CALENDAR_TOKEN_JSON env var ({ client_id, client_secret, refresh_token,
-// type: "authorized_user" }). There is NO per-org OAuth and NO browser flow — every
-// org sees the same account's calendars (per-org scoping is a future concern).
+// AUTH MODEL (per-org first, global fallback): listCalendars(orgId) first resolves the
+// CALLING org's default connected Calendar account (GoogleAccountsService) and uses
+// that account's live access token — so each tenant sees only its OWN calendars (the
+// multi-tenant fix). When the org has no connected Calendar account, it falls back to
+// the single deployment-wide `authorized_user` token in GOOGLE_CALENDAR_TOKEN_JSON
+// ({ client_id, client_secret, refresh_token, type: "authorized_user" }) for
+// back-compat with deployments that haven't connected per-org accounts yet.
 //
 // NEVER-THROW CONTRACT: listCalendars() must NEVER throw. It powers a dropdown on a
 // page load, so any failure (no token, bad JSON, OAuth refresh failure, non-2xx, network
@@ -19,12 +23,23 @@ import { AppConfigService } from '../config/app-config.service';
 export class GoogleCalendarService {
   private readonly logger = new Logger(GoogleCalendarService.name);
 
-  constructor(private readonly config: AppConfigService) {}
+  constructor(
+    private readonly config: AppConfigService,
+    private readonly googleAccounts: GoogleAccountsService,
+  ) {}
 
-  async listCalendars(): Promise<{
+  async listCalendars(orgId: string): Promise<{
     configured: boolean;
     calendars: { id: string; summary: string; primary: boolean }[];
   }> {
+    // Per-org path: use the org's default connected Calendar account's access token
+    // when one resolves. Never throws (getAccessTokenForOrg returns null on failure).
+    const perOrg = await this.googleAccounts.getAccessTokenForOrg(orgId, 'calendar');
+    if (perOrg) {
+      return this.fetchCalendars(perOrg.accessToken);
+    }
+
+    // Fallback: the single deployment-wide authorized_user token (back-compat).
     const raw = this.config.get('GOOGLE_CALENDAR_TOKEN_JSON');
     if (!raw) {
       // Not wired — expected when the deployment hasn't connected a Google account.
@@ -64,7 +79,26 @@ export class GoogleCalendarService {
       const client = new OAuth2Client({ clientId, clientSecret });
       client.setCredentials({ refresh_token: refreshToken });
       const { token } = await client.getAccessToken();
+      return this.fetchCalendars(token ?? undefined);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown error';
+      this.logger.warn(`Google calendar scan failed: ${msg}`);
+      return { configured: false, calendars: [] };
+    }
+  }
 
+  // GET the calendarList with a bearer access token and map it to the dropdown shape
+  // (primary first, then alphabetical by display label). Shared by the per-org and the
+  // global-fallback paths. Preserves the NEVER-THROW contract — any non-2xx, network
+  // error, or bad body degrades to { configured: false, calendars: [] }.
+  private async fetchCalendars(token: string | undefined): Promise<{
+    configured: boolean;
+    calendars: { id: string; summary: string; primary: boolean }[];
+  }> {
+    if (!token) {
+      return { configured: false, calendars: [] };
+    }
+    try {
       const res = await fetch(
         'https://www.googleapis.com/calendar/v3/users/me/calendarList?minAccessRole=writer&showHidden=false',
         { headers: { Authorization: `Bearer ${token}` } },

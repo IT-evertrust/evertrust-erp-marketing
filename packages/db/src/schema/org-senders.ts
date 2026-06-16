@@ -7,6 +7,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+import { googleAccounts } from './google-accounts';
 import { organizations } from './org';
 
 // PER-ORGANIZATION email senders. One row per from-address an org is allowed to
@@ -38,6 +39,10 @@ export const orgSenders = pgTable(
     // Whether this is the org's default sender. Plain flag — the resolver picks it
     // when a campaign names no sender.
     isDefault: boolean('is_default').notNull().default(false),
+    // Connected Google account backing this sender (null = bare alias as today).
+    googleAccountId: uuid('google_account_id').references(
+      () => googleAccounts.id,
+    ),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

@@ -4,8 +4,6 @@
     "footer": "Evertrust GmbH · Authorized access only"
   },
   "form": {
-    "title": "Sign in",
-    "description": "Access the Evertrust operations console.",
     "submitting": "Signing in…",
     "companyHint": "Use your company Google account to sign in."
   },

@@ -1,8 +1,12 @@
 import { GoogleCalendarService } from '../src/arsenal/google-calendar.service';
 import type { AppConfigService } from '../src/config/app-config.service';
+import type { GoogleAccountsService } from '../src/google/google-accounts.service';
 
-// GoogleCalendarService lists the deployment's Google Calendars for the AIM Calendar
-// dropdown via a SINGLE deployment-wide authorized_user token. The contract under test:
+// GoogleCalendarService lists an org's Google Calendars for the AIM Calendar dropdown.
+// It resolves the org's default connected Calendar account FIRST (per-org token), and
+// FALLS BACK to a single deployment-wide authorized_user token when the org has none.
+// These tests exercise the FALLBACK path: the per-org resolver returns null, so the
+// service uses GOOGLE_CALENDAR_TOKEN_JSON. The contract under test:
 // (1) blank/missing token → { configured: false, calendars: [] }; (2) a configured
 // happy path maps calendarList items + sorts primary-first then alphabetical; (3) any
 // failure (non-2xx or a throwing fetch) degrades to { configured: false, calendars: [] }
@@ -10,6 +14,16 @@ import type { AppConfigService } from '../src/config/app-config.service';
 //
 // google-auth-library is mocked so OAuth2Client.getAccessToken() resolves a fake token
 // with no network; the live calendarList GET is mocked via globalThis.fetch.
+
+const ORG = 'org-1';
+
+// A GoogleAccountsService whose per-org resolver returns null, so the service uses the
+// global GOOGLE_CALENDAR_TOKEN_JSON fallback these tests cover.
+function makeGoogleAccounts(): GoogleAccountsService {
+  return {
+    getAccessTokenForOrg: jest.fn().mockResolvedValue(null),
+  } as unknown as GoogleAccountsService;
+}
 
 const getAccessToken = jest.fn();
 const setCredentials = jest.fn();
@@ -51,9 +65,9 @@ describe('GoogleCalendarService — listCalendars', () => {
   it('returns { configured: false, calendars: [] } when the token is blank', async () => {
     const fetchSpy = jest.fn();
     globalThis.fetch = fetchSpy as unknown as typeof fetch;
-    const service = new GoogleCalendarService(makeConfig(''));
+    const service = new GoogleCalendarService(makeConfig(''), makeGoogleAccounts());
 
-    expect(await service.listCalendars()).toEqual({
+    expect(await service.listCalendars(ORG)).toEqual({
       configured: false,
       calendars: [],
     });
@@ -74,8 +88,11 @@ describe('GoogleCalendarService — listCalendars', () => {
       }),
     }) as unknown as typeof fetch;
 
-    const service = new GoogleCalendarService(makeConfig(TOKEN_JSON));
-    const result = await service.listCalendars();
+    const service = new GoogleCalendarService(
+      makeConfig(TOKEN_JSON),
+      makeGoogleAccounts(),
+    );
+    const result = await service.listCalendars(ORG);
 
     expect(result.configured).toBe(true);
     expect(result.calendars).toEqual([
@@ -96,8 +113,11 @@ describe('GoogleCalendarService — listCalendars', () => {
       json: async () => ({}),
     }) as unknown as typeof fetch;
 
-    const service = new GoogleCalendarService(makeConfig(TOKEN_JSON));
-    expect(await service.listCalendars()).toEqual({
+    const service = new GoogleCalendarService(
+      makeConfig(TOKEN_JSON),
+      makeGoogleAccounts(),
+    );
+    expect(await service.listCalendars(ORG)).toEqual({
       configured: false,
       calendars: [],
     });
@@ -108,8 +128,11 @@ describe('GoogleCalendarService — listCalendars', () => {
       .fn()
       .mockRejectedValue(new Error('network down')) as unknown as typeof fetch;
 
-    const service = new GoogleCalendarService(makeConfig(TOKEN_JSON));
-    await expect(service.listCalendars()).resolves.toEqual({
+    const service = new GoogleCalendarService(
+      makeConfig(TOKEN_JSON),
+      makeGoogleAccounts(),
+    );
+    await expect(service.listCalendars(ORG)).resolves.toEqual({
       configured: false,
       calendars: [],
     });
@@ -118,9 +141,12 @@ describe('GoogleCalendarService — listCalendars', () => {
   it('returns { configured: false, calendars: [] } when the token JSON is malformed', async () => {
     const fetchSpy = jest.fn();
     globalThis.fetch = fetchSpy as unknown as typeof fetch;
-    const service = new GoogleCalendarService(makeConfig('{not valid json'));
+    const service = new GoogleCalendarService(
+      makeConfig('{not valid json'),
+      makeGoogleAccounts(),
+    );
 
-    expect(await service.listCalendars()).toEqual({
+    expect(await service.listCalendars(ORG)).toEqual({
       configured: false,
       calendars: [],
     });

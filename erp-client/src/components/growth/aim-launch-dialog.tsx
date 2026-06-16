@@ -7,7 +7,7 @@ import { Crosshair } from 'lucide-react';
 import { type CreateCampaignDto, slugify } from '@evertrust/shared';
 import { useCreateCampaign } from '@/hooks/use-campaigns';
 import { useNiches } from '@/hooks/use-niches';
-import { useOrgSenders } from '@/hooks/use-arsenal';
+import { useOrgCalendars, useOrgSenders } from '@/hooks/use-arsenal';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -43,6 +43,9 @@ type FormState = {
   // A per-org sender KEY (validated server-side against the org's resolved senders).
   // Sourced from the org's senders list; defaults to the org default (or 'info').
   sender: string;
+  // The Google calendar id meetings book into. Sourced from the org's calendar scan;
+  // stays '' when Google isn't connected (the org default calendar is used instead).
+  salesCalendarId: string;
 };
 
 // AIM Region zones (strict dropdown). Values are sent to n8n as-is and seed the
@@ -73,6 +76,9 @@ const EMPTY_FORM: FormState = {
   // effect below); 'info' is the safe initial/fallback (the wire default is 'info'
   // too) so the Select shows a valid choice before the senders query resolves.
   sender: 'info',
+  // salesCalendarId is seeded from the org's primary calendar once the scan loads
+  // (see the effect below); '' means "use the org default" (Google not connected).
+  salesCalendarId: '',
 };
 
 // The text inputs that must be filled before launch (niche/country/project/whatsapp
@@ -125,12 +131,17 @@ export function AimLaunchDialog() {
   // The org's resolved senders (its own, or DEFAULT_SENDERS). Drives the From-alias
   // picker; the default-flagged sender seeds the form's initial selection.
   const senders = useOrgSenders();
+  // The org's Google calendars (live scan, gated on dialog open). Drives the calendar
+  // picker; configured=false (no Google token) hides it and falls back to the default.
+  const calendars = useOrgCalendars(open);
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
   // Track whether the user has hand-picked a sender, so the auto-seed (below) only
   // sets the org default until they choose.
   const [senderEdited, setSenderEdited] = useState(false);
+  // Same, for the calendar picker.
+  const [calendarEdited, setCalendarEdited] = useState(false);
 
   // The org default sender key (the isDefault row, else the first sender, else
   // 'info' when the list is empty/unloaded — matching the wire default).
@@ -165,6 +176,32 @@ export function AimLaunchDialog() {
     if (senderEdited) return;
     setForm((f) => (f.sender === defaultSenderKey ? f : { ...f, sender: defaultSenderKey }));
   }, [defaultSenderKey, senderEdited]);
+
+  // True only when the org has a Google token wired AND the live scan succeeded.
+  // Gates whether we render the picker at all (vs. the "not connected" helper text).
+  const calendarsConfigured = calendars.data?.configured ?? false;
+
+  // The calendar Select options (label = calendar summary, value = its id).
+  const calendarOptions = useMemo(
+    () =>
+      (calendars.data?.calendars ?? []).map((c) => ({
+        value: c.id,
+        label: c.summary,
+      })),
+    [calendars.data],
+  );
+
+  // Seed the form's calendar from the org's primary calendar once the scan loads
+  // (else the first calendar), until the user picks one themselves. Re-seeds when the
+  // dialog reopens (calendarEdited resets in reset()).
+  useEffect(() => {
+    if (calendarEdited) return;
+    const list = calendars.data?.calendars ?? [];
+    const pick = list.find((c) => c.primary) ?? list[0];
+    if (!pick) return;
+    const seed = pick.id;
+    setForm((f) => (f.salesCalendarId === seed ? f : { ...f, salesCalendarId: seed }));
+  }, [calendars.data, calendarEdited]);
 
   // Niche options grouped by industry: industries first (alphabetical), Unassigned
   // last; niches alphabetical within each. `optionLabel` is what the datalist shows.
@@ -212,6 +249,7 @@ export function AimLaunchDialog() {
     setForm(EMPTY_FORM);
     setLabelEdited(false);
     setSenderEdited(false);
+    setCalendarEdited(false);
   }
 
   function submit() {
@@ -231,11 +269,13 @@ export function AimLaunchDialog() {
       region: form.region.trim(),
       project: form.project.trim(),
       gmailLabel: form.gmailLabel.trim(),
-      // Calendar is pinned to info@ in Reply Glock, so there's no picker — the
-      // required salesCalendarId is sent as info@.
-      salesCalendarId: 'info@evertrust-germany.de',
       whatsappNumber: form.whatsappNumber.trim(),
       sender: form.sender,
+      // Only sent when a calendar was picked/seeded; omitted when Google isn't
+      // connected so the server falls back to the org-default calendar.
+      ...(form.salesCalendarId.trim()
+        ? { salesCalendarId: form.salesCalendarId.trim() }
+        : {}),
       ...(form.name.trim() ? { name: form.name.trim() } : {}),
     };
     create.mutate(input, {
@@ -410,6 +450,47 @@ export function AimLaunchDialog() {
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">{t('senderHint')}</p>
+          </div>
+
+          {/* Sales calendar — which Google calendar meetings book into. Rendered only
+              when the org's Google token is wired and the scan returned calendars;
+              otherwise a helper note says the org-default calendar is used. */}
+          <div className="grid gap-2">
+            <Label htmlFor={`${fieldId}-salesCalendarId`}>
+              {t('calendarLabel')}
+            </Label>
+            {calendarsConfigured && calendarOptions.length > 0 ? (
+              <>
+                <Select
+                  value={form.salesCalendarId}
+                  onValueChange={(v) => {
+                    setCalendarEdited(true);
+                    set('salesCalendarId', v);
+                  }}
+                >
+                  <SelectTrigger
+                    id={`${fieldId}-salesCalendarId`}
+                    className="w-full"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {calendarOptions.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {t('calendarHint')}
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {t('calendarNotConnected')}
+              </p>
+            )}
           </div>
         </div>
         <DialogFooter>

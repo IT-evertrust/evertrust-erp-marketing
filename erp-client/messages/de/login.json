@@ -4,8 +4,6 @@
     "footer": "Evertrust GmbH · Nur für autorisierten Zugriff"
   },
   "form": {
-    "title": "Anmelden",
-    "description": "Zugang zur Evertrust-Konsole.",
     "submitting": "Wird angemeldet…",
     "companyHint": "Melden Sie sich mit Ihrem Firmen-Google-Konto an."
   },
