@@ -4,8 +4,6 @@ export * from './enums';
 export * from './org';
 export * from './core';
 export * from './auth';
-export * from './pricing';
-export * from './process';
 export * from './observability';
 export * from './industries';
 export * from './niches';

@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { and, desc, eq, gte, isNotNull, lt } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 import {
@@ -12,10 +7,8 @@ import {
   PerformanceBriefSummary,
   zoneForScore,
   type CreateKpiValueDto,
-  type CreateTenderContributionDto,
   type Department,
   type DepartmentRollupDto,
-  type TenderContributionDto,
   type KpiCategory,
   type KpiDefinitionDto,
   type KpiPeriod,
@@ -268,71 +261,17 @@ export class PerformanceService {
       });
   }
 
-  // Derive AUTO KPI values for the current week from REAL ERP activity (submission
-  // receipts, pricing decisions, meetings, leads). Idempotent; runs on every read
-  // so scorecards always reflect live data. KPIs with no source (content, bugs,
-  // cost-per-lead, etc.) are left to MANUAL entry — never invented.
+  // Derive AUTO KPI values for the current week from REAL ERP activity (meetings,
+  // leads). Idempotent; runs on every read so scorecards always reflect live data.
+  // KPIs with no source (content, bugs, cost-per-lead, submissions_per_week,
+  // deadline_compliance, profit_maximization, etc.) are left to MANUAL entry —
+  // never invented.
   async collectAuto(orgId: string): Promise<void> {
     const { start, end } = currentWeek();
     const users = await this.db
       .select()
       .from(schema.users)
       .where(tenantScope(orgId, schema.users));
-
-    // Submissions / week + deadline compliance (from submission_receipts).
-    const subs = await this.db
-      .select({
-        by: schema.submissionReceipts.submittedBy,
-        at: schema.submissionReceipts.submittedAt,
-        deadline: schema.tenders.submissionDeadlineAt,
-      })
-      .from(schema.submissionReceipts)
-      .innerJoin(
-        schema.tenders,
-        eq(schema.tenders.id, schema.submissionReceipts.tenderId),
-      )
-      .where(
-        and(
-          eq(schema.tenders.organizationId, orgId),
-          gte(schema.submissionReceipts.submittedAt, start),
-          lt(schema.submissionReceipts.submittedAt, end),
-        ),
-      );
-    const subAgg = new Map<string, { n: number; onTime: number }>();
-    for (const s of subs) {
-      const a = subAgg.get(s.by) ?? { n: 0, onTime: 0 };
-      a.n += 1;
-      if (s.deadline && s.at <= s.deadline) a.onTime += 1;
-      subAgg.set(s.by, a);
-    }
-    for (const [uid, a] of subAgg) {
-      await this.upsertAuto(orgId, uid, 'submissions_per_week', start, end, a.n, String(a.n), 'AUTO');
-      const pct = Math.round((a.onTime / a.n) * 100);
-      await this.upsertAuto(orgId, uid, 'deadline_compliance', start, end, pct, `${pct}%`, 'AUTO');
-    }
-
-    // Profit maximization = avg pricing margin per approver (from pricings).
-    const prs = await this.db
-      .select({ by: schema.pricings.decidedBy, margin: schema.pricings.margin })
-      .from(schema.pricings)
-      .innerJoin(schema.tenders, eq(schema.tenders.id, schema.pricings.tenderId))
-      .where(
-        and(
-          eq(schema.tenders.organizationId, orgId),
-          isNotNull(schema.pricings.decidedBy),
-          gte(schema.pricings.decidedAt, start),
-          lt(schema.pricings.decidedAt, end),
-        ),
-      );
-    const prAgg = new Map<string, number[]>();
-    for (const p of prs) {
-      if (!p.by) continue;
-      (prAgg.get(p.by) ?? prAgg.set(p.by, []).get(p.by)!).push(Number(p.margin));
-    }
-    for (const [uid, arr] of prAgg) {
-      const avg = Math.round(arr.reduce((x, y) => x + y, 0) / arr.length);
-      await this.upsertAuto(orgId, uid, 'profit_maximization', start, end, avg, String(avg), 'AUTO');
-    }
 
     // Meetings booked (PARTIAL: meetings.aeName matched to a user by display name).
     const mtgs = await this.db
@@ -616,129 +555,5 @@ export class PerformanceService {
         .sort((a, b) => a.composite - b.composite)
         .slice(0, 5),
     };
-  }
-
-  // ---- Tender revenue attribution (who played each role on a tender) ----
-  private async ensureTenderInOrg(
-    orgId: string,
-    tenderId: string,
-  ): Promise<void> {
-    const t = await this.db
-      .select({ id: schema.tenders.id })
-      .from(schema.tenders)
-      .where(
-        and(
-          eq(schema.tenders.id, tenderId),
-          eq(schema.tenders.organizationId, orgId),
-        ),
-      )
-      .limit(1);
-    if (!t[0]) throw new NotFoundException('Tender not found');
-  }
-
-  private async contributionRows(
-    tenderId: string,
-  ): Promise<TenderContributionDto[]> {
-    const rows = await this.db
-      .select({ c: schema.tenderContributions, name: schema.users.name })
-      .from(schema.tenderContributions)
-      .leftJoin(
-        schema.users,
-        eq(schema.users.id, schema.tenderContributions.userId),
-      )
-      .where(eq(schema.tenderContributions.tenderId, tenderId));
-    return rows.map((r) => ({
-      id: r.c.id,
-      tenderId: r.c.tenderId,
-      userId: r.c.userId,
-      userName: r.name,
-      role: r.c.role,
-      createdAt: r.c.createdAt.toISOString(),
-    }));
-  }
-
-  // Auto-seed VALIDATION from the data the ERP already knows: the pricing approver
-  // and the submitter. The other roles (research/qualification/sales/account) have
-  // no source and are added by hand.
-  private async autoSeedContributions(tenderId: string): Promise<void> {
-    const validators = new Set<string>();
-    const pr = await this.db
-      .select({ by: schema.pricings.decidedBy })
-      .from(schema.pricings)
-      .where(
-        and(
-          eq(schema.pricings.tenderId, tenderId),
-          isNotNull(schema.pricings.decidedBy),
-        ),
-      );
-    for (const p of pr) if (p.by) validators.add(p.by);
-    const sub = await this.db
-      .select({ by: schema.submissionReceipts.submittedBy })
-      .from(schema.submissionReceipts)
-      .where(eq(schema.submissionReceipts.tenderId, tenderId));
-    for (const s of sub) validators.add(s.by);
-    if (validators.size === 0) return;
-    await this.db
-      .insert(schema.tenderContributions)
-      .values(
-        [...validators].map((uid) => ({
-          tenderId,
-          userId: uid,
-          role: 'VALIDATION' as const,
-        })),
-      )
-      .onConflictDoNothing();
-  }
-
-  async listContributions(
-    orgId: string,
-    tenderId: string,
-  ): Promise<TenderContributionDto[]> {
-    await this.ensureTenderInOrg(orgId, tenderId);
-    let rows = await this.contributionRows(tenderId);
-    if (rows.length === 0) {
-      await this.autoSeedContributions(tenderId);
-      rows = await this.contributionRows(tenderId);
-    }
-    return rows;
-  }
-
-  async addContribution(
-    orgId: string,
-    tenderId: string,
-    dto: CreateTenderContributionDto,
-  ): Promise<void> {
-    await this.ensureTenderInOrg(orgId, tenderId);
-    const u = await this.db
-      .select({ id: schema.users.id })
-      .from(schema.users)
-      .where(
-        and(
-          eq(schema.users.id, dto.userId),
-          eq(schema.users.organizationId, orgId),
-        ),
-      )
-      .limit(1);
-    if (!u[0]) throw new BadRequestException('User not in organization');
-    await this.db
-      .insert(schema.tenderContributions)
-      .values({ tenderId, userId: dto.userId, role: dto.role })
-      .onConflictDoNothing();
-  }
-
-  async removeContribution(
-    orgId: string,
-    tenderId: string,
-    contributionId: string,
-  ): Promise<void> {
-    await this.ensureTenderInOrg(orgId, tenderId);
-    await this.db
-      .delete(schema.tenderContributions)
-      .where(
-        and(
-          eq(schema.tenderContributions.id, contributionId),
-          eq(schema.tenderContributions.tenderId, tenderId),
-        ),
-      );
   }
 }

@@ -44,9 +44,9 @@ describe('PermissionsGuard', () => {
     );
   });
 
-  it('requires ALL listed permissions (EMPLOYEE has tenders:read but not pricing:approve)', () => {
+  it('requires ALL listed permissions (EMPLOYEE has campaigns:read but not performance:read)', () => {
     const guard = new PermissionsGuard(
-      reflectorReturning(['tenders:read', 'pricing:approve']),
+      reflectorReturning(['campaigns:read', 'performance:read']),
     );
     expect(() => guard.canActivate(contextWithUser(EMPLOYEE))).toThrow(
       ForbiddenException,

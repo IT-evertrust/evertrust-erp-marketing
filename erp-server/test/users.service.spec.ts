@@ -243,9 +243,9 @@ describe('UsersService — updateUser per-user permissions', () => {
   it('sets an explicit per-user permission override', async () => {
     const { service } = seed();
     const { after } = await service.updateUser(ORG_A, ALICE, BOB, {
-      permissions: ['tenders:read', 'campaigns:read'],
+      permissions: ['performance:read', 'campaigns:read'],
     });
-    expect(after.permissions).toEqual(['tenders:read', 'campaigns:read']);
+    expect(after.permissions).toEqual(['performance:read', 'campaigns:read']);
   });
 
   it('resets a user to role defaults (permissions = null)', async () => {
@@ -260,7 +260,7 @@ describe('UsersService — updateUser per-user permissions', () => {
     const { service } = seed();
     // Try to narrow ALICE (Super Admin) — must not be persisted.
     const { after } = await service.updateUser(ORG_A, BOB, ALICE, {
-      permissions: ['tenders:read'],
+      permissions: ['campaigns:read'],
     });
     expect(after.permissions ?? null).toBeNull();
   });
@@ -268,7 +268,7 @@ describe('UsersService — updateUser per-user permissions', () => {
   it('blocks removing your own user-management access', async () => {
     const { service } = seed();
     await expect(
-      service.updateUser(ORG_A, BOB, BOB, { permissions: ['tenders:read'] }),
+      service.updateUser(ORG_A, BOB, BOB, { permissions: ['campaigns:read'] }),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

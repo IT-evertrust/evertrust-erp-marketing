@@ -11,9 +11,8 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { organizations } from './org';
-import { users, tenders } from './core';
+import { users } from './core';
 import {
-  contributionRoleEnum,
   departmentEnum,
   kpiCategoryEnum,
   kpiPeriodEnum,
@@ -138,35 +137,6 @@ export const scorecards = pgTable(
       t.userId,
       t.period,
       t.periodStart,
-    ),
-  ],
-);
-
-// Revenue attribution: who played each role on a tender. Drives contribution
-// scores for bonuses/promotions. Auto-seeded where the ERP already knows (PIC,
-// submittedBy, pricing approver, lead creator), manually set for the rest.
-export const tenderContributions = pgTable(
-  'tender_contributions',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    tenderId: uuid('tender_id')
-      .notNull()
-      .references(() => tenders.id),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id),
-    role: contributionRoleEnum('role').notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => [
-    index('tender_contributions_tender_id_idx').on(t.tenderId),
-    index('tender_contributions_user_id_idx').on(t.userId),
-    uniqueIndex('tender_contributions_tender_user_role_uq').on(
-      t.tenderId,
-      t.userId,
-      t.role,
     ),
   ],
 );

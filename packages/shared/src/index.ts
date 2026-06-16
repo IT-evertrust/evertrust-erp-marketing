@@ -2,9 +2,6 @@
 // Every API contract lives here as a Zod schema so client and server cannot drift.
 import { z } from 'zod';
 
-// Phase 5a pricing: the pure/deterministic pricing engine + pricing DTOs.
-export * from './pricing';
-
 export const HealthDto = z.object({
   status: z.literal('ok'),
   service: z.string(),
@@ -88,21 +85,8 @@ export const POSITION_LABELS: Record<Position, string> = {
 // API's PermissionsGuard checks permissions — never roles — so authorization
 // rules live in one place and the role->permission mapping can evolve freely.
 export const PERMISSIONS = [
-  'tenders:read',
-  'tenders:write',
-  'tenders:transition',
-  'tenders:assign',
-  'suppliers:read',
-  'suppliers:write',
   'customers:read',
   'customers:write',
-  'pricing:read',
-  'pricing:write',
-  'pricing:approve',
-  'approvals:read',
-  'approvals:decide',
-  'compliance:read',
-  'compliance:review',
   'campaigns:read',
   'campaigns:write',
   'performance:read',
@@ -133,42 +117,22 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   SUPER_ADMIN: [...PERMISSIONS],
   // Admin: everything except managing other users.
   ADMIN: PERMISSIONS.filter((p) => p !== 'users:manage'),
-  // Manager (lead-level): full tender/pricing/approval/campaign authority.
+  // Manager (lead-level): full customer/campaign authority.
   MANAGER: [
-    'tenders:read',
-    'tenders:write',
-    'tenders:transition',
-    'tenders:assign',
-    'suppliers:read',
-    'suppliers:write',
     'customers:read',
     'customers:write',
-    'pricing:read',
-    'pricing:write',
-    'pricing:approve',
-    'approvals:read',
-    'approvals:decide',
-    'compliance:read',
-    'compliance:review',
     'campaigns:read',
     'campaigns:write',
-    // Managers see scorecards and record manual KPIs / tender contributions, but
-    // editing KPI definitions + weights stays an admin (performance:admin) action.
+    // Managers see scorecards and record manual KPIs, but editing KPI definitions
+    // + weights stays an admin (performance:admin) action.
     'performance:read',
     'performance:write',
     'audit:read',
   ],
   // Employee (operator): read across the board, write where day-to-day work
-  // happens (tenders), but no pricing/approval sign-off and no campaign launches.
+  // happens, but no campaign launches.
   EMPLOYEE: [
-    'tenders:read',
-    'tenders:write',
-    'tenders:transition',
-    'suppliers:read',
     'customers:read',
-    'pricing:read',
-    'approvals:read',
-    'compliance:read',
     'campaigns:read',
     'audit:read',
   ],
@@ -346,259 +310,13 @@ export const UpdateMyNameDto = z.object({
 export type UpdateMyNameDto = z.infer<typeof UpdateMyNameDto>;
 
 // ============================================================================
-// ERP CORE (M1): tenders + supplier/customer registries
+// ERP CORE: customer registry
 // All read DTOs mirror the @evertrust/db rows AS THEY ARRIVE OVER HTTP:
 //   numeric  -> string (postgres-js keeps numeric precision as a string)
 //   timestamp-> ISO string (Date is JSON-serialized to an ISO string)
 //   uuid     -> string
 // nullable DB columns are .nullable() here so the read shape can't drift.
 // ============================================================================
-
-// ---- Tenders ----
-
-// Mirrors the tender_status pgEnum (@evertrust/db). The canonical 7-value
-// "Combine" chain. The lifecycle is governed by the STATE_MACHINE in the API;
-// this enum is just the set of valid states.
-export const TenderStatus = z.enum([
-  'NOT_STARTED',
-  'PIC_PRICING',
-  'CUSTOMER_PRICING',
-  'DOCUMENTS',
-  'SUBMITTED',
-  'AWARDED',
-  'LOST',
-]);
-export type TenderStatus = z.infer<typeof TenderStatus>;
-
-// ---- Tender state machine (single source of truth) ----
-// The tender lifecycle as an explicit adjacency map: status -> the statuses it
-// may legally transition to. Lives here so the API (enforcement) and the web UI
-// (which next-states to offer) read the EXACT same authority instead of
-// re-deriving the rules. Terminal states (AWARDED, LOST) have no outgoing
-// transitions. Every non-terminal state can drop to LOST. PIC_PRICING may fork
-// to DOCUMENTS directly (Track B documentation running in parallel).
-export const STATE_MACHINE: Record<TenderStatus, readonly TenderStatus[]> = {
-  NOT_STARTED: ['PIC_PRICING', 'LOST'],
-  PIC_PRICING: ['CUSTOMER_PRICING', 'DOCUMENTS', 'LOST'],
-  CUSTOMER_PRICING: ['DOCUMENTS', 'LOST'],
-  DOCUMENTS: ['SUBMITTED', 'LOST'],
-  SUBMITTED: ['AWARDED', 'LOST'],
-  AWARDED: [],
-  LOST: [],
-};
-
-// True iff `to` is a legal next state from `from` per STATE_MACHINE.
-export function canTransition(from: TenderStatus, to: TenderStatus): boolean {
-  return STATE_MACHINE[from].includes(to);
-}
-
-// The legal next states from `status` (a fresh array so callers can't mutate the
-// shared map). Empty for terminal states. The web UI uses this to render exactly
-// the transition affordances the API will accept.
-export function nextStates(status: TenderStatus): TenderStatus[] {
-  return [...STATE_MACHINE[status]];
-}
-
-// ---- Phase 6 (R30): the customer-approval gate ----
-// "No written approval → no submission" expressed as ONE pure rule, shared by the
-// API (enforcement in TendersService.transition) and the web UI (which disables +
-// explains the SUBMITTED affordance) so they cannot drift. Submitting (→SUBMITTED)
-// is HARD-BLOCKED unless the tender has a recorded APPROVED customer approval. The
-// gate is channel-agnostic: it asks only whether an approval EXISTS, never how it
-// arrived (WhatsApp / email / call all count once a human records it).
-export function isSubmissionBlocked(
-  to: TenderStatus,
-  hasApprovedCustomerApproval: boolean,
-): boolean {
-  return to === 'SUBMITTED' && !hasApprovedCustomerApproval;
-}
-
-// ---- Phase 6 (R31): deadline safety + escalation ----
-// Days-before-submission-deadline at which a tender escalates up the
-// MANAGER→ADMIN→SUPER_ADMIN chain. T-2 is the "deadline safety" trigger
-// (MANAGER); it climbs to ADMIN (T-1) then SUPER_ADMIN (T-0 / overdue) as the
-// deadline nears. Pure constants so the API (computation), the web UI (badges)
-// and n8n (who to notify) read ONE authority.
-export const DEADLINE_ESCALATION_DAYS = {
-  MANAGER: 2,
-  ADMIN: 1,
-  SUPER_ADMIN: 0,
-} as const;
-
-// Reminder cadence: days-before-deadline marks at which an informational reminder
-// is due (BEFORE escalation starts). The ERP exposes the risk; n8n Cloud sends and
-// dedupes the actual reminders (thin orchestration — no business logic in n8n).
-export const REMINDER_CADENCE_DAYS = [5, 3, 1] as const;
-
-// Escalation target role (a real UserRole, or NONE when the tender is not at risk).
-export const EscalationLevel = z.enum([
-  'NONE',
-  'MANAGER',
-  'ADMIN',
-  'SUPER_ADMIN',
-]);
-export type EscalationLevel = z.infer<typeof EscalationLevel>;
-
-// Coarse severity for UI colour. AT_RISK spans the T-2..T-0 escalation window;
-// DUE_SOON is the pre-escalation reminder window (T-5..T-3).
-export const DeadlineLevel = z.enum([
-  'NONE',
-  'SAFE',
-  'DUE_SOON',
-  'AT_RISK',
-  'OVERDUE',
-]);
-export type DeadlineLevel = z.infer<typeof DeadlineLevel>;
-
-// The computed deadline risk of one tender. daysRemaining is whole days (floored);
-// negative = overdue; null when there is no deadline or the tender is closed.
-export const DeadlineRiskDto = z.object({
-  hasDeadline: z.boolean(),
-  daysRemaining: z.number().nullable(),
-  atRisk: z.boolean(),
-  escalateTo: EscalationLevel,
-  level: DeadlineLevel,
-});
-export type DeadlineRiskDto = z.infer<typeof DeadlineRiskDto>;
-
-// Pure deadline-risk for one tender. Only OPEN tenders carry risk — a closed
-// tender (SUBMITTED / AWARDED / LOST) is never "at risk", nor is one without a
-// submission deadline. `now` is injected (never read from the clock here) so the
-// rule is deterministic and unit-testable.
-export function computeDeadlineRisk(
-  submissionDeadlineAt: string | null,
-  now: Date,
-  status: TenderStatus,
-): DeadlineRiskDto {
-  const closed =
-    status === 'SUBMITTED' || status === 'AWARDED' || status === 'LOST';
-  const deadlineMs = submissionDeadlineAt
-    ? new Date(submissionDeadlineAt).getTime()
-    : NaN;
-
-  if (!submissionDeadlineAt || closed || Number.isNaN(deadlineMs)) {
-    return {
-      hasDeadline: Boolean(submissionDeadlineAt),
-      daysRemaining: null,
-      atRisk: false,
-      escalateTo: 'NONE',
-      level: 'NONE',
-    };
-  }
-
-  const days = Math.floor((deadlineMs - now.getTime()) / 86_400_000);
-
-  let escalateTo: EscalationLevel = 'NONE';
-  if (days <= DEADLINE_ESCALATION_DAYS.SUPER_ADMIN) escalateTo = 'SUPER_ADMIN';
-  else if (days <= DEADLINE_ESCALATION_DAYS.ADMIN) escalateTo = 'ADMIN';
-  else if (days <= DEADLINE_ESCALATION_DAYS.MANAGER) escalateTo = 'MANAGER';
-
-  let level: DeadlineLevel;
-  if (days < 0) level = 'OVERDUE';
-  else if (days <= DEADLINE_ESCALATION_DAYS.MANAGER) level = 'AT_RISK';
-  else if (days <= REMINDER_CADENCE_DAYS[0]) level = 'DUE_SOON';
-  else level = 'SAFE';
-
-  return {
-    hasDeadline: true,
-    daysRemaining: days,
-    atRisk: escalateTo !== 'NONE',
-    escalateTo,
-    level,
-  };
-}
-
-// Mirrors the tender_regime pgEnum.
-export const TenderRegime = z.enum(['VOB_A', 'VgV', 'UVgO']);
-export type TenderRegime = z.infer<typeof TenderRegime>;
-
-// Full read shape of a tender row (the API GET responses).
-export const TenderDto = z.object({
-  id: z.string().uuid(),
-  organizationId: z.string().uuid(),
-  // Portal-issued Vergabe-ID (German procurement reference). No internal numbering.
-  vergabeId: z.string(),
-  source: z.string(),
-  title: z.string(),
-  buyer: z.string().nullable(),
-  customerId: z.string().uuid().nullable(),
-  regime: TenderRegime.nullable(),
-  niche: z.string().nullable(),
-  status: TenderStatus,
-  estimatedValue: z.string().nullable(),
-  currency: z.string(),
-  isAboveThreshold: z.boolean(),
-  questionsDeadlineAt: z.string().nullable(),
-  submissionDeadlineAt: z.string().nullable(),
-  location: z.string().nullable(),
-  createdAt: z.string(),
-  updatedAt: z.string(),
-});
-export type TenderDto = z.infer<typeof TenderDto>;
-
-// Create payload. vergabeId/source/title are REQUIRED; everything else is
-// optional. status and organizationId are deliberately ABSENT — the server sets
-// status='NOT_STARTED' and organizationId from the authenticated tenant.
-export const CreateTenderDto = z.object({
-  vergabeId: z.string().min(1),
-  source: z.string().min(1),
-  title: z.string().min(1),
-  buyer: z.string().optional(),
-  customerId: z.string().uuid().optional(),
-  regime: TenderRegime.optional(),
-  niche: z.string().optional(),
-  estimatedValue: z.string().optional(),
-  currency: z.string().length(3).optional(),
-  isAboveThreshold: z.boolean().optional(),
-  questionsDeadlineAt: z.string().datetime().optional(),
-  submissionDeadlineAt: z.string().datetime().optional(),
-  location: z.string().optional(),
-});
-export type CreateTenderDto = z.infer<typeof CreateTenderDto>;
-
-// Partial update of the writable fields. status is NOT writable here — it only
-// changes through POST /tenders/:id/transition. organizationId is never writable.
-export const UpdateTenderDto = CreateTenderDto.partial();
-export type UpdateTenderDto = z.infer<typeof UpdateTenderDto>;
-
-// Body for POST /tenders/:id/transition — the target status. Whether the
-// transition is legal is decided by the server-side STATE_MACHINE.
-export const TransitionTenderDto = z.object({
-  to: TenderStatus,
-});
-export type TransitionTenderDto = z.infer<typeof TransitionTenderDto>;
-
-// Query params for GET /tenders. Optional status filter.
-export const ListTendersQuery = z.object({
-  status: TenderStatus.optional(),
-});
-export type ListTendersQuery = z.infer<typeof ListTendersQuery>;
-
-// ---- Suppliers ----
-
-export const SupplierDto = z.object({
-  id: z.string().uuid(),
-  organizationId: z.string().uuid(),
-  name: z.string(),
-  niches: z.array(z.string()),
-  capabilities: z.array(z.string()),
-  fitScore: z.string().nullable(),
-  contact: z.string().nullable(),
-  createdAt: z.string(),
-});
-export type SupplierDto = z.infer<typeof SupplierDto>;
-
-export const CreateSupplierDto = z.object({
-  name: z.string().min(1),
-  niches: z.array(z.string()).optional(),
-  capabilities: z.array(z.string()).optional(),
-  fitScore: z.string().optional(),
-  contact: z.string().optional(),
-});
-export type CreateSupplierDto = z.infer<typeof CreateSupplierDto>;
-
-export const UpdateSupplierDto = CreateSupplierDto.partial();
-export type UpdateSupplierDto = z.infer<typeof UpdateSupplierDto>;
 
 // ---- Customers ----
 
@@ -623,7 +341,7 @@ export const UpdateCustomerDto = CreateCustomerDto.partial();
 export type UpdateCustomerDto = z.infer<typeof UpdateCustomerDto>;
 
 // ============================================================================
-// PHASE 4 (R20–R22): users list · tender assignment · TYPE 1 documents
+// Users (org directory + admin management)
 // ============================================================================
 
 // ---- Users (org directory, read-only list) ----
@@ -860,221 +578,6 @@ export type ScanLeadsResultDto = z.infer<typeof ScanLeadsResultDto>;
 // NOTE: meetings enter the ERP ONLY via "Sync from Drive" (mirror the folder
 // Docs). There is intentionally no n8n→ERP push/ingest of meetings — the n8n
 // workflow runs analyses and writes Drive artifacts; it never inserts ERP rows.
-
-// ---- Tender assignment (manual L5-PIC assign) ----
-// Body for POST /tenders/:id/assign. reason is optional context (<= 500 chars).
-export const AssignTenderDto = z.object({
-  picId: z.string().uuid(),
-  reason: z.string().max(500).optional(),
-});
-export type AssignTenderDto = z.infer<typeof AssignTenderDto>;
-
-// The ACTIVE assignment of a tender (picName joined from users). assignedAt is an
-// ISO string over the wire; status is the lifecycle token (ACTIVE/REASSIGNED).
-export const AssignmentDto = z.object({
-  id: z.string().uuid(),
-  tenderId: z.string().uuid(),
-  picId: z.string().uuid(),
-  picName: z.string(),
-  reason: z.string().nullable(),
-  assignedAt: z.string(),
-  status: z.string(),
-});
-export type AssignmentDto = z.infer<typeof AssignmentDto>;
-
-// ---- Documents (TYPE 1 upload) ----
-// Mirrors the document_type pgEnum (@evertrust/db).
-export const DocumentType = z.enum(['TYPE1', 'TYPE2']);
-export type DocumentType = z.infer<typeof DocumentType>;
-
-// Mirrors the ocr_status pgEnum.
-export const OcrStatus = z.enum(['PENDING', 'DONE', 'FAILED']);
-export type OcrStatus = z.infer<typeof OcrStatus>;
-
-// Read shape of a documents row over HTTP. Metadata only — the binary is fetched
-// separately via GET /documents/:id/download. Nullable columns are .nullable().
-export const DocumentDto = z.object({
-  id: z.string().uuid(),
-  tenderId: z.string().uuid(),
-  type: DocumentType,
-  kind: z.string().nullable(),
-  originalName: z.string(),
-  mimeType: z.string().nullable(),
-  sizeBytes: z.number().nullable(),
-  ocrStatus: OcrStatus,
-  uploadedBy: z.string().uuid().nullable(),
-  createdAt: z.string(),
-});
-export type DocumentDto = z.infer<typeof DocumentDto>;
-
-// Multipart upload fields for POST /tenders/:id/documents (the file rides
-// alongside as `file`). type defaults to TYPE1; kind is optional free-text.
-export const UploadDocumentDto = z.object({
-  type: DocumentType.default('TYPE1'),
-  kind: z.string().max(200).optional(),
-});
-export type UploadDocumentDto = z.infer<typeof UploadDocumentDto>;
-
-// ============================================================================
-// PHASE 6 (R30–R31): customer-approval gate
-// "No written approval → no submission" is enforced in CODE (see
-// isSubmissionBlocked above + TendersService.transition): a tender cannot reach
-// SUBMITTED unless a CUSTOMER approval is recorded APPROVED. What COUNTS as
-// approval is channel-agnostic — a human records it with a free-form evidence
-// reference; the gate only checks that one EXISTS.
-// ============================================================================
-
-// Mirrors the approval_type pgEnum (@evertrust/db). CUSTOMER is the Phase 6 gate;
-// PRICING / QC exist for the pricing sign-off and the Phase 7 QC gate.
-export const ApprovalType = z.enum(['PRICING', 'CUSTOMER', 'QC']);
-export type ApprovalType = z.infer<typeof ApprovalType>;
-
-// Mirrors the approval_status pgEnum.
-export const ApprovalStatus = z.enum(['PENDING', 'APPROVED', 'REJECTED']);
-export type ApprovalStatus = z.infer<typeof ApprovalStatus>;
-
-// Read shape of an approval_requests row over HTTP. evidenceUrl is a FREE-FORM
-// reference to the approval proof (a link OR a note like "phone 2026-05-30,
-// confirmed by Frau Müller") — channel-agnostic by design. Nullable columns are
-// .nullable(); timestamps are ISO strings over the wire.
-export const ApprovalRequestDto = z.object({
-  id: z.string().uuid(),
-  tenderId: z.string().uuid(),
-  type: ApprovalType,
-  status: ApprovalStatus,
-  evidenceUrl: z.string().nullable(),
-  requestedAt: z.string(),
-  requestedBy: z.string().uuid().nullable(),
-  decidedBy: z.string().uuid().nullable(),
-  decidedAt: z.string().nullable(),
-});
-export type ApprovalRequestDto = z.infer<typeof ApprovalRequestDto>;
-
-// Body for POST /tenders/:tenderId/approvals — open a PENDING approval request.
-// type defaults to CUSTOMER (the Phase 6 gate). evidenceUrl is optional at request
-// time (usually attached when the decision is recorded). status/requestedBy are
-// server-owned and deliberately absent.
-export const CreateApprovalRequestDto = z.object({
-  type: ApprovalType.default('CUSTOMER'),
-  evidenceUrl: z.string().min(1).max(2000).optional(),
-});
-export type CreateApprovalRequestDto = z.infer<typeof CreateApprovalRequestDto>;
-
-// Body for POST /approvals/:id/decide — record the customer's decision. Only
-// APPROVED or REJECTED (never back to PENDING). evidenceUrl is the channel-agnostic
-// proof; recommended on APPROVED so the gate has an auditable basis.
-export const DecideApprovalDto = z.object({
-  decision: z.enum(['APPROVED', 'REJECTED']),
-  evidenceUrl: z.string().min(1).max(2000).optional(),
-});
-export type DecideApprovalDto = z.infer<typeof DecideApprovalDto>;
-
-// A tender paired with its computed deadline risk — the row shape of
-// GET /tenders/deadline-risk (the at-risk worklist the dashboard + n8n poll).
-export const TenderDeadlineRiskDto = z.object({
-  tender: TenderDto,
-  risk: DeadlineRiskDto,
-});
-export type TenderDeadlineRiskDto = z.infer<typeof TenderDeadlineRiskDto>;
-
-// ============================================================================
-// PHASE 7 (R34–R37): conditional QC gate + submission act + evidence logging
-// The submission act stays HUMAN (the portal). The ERP enforces the gates, records
-// the proof, and only then moves the tender to SUBMITTED — so SUBMITTED ⟺ a logged
-// submission_receipt (no submission without evidence). All gate predicates are PURE
-// so the API (enforcement) and the web UI (readiness card) read ONE authority.
-// ============================================================================
-
-// R34 — conditional QC. A QC review (approval_type 'QC') is REQUIRED before a tender
-// may be submitted when ANY of: it's above the EU procurement threshold (high-value),
-// its pricing is high-risk (≥35% unbacked or a top-5 line unbacked — computeTenderRisk),
-// or a QC review was explicitly opened (a human flagged it). Routine tenders skip QC
-// and can go straight to submit. Pure: the API computes the inputs, the web reuses it.
-export interface QcRequirement {
-  required: boolean;
-  reasons: string[];
-}
-export function qcRequired(input: {
-  isAboveThreshold: boolean;
-  highRisk: boolean;
-  qcRequested: boolean;
-}): QcRequirement {
-  const reasons: string[] = [];
-  if (input.isAboveThreshold)
-    reasons.push('Above the EU procurement threshold (high-value)');
-  if (input.highRisk) reasons.push('Pricing is high-risk (unbacked lines)');
-  if (input.qcRequested) reasons.push('A QC review was opened for this tender');
-  return { required: reasons.length > 0, reasons };
-}
-
-// The reasons a tender CANNOT be submitted yet (empty array = ready to submit).
-// Composes the Phase 6 customer-approval gate (isSubmissionBlocked) with the Phase 7
-// QC gate and the state-machine precondition. Shared by the API's submit() and the
-// web submission card so enforcement and display can never drift.
-export function submissionBlockers(input: {
-  status: TenderStatus;
-  hasCustomerApproval: boolean;
-  qcRequired: boolean;
-  hasApprovedQc: boolean;
-}): string[] {
-  const blockers: string[] = [];
-  if (!canTransition(input.status, 'SUBMITTED')) {
-    blockers.push(
-      `Tender must be in DOCUMENTS to submit (currently ${input.status}).`,
-    );
-  }
-  if (isSubmissionBlocked('SUBMITTED', input.hasCustomerApproval)) {
-    blockers.push(
-      'No customer approval recorded (no written approval → no submission).',
-    );
-  }
-  if (input.qcRequired && !input.hasApprovedQc) {
-    blockers.push('QC review required but not approved.');
-  }
-  return blockers;
-}
-
-// Body for POST /tenders/:id/submit — the human records the portal submission proof.
-// proofUrl is the channel-agnostic evidence reference (portal receipt id, link, or a
-// note). fileList optionally overrides the server's snapshot of the attached
-// documents (omit = the API snapshots the current document set automatically).
-export const SubmitTenderDto = z.object({
-  proofUrl: z.string().min(1).max(2000),
-  fileList: z.array(z.string().max(400)).max(200).optional(),
-});
-export type SubmitTenderDto = z.infer<typeof SubmitTenderDto>;
-
-// Read shape of a submission_receipts row — the immutable submission evidence
-// (proof + timestamp + the file-list snapshot taken at submit time).
-export const SubmissionReceiptDto = z.object({
-  id: z.string().uuid(),
-  tenderId: z.string().uuid(),
-  submittedBy: z.string().uuid(),
-  submittedAt: z.string(),
-  proofUrl: z.string(),
-  fileList: z.array(z.string()).nullable(),
-});
-export type SubmissionReceiptDto = z.infer<typeof SubmissionReceiptDto>;
-
-// GET /tenders/:id/submission — everything the submission card needs: the gate state
-// (computed the SAME way submit() enforces it), the QC requirement + reasons, the
-// proposed file list (current documents) and the logged receipts. canSubmit mirrors
-// blockers.length === 0.
-export const SubmissionReadinessDto = z.object({
-  status: TenderStatus,
-  hasCustomerApproval: z.boolean(),
-  qcRequired: z.boolean(),
-  qcReasons: z.array(z.string()),
-  qcRequestExists: z.boolean(),
-  hasApprovedQc: z.boolean(),
-  highRisk: z.boolean(),
-  blockers: z.array(z.string()),
-  canSubmit: z.boolean(),
-  // The document names currently attached (the proposed bid file list).
-  documents: z.array(z.string()),
-  receipts: z.array(SubmissionReceiptDto),
-});
-export type SubmissionReadinessDto = z.infer<typeof SubmissionReadinessDto>;
 
 // ============================================================================
 // GROWTH ENGINE — the "AIM sequence" (campaign launch → outbound arsenal)
@@ -1909,25 +1412,6 @@ export const ScorecardDto = z.object({
   generatedAt: z.string().nullable(),
 });
 export type ScorecardDto = z.infer<typeof ScorecardDto>;
-
-export const TenderContributionDto = z.object({
-  id: z.string().uuid(),
-  tenderId: z.string().uuid(),
-  userId: z.string().uuid(),
-  userName: z.string().nullable(),
-  role: ContributionRole,
-  createdAt: z.string(),
-});
-export type TenderContributionDto = z.infer<typeof TenderContributionDto>;
-
-// Body for POST /tenders/:id/contributions.
-export const CreateTenderContributionDto = z.object({
-  userId: z.string().uuid(),
-  role: ContributionRole,
-});
-export type CreateTenderContributionDto = z.infer<
-  typeof CreateTenderContributionDto
->;
 
 export const PerformanceReportDto = z.object({
   id: z.string().uuid(),

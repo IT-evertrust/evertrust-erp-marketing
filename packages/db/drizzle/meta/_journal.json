@@ -225,6 +225,13 @@
       "when": 1780579000000,
       "tag": "0031_google_accounts",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1780580000000,
+      "tag": "0032_drop_tender_erp",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AiModule } from '../ai/ai.module';
 import { PerformanceController } from './performance.controller';
-import { TenderContributionsController } from './tender-contributions.controller';
 import { PerformanceService } from './performance.service';
 
 // Performance Management System (PMS) — KPI scorecards + executive rollup + the
@@ -9,7 +8,7 @@ import { PerformanceService } from './performance.service';
 // computes scores from kpi_values + kpi_definitions.
 @Module({
   imports: [AiModule],
-  controllers: [PerformanceController, TenderContributionsController],
+  controllers: [PerformanceController],
   providers: [PerformanceService],
 })
 export class PerformanceModule {}
