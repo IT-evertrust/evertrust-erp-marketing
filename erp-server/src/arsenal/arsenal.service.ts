@@ -44,6 +44,16 @@ const STAGE_METHOD: Record<ArsenalStage, 'GET' | 'POST'> = {
   SLEEPER_GRENADE: 'GET',
 };
 
+// ArsenalStage → the Python-agent run path (POST), used when the stage's
+// AGENT_*_URL is configured (the ERP-native dispatch path).
+const STAGE_AGENT_PATH: Record<ArsenalStage, string> = {
+  LEAD_SATELLITE: '/satellite/run',
+  AMMO_FORGE: '/ammoforge/run',
+  REACH_BAZOOKA: '/reach/run',
+  REPLY_GLOCK: '/glock/run',
+  SLEEPER_GRENADE: '/sleeper/run',
+};
+
 // Fires an arsenal stage's n8n webhook ("Run now" + the daily scheduler) and
 // records the hand-off in arsenal_runs. ERP-first + observable: the webhook call
 // is best-effort and the ERP owns only the hand-off (DISPATCHED) — n8n then runs
@@ -170,30 +180,43 @@ export class ArsenalService {
   ): Promise<ArsenalRunRow> {
     const meta = ARSENAL_STAGE_META[stage];
     let campaignId: string | null = null;
+    let campaignName: string | null = null;
     let payload: Record<string, unknown>;
 
     // A campaign was chosen (a targeted run from a campaign) → send that
     // campaign's context. Otherwise it's a global run (e.g. the Arsenal panel) —
-    // fire the stage's webhook with no campaign; n8n processes across campaigns.
+    // fire the stage with no campaign; the worker processes across campaigns.
     if (opts.campaignId) {
       if (!orgId) {
         throw new BadRequestException('A campaign-scoped run needs a tenant.');
       }
       const campaign = await this.requireCampaign(orgId, opts.campaignId);
       campaignId = campaign.id;
+      campaignName = campaign.name;
       payload = { stage, campaign: await this.campaignPayload(campaign) };
     } else {
       payload = { stage, source: 'erp' };
     }
 
-    const webhookUrl = await this.workflowConfig.getStageWebhook(stage);
-    if (!webhookUrl) {
-      throw new BadRequestException(
-        `${meta.label} is not wired up yet — set ${STAGE_WEBHOOK_ENV[stage]} (and add a Webhook trigger to the n8n workflow).`,
-      );
+    // ERP-native Python agent takes precedence when its AGENT_*_URL is set;
+    // otherwise fall back to the stage's n8n webhook. Either way a run row is
+    // written; the agent/n8n then posts its final outcome to /arsenal/runs/callback.
+    const agentUrl = this.workflowConfig.getStageAgentUrl(stage);
+    let outcome: { status: 'DISPATCHED' | 'FAILED'; detail: string };
+    if (agentUrl) {
+      outcome = await this.fireAgent(agentUrl, stage, {
+        campaignId,
+        campaign: campaignName,
+      });
+    } else {
+      const webhookUrl = await this.workflowConfig.getStageWebhook(stage);
+      if (!webhookUrl) {
+        throw new BadRequestException(
+          `${meta.label} is not wired up yet — set ${STAGE_WEBHOOK_ENV[stage]} (n8n) or its AGENT_*_URL (Python agent).`,
+        );
+      }
+      outcome = await this.fire(webhookUrl, STAGE_METHOD[stage], payload);
     }
-
-    const outcome = await this.fire(webhookUrl, STAGE_METHOD[stage], payload);
 
     const inserted = await this.db
       .insert(schema.arsenalRuns)
@@ -475,6 +498,43 @@ export class ArsenalService {
       };
     }
     return { from, labels, indexOf, count: labels.length };
+  }
+
+  // Dispatch to the ERP-native Python agent service (POST /<agent>/run, live).
+  // The agent runs synchronously then posts its own /arsenal/runs/callback with the
+  // final metrics; here we record only the hand-off (DISPATCHED on a 2xx). Generous
+  // timeout because agents do real work (LLM + sends) before returning.
+  private async fireAgent(
+    baseUrl: string,
+    stage: ArsenalStage,
+    body: { campaignId: string | null; campaign: string | null },
+  ): Promise<{ status: 'DISPATCHED' | 'FAILED'; detail: string }> {
+    const url = baseUrl.replace(/\/+$/, '') + STAGE_AGENT_PATH[stage];
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120_000);
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          live: true,
+          source: 'erp',
+          campaignId: body.campaignId ?? undefined,
+          campaign: body.campaign ?? undefined,
+        }),
+        signal: controller.signal,
+      });
+      return res.ok
+        ? { status: 'DISPATCHED', detail: `agent HTTP ${res.status}` }
+        : { status: 'FAILED', detail: `agent HTTP ${res.status}` };
+    } catch (err) {
+      return {
+        status: 'FAILED',
+        detail: err instanceof Error ? err.message : 'agent call failed',
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   // Hit the stage webhook with its configured method; map the outcome to a run

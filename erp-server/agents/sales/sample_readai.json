@@ -1,0 +1,30 @@
+{
+  "body": {
+    "title": "EVERTRUST x Nordwind Logistics — discovery call",
+    "session_id": "sample-sales-001",
+    "persona": "Alex Hormozi",
+    "summary": "Discovery call between EVERTRUST and Nordwind Logistics about public-tender bidding support. The AE qualified the prospect, surfaced pain around losing tenders on technical scoring, and outlined the cooperation model.",
+    "chapter_summaries": [
+      {"title": "Rapport and agenda", "description": "Opening small talk and setting the agenda for the call."},
+      {"title": "Discovery", "description": "Questions about current tender win-rate and bottlenecks."},
+      {"title": "Value and next steps", "description": "How EVERTRUST improves scoring and the proposed trial."}
+    ],
+    "topics": [
+      {"text": "Public tender bidding"},
+      {"text": "Technical scoring"},
+      {"text": "Cooperation trial"}
+    ],
+    "transcript": {
+      "speaker_blocks": [
+        {"speaker": {"name": "Hanna"}, "words": "Hi Markus, thanks for making the time today. Before we dive in, how has the quarter been treating the bidding team over at Nordwind?", "start_time": 0},
+        {"speaker": {"name": "Markus"}, "words": "Honestly a bit rough. We are submitting plenty of tenders but our win rate has slipped and we are not always sure why we lose on the technical sections.", "start_time": 18000},
+        {"speaker": {"name": "Hanna"}, "words": "That is exactly the pattern we see most often. When you say technical sections, do you mean the scored quality criteria, the references, or the methodology write ups specifically?", "start_time": 41000},
+        {"speaker": {"name": "Markus"}, "words": "Mostly the methodology write ups and the references. We know our pricing is competitive so it has to be the qualitative scoring that is dragging us down.", "start_time": 70000},
+        {"speaker": {"name": "Hanna"}, "words": "Got it. If you could lift the qualitative score by even ten percent on the next five tenders, what would that be worth to Nordwind over a year?", "start_time": 95000},
+        {"speaker": {"name": "Markus"}, "words": "Each of those contracts is roughly four hundred thousand euros, so realistically a couple of extra wins would mean close to a million euros in additional revenue.", "start_time": 122000},
+        {"speaker": {"name": "Hanna"}, "words": "Then here is what I would propose. We run a short trial on your next two live tenders, our team rewrites the methodology and references against the published scoring matrix, and we only deepen the cooperation if you see the score improve.", "start_time": 150000},
+        {"speaker": {"name": "Markus"}, "words": "That sounds reasonable. I would want to see how you handle the references section before we commit to anything longer term, but a trial on two tenders is something I can get approved.", "start_time": 184000}
+      ]
+    }
+  }
+}

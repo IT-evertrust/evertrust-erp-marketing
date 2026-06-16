@@ -2,8 +2,9 @@
 
 Goal: break the 2-Gmail-credential ceiling so **any client org sends from and receives at
 its own address**, with onboarding that's self-serve (no credential handed to you and none
-hand-made in n8n). This is what makes the product multi-tenant/sellable. n8n stays; only the
-email send/receive path changes.
+hand-made in n8n). This is what makes the product multi-tenant/sellable. n8n **or** the Python
+agent (`erp-and-agent-wiring`) stays as the orchestrator; only the email send/receive path
+changes, and **both call the same ERP send seam** so the fix is built once.
 
 Builds on the per-org config already shipped (`org_senders`, `defaultSenderEmail`,
 `salesCalendarId` exposed in `GET /campaigns/:id/config`). See the session diagrams:
@@ -67,15 +68,25 @@ inbound Routes + subaccounts. ⚠️ Verify current ToS (cold-email policy) + pr
 
 ---
 
-## 4. n8n changes
-- **Reach Bazooka:** replace `IF — Sender Hanna? → 2 Gmail nodes` with ONE HTTP node →
-  `POST {ERP}/outreach/send`. (Validation/compose stays; the send + From + Reply-To move to the ERP.)
-- **Reply Glock:** intake moves from Gmail polling → the ERP `/inbound/email` webhook. To keep
-  the rewrite small, the ERP inbound endpoint matches the prospect + records the message, then
-  calls the existing Reply Glock **classify** webhook with the resolved prospect + body — so the
-  gpt-4o classification + graduate logic stays in n8n unchanged. (Later option: move
-  classification into the ERP `ai` module.)
-- **Calendar:** unchanged for now (already per-org id); booking-link is the scalable swap later.
+## 4. Send/receive integration — n8n OR the Python agent (one seam)
+The `erp-and-agent-wiring` branch adds ERP-native Python agents that **inherit the exact same
+2-Gmail-credential ceiling** — confirmed by a port-fidelity check: the `bazooka` agent's
+`settings.sender_addresses = {info, hanna}` + one OAuth token file per account, a faithful copy
+of the n8n node's two hardcoded credentials. So Phase 3 applies **regardless of which path runs
+a stage** (the `AGENT_*_URL` toggle): the fix is the same `/outreach/send` seam, and the
+provider key + From-verified check + suppression + token + `outreach_messages` write all stay
+**server-side in the ERP** — one place, both callers.
+
+- **Send:**
+  - **n8n Reach Bazooka:** replace `IF — Sender Hanna? → 2 Gmail nodes` with ONE HTTP node →
+    `POST {ERP}/outreach/send`.
+  - **bazooka agent:** replace `clients/gmail.py` (the per-account token send) with a call to
+    `POST {ERP}/outreach/send`. Drops the per-account token files entirely.
+- **Reply:** replies arrive at the ERP `/inbound/email` webhook (Reply-To token). The ERP
+  matches the prospect + records the INBOUND message, then triggers classification — the n8n
+  Reply Glock **classify** webhook *or* the glock agent — leaving the gpt-4o classify + graduate
+  logic unchanged. (Later: move classify into the ERP `ai` module.)
+- **Calendar:** unchanged for now (already per-org id); per-org booking-link is the scalable swap.
 
 ---
 
