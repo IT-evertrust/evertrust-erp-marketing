@@ -1,127 +1,102 @@
-"""Handle one Read.ai meeting: extract signal -> log -> if signing, aggregate the
-company's meetings -> extract partner identity -> match campaign -> build contract fields
--> (live) generate the PDF + lock the company. Dry-run produces a 'contract plan' and
-writes nothing.
+"""ContractMaker core — the function the ERP route calls: run(settings, opts, erp, llm, gdocs).
 
-Fixes vs n8n: the empty-body CRM ping is gone — CRM reads the meetings table directly.
+Faithful to n8n workflow wZWcjzx7fSbbsT7c (ContractMaker (PG)): a Read.ai meeting →
+signal-extract → if signing agreed → deal-extract (no fabrication) → match campaign (ERP) →
+idempotency check (ERP /contracts) → generate contract PDF (Google Docs/Drive, kept) →
+POST /contracts GENERATED → PATCH /contracts SIGNED.
+
+Dry-run (default): extract + match + build fields, NO PDF, NO ERP writes. --live arms PDF + writes.
+Reuses the existing readai/company/contract/llm/gdocs modules; only the data layer is the ERP.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date, datetime
-from pathlib import Path
+from dataclasses import dataclass, field
+from datetime import date, datetime, timezone
 
-from . import db, readai
-from .clients import llm
+from . import readai
+from .clients import gdocs as gdocs_default
+from .clients import llm as llm_default
+from .clients.erp import ErpGateway
+from .domain import contract as contract_domain
 from .domain.company import company_key
-from .domain.contract import build_fields, match_campaign
-from .settings import Settings
 
-AGG_CAP = 120_000
+_STUB_FOLDER = "1tB2BLuQcWhYqStsR9vZlVshAB_OQKa_M"
 
 
 @dataclass(frozen=True)
 class RunOptions:
+    meeting: dict = field(default_factory=dict)  # Read.ai webhook body
     live: bool = False
     use_llm: bool = True
 
 
-def handle_meeting(settings: Settings, opts: RunOptions, body: dict, today: date | None = None) -> dict:
-    today = today or datetime.now().date()
-    report: list[str] = []
+def _drop_none(d: dict) -> dict:
+    return {k: v for k, v in d.items() if v not in (None, "")}
 
-    def log(m: str) -> None:
-        print(m, flush=True)
-        report.append(f"- {m}")
 
-    adapted = readai.adapt(body)
-    signal = (llm.offline_signal(adapted["text"]) if not opts.use_llm
-              else llm.signal_extract(settings, adapted["text"]))
-    name = signal.get("companyName") or adapted["title"]
-    key = company_key(name)
-    sign_now = str(signal.get("contractSigningMentioned")).lower() == "true" or signal.get("contractSigningMentioned") is True
-    log(f"[signal] {name!r} key={key} niche={signal.get('niche')!r} "
-        f"country={signal.get('country')!r} signNow={sign_now}")
+def run(settings, opts: RunOptions, erp: ErpGateway, llm=llm_default, gdocs=gdocs_default) -> dict:
+    run_id = datetime.now(timezone.utc).strftime("%Y-%m-%d-%H%M")
+    meeting = opts.meeting or {}
+    adapted = readai.adapt(meeting)
+    text = adapted.get("text", "")
+    title = adapted.get("title", "")
+    meeting_id = adapted.get("meetingId", "")
 
-    conn = db.connect(settings.database_url)
-    meeting_row = {
-        "company_key": key, "company_name": name, "country": signal.get("country", ""),
-        "niche": signal.get("niche", ""), "meeting_id": adapted["meeting_id"],
-        "meeting_date": today, "title": adapted["title"],
-        "transcript": adapted["text"][:45_000], "sign_now": sign_now,
-        "meeting_outcome": signal.get("meetingOutcome", ""),
-        "cooperation_term": signal.get("cooperationTerm", ""),
-    }
-    if opts.live:
-        db.log_meeting(conn, meeting_row)
-        log("[log] meeting appended to meetings table")
-    else:
-        log("[log] (dry) would append meeting row")
+    signal = llm.signal_extract(settings, text) if opts.use_llm else llm.offline_signal(text)
+    company_name = str(signal.get("companyName") or "").strip()
+    country = str(signal.get("country") or "").strip()
+    niche = str(signal.get("niche") or "").strip()
+    cs = signal.get("contractSigningMentioned")
+    sign_now = cs is True or str(cs).strip().lower() == "true"
+    ck = company_key(company_name or title)
 
-    result = {"company_key": key, "sign_now": sign_now, "contract": None}
+    result: dict = {"runId": run_id, "mode": "live" if opts.live else "dry",
+                    "companyKey": ck, "companyName": company_name, "signNow": sign_now, "status": "ok"}
+
     if not sign_now:
-        log("[gate] not a signing — done")
-        _write_report(settings, key, report)
-        conn.close()
-        return result
+        return {**result, "status": "no_signing", "action": "skipped"}
 
-    # signing path — aggregate the company's meeting history
-    history = db.company_history(conn, key) if opts.live else [meeting_row]
-    if opts.live and db.any_processed(conn, key):
-        log("[idempotency] company already has a generated contract — halt")
-        _write_report(settings, key, report)
-        conn.close()
-        return result
+    lead_id = str(meeting.get("leadId") or meeting.get("lead_id") or "")
+    customer_id = str(meeting.get("customerId") or meeting.get("customer_id") or "")
+    aggregate_text = text
 
-    agg_parts, niche, country = [], "", ""
-    for m in history:
-        agg_parts.append(f"=== {m.get('meeting_date')} | {m.get('title','')} ===\n{m.get('transcript','')}")
-        if m.get("sign_now"):
-            niche = niche or m.get("niche", "")
-            country = country or m.get("country", "")
-    niche = niche or signal.get("niche", "")
-    country = country or signal.get("country", "")
-    aggregate_text = "\n\n".join(agg_parts)[:AGG_CAP]
+    deal = llm.deal_extract(settings, aggregate_text) if opts.use_llm else {}
+    campaigns = erp.list_active_campaigns()
+    camp = contract_domain.match_campaign(niche, country, campaigns) or {}
+    campaign_id = str(camp.get("id") or "")
+    folder_id = camp.get("folderId") or _STUB_FOLDER
+    template_asset_id = camp.get("templateAssetId") or ""
 
-    deal = ({"companyName": name} if not opts.use_llm
-            else llm.deal_extract(settings, aggregate_text) or {"companyName": name})
-    campaign = match_campaign(niche, country, db.fetch_campaigns(conn))
-    log(f"[campaign] niche={niche!r} country={country!r} -> "
-        f"{('campaign ' + str(campaign['id'])) if campaign else 'NO MATCH (stub)'}")
+    existing = erp.get_contracts(lead_id, campaign_id)
+    if any(str(c.get("status", "")).upper() in ("GENERATED", "SIGNED") for c in existing):
+        return {**result, "status": "exists", "action": "skipped_existing", "campaignId": campaign_id}
 
-    built = build_fields(deal, aggregate_text, niche, country, today)
-    log(f"[contract] template={built['template_name']} file={built['file_base']}")
-    log(f"    fields: CLIENT_NAME={built['fields']['CLIENT_NAME']!r} "
-        f"SIGN_CITY={built['fields']['SIGN_CITY']!r}")
+    built = contract_domain.build_fields(
+        deal, aggregate_text, niche or camp.get("niche") or "DEFAULT",
+        country or camp.get("country") or "Poland", date.today(),
+    )
+    result.update({"campaignId": campaign_id, "templateName": built["template_name"],
+                   "fileBase": built["file_base"], "clientName": built["fields"]["CLIENT_NAME"],
+                   "posted": False})
 
-    pdf_ref = None
     if opts.live:
-        from .clients import gdocs
-        # n8n stored PDFs in the campaign Drive folder; here that id would come from the
-        # campaign row when wired up. Requires a folder id — left to deployment config.
-        folder_id = (campaign or {}).get("drive_folder_id")
-        if folder_id:
-            pdf_ref = gdocs.generate_contract_pdf(
-                settings, built["template_name"], folder_id, built["file_base"], built["fields"])
-            db.record_contract(conn, key, name, (campaign or {}).get("id"),
-                               built["template_name"], pdf_ref, built["fields"])
-            db.mark_processed(conn, key)
-            log(f"[pdf] generated + stored ({pdf_ref}); company locked")
-        else:
-            log("[pdf] no Drive folder configured for campaign — plan only, not generated")
+        drive_url = gdocs.generate_contract_pdf(
+            settings, built["template_name"], folder_id, built["file_base"], built["fields"])
+        contract = erp.record_contract(_drop_none({
+            "leadId": lead_id, "customerId": customer_id, "campaignId": campaign_id,
+            "templateAssetId": template_asset_id, "signingMeetingId": meeting_id,
+            "status": "GENERATED", "driveUrl": drive_url,
+        }))
+        contract_id = str(contract.get("id") or contract.get("contractId") or "")
+        if contract_id:
+            erp.mark_signed(contract_id, _drop_none({
+                "status": "SIGNED", "signedAt": datetime.now(timezone.utc).isoformat(),
+                "cooperationTerm": signal.get("cooperationTerm") or "",
+            }))
+        result["posted"] = True
+        result["action"] = "generated_signed"
+        result["driveUrl"] = drive_url
     else:
-        log("[pdf] (dry) would generate + store contract PDF")
+        result["action"] = "planned"
 
-    result["contract"] = {"template": built["template_name"], "file_base": built["file_base"],
-                          "campaign_id": (campaign or {}).get("id"), "pdf_ref": pdf_ref}
-    _write_report(settings, key, report)
-    conn.close()
     return result
-
-
-def _write_report(settings: Settings, key: str, lines: list[str]) -> None:
-    run_id = "cm-" + datetime.now().strftime("%Y-%m-%d-%H%M%S") + "-" + (key or "x")[:12]
-    path = Path(settings.report_dir) / f"{run_id}.md"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f"# ContractMaker {run_id}\n\n" + "\n".join(lines) + "\n")
-    print(f"Run report: {path}")

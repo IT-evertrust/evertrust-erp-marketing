@@ -1,11 +1,17 @@
 [project]
 name = "ammoforge"
+description = "AMMO FORGE — ERP-native campaign template forge (mirrors n8n AMMO FORGE (PG) v2 rDLhY3sqi6U9xK6t)"
 version = "0.1.0"
-description = "AMMO FORGE — demand-driver news intel + template forge (port of n8n WfBtXiyyFq8Ktr9P)"
 requires-python = ">=3.11"
-dependencies = ["psycopg[binary]>=3.1"]
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "httpx>=0.27",
+    "pydantic>=2",
+]
 
 [project.optional-dependencies]
+# Only needed for real LLM forging — dry-run with --no-llm works without these.
 live = ["openai>=1.30"]
 dev = ["pytest>=8.0"]
 

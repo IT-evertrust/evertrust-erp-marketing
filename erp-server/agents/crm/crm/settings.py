@@ -1,3 +1,5 @@
+"""Run configuration for CRM Customer. Reads the central agents .env; talks to the ERP machine API.
+Pure ERP agent — no LLM/Gmail."""
 from __future__ import annotations
 
 import os
@@ -21,13 +23,14 @@ def _load_dotenv() -> None:
 
 @dataclass(frozen=True)
 class Settings:
-    database_url: str
+    erp_base_url: str = "http://localhost:3001"
+    arsenal_token: str = ""
     report_dir: str = str(PACKAGE_ROOT / "runs")
 
 
 def load_settings() -> Settings:
     _load_dotenv()
-    db = os.environ.get("DATABASE_URL", "")
-    if not db:
-        raise SystemExit("DATABASE_URL is not set. Put it in crm/.env or the environment.")
-    return Settings(database_url=db)
+    return Settings(
+        erp_base_url=os.environ.get("ERP_BASE_URL", "http://localhost:3001"),
+        arsenal_token=os.environ.get("ARSENAL_TOKEN", os.environ.get("ARSENAL_INGEST_TOKEN", "")),
+    )

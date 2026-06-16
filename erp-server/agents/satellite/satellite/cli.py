@@ -1,60 +1,50 @@
-"""CLI. Dry-run by default (research happens, nothing is written to the DB).
+"""CLI for Satellite. Dry-run by default (research + build prospects, writes nothing).
+--live bulk-posts prospects to the ERP + run callback.
 
-    python -m satellite --campaign "DEMO PL CYBERSECURITY" --max-queries 6 --no-llm
-    python -m satellite --campaign "PL CYBERSECURITY" --live
+    python -m satellite --campaign-id <id>                 # dry-run
+    python -m satellite --campaign-id <id> --no-llm        # offline (no gateway/search)
+    python -m satellite --campaign-id <id> --max-segments 4
+    python -m satellite --campaign-id <id> --live          # bulk-post to ERP
 """
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 
+from .clients.erp import ErpClient
+from .clients.search import HttpFetcher, OfflineFetcher, OfflineSearch, SearxngClient
 from .pipeline import RunOptions, run
 from .settings import load_settings
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="satellite", description="LEAD SATELLITE research run")
-    parser.add_argument("--campaign", required=True, help="campaign name (exact, case-insensitive)")
-    parser.add_argument("--live", action="store_true", help="insert leads into the DB")
-    parser.add_argument("--force", action="store_true", help="hunt even if leads already exist")
-    parser.add_argument("--no-llm", action="store_true",
-                        help="offline extraction — accepts everything, testing only")
-    parser.add_argument("--queries-per-city", type=int, default=2)
-    parser.add_argument("--max-queries", type=int, default=600)
-    parser.add_argument("--max-candidates", type=int, default=1000)
-    parser.add_argument("--max-cities", type=int, default=0, help="0 = unlimited")
-    parser.add_argument("--extract-batch-size", type=int, default=8)
-    parser.add_argument("--fast", action="store_true",
-                        help="drop SERP politeness delay to 0.4s (testing only)")
-    args = parser.parse_args(argv)
+    p = argparse.ArgumentParser(prog="satellite", description="LEAD SATELLITE — hunt prospects")
+    p.add_argument("--campaign-id", required=True)
+    p.add_argument("--live", action="store_true", help="bulk-post prospects to the ERP (default: dry)")
+    p.add_argument("--no-llm", action="store_true", help="offline deterministic research (no gateway)")
+    p.add_argument("--max-segments", type=int, default=None)
+    args = p.parse_args(argv)
 
     settings = load_settings()
-    if args.fast:
-        object.__setattr__(settings, "serp_delay_s", 0.4)
-    if args.live and args.no_llm:
-        raise SystemExit("--live with --no-llm is forbidden: offline extraction is unjudged.")
-
     opts = RunOptions(
-        campaign=args.campaign,
-        live=args.live,
-        force=args.force,
-        use_llm=not args.no_llm,
-        queries_per_city=args.queries_per_city,
-        max_queries=args.max_queries,
-        max_candidates=args.max_candidates,
-        max_cities=args.max_cities,
-        extract_batch_size=args.extract_batch_size,
+        campaign_id=args.campaign_id, live=args.live, use_llm=not args.no_llm,
+        max_segments=args.max_segments,
     )
+    erp = ErpClient(settings.erp_base_url, settings.arsenal_token)
+    if args.no_llm:
+        search, fetcher = OfflineSearch(), OfflineFetcher()
+    else:
+        search, fetcher = SearxngClient(settings.searxng_url, settings.arsenal_token), HttpFetcher()
     try:
-        run(settings, opts)
-        return 0
-    except SystemExit:
-        raise
-    except Exception:
-        import traceback
-
-        traceback.print_exc()
-        return 1
+        result = run(settings, opts, erp, search, fetcher)
+        print(json.dumps(result, indent=2))
+        return 0 if result.get("status") in ("ok", "no_targets", "no_segments") else 1
+    finally:
+        for gw in (erp, search, fetcher):
+            close = getattr(gw, "close", None)
+            if callable(close):
+                close()
 
 
 if __name__ == "__main__":

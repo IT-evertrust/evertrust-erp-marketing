@@ -1,148 +1,87 @@
-"""Score one sales-meeting transcript: adapt -> validate -> resolve persona -> build
-system message -> LLM (or offline) -> parse -> render -> persist (or plan-only).
+"""Sales Agent core — the function the ERP route calls: run(settings, opts, erp, llm) -> dict.
 
-Dry-run by default: writes nothing unless opts.live. --no-llm uses the deterministic offline
-stub. Fixes baked in:
-  - persona resolution surfaces fallback_first loudly (no silent mis-scoring)
-  - parse failure -> error_log + return error result, never crash, never write a row
-  - clean meeting_analyses column set
-  - source routing: source=='erp' returns the analysis JSON only (no persist); else persist.
+Faithful to n8n workflow OUNbboRQNqch5USk (SALES AGENT (PG)): validate transcript -> GET
+/personas + resolve persona -> Hormozi-lens coach (LLM, strict JSON) -> parse. Then route by
+source: 'erp' returns the analysis JSON only; otherwise render a report + POST /meeting-analyses.
+
+Dry-run (default): analyze, but do NOT persist. --live persists (for non-erp sources).
+Reuses the existing transcript/rubric/parse/render/llm modules; only the data layer is the ERP.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date, datetime
-from pathlib import Path
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 
-from . import db, readai
-from .clients import llm
-from .domain import render
-from .domain.parse import ParseError, parse_analysis_json
-from .domain.rubric import build_system_message
-from .domain.transcript import validate_transcript
-from .settings import Settings
+from .clients import llm as llm_default
+from .clients.erp import ErpGateway
+from .domain import parse, render, rubric, transcript
 
 
 @dataclass(frozen=True)
 class RunOptions:
+    transcript: str = ""          # transcript text (chatInput)
+    persona: str = "Alex Hormozi"
+    source: str = "erp"           # 'erp' (return JSON) | 'readai' | 'manual' (persist)
     live: bool = False
     use_llm: bool = True
 
 
-def score(settings: Settings, opts: RunOptions, body: dict, today: date | None = None) -> dict:
-    today = today or datetime.now().date()
-    today_str = today.strftime("%Y-%m-%d")
-    report: list[str] = []
+def _resolve_persona(personas: list[dict], target_name: str) -> tuple[str, str]:
+    """Port of 'Resolve Persona': exact -> substring -> first. Returns (prompt, name)."""
+    def norm(s):
+        return str(s or "").lower().strip()
 
-    def log(m: str) -> None:
-        print(m, flush=True)
-        report.append(f"- {m}")
+    target = norm(target_name)
+    match = next((p for p in personas if norm(p.get("name") or p.get("persona_name")) == target), None)
+    if not match:
+        match = next((p for p in personas if target and target in norm(p.get("name") or p.get("persona_name"))), None)
+    if not match and personas:
+        match = personas[0]
+    if not match:
+        raise ValueError("No personas returned from ERP /personas")
+    prompt = match.get("prompt") or match.get("body") or match.get("text") or ""
+    return prompt, (match.get("name") or match.get("persona_name") or target_name)
 
-    # 1. adapt Read.ai/ERP webhook body -> chatInput + persona + source
-    adapted = readai.adapt(body)
-    if adapted.get("_readai_error"):
-        log(f"[adapt] missing transcript: {adapted['_readai_error']}")
-    source = adapted["source"]
 
-    # 2. validate
-    v = validate_transcript(adapted["chatInput"], adapted["active_persona_name"], source)
-    if not v.valid:
-        log(f"[validate] INVALID — {v.reason} (no write)")
-        _write_report(settings, source, report)
-        return {"valid": False, "error": v.reason, "detail": v.stats, "source": source}
-    log(f"[validate] ok — words={v.stats['wordCount']} turns={v.stats['turns']} "
-        f"primaryShare={v.stats['primaryShare']:.2f} flags={v.flags or 'none'}")
+def run(settings, opts: RunOptions, erp: ErpGateway, llm=llm_default) -> dict:
+    run_id = datetime.now(timezone.utc).strftime("%Y-%m-%d-%H%M")
+    result: dict = {"runId": run_id, "mode": "live" if opts.live else "dry", "source": opts.source}
 
-    # A DB connection is opened only when we need one (live, or any DB-backed lookup).
-    # Kept open across persona-resolution + persist so a single autocommit connection
-    # serves the whole run; closed in the finally below.
-    conn = None
-    need_db = opts.live or opts.use_llm
-    if need_db:
-        conn = db.connect(settings.database_url)
+    val = transcript.validate_transcript(opts.transcript, opts.persona, opts.source)
+    if not val.valid:
+        return {**result, "status": "invalid", "valid": False, "reason": val.reason}
+
+    personas = erp.get_personas()
+    persona_prompt, persona_name = _resolve_persona(personas, val.active_persona_name or opts.persona)
+    system = rubric.build_system_message(persona_prompt)
+
+    raw = (llm.sales_coach(settings, system, val.agent_input) if opts.use_llm
+           else llm.offline_coach(val.transcript))
     try:
-        return _score_with_conn(settings, opts, body, today_str, adapted, source, v,
-                                conn, log, report)
-    finally:
-        if conn is not None:
-            try:
-                conn.close()
-            except Exception:
-                pass
+        analysis = parse.parse_analysis_json(raw)
+    except parse.ParseError as exc:
+        return {**result, "status": "error", "reason": str(exc)}
 
+    result["persona"] = persona_name
+    result["status"] = "ok"
 
-def _score_with_conn(settings, opts, body, today_str, adapted, source, v, conn, log, report):
-    # 3. resolve persona (DB) — fail loud on fallback_first, never silently mis-score
-    persona_name = v.active_persona_name or "Alex Hormozi"
-    persona_prompt = ""
-    if conn is not None:
-        match = db.resolve_persona(conn, persona_name)
-        if match is None:
-            log("[persona] ERROR — no persona docs found in personas table")
-            return {"valid": False, "error": "no_personas", "source": source}
-        persona_name = match.persona_name
-        persona_prompt = match.prompt
-        if match.match_type == "fallback_first":
-            log(f"[persona] WARNING — requested {match.requested_persona!r} had no exact/"
-                f"substring match; FELL BACK to first persona {persona_name!r} "
-                f"(match_type=fallback_first). Scoring may be under the wrong persona.")
-        else:
-            log(f"[persona] resolved {match.requested_persona!r} -> {persona_name!r} "
-                f"(match_type={match.match_type})")
-    else:
-        log("[persona] (offline) no DB lookup; using requested name + offline stub")
+    # ERP-source callers want the raw analysis JSON, no persistence.
+    if opts.source == "erp":
+        return {**result, "analysis": analysis, "persisted": False}
 
-    # 4. build system message (persona prompt + VERBATIM Hormozi rubric + strict format)
-    system = build_system_message(persona_prompt)
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    stats = {**(val.stats or {}), "transcript": val.transcript, "source": val.source}
+    row = render.build_row(analysis, stats, persona_name, today)
+    report = render.build_report(analysis, row, persona_name, val.flags, val.stats or {})
 
-    # 5. LLM (or offline stub)
-    if opts.use_llm:
-        raw = llm.sales_coach(settings, system, v.agent_input)
-        log("[llm] sales_coach pass complete")
-    else:
-        raw = llm.offline_coach(v.transcript)
-        log("[llm] (offline) deterministic stub analysis")
+    row_dict = asdict(row)
+    row_dict.update({"report_html": report, "transcript": val.transcript,
+                     "persona": persona_name, "generated_at": datetime.now(timezone.utc).isoformat()})
 
-    # 6. parse defensively — on failure: error_log + return error, no crash, no row
-    try:
-        analysis = parse_analysis_json(raw)
-    except ParseError as e:
-        log(f"[parse] FAILED — {e}; recording to error_log, skipping write")
-        if opts.live and conn is not None:
-            db.log_error(conn, source, "", "parse_analysis_json", str(e))
-        _write_report(settings, source, report)
-        return {"valid": True, "parsed": False, "error": "parse_failed",
-                "detail": str(e), "source": source}
-
-    # 7. render the clean row + report
-    stats = {**v.stats, "transcript": v.transcript, "source": source}
-    row = render.build_row(analysis, stats, persona_name, today_str)
-    report_html = render.build_report(analysis, row, persona_name, v.flags, v.stats)
-    log(f"[render] row: client={row.client_name!r} ae={row.ae_name!r} "
-        f"perf={row.performance_score} client_score={row.client_score}")
-
-    result = {"valid": True, "parsed": True, "source": source,
-              "analysis": analysis, "row": row.as_dict()}
-
-    # 8. source routing: erp -> return JSON only; else -> persist (when live)
-    if source == "erp":
-        log("[route] source=='erp' -> return analysis JSON only, no persist")
-    elif opts.live:
-        generated_at = datetime.now()
-        new_id = db.insert_meeting_analysis(conn, row.as_dict(), v.transcript,
-                                            report_html, generated_at)
-        log(f"[persist] meeting_analyses row inserted id={new_id}")
-        result["meeting_analysis_id"] = new_id
-    else:
-        log("[persist] (dry) would insert meeting_analyses row")
-
-    _write_report(settings, source, report)
+    result["persisted"] = False
+    if opts.live:
+        erp.save_meeting_analysis(row_dict)
+        result["persisted"] = True
+    result["row"] = {"client_name": row.client_name, "performance_score": row.performance_score,
+                     "client_score": row.client_score, "summary": row.summary}
     return result
-
-
-def _write_report(settings: Settings, source: str, lines: list[str]) -> None:
-    run_id = "sa-" + datetime.now().strftime("%Y-%m-%d-%H%M%S") + "-" + (source or "x")[:12]
-    path = Path(settings.report_dir) / f"{run_id}.md"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f"# Sales Agent {run_id}\n\n" + "\n".join(lines) + "\n")
-    print(f"Run report: {path}")

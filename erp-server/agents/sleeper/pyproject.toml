@@ -1,12 +1,22 @@
 [project]
 name = "sleeper"
+description = "SLEEPER GRENADE — ERP-native snooze sweep + re-engage (mirrors n8n SLEEPER GRENADE (PG) cZDGIoudM6yg17kV)"
 version = "0.1.0"
-description = "SLEEPER GRENADE — snooze/suppression sweep (Python port of n8n workflow 4GgPmoulQDgDWtej, bugs fixed)"
 requires-python = ">=3.11"
-dependencies = ["psycopg[binary]>=3.1"]
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "httpx>=0.27",
+    "pydantic>=2",
+]
 
 [project.optional-dependencies]
-live = ["httpx>=0.27"]
+# Only needed for live re-engage drafting/sending — dry-run/--no-llm works without these.
+live = [
+    "openai>=1.30",
+    "google-api-python-client>=2.120",
+    "google-auth-oauthlib>=1.2",
+]
 dev = ["pytest>=8.0"]
 
 [tool.setuptools.packages.find]

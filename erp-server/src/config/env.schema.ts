@@ -61,6 +61,16 @@ export const EnvSchema = z.object({
   N8N_REACH_BAZOOKA_WEBHOOK_URL: z.string().default(''),
   N8N_REPLY_GLOCK_WEBHOOK_URL: z.string().default(''),
   N8N_SLEEPER_GRENADE_WEBHOOK_URL: z.string().default(''),
+
+  // Python-agent service base URLs (the ERP-native replacement for the n8n
+  // webhooks). When a stage's AGENT_*_URL is set it takes PRECEDENCE over the n8n
+  // webhook: ArsenalService POSTs to `${url}/<agent>/run` (live) and the agent
+  // posts its own /arsenal/runs/callback. Blank = use the n8n webhook fallback.
+  AGENT_LEAD_SATELLITE_URL: z.string().default(''),
+  AGENT_AMMO_FORGE_URL: z.string().default(''),
+  AGENT_REACH_BAZOOKA_URL: z.string().default(''),
+  AGENT_REPLY_GLOCK_URL: z.string().default(''),
+  AGENT_SLEEPER_GRENADE_URL: z.string().default(''),
   // (The daily Bazooka send time is now an ERP-editable setting in arsenal_settings,
   // not an env var — changeable in the UI without a redeploy.)
 

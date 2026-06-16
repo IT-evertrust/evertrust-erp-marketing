@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 
 @dataclass(frozen=True)
@@ -12,20 +12,18 @@ class Reply:
     from_email: str
     subject: str
     reply_text: str
-    account: str  # which inbox it arrived in: 'info' | 'hanna'
+    account: str  # which inbox it arrived in: 'info' | 'hanna' (also the reply identity)
 
 
 @dataclass(frozen=True)
 class Lead:
-    """The lead this reply belongs to, hydrated from Postgres (fixes the n8n gap where
-    these were all undefined)."""
-    id: int
-    campaign_id: int
+    """The prospect this reply belongs to, resolved from the ERP (GET /prospects?email=)."""
+    prospect_id: str
+    campaign_id: str
     company_name: str
     company_type: str
     email: str
     status: str
-    notes: str
     sender: str          # 'info' | 'hanna' — which identity replies to this lead
     niche: str
     project: str
@@ -36,7 +34,7 @@ class Lead:
 class Classification:
     """Parsed + derived output of the classify LLM call."""
     classification: str          # 'Interested' | 'Unsure' | 'Not Interested'
-    status: str                  # derived sheet status (the shared vocabulary)
+    status: str                  # derived status (shared vocabulary)
     ni_type: str = ""            # 'temporary' | 'permanent' | ''
     snooze_until: str = ""       # YYYY-MM-DD when temporary
     proposed_start: str = ""     # ISO 8601 if the lead named a time

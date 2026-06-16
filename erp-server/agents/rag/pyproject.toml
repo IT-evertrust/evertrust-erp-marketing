@@ -1,19 +1,18 @@
 [project]
 name = "rag"
+description = "RAG AGENT — ERP-native unsure-reply drafter (mirrors n8n RAG AGENT (PG) ffd3c2uRgkMLFaxT)"
 version = "0.1.0"
-description = "RAG AGENT — unsure-lead reply drafter (Python port of n8n workflow Ehl6IeZviaycfkSo)"
 requires-python = ">=3.11"
 dependencies = [
-    "psycopg[binary]>=3.1",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "httpx>=0.27",
+    "pydantic>=2",
 ]
 
 [project.optional-dependencies]
-live = [
-    "openai>=1.30",
-    "httpx>=0.27",
-    "google-api-python-client>=2.120",
-    "google-auth-oauthlib>=1.2",
-]
+# Only needed for real drafting — --no-llm offline path works without these.
+live = ["openai>=1.30"]
 dev = ["pytest>=8.0"]
 
 [tool.setuptools.packages.find]

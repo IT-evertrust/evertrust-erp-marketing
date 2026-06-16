@@ -24,7 +24,9 @@ def _service(settings, account: str):
 
     token_file = Path(settings.gmail_token_dir) / f"{account}.json"
     if not token_file.exists():
-        raise SystemExit(
+        # RuntimeError (not SystemExit) so a per-item send failure is caught by the
+        # pipeline's `except Exception`, logged FAILED, and the batch continues.
+        raise RuntimeError(
             f"No Gmail token for account '{account}'. Run: python -m bazooka.auth {account}"
         )
     creds = Credentials.from_authorized_user_file(str(token_file), SCOPES)

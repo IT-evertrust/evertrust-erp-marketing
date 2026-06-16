@@ -1,14 +1,17 @@
 [project]
 name = "satellite"
+description = "LEAD SATELLITE — ERP-native prospect hunter (mirrors n8n LEAD SATELLITE copy 6 (PG) dCGzrlpaxpxJanbJ)"
 version = "0.1.0"
-description = "LEAD SATELLITE — lead research pipeline (Python port of n8n workflow wKMX2cvDKlAc7p0N V2)"
 requires-python = ">=3.11"
 dependencies = [
-    "psycopg[binary]>=3.1",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
     "httpx>=0.27",
+    "pydantic>=2",
 ]
 
 [project.optional-dependencies]
+# Only needed for real lead research / email recovery — --no-llm offline path works without these.
 llm = ["openai>=1.30"]
 dev = ["pytest>=8.0"]
 

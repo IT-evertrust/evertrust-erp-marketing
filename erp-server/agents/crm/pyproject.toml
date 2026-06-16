@@ -1,9 +1,14 @@
 [project]
 name = "crm"
+description = "CRM Customer — ERP-native intake + graduation (mirrors n8n CRM Customer (PG) vNCqzVjOOhSD2Czb)"
 version = "0.1.0"
-description = "CRM — hot-leads intake + customer graduation (port of n8n s65rZ9hiuvVCbKu5 + Dddp6wSvw3rwEsOw)"
 requires-python = ">=3.11"
-dependencies = ["psycopg[binary]>=3.1"]
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "httpx>=0.27",
+    "pydantic>=2",
+]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]

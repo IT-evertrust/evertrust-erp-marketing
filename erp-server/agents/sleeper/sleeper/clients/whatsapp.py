@@ -5,7 +5,7 @@ def notify(settings, text: str) -> None:
     import httpx
 
     if not settings.whatsapp_api_key:
-        raise SystemExit("WHATSAPP_API_KEY is not set — required for live notifications.")
+        return  # best-effort: WhatsApp notifications are optional; skip when unconfigured
     payload = {
         "messaging_product": "whatsapp", "recipient_type": "individual",
         "to": settings.manager_whatsapp_number, "type": "text", "text": {"body": text},

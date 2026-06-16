@@ -1,63 +1,82 @@
-"""The sweep loop. One pass over all not-interested leads: route each, then re-engage
-due snoozes and archive+delete do-not-contacts. Dry-run default; --live arms writes."""
+"""Sleeper core — the function the ERP route calls: run(settings, opts, erp, llm, gmail, whatsapp).
+
+Faithful to n8n workflow cZDGIoudM6yg17kV (SLEEPER GRENADE (PG)):
+  GET /prospects?snoozeDue=true -> per prospect:
+    do-not-contact  -> POST /suppressions + PATCH status=DO_NOT_CONTACT  (row kept, never deleted)
+    otherwise       -> AI re-engage draft -> (approval) -> Gmail send -> POST /outreach-messages
+                       + PATCH status=RE_ENGAGED (lastContactedAt, followupCount+1)
+
+Dry-run (default): draft + decide, NO ERP writes, NO sends. --live arms suppression, send, writes.
+NOTE: the n8n WhatsApp send-and-wait approval gate is a manager-in-the-loop step; the ERP-native
+agent defers approval to the ERP/manager UI — in --live it sends after drafting.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from . import db
-from .domain.sweep import route_lead
-from .settings import TZ, Settings
+from .clients import llm as llm_default
+from .domain.models import Prospect
+
+TZ = "Europe/Berlin"
 
 
 @dataclass(frozen=True)
 class RunOptions:
     live: bool = False
+    use_llm: bool = True
+    limit: int = 100
 
 
-def run(settings: Settings, opts: RunOptions) -> dict:
+def run(settings, opts: RunOptions, erp, llm=llm_default, gmail=None, whatsapp=None) -> dict:
     now = datetime.now(ZoneInfo(TZ))
-    today = now.date()
-    run_id = "sleeper-" + now.strftime("%Y-%m-%d-%H%M%S")
-    report = [f"# Sleeper Grenade run {run_id} ({'live' if opts.live else 'dry'})", ""]
-    counts = {"reengage": 0, "delete": 0, "skip": 0}
+    run_id = now.strftime("%Y-%m-%d-%H%M")
+    counts = {"due": 0, "doNotContact": 0, "reengaged": 0, "skipped": 0, "errors": 0}
+    result: dict = {"runId": run_id, "mode": "live" if opts.live else "dry", "prospects": []}
 
-    def log(msg: str) -> None:
-        print(msg, flush=True)
-        report.append(f"- {msg}")
+    due = erp.get_snooze_due(opts.limit)
+    counts["due"] = len(due)
+    dnc_n = sum(1 for p in due if p.do_not_contact)
+    if opts.live and whatsapp is not None:
+        try:
+            whatsapp.notify(settings, f"Sleeper Grenade — run {run_id}\nDue {len(due)} "
+                                      f"(re-engage {len(due) - dnc_n}, do-not-contact {dnc_n})")
+        except Exception:
+            pass
 
-    conn = db.connect(settings.database_url)
-    targets = db.fetch_targets(conn)
-    log(f"[scan] {len(targets)} not-interested leads to evaluate")
-
-    for lead in targets:
-        action, detail = route_lead(lead["status"], today, lead.get("snooze_until"))
-        counts[action] += 1
-        if action == "reengage":
-            log(f"REENGAGE {lead['company_name']} <{lead['email']}> — {detail}")
+    for p in due:
+        entry = {"email": p.email, "prospectId": p.id, "company": p.company_name}
+        if p.do_not_contact:
             if opts.live:
-                db.reengage(conn, run_id, lead, detail)
-        elif action == "delete":
-            log(f"SUPPRESS {lead['company_name']} <{lead['email']}> — {detail} "
-                "(soft-suppress: do_not_contact=true)")
-            if opts.live:
-                db.archive_and_delete(conn, run_id, lead, detail)
-        else:
-            log(f"skip {lead['company_name']} <{lead['email']}> — {detail}")
+                try:
+                    erp.add_suppression(p.email, p.id)
+                    erp.patch_prospect(p.id, {"status": "DO_NOT_CONTACT"})
+                except Exception:
+                    counts["errors"] += 1
+            counts["doNotContact"] += 1
+            entry["action"] = "do_not_contact"
+            result["prospects"].append(entry)
+            continue
 
-    conn.close()
-    summary = (f"Sweep complete\nRe-engaged: {counts['reengage']} | "
-               f"Suppressed: {counts['delete']} | Left: {counts['skip']}")
-    log(f"[summary] {counts}")
-    if opts.live and (counts["reengage"] or counts["delete"]):
-        from .clients import whatsapp
-        whatsapp.notify(settings, summary)
+        try:
+            draft = llm.draft_reengage(settings, p) if opts.use_llm else llm.offline_reengage(p)
+        except ValueError as exc:
+            counts["errors"] += 1
+            entry["action"] = "draft_failed"
+            entry["reason"] = str(exc)
+            result["prospects"].append(entry)
+            continue
 
-    path = Path(settings.report_dir) / f"{run_id}.md"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(report) + "\n")
-    print(f"Run report: {path}")
-    print(f"Counts: {counts}")
-    return counts
+        entry["subject"] = draft.subject
+        if opts.live:
+            message_id, thread_id = gmail.send_text(settings, "hanna", p.email, draft.subject, draft.body)
+            erp.log_outreach(p.id, draft.subject, draft.body, message_id, thread_id)
+            erp.patch_prospect(p.id, {"status": "RE_ENGAGED", "lastContactedAt": now.isoformat(),
+                                      "followupCount": (p.followup_count or 0) + 1})
+        counts["reengaged"] += 1
+        entry["action"] = "reengaged"
+        result["prospects"].append(entry)
+
+    result["counts"] = counts
+    return result

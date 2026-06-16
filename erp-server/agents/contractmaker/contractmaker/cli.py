@@ -1,57 +1,41 @@
-"""CLI. Feeds a Read.ai meeting JSON (file or stdin) through the pipeline. Dry-run by
-default (logs + plan, no DB writes, no PDF). --live arms.
+"""CLI for ContractMaker. Feeds a Read.ai meeting JSON (file or stdin) through the pipeline.
+Dry-run by default (extract + match + build fields, no PDF/writes). --live arms PDF + ERP writes.
 
-    python -m contractmaker --meeting-file meeting.json
-    python -m contractmaker --meeting-file meeting.json --live
-    python -m contractmaker --sample            # built-in test meeting
+    python -m contractmaker --meeting-file mtg.json            # dry-run
+    cat mtg.json | python -m contractmaker --no-llm            # offline, from stdin
+    python -m contractmaker --meeting-file mtg.json --live      # generate + record + sign
 """
 from __future__ import annotations
 
 import argparse
 import json
 import sys
-import traceback
 
-from .pipeline import RunOptions, handle_meeting
+from .clients import gdocs, llm
+from .clients.erp import ErpClient
+from .pipeline import RunOptions, run
 from .settings import load_settings
-
-SAMPLE = {
-    "title": "EVERTRUST × Baltic Boxes — cooperation",
-    "summary": "Discussed container tender cooperation. Both sides agreed to sign the cooperation contract now.",
-    "session_id": "sample-001",
-    "transcript": {"speaker_blocks": [
-        {"speaker": {"name": "Hanna"}, "words": "Great, so we are aligned on the 3.5% commission."},
-        {"speaker": {"name": "Partner"}, "words": "Yes, Baltic Boxes Sp. z o.o. agrees to sign the contract today."},
-    ]},
-}
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(prog="contractmaker", description="ContractMaker meeting handler")
-    p.add_argument("--meeting-file", help="path to a Read.ai webhook body JSON")
-    p.add_argument("--sample", action="store_true", help="use the built-in sample meeting")
-    p.add_argument("--live", action="store_true", help="arm DB writes + PDF generation")
-    p.add_argument("--no-llm", action="store_true", help="offline signing heuristic (testing)")
+    p = argparse.ArgumentParser(prog="contractmaker", description="ContractMaker — generate signed contract")
+    p.add_argument("--meeting-file", help="path to a Read.ai meeting JSON (else read stdin)")
+    p.add_argument("--live", action="store_true", help="generate PDF + record/sign in ERP (default: dry)")
+    p.add_argument("--no-llm", action="store_true", help="offline extraction (no gateway)")
     args = p.parse_args(argv)
 
-    if args.live and args.no_llm:
-        raise SystemExit("--live with --no-llm is forbidden: offline signing detection is unjudged.")
-    if args.sample:
-        body = SAMPLE
-    elif args.meeting_file:
-        body = json.loads(open(args.meeting_file).read())
-    else:
-        raise SystemExit("Provide --meeting-file PATH or --sample.")
+    raw = open(args.meeting_file).read() if args.meeting_file else sys.stdin.read()
+    meeting = json.loads(raw) if raw.strip() else {}
 
     settings = load_settings()
+    opts = RunOptions(meeting=meeting, live=args.live, use_llm=not args.no_llm)
+    erp = ErpClient(settings.erp_base_url, settings.arsenal_token)
     try:
-        handle_meeting(settings, RunOptions(live=args.live, use_llm=not args.no_llm), body)
+        result = run(settings, opts, erp, llm, gdocs)
+        print(json.dumps(result, indent=2))
         return 0
-    except SystemExit:
-        raise
-    except Exception:
-        traceback.print_exc()
-        return 1
+    finally:
+        erp.close()
 
 
 if __name__ == "__main__":

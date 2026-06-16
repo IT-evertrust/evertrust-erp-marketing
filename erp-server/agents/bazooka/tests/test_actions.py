@@ -1,10 +1,17 @@
-"""Decision matrix (ERP edition): followup_count -> action + template key."""
+"""Decision matrix, aligned to zyCTVLpZj3YyR2qV: status + followup_count + COLD-AGG."""
 from __future__ import annotations
 
 from bazooka.domain.actions import compute_action
-from bazooka.domain.models import Prospect
+from bazooka.domain.models import News, Prospect, Template
 
-TEMPLATES = {"coldEmail": "c", "followUp": "f", "finalPush": "x"}
+TEMPLATES = {
+    "COLD": Template("s", "cold body"),
+    "COLD-AGG": Template("s", "aggressive body"),
+    "FOLLOWUP": Template("s", "followup body"),
+    "FINALPUSH": Template("s", "finalpush body"),
+}
+NO_NEWS = News("", False)
+BAD_NEWS = News("isBadNews: true\n[BAD NEWS] something", True)
 
 
 def _p(email="a@b.com", fc=0, status="NEW"):
@@ -12,30 +19,41 @@ def _p(email="a@b.com", fc=0, status="NEW"):
 
 
 def test_new_is_cold():
-    a = compute_action(_p(fc=0), TEMPLATES)
-    assert a.action_type == "cold" and a.template_key == "coldEmail"
+    a = compute_action(_p(fc=0, status="NEW"), TEMPLATES, NO_NEWS)
+    assert a.action_type == "cold" and a.template_block == "COLD"
 
 
-def test_followup_one():
-    a = compute_action(_p(fc=1, status="EMAILED"), TEMPLATES)
-    assert a.action_type == "followup" and a.template_key == "followUp"
+def test_cold_agg_on_bad_news():
+    a = compute_action(_p(fc=0, status="NEW"), TEMPLATES, BAD_NEWS)
+    assert a.action_type == "cold" and a.template_block == "COLD-AGG"
 
 
-def test_finalpush_two_plus():
-    a = compute_action(_p(fc=3, status="EMAILED"), TEMPLATES)
-    assert a.action_type == "finalpush" and a.template_key == "finalPush"
+def test_cold_agg_falls_back_when_block_empty():
+    templates = {**TEMPLATES, "COLD-AGG": Template("", "")}
+    a = compute_action(_p(fc=0), templates, BAD_NEWS)
+    assert a.template_block == "COLD"
+
+
+def test_followup_by_count():
+    a = compute_action(_p(fc=1, status="NEW"), TEMPLATES, NO_NEWS)
+    assert a.action_type == "followup" and a.template_block == "FOLLOWUP"
+
+
+def test_followup_by_status_contacted():
+    a = compute_action(_p(fc=0, status="CONTACTED"), TEMPLATES, NO_NEWS)
+    assert a.action_type == "followup"
+
+
+def test_finalpush_by_count():
+    a = compute_action(_p(fc=2, status="NEW"), TEMPLATES, NO_NEWS)
+    assert a.action_type == "finalpush" and a.template_block == "FINALPUSH"
+
+
+def test_finalpush_by_status_emailed():
+    a = compute_action(_p(fc=0, status="EMAILED"), TEMPLATES, NO_NEWS)
+    assert a.action_type == "finalpush"
 
 
 def test_invalid_email_skips():
-    a = compute_action(_p(email="not-an-email"), TEMPLATES)
+    a = compute_action(_p(email="not-an-email"), TEMPLATES, NO_NEWS)
     assert a.action_type == "skip" and a.skip_reason == "INVALID_EMAIL"
-
-
-def test_no_template_skips():
-    a = compute_action(_p(fc=0), {})
-    assert a.action_type == "skip" and a.skip_reason == "NO_TEMPLATE"
-
-
-def test_followup_falls_back_to_cold_template():
-    a = compute_action(_p(fc=1), {"coldEmail": "c"})
-    assert a.action_type == "followup" and a.template_key == "coldEmail"

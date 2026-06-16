@@ -1,13 +1,13 @@
-"""Reach core — the run loop, ERP edition.
+"""Reach core — the run loop, faithful to n8n workflow zyCTVLpZj3YyR2qV
+(EVERTRUST - REACH BAZOOKA (PG) v2).
 
-This is the function a route calls: `run(settings, opts, erp) -> dict`. It pulls the
-ERP send-list, decides the action per prospect, personalises, (in live mode) sends via
-Gmail + writes back to the ERP, and returns a JSON-serialisable result the caller relays
-to the client. The ERP gateway is injected so tests feed canned data with no network.
+The function a route calls: `run(settings, opts, erp) -> dict`. Per active campaign it pulls
+the ERP config + send list, decides the action per prospect (cold/followup/finalpush, COLD-AGG
+on bad news), personalises via the LLM, and — in live mode — sends via Gmail (info@/hanna
+split), logs SENT/FAILED to /outreach-messages, PATCHes the prospect to EMAILED, fires ERP
+/notifications at each stage, and posts /arsenal/runs/callback at the end. Send-capped.
 
-Dry-run (default): no Gmail, no ERP writes, no run callback — just the fire plan + counts.
---live arms Gmail sends, POST /outreach-messages, PATCH /prospects/:id, and the
-POST /arsenal/runs/callback at the end.
+Dry-run (default): no Gmail, no ERP writes — just the fire plan + counts. --live arms it all.
 """
 from __future__ import annotations
 
@@ -19,7 +19,12 @@ from .clients import llm
 from .clients.erp import ErpGateway
 from .domain.actions import STATUS_AFTER_SEND, compute_action
 from .domain.hygiene import clean_email
-from .domain.models import RunCounts, parse_template
+from .domain.models import (
+    News,
+    RunCounts,
+    detect_bad_news,
+    parse_template_blocks,
+)
 from .report import RunReport
 from .settings import TZ, Settings
 
@@ -28,28 +33,45 @@ from .settings import TZ, Settings
 class RunOptions:
     live: bool = False
     campaign: str | None = None  # only this campaign (name/project, case-insensitive)
-    limit: int | None = None  # max emails this run (live training wheels)
+    limit: int | None = None  # overrides settings.max_sends_per_run for this run
     use_llm: bool = True  # False => offline placeholder fill (tests / isolated)
+
+
+def _dig(d: dict, *path):
+    cur = d
+    for key in path:
+        if not isinstance(cur, dict):
+            return None
+        cur = cur.get(key)
+    return cur
 
 
 def run(settings: Settings, opts: RunOptions, erp: ErpGateway) -> dict:
     now = datetime.now(ZoneInfo(TZ))
-    run_id = now.strftime("%Y-%m-%d-%H%M%S")
+    run_id = now.strftime("%Y-%m-%d-%H%M")
     mode = "live" if opts.live else "dry"
     report = RunReport(settings.report_dir, run_id, mode)
     counts = RunCounts()
     sends_done = 0
+    max_sends = opts.limit if opts.limit is not None else settings.max_sends_per_run
+    # LLM is optional: if the gateway isn't configured, degrade to deterministic
+    # placeholder fill rather than crash the batch (the template is still filled).
+    use_llm = opts.use_llm and bool(settings.litellm_base_url)
     result: dict = {"runId": run_id, "mode": mode, "campaigns": [], "messages": []}
 
-    def notify(text: str) -> None:
+    def notify(text: str, ntype: str, title: str, campaign_id: str | None = None) -> None:
         report.whatsapp(text, sent=opts.live)
-        result["messages"].append(text)
+        result["messages"].append({"type": ntype, "text": text})
         if opts.live:
+            try:
+                erp.post_notification(ntype, title, text, campaign_id)
+            except Exception:
+                pass
             try:
                 from .clients import whatsapp
 
                 whatsapp.notify(settings, text)
-            except Exception:  # WhatsApp must never break the run
+            except Exception:
                 pass
 
     campaigns = erp.fetch_active_campaigns()
@@ -58,13 +80,19 @@ def run(settings: Settings, opts: RunOptions, erp: ErpGateway) -> dict:
         campaigns = [c for c in campaigns if want in (c.name.lower(), c.project.lower())]
 
     if not campaigns:
-        notify(f"Bazooka — run {run_id}: no active campaigns")
+        notify(
+            f"Bazooka dry-fire — no ammo loaded\nRun ID: {run_id}\n\nNo ACTIVE campaigns.",
+            "REACH_BAZOOKA_RUN_START", "Reach Bazooka — run start",
+        )
         result["counts"] = counts.as_dict()
         result["emailsSent"] = 0
         result["reportPath"] = str(report.write())
         return result
 
-    notify(f"Locked and loaded — run {run_id}, {len(campaigns)} campaign(s)")
+    notify(
+        f"Locked and loaded\nRun ID: {run_id}\nLoading {len(campaigns)} mags now...",
+        "REACH_BAZOOKA_RUN_START", "Reach Bazooka — run start",
+    )
 
     for campaign in campaigns:
         report.section(f"Campaign: {campaign.name}")
@@ -72,38 +100,60 @@ def run(settings: Settings, opts: RunOptions, erp: ErpGateway) -> dict:
             cfg = erp.fetch_campaign_config(campaign.id)
         except Exception:
             cfg = {}
-        templates = cfg.get("templates") if isinstance(cfg, dict) else None
-        templates = templates or {}
-        niche = campaign.niche
-        if isinstance(cfg, dict) and isinstance(cfg.get("niche"), dict):
-            niche = cfg["niche"].get("name") or niche
+        cfg = cfg if isinstance(cfg, dict) else {}
+        tfield = cfg.get("templates") if isinstance(cfg.get("templates"), dict) else {}
+        cold_email = str(tfield.get("coldEmail") or "")
+        news_brief = str(tfield.get("newsBrief") or "")
+        templ_subject = str(cfg.get("templateSubject") or "")
+        templ_body = str(cfg.get("templateBody") or "")
+        template_asset_id = cfg.get("templateAssetId") or cfg.get("templateId")
+
         camp = replace(
             campaign,
-            niche=niche,
-            region=(cfg.get("region") if isinstance(cfg, dict) else None) or campaign.region,
-            project=(cfg.get("project") if isinstance(cfg, dict) else None) or campaign.project,
-            sender=(cfg.get("sender") if isinstance(cfg, dict) else None) or campaign.sender,
+            niche=str(cfg.get("niche") or campaign.niche),
+            region=str(cfg.get("city") or campaign.region),
+            project=str(cfg.get("project") or campaign.project),
+            sender=str(cfg.get("sender") or campaign.sender),
         )
-
         block = {"id": campaign.id, "name": campaign.name, "prospects": 0, "planned": []}
 
-        if not templates:
-            notify(f"Mag jammed — {campaign.name}: no templates configured, holstered.")
-            block["skippedReason"] = "no templates"
+        # completeness gate (n8n "Check Config Present")
+        missing = []
+        if not cfg:
+            missing.append("campaign config")
+        elif not cold_email and not (templ_subject or templ_body):
+            missing.append("templates")
+        if missing:
+            notify(
+                f"Mag jammed — missing ammo\nCampaign: {campaign.name}\n"
+                f"Missing: {', '.join(missing)}\nAction: holstered for today.",
+                "REACH_BAZOOKA_MISSING_FILE", "Reach Bazooka — missing file", campaign.id,
+            )
+            block["skippedReason"] = ", ".join(missing)
             result["campaigns"].append(block)
             continue
 
-        prospects = erp.fetch_send_list(campaign.id)
+        templates = parse_template_blocks(cold_email, templ_subject, templ_body)
+        news = News(news_brief, detect_bad_news(news_brief))
+
+        prospects = erp.fetch_send_list(campaign.id, settings.send_list_limit)
         block["prospects"] = len(prospects)
-        notify(f"{campaign.name} hot — {len(prospects)} eligible prospect(s)")
+        notify(
+            f"Mag loaded — campaign hot\nCampaign: {campaign.name}\n"
+            f"Rounds chambered: {len(prospects)}",
+            "REACH_BAZOOKA_CAMPAIGN_ACTIVATED", "Reach Bazooka — campaign activated", campaign.id,
+        )
+
+        cap = _dig(cfg, "automation", "leads", "dailySendCap")
+        cap = int(cap) if isinstance(cap, (int, float)) and cap else max_sends
 
         for p in prospects:
-            if opts.limit is not None and sends_done >= opts.limit:
-                block["planned"].append({"status": "stopped", "reason": f"limit {opts.limit}"})
-                break
+            if sends_done >= cap:
+                block["planned"].append({"status": "capped", "email": p.email})
+                continue
 
             email = clean_email(p.email)
-            action = compute_action(p, templates)
+            action = compute_action(p, templates, news)
             if action.action_type == "skip":
                 counts.skipped += 1
                 block["planned"].append(
@@ -112,9 +162,11 @@ def run(settings: Settings, opts: RunOptions, erp: ErpGateway) -> dict:
                 )
                 continue
 
-            template = parse_template(templates.get(action.template_key) or "", camp)
-            if opts.use_llm:
-                validation = llm.personalize(settings, p, camp, template, email)
+            template = templates.get(action.template_block) or templates["COLD"]
+            if use_llm:
+                validation = llm.personalize(
+                    settings, p, camp, template, action.template_block, news, email
+                )
             else:
                 validation = llm.offline_fill(p, camp, template, email)
 
@@ -124,6 +176,14 @@ def run(settings: Settings, opts: RunOptions, erp: ErpGateway) -> dict:
                     {"email": email, "company": p.company_name,
                      "status": "invalid", "reason": validation.reason}
                 )
+                if opts.live:
+                    try:
+                        erp.log_failed_outreach(
+                            p.id, validation.final_subject,
+                            validation.reason or "validation failed", template_asset_id,
+                        )
+                    except Exception:
+                        pass
                 continue
 
             sender = "hanna" if "hanna" in (camp.sender or "info").lower() else "info"
@@ -131,15 +191,30 @@ def run(settings: Settings, opts: RunOptions, erp: ErpGateway) -> dict:
             if opts.live:
                 from .clients import gmail
 
-                body_html = gmail.html_body(validation.final_body, settings.signature_img_url)
-                message_id, thread_id = gmail.send_html(
-                    settings, sender, email, validation.final_subject, body_html
-                )
-                erp.record_outreach(
-                    p.id, validation.final_subject, validation.final_body, message_id, thread_id
-                )
-                erp.update_prospect(p.id, STATUS_AFTER_SEND, p.followup_count + 1)
-                sent_status = "sent"
+                try:
+                    body_html = gmail.html_body(validation.final_body, settings.signature_img_url)
+                    message_id, thread_id = gmail.send_html(
+                        settings, sender, email, validation.final_subject, body_html
+                    )
+                    erp.record_outreach(
+                        p.id, validation.final_subject, validation.final_body,
+                        message_id, thread_id, template_asset_id,
+                    )
+                    erp.update_prospect(p.id, STATUS_AFTER_SEND, p.followup_count + 1)
+                    sent_status = "sent"
+                except Exception as exc:  # noqa: BLE001 — per-item failure must not abort the run
+                    try:
+                        erp.log_failed_outreach(
+                            p.id, validation.final_subject,
+                            f"gmail send failed: {exc}"[:280], template_asset_id,
+                        )
+                    except Exception:
+                        pass
+                    block["planned"].append(
+                        {"email": email, "company": p.company_name,
+                         "status": "failed", "reason": "gmail send failed"}
+                    )
+                    continue
 
             report.email(
                 to=email, sender=sender, action=action.action_type,
@@ -147,18 +222,20 @@ def run(settings: Settings, opts: RunOptions, erp: ErpGateway) -> dict:
             )
             block["planned"].append(
                 {"email": email, "company": p.company_name, "action": action.action_type,
-                 "sender": sender, "subject": validation.final_subject,
-                 "body": validation.final_body, "status": sent_status}
+                 "block": action.template_block, "sender": sender,
+                 "subject": validation.final_subject, "body": validation.final_body,
+                 "status": sent_status}
             )
             setattr(counts, action.action_type, getattr(counts, action.action_type) + 1)
             sends_done += 1
 
+        notify(
+            f"Shots fired\nCold: {counts.cold} | Follow-up: {counts.followup} | "
+            f"Final push: {counts.finalpush}\nMisfires (validation failed): {counts.invalid}",
+            "REACH_BAZOOKA_OUTBOUND_SUMMARY", "Reach Bazooka — outbound summary", campaign.id,
+        )
         result["campaigns"].append(block)
 
-    notify(
-        f"Shots fired — cold {counts.cold} | follow-up {counts.followup} | "
-        f"final {counts.finalpush} | skipped {counts.skipped} | invalid {counts.invalid}"
-    )
     if opts.live:
         try:
             erp.post_run_callback("SUCCESS", {"emailsSent": counts.emails_sent})

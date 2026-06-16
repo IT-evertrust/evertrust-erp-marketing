@@ -1,3 +1,4 @@
+"""Run configuration for AmmoForge. Reads the central agents .env; talks to the ERP machine API."""
 from __future__ import annotations
 
 import os
@@ -21,23 +22,22 @@ def _load_dotenv() -> None:
 
 @dataclass(frozen=True)
 class Settings:
-    database_url: str
+    erp_base_url: str = "http://localhost:3001"
+    arsenal_token: str = ""
     llm_base_url: str = ""
     llm_api_key: str = "sk-anything"
-    news_model: str = "hermes"        # n8n: hermes via LiteLLM gateway
-    forge_model: str = "deepseek"     # n8n: deepseek via LiteLLM gateway
+    research_model: str = "hermes"  # n8n AMMO FORGE (PG) v2 uses hermes for both steps
+    forge_model: str = "hermes"
     report_dir: str = str(PACKAGE_ROOT / "runs")
 
 
 def load_settings() -> Settings:
     _load_dotenv()
-    db = os.environ.get("DATABASE_URL", "")
-    if not db:
-        raise SystemExit("DATABASE_URL is not set. Put it in ammoforge/.env or the environment.")
     return Settings(
-        database_url=db,
-        llm_base_url=os.environ.get("LLM_BASE_URL", ""),
-        llm_api_key=os.environ.get("LLM_API_KEY", "sk-anything"),
-        news_model=os.environ.get("NEWS_MODEL", "hermes"),
-        forge_model=os.environ.get("FORGE_MODEL", "deepseek"),
+        erp_base_url=os.environ.get("ERP_BASE_URL", "http://localhost:3001"),
+        arsenal_token=os.environ.get("ARSENAL_TOKEN", os.environ.get("ARSENAL_INGEST_TOKEN", "")),
+        llm_base_url=os.environ.get("LLM_BASE_URL", os.environ.get("LITELLM_BASE_URL", "")),
+        llm_api_key=os.environ.get("LLM_API_KEY", os.environ.get("LITELLM_API_KEY", "sk-anything")),
+        research_model=os.environ.get("NEWS_MODEL", os.environ.get("FORGE_MODEL", "hermes")),
+        forge_model=os.environ.get("FORGE_MODEL", "hermes"),
     )

@@ -1,3 +1,4 @@
+"""Run configuration for Sales Agent. Reads the central agents .env; talks to the ERP machine API."""
 from __future__ import annotations
 
 import os
@@ -21,26 +22,24 @@ def _load_dotenv() -> None:
 
 @dataclass(frozen=True)
 class Settings:
-    database_url: str
+    erp_base_url: str = "http://localhost:3001"
+    arsenal_token: str = ""
     llm_base_url: str = ""
     llm_api_key: str = "sk-anything"
-    llm_model: str = "hermes"              # n8n 'local deep seek' = LiteLLM model "hermes"
-    # LLM call config — verbatim from §9 (local deep seek, the active model)
+    llm_model: str = "hermes"  # n8n SALES AGENT (PG) coach = hermes via LiteLLM
     llm_temperature: float = 0.2
     llm_max_tokens: int = 8000
-    llm_timeout: int = 180                 # seconds (n8n had 180000 ms)
+    llm_timeout: int = 180
     llm_max_retries: int = 2
     report_dir: str = str(PACKAGE_ROOT / "runs")
 
 
 def load_settings() -> Settings:
     _load_dotenv()
-    db = os.environ.get("DATABASE_URL", "")
-    if not db:
-        raise SystemExit("DATABASE_URL is not set. Put it in sales/.env or the environment.")
     return Settings(
-        database_url=db,
-        llm_base_url=os.environ.get("LLM_BASE_URL", ""),
-        llm_api_key=os.environ.get("LLM_API_KEY", "sk-anything"),
+        erp_base_url=os.environ.get("ERP_BASE_URL", "http://localhost:3001"),
+        arsenal_token=os.environ.get("ARSENAL_TOKEN", os.environ.get("ARSENAL_INGEST_TOKEN", "")),
+        llm_base_url=os.environ.get("LLM_BASE_URL", os.environ.get("LITELLM_BASE_URL", "")),
+        llm_api_key=os.environ.get("LLM_API_KEY", os.environ.get("LITELLM_API_KEY", "sk-anything")),
         llm_model=os.environ.get("LLM_MODEL", "hermes"),
     )

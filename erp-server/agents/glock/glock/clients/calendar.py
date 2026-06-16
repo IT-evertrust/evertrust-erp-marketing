@@ -21,7 +21,9 @@ def _service(settings):
     from pathlib import Path
     token_file = Path(settings.gmail_token_dir) / "calendar.json"
     if not token_file.exists():
-        raise SystemExit("No calendar token. Run the calendar consent flow first.")
+        # RuntimeError (not SystemExit) so the pipeline's `except Exception` catches it
+        # and degrades to busy=[] instead of aborting the whole run.
+        raise RuntimeError("No calendar token. Run the calendar consent flow first.")
     creds = Credentials.from_authorized_user_file(str(token_file), SCOPES)
     return build("calendar", "v3", credentials=creds, cache_discovery=False)
 

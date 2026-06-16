@@ -1,14 +1,17 @@
-"""Domain models — ERP edition.
+"""Domain models — ERP edition, aligned to n8n workflow zyCTVLpZj3YyR2qV
+(EVERTRUST - REACH BAZOOKA (PG) v2).
 
-Reach now reads/writes the EVERTRUST ERP machine API (prospects/campaigns/outreach),
-not Neon. So the lead row becomes a `Prospect` (ERP shape, status enum + followupCount)
-and templates come from the campaign config as named strings.
-Contract: AGENT-BLUEPRINTS/REACH-ERP-CONTRACT.md.
+Templates come from the ERP campaign config as a single `templates.coldEmail` string
+holding [COLD]/[COLD-AGG]/[FOLLOWUP]/[FINALPUSH] blocks (each Subject:/Body:); news from
+`templates.newsBrief`. A prospect is the ERP /prospects row.
 """
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+
+# template block names, matching the n8n workflow
+BLOCKS = ("COLD", "COLD-AGG", "FOLLOWUP", "FINALPUSH")
 
 
 @dataclass(frozen=True)
@@ -18,13 +21,11 @@ class Campaign:
     project: str = ""
     country: str = ""
     region: str = ""
-    sender: str = "info"  # 'info' | 'hanna' (Gmail routing key)
+    sender: str = "info"  # 'info' | 'hanna'
     niche: str = ""
 
     @property
     def city(self) -> str:
-        # ERP has no explicit city for the campaign; region is the closest carrier and
-        # is what the LLM prompt exposes as {{city}} (matches the n8n behaviour).
         return self.region
 
 
@@ -35,10 +36,11 @@ class Prospect:
     id: str
     email: str
     company_name: str = ""
+    company_type: str = ""
     website: str = ""
     city: str = ""
     country: str = ""
-    status: str = "NEW"  # NEW | EMAILED | REPLIED | RE_ENGAGED | ...
+    status: str = "NEW"  # NEW | EMAILED | REPLIED | RE_ENGAGED | CONTACTED | ...
     followup_count: int = 0
     last_contacted_at: str | None = None
 
@@ -53,19 +55,25 @@ class Template:
         return not (self.subject.strip() or self.body.strip())
 
 
+# block name -> Template
+Templates = dict[str, Template]
+
+
+@dataclass(frozen=True)
+class News:
+    body: str = ""
+    is_bad_news: bool = False
+
+
 @dataclass(frozen=True)
 class Action:
-    """Outcome of the decision matrix for one prospect."""
-
     action_type: str  # 'cold' | 'followup' | 'finalpush' | 'skip'
-    template_key: str | None = None  # the campaign.templates key to use
-    skip_reason: str = ""  # 'INVALID_EMAIL' | 'NO_TEMPLATE'
+    template_block: str | None = None  # 'COLD' | 'COLD-AGG' | 'FOLLOWUP' | 'FINALPUSH'
+    skip_reason: str = ""  # 'INVALID_EMAIL'
 
 
 @dataclass(frozen=True)
 class Validation:
-    """LLM (or offline) personalization result — mirrors the n8n JSON contract."""
-
     valid: bool
     reason: str
     final_subject: str
@@ -94,21 +102,47 @@ class RunCounts:
         }
 
 
-_SUBJECT_RE = re.compile(r"^\s*subject\s*:\s*(.*)$", re.IGNORECASE)
+# --- template / news parsing (ports the n8n "Parse Template Blocks" / "Parse News") ----
+
+def _extract_block(text: str, tag: str) -> Template:
+    pattern = re.compile(
+        r"\[" + tag + r"\]([\s\S]*?)(?=\n\[(?:COLD-AGG|COLD|FOLLOWUP|FINALPUSH)\]|$)",
+        re.IGNORECASE,
+    )
+    m = pattern.search(text)
+    if not m:
+        return Template("", "")
+    raw = m.group(1)
+    subj = re.search(r"Subject:\s*(.+)", raw, re.IGNORECASE)
+    body = re.search(r"Body:\s*([\s\S]+)", raw, re.IGNORECASE)
+    return Template(
+        subj.group(1).strip() if subj else "",
+        body.group(1).strip() if body else "",
+    )
 
 
-def parse_template(raw: str, campaign: Campaign) -> Template:
-    """ERP campaign.templates values are single strings. Support an optional leading
-    'Subject:' line; otherwise synthesise a personalisable default subject so the LLM
-    (or offline fill) still produces one."""
-    raw = raw or ""
-    lines = raw.splitlines()
-    if lines:
-        m = _SUBJECT_RE.match(lines[0])
-        if m:
-            body = "\n".join(lines[1:]).lstrip("\n")
-            if body[:5].lower() == "body:":
-                body = body.split(":", 1)[1].lstrip()
-            return Template(m.group(1).strip(), body)
-    default_subject = "{{companyName}} — German public tender opportunity"
-    return Template(default_subject, raw)
+def parse_template_blocks(
+    cold_email: str, fallback_subject: str = "", fallback_body: str = ""
+) -> Templates:
+    """Parse the campaign config `templates.coldEmail` string into the 4 blocks.
+    If it carries no [BLOCK] markers, the whole text becomes the COLD/FOLLOWUP/FINALPUSH
+    body (COLD-AGG empty) — same fallback as the n8n workflow."""
+    text = (cold_email or "").strip()
+    parsed = {tag: _extract_block(text, tag) for tag in BLOCKS}
+    if any(not parsed[t].is_empty for t in BLOCKS):
+        return parsed
+    base = Template(fallback_subject, text or fallback_body)
+    return {
+        "COLD": base,
+        "COLD-AGG": Template("", ""),
+        "FOLLOWUP": base,
+        "FINALPUSH": base,
+    }
+
+
+def detect_bad_news(news_text: str) -> bool:
+    text = news_text or ""
+    return bool(
+        re.search(r"isBadNews:\s*true", text, re.IGNORECASE)
+        or re.search(r"\[BAD NEWS", text, re.IGNORECASE)
+    )

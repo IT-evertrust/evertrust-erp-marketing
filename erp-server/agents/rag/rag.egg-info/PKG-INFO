@@ -1,13 +1,13 @@
 Metadata-Version: 2.4
 Name: rag
 Version: 0.1.0
-Summary: RAG AGENT — unsure-lead reply drafter (Python port of n8n workflow Ehl6IeZviaycfkSo)
+Summary: RAG AGENT — ERP-native unsure-reply drafter (mirrors n8n RAG AGENT (PG) ffd3c2uRgkMLFaxT)
 Requires-Python: >=3.11
-Requires-Dist: psycopg[binary]>=3.1
+Requires-Dist: fastapi>=0.110
+Requires-Dist: uvicorn>=0.29
+Requires-Dist: httpx>=0.27
+Requires-Dist: pydantic>=2
 Provides-Extra: live
 Requires-Dist: openai>=1.30; extra == "live"
-Requires-Dist: httpx>=0.27; extra == "live"
-Requires-Dist: google-api-python-client>=2.120; extra == "live"
-Requires-Dist: google-auth-oauthlib>=1.2; extra == "live"
 Provides-Extra: dev
 Requires-Dist: pytest>=8.0; extra == "dev"

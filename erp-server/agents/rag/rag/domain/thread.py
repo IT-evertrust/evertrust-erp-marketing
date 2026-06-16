@@ -44,6 +44,38 @@ def _extract_body(payload: dict) -> str:
     return ""
 
 
+def format_erp_thread(messages: list[dict], lead_email: str, *, cap: int = 20, body_cap: int = 2000) -> str:
+    """Port of the PG 'Build RAG Prompt' fmtThread: format ERP /outreach-messages rows into a
+    labeled transcript ([LEAD] for INBOUND / from-lead, else [EVERTRUST]). Oldest first, last 20."""
+    arr = messages if isinstance(messages, list) else []
+    le = (lead_email or "").lower()
+
+    def ts(m: dict) -> float:
+        for k in ("sentAt", "createdAt", "date"):
+            v = m.get(k)
+            if v:
+                try:
+                    from datetime import datetime
+                    return datetime.fromisoformat(str(v).replace("Z", "+00:00")).timestamp()
+                except ValueError:
+                    pass
+        return 0.0
+
+    ordered = sorted(arr, key=ts)[-cap:]
+    blocks = []
+    for m in ordered:
+        direction = str(m.get("direction") or "").upper()
+        frm = str(m.get("fromAddress") or m.get("from") or "").lower()
+        is_lead = direction == "INBOUND" or (le and le in frm)
+        label = "[LEAD]" if is_lead else "[EVERTRUST]"
+        when = str(m.get("sentAt") or m.get("createdAt") or m.get("date") or "")
+        from_disp = str(m.get("fromAddress") or m.get("from") or "")
+        subject = str(m.get("subject") or "")
+        body = str(m.get("body") or m.get("text") or m.get("bodySnippet") or m.get("snippet") or "").strip()[:body_cap]
+        blocks.append(f"--- {label} | {when} ---\nFrom: {from_disp}\nSubject: {subject}\n\n{body or '[no text content]'}")
+    return "\n\n".join(blocks) if blocks else "[no prior messages on file]"
+
+
 def build_thread_context(
     messages: list[dict],
     lead: UnsureLead,

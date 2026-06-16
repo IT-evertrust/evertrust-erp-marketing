@@ -1,178 +1,176 @@
-# Migration Plan: n8n → Local Agent Pipeline
+# Migration Plan: n8n (PG) workflows → ERP-native Python agents
 
-**Goal:** Run the EVERTRUST automation stack as local code on the mac-mini (the box already
-running LiteLLM + Ollama/hermes + SearXNG), with n8n workflows kept only as frozen blueprints.
-n8n stops being a runtime dependency.
+**Goal:** Reimplement the EVERTRUST automation agents as **Python backend logic that lives in
+the ERP and is invoked by it** — replacing the n8n workflows. Each agent mirrors its n8n
+**`(PG)`** workflow (the ERP-API rebuild), not the original Drive/Sheets workflow. The ERP
+(machine API + Postgres) is the single source of truth and owns orchestration, governance,
+state, and audit.
 
-**Date:** 2026-06-12
+**Last updated:** 2026-06-15
+
+> This supersedes the earlier "standalone mac-mini monorepo replacing n8n via Drive/Sheets +
+> SQLite" plan. That pivoted: the agents now sit inside `erp-server/agents/`, read/write the
+> **ERP machine API** (not Drive/Sheets/SQLite/Neon-direct), and are triggered **by the ERP**.
 
 ---
 
-## 1. What's actually in n8n today (inventory & triage)
+## 1. Architecture (how it actually works now)
 
-34 workflows, but most are copies, temps, and debug scaffolding. The canonical set to migrate:
+```
+client ── HTTP ──▶ ERP route (NestJS)  ──▶ agent service (Python, FastAPI)
+                        ▲                         │
+                        │   ERP machine API       │  reads send-list / config,
+                        └─── (x-arsenal-token) ◀──┘  writes outreach/prospect/notify/callback
+```
 
-| Workflow | Trigger | Status | Migration notes |
+- **Agents are on-demand backend logic.** The ERP triggers an arsenal stage → calls the agent
+  → the agent runs once, calls back, returns a structured result → the ERP records it. Same
+  trigger model as the n8n webhooks it replaces; agents sleep until called.
+- **Data layer = the ERP machine API** (`x-arsenal-token`). No Drive/Sheets reads, no SQLite,
+  no direct Neon. Google APIs (Gmail/Calendar/Docs) remain **only as side-effect clients**
+  (send mail, book meetings, render PDFs) — exactly as the `(PG)` workflows keep them.
+- **The ERP owns governance & state:** eligibility/`sendList`, cooldown, follow-up caps,
+  suppression, dedup, audit (`outreach_messages`, `arsenal_runs`, `notifications`). Agents
+  don't reimplement these — they consume the gated send-list and report results.
+- **Spec = the `(PG)` n8n workflow** for each agent (fetch with `n8n_get_workflow {mode:"full"}`).
+  Each agent's BLUEPRINT is rewritten to that `(PG)` reality before/with the code conversion.
+
+Location: `marketing-agent-workflows/erp-server/agents/<agent>/`. The repo root
+(`marketing-agent-workflows/`) is the ERP monorepo (erp-server / erp-client / packages / ai-stack).
+
+---
+
+## 2. The reach reference pattern (the template for every agent)
+
+`erp-server/agents/bazooka` (reach) is **done** and is the pattern to copy. Per agent:
+
+```
+<agent>/<agent>/
+├── clients/
+│   ├── erp.py        # ErpGateway Protocol + ErpClient (httpx, x-arsenal-token).
+│   │                 #   The ONLY data layer. Injectable so tests use a fake.
+│   ├── llm.py        # LiteLLM gateway call; prompt kept verbatim with the (PG) workflow;
+│   │                 #   offline_fill() deterministic path for --no-llm / tests.
+│   └── gmail.py / calendar.py / gdocs.py   # side-effects only, as the workflow needs
+├── domain/
+│   ├── models.py     # dataclasses matching the ERP shapes + parsing (e.g. template blocks)
+│   ├── actions.py    # the decision matrix — pure, unit-tested, verbatim port of the
+│   │                 #   workflow's "Compute Action" node
+│   └── hygiene.py    # shared validators (email cleaning, etc.)
+├── pipeline.py       # run(settings, opts, erp) -> dict   (the function the route calls)
+├── server.py         # FastAPI: POST /<agent>/run + /health; get_erp is an injectable dep
+├── settings.py       # reads the central .env (ERP_BASE_URL, ARSENAL_TOKEN, LLM, ...)
+└── cli.py            # manual/cron entry: dry-run default, --live, --campaign, --limit
+tests/
+├── test_actions.py        # decision matrix
+├── test_offline_fill.py   # placeholder/templating
+└── test_route_run.py      # route → agent → output via TestClient + FakeErp (dry + live writes)
+```
+
+Invariants the pattern enforces (carried from the n8n era):
+- **Dry-run is the default**; `--live` arms sends + ERP writes + the run callback.
+- **Structured return, not crashes:** the route returns a JSON result (counts + per-item plan)
+  even on empty input; per-item failures are caught and logged FAILED to the ERP, never abort
+  the run; a run-level failure posts an `ERROR` callback + notification.
+- **Governance is the ERP's**, consumed via `sendList`/config — agents don't re-derive it.
+- **LLM concurrency is bounded** (the LiteLLM box is small); agents loop prospects sequentially
+  or behind a small semaphore — never fan out unbounded LLM calls.
+- **Anti-fabrication** (satellite): ID-join, copy-only extraction — no invented data.
+- **db.py (Neon/psycopg) is deleted** once an agent is on `erp.py`.
+
+---
+
+## 3. Agent → canonical `(PG)` workflow
+
+| Agent | (PG) workflow | n8n id | nodes | status |
+|---|---|---|---|---|
+| bazooka (reach) | REACH BAZOOKA (PG) v2 | `zyCTVLpZj3YyR2qV` | 57 | ✅ done |
+| ammoforge | AMMO FORGE (PG) v2 | `rDLhY3sqi6U9xK6t` | 13 | ✅ done |
+| satellite | LEAD SATELLITE copy 6 (PG) | `dCGzrlpaxpxJanbJ` | 47 | ✅ done |
+| glock (reply) | REPLY GLOCK (PG) v2 | `5QkBzSzK1UdxiE96` | 74 | ✅ done |
+| sleeper | SLEEPER GRENADE (PG) | `cZDGIoudM6yg17kV` | 20 | ✅ done |
+| crm | CRM Customer (PG) | `vNCqzVjOOhSD2Czb` | 19 | ✅ done |
+| rag | RAG AGENT (PG) | `ffd3c2uRgkMLFaxT` | 13 | ✅ done |
+| contractmaker | ContractMaker (PG) | `wZWcjzx7fSbbsT7c` | 27 | ✅ done |
+| sales | SALES AGENT (PG) | `OUNbboRQNqch5USk` | 29 | ✅ done |
+
+Supporting (not agents): AIM v2 (PG) `QDvotfZeo03bZy7m` (campaign deploy); CAMPAIGNS LIST (ERP)
+`29sRw4nD3U4C5vtT`; NICHE ANALYTICS `jgOVy4Ox9fCtpT7S`; DATA BACKFILL (sheets→PG) `XFxlPdyRfTyO6KX9`.
+
+---
+
+## 4. Per-agent conversion recipe (repeatable, one at a time)
+
+For each agent, in order:
+
+1. **Fetch the spec** — `n8n_get_workflow { id, mode: "full" }` for the `(PG)` workflow.
+2. **Map it** — ERP endpoints called (+ payloads), the decision matrix, LLM prompts/models,
+   side-effects (Gmail/Calendar/Docs), notifications, run callback, send caps.
+3. **Rewrite the BLUEPRINT** (`AGENT-BLUEPRINTS/<agent>-BLUEPRINT.md`) to the `(PG)` reality
+   (it currently describes the Drive-era workflow).
+4. **Refactor the Python** to the reach pattern: `erp.py` gateway, `domain` (models + actions
+   verbatim), `clients` (LLM + needed side-effects), `pipeline.run(settings, opts, erp)`,
+   `server.py` route, `settings.py` (central `.env`). Delete `db.py`.
+5. **Tests** — unit (actions, templating) + `test_route_run.py` (TestClient + FakeErp): dry
+   (correct counts, zero writes) and live (correct ERP writes + callback). All green.
+6. **Live check** — you provide creds + real data; run the agent's `/…/run` against the local
+   ERP (`:3001`, ts-node) and verify output.
+
+**Conversion order (pipeline-aware):**
+`ammoforge → satellite → glock → sleeper → crm → rag → contractmaker → sales`.
+Rationale: ammoforge (templates) + satellite (prospects) feed reach, making reach testable with
+real data; ammoforge is small (13 nodes) — a clean first conversion. Glock/sleeper handle the
+reply/re-engage side; crm/rag/contractmaker/sales are downstream.
+
+After all agents: **build the ERP→agent wiring** (Section 6), starting with reach.
+
+---
+
+## 5. Environment & credentials
+
+- **Central agents env:** `erp-server/agents/.env` (single source; every `<agent>/.env`
+  symlinks to it). ERP backend keeps its own `erp-server/.env`; the only shared secret is the
+  token — agents' `ARSENAL_TOKEN` must equal the server's `ARSENAL_INGEST_TOKEN`.
+- **Local ERP:** boots under **ts-node** (not tsx — tsx/esbuild doesn't emit NestJS DI
+  metadata). See `[[erp-reach-local-test]]` for the exact recipe; `/health` → `{db:true}` on `:3001`.
+
+Credentials needed (user provides):
+
+| Credential | env / form | used by | status |
 |---|---|---|---|
-| EVERTRUST - AIM | schedule | **active** | targeting/orchestration head of pipeline |
-| EVERTRUST - LEAD SATELLITE | webhook + Drive poll + manual | inactive (6 variants!) | **decide canonical variant first** — copy 5 "SEAR batched" is the newest engineering, V2 "Real Search + Local AI" is the alternate architecture |
-| WF-03 Segment Worker (SEAR v3) | sub-workflow call | inactive | fan-out child — disappears entirely in code (becomes an async function) |
-| EVERTRUST - AMMO FORGE | schedule | **active** | uses OpenAI web search for demand drivers |
-| EVERTRUST — REACH BAZOOKA | schedule | inactive | outbound cold email — highest side-effect risk |
-| EVERTRUST - REPLY GLOCK | schedule/Gmail poll | inactive | reply classification via hermes gateway |
-| EVERTRUST - SLEEPER GRENADE | schedule | inactive | snooze/do-not-contact sweep, copy-before-delete |
-| EVERTRUST - CRM Hot Leads | webhook + Drive poll | inactive | sheet provisioning |
-| EVERTRUST - CRM Customer | schedule | inactive | CRM state machine |
-| EVERTRUST — ContractMaker v2 | Read.ai webhook | **active** | inbound webhook must keep a stable URL |
-| EVERTRUST - RAG AGENT | hourly | **active** | Unsure-lead analysis, Gmail threads, agent drafts |
-| EVERTRUST - CAMPAIGNS LIST (ERP) | GET webhook | inactive | read-only — perfect first migration |
-| ACTIVATE - SALES AGENT | Read.ai/manual | inactive | Hormozi transcript scoring on hermes; audit plan in flight |
-| Kairos - Listings Scraper | daily schedule | inactive | Apify + Supabase, independent of EVERTRUST |
-
-**Not migrated:** all `copy`, `ZZ`, `TEMP`, `TEST`, `SIM` workflows, LLM AB HARNESS (becomes a
-pytest suite), Setup one-shots, REACH BAZOOKA test, Reply Glock copy, old Lead Satellite variants.
+| ERP machine token | `ARSENAL_TOKEN` = server `ARSENAL_INGEST_TOKEN` | all | dev set; real for prod |
+| LiteLLM gateway URL + key | `LITELLM_BASE_URL`/`_API_KEY` (+ `LLM_*`) | reach, ammoforge, satellite, glock, contractmaker, rag, sales | ⛔ needed |
+| Gmail OAuth — info@ | `client_secret.json` + tokens | reach, glock, rag | 📄 needed |
+| Gmail OAuth — hanna@ | `client_secret.json` + tokens | reach | 📄 needed |
+| Google Calendar OAuth | (Calendar scope) | glock | 📄 needed |
+| Google Docs/Drive OAuth | (Docs/Drive scope) | contractmaker | 📄 needed |
+| WhatsApp Meta Cloud token | `WHATSAPP_API_KEY` | reach, glock, sleeper | ⛔ needed |
+| Database URL | `DATABASE_URL` | ERP backend + not-yet-converted agents | dev set (Neon) |
+| SearXNG URL | `SEARXNG_URL` | satellite | optional |
 
 ---
 
-## 2. Target architecture
+## 6. ERP wiring & deployment (phase after the agents)
 
-One Python 3.12 monorepo (`evertrust-pipeline/`) running on the mac-mini as a single
-launchd-managed service. Deterministic orchestration in code; LLM calls only where n8n had
-AI Agent / LLM nodes. No workflow engine — n8n's value (visual graph, retries, scheduling,
-credentials) gets replaced by ~5 small pieces of infrastructure you control:
+Once agents are converted, wire the ERP to call them (starting with reach):
 
-```
-evertrust-pipeline/
-├── blueprints/            # exported n8n JSON, frozen, reference-only
-├── core/
-│   ├── config.py          # .env + per-campaign config.json loader
-│   ├── google.py          # Drive / Sheets / Docs / Gmail (own OAuth client, google-auth)
-│   ├── llm.py             # LiteLLM gateway client + pydantic structured output + retry
-│   ├── search.py          # SearXNG client (+ DDG/Mojeek rotation from Satellite V2)
-│   ├── notify.py          # WhatsApp alerts (failure + approval messages)
-│   ├── state.py           # SQLite: run journal, dedup keys, snooze list, lead state
-│   └── runner.py          # job wrapper: logging, retries, failure notification, dry-run flag
-├── pipelines/
-│   ├── lead_satellite.py
-│   ├── ammo_forge.py
-│   ├── reach_bazooka.py
-│   ├── reply_glock.py
-│   ├── sleeper_grenade.py
-│   ├── crm.py             # hot leads + customer graduation
-│   ├── contract_maker.py
-│   ├── rag_agent.py
-│   ├── sales_agent.py
-│   └── kairos_zillow.py
-├── server.py              # FastAPI: Read.ai webhook, ERP endpoints, manual-trigger routes
-├── scheduler.py           # APScheduler inside the same process (replaces Schedule Triggers)
-└── tests/                 # incl. the LLM A/B harness as pytest with canned replies
-```
-
-### n8n concept → local equivalent
-
-| n8n | Local replacement |
-|---|---|
-| Schedule Trigger | APScheduler job (cron expressions kept identical) |
-| Webhook Trigger | FastAPI route, exposed via Tailscale Funnel (already used for SearXNG) |
-| Drive "On New Folder" poll | scheduled poll job + SQLite seen-set |
-| Credentials store | `.env` for API keys; Google OAuth refresh tokens on disk (or Keychain) via own GCP OAuth client |
-| Data Tables | SQLite tables (kills the project-scoping gotcha) |
-| Executions list | `runs` table in SQLite + structured log files; WhatsApp ping on failure |
-| AI Agent node + structured output parser | direct LiteLLM call + pydantic model validation, fail-fast, retries capped at 2 (matches SEAR v3 design) |
-| splitInBatches + Wait + child-workflow fan-out | `asyncio` loop with a **global semaphore** (the entire "SEAR batched" concurrency dance collapses into ~10 lines) |
-| Error workflow / onError continue | try/except per item + runner-level failure notification |
-| Manual trigger | CLI: `python -m pipelines.lead_satellite --campaign X [--dry-run]` |
-
-### Hard rules carried over from the n8n era
-
-- **Global LLM semaphore = 1–2.** The 8GB M2 cap is physical; enforce it in `core/llm.py`,
-  not per-pipeline.
-- **Loud failures.** Zero-rows guards raise, never silently stop (the execution-5420 lesson).
-- **Copy-before-delete** everywhere Sleeper Grenade touches rows.
-- **Anti-fabrication:** ID-join copy-only extraction from Satellite V2 stays.
-- **Idempotency keys** on every outbound send (Gmail message dedup in SQLite) — critical
-  during the parallel-run period so n8n and local code never double-send.
-- **`--dry-run` on every pipeline** — prints intended side effects without executing them.
+- **Trigger:** the arsenal stage-run dispatcher calls the agent's `POST /<agent>/run` (replacing
+  the `N8N_*_WEBHOOK_URL` target) and records the returned result.
+- **Packaging (decision pending):** how the Python services run alongside the NestJS ERP —
+  options: (a) one FastAPI app exposing every agent's route; (b) per-agent services; (c) ERP
+  spawns the agent as a subprocess; (d) Docker service(s) in the stack. Reach currently runs as
+  a standalone `uvicorn` service — fine for local; pick the prod packaging during this phase.
+- **Cutover:** per agent, run the Python and the n8n `(PG)` workflow in parallel briefly, then
+  point the ERP at the Python service and deactivate the n8n workflow.
 
 ---
 
-## 3. Migration phases (strangler pattern — one workflow at a time, shadow first)
+## 7. Risks
 
-### Phase 0 — Freeze & export (½ day)
-- Export canonical workflow JSONs into `blueprints/` (via n8n-mcp `n8n_get_workflow`).
-- Write a one-page spec per workflow: trigger, inputs, outputs, side effects, credentials,
-  known issues. The JSON is the ground truth for parameters; the spec is the contract.
-- **Decision required:** pick the canonical Lead Satellite variant (copy 5 SEAR-batched vs V2
-  Real-Search). Recommendation: V2's search/extract architecture + drop all the batching
-  machinery (unnecessary in code).
-
-### Phase 1 — Foundation (1–2 days)
-- Repo scaffold, `core/` clients, SQLite schema, runner, FastAPI + APScheduler service,
-  launchd plist with KeepAlive.
-- **Google OAuth is the long pole:** create your own GCP OAuth client with Drive, Sheets,
-  Docs, Gmail scopes; run the consent flow once per account (info@ and hanna@); store refresh
-  tokens locally. n8n's stored tokens are not portable.
-- Smoke tests: list Drive campaign folders, read a sheet, hermes round-trip via LiteLLM,
-  SearXNG query, WhatsApp test message.
-
-### Phase 2 — Low-risk read-only migrations (1 day)
-1. **CAMPAIGNS LIST (ERP)** — read-only GET, trivially comparable. Repoint ERP to the new URL.
-2. **RAG AGENT (shadow mode)** — run hourly against a test campaign or write to a
-   `Unsure_Analysis_SHADOW` sheet; diff against the n8n version for a few days.
-
-### Phase 3 — Lead Satellite (2–3 days) — biggest payoff
-The profiler bypass, retry wrappers, metro multi-pass, batched fan-out, 90s parks, and the
-Segment Worker child workflow all exist *because* n8n made concurrency hard. In code this is:
-search → fetch → extract → email-recovery as async stages behind the LLM semaphore.
-- Shadow-run against the copy-3 sandbox campaign; compare output sheets row-for-row.
-- Port the Cloudflare cfemail XOR decode + contact-page scrape as a plain function.
-
-### Phase 4 — Side-effecting outbound (2–3 days, most careful)
-- **Reply Glock** first (classification mostly; sends are limited), then **Reach Bazooka**
-  (cold email), then **Sleeper Grenade**.
-- Every send path: dry-run default, idempotency key check, explicit `--live` flag to arm.
-- Keep the WhatsApp approval gates — FastAPI endpoint or simple reply-to-approve.
-- The LLM A/B harness becomes `tests/test_reply_classification.py` with the 5 canned replies.
-
-### Phase 5 — Webhook consumers + remaining (1–2 days)
-- **ContractMaker v2:** stand up the FastAPI route, repoint Read.ai webhook, replay a logged
-  meeting payload to verify, then deactivate the n8n version.
-- **CRM Hot Leads / Customer**, **AIM**, **Ammo Forge**, **Sales Agent** (fold in the planned
-  persona/rubric audit fixes while porting), **Kairos Zillow**.
-
-### Phase 6 — Decommission
-- Each pipeline: ≥1 week clean parallel/shadow operation → deactivate the n8n workflow.
-- When all are off: export a final full backup of the instance, keep n8n stopped (not
-  deleted) for a month as archive, then remove.
-
----
-
-## 4. What you gain / what you lose
-
-**Gain:** git history and real diffs; pytest instead of throwaway debug workflows; concurrency
-you can actually control; no Data Table scoping or webhook path-collision gotchas; one
-process to monitor; everything runs even if the n8n container is down.
-
-**Lose (and mitigations):**
-- Visual graph → the per-workflow spec doc + clear stage functions.
-- Executions UI → `runs` table + `python -m core.state tail` (or a 50-line status page later).
-- Built-in OAuth flows → one-time GCP client setup (Phase 1).
-- Easy manual re-trigger from a UI → CLI commands per pipeline.
-
-## 5. Risks
-
-1. **Double-sends during parallel running** — idempotency keys + only ever one side armed live.
-2. **OAuth scope/verification friction** with Google (unverified-app warnings for own OAuth
-   client are fine for personal use, but budget an afternoon).
-3. **Webhook URL changes** — Read.ai and the ERP must be repointed; do it per-consumer with
-   a rollback path (n8n workflow stays activatable for a week).
-4. **mac-mini as single point of failure** — it already is (LiteLLM/SearXNG); add launchd
-   KeepAlive + a daily heartbeat WhatsApp/log line.
-5. **Silent drift from blueprint** — the exported JSONs in `blueprints/` are the acceptance
-   spec; each ported pipeline gets a shadow-comparison before go-live.
-
-## 6. Rough total effort
-
-~8–12 working days end-to-end, front-loaded on Phase 1 (foundation + OAuth) and Phase 3
-(Lead Satellite). Phases 2–5 each end with a deactivated n8n workflow, so value lands
-incrementally — no big-bang cutover.
+1. **Double-sends during parallel running** — only one side armed live; the ERP's `sendList`
+   gating + `outreach_messages` dedup is the backstop.
+2. **OAuth setup** — own GCP client, consent once per Google account (info@, hanna@); budget an afternoon.
+3. **LLM box limits** — bound LLM concurrency in each agent; keep prompts verbatim with the workflow.
+4. **Spec drift** — the `(PG)` workflow JSON is the acceptance spec; each agent's `test_route_run.py`
+   encodes its expected behaviour. Re-fetch the workflow if it changes.
+5. **Packaging the Python runtime in prod** (Section 6) is the main open architectural decision.

@@ -1,46 +1,38 @@
-"""CLI. Dry-run by default (compute the plan, no drafts/writes). --live arms Gmail draft
-creation + DB writes. --no-llm uses the deterministic offline stub. --campaign filters.
+"""CLI for RAG Agent. Dry-run by default (draft only, writes nothing). --live saves the draft
+back to the ERP + notifies.
 
-    python -m rag                         # dry-run plan, writes/sends nothing
-    python -m rag --no-llm                # offline stub instead of calling hermes
-    python -m rag --campaign 7            # one campaign only
-    python -m rag --live                  # the real thing (drafts only, never sends)
+    python -m rag             # dry-run
+    python -m rag --no-llm    # offline deterministic draft (no gateway)
+    python -m rag --live      # save suggestedReply + notify
 """
 from __future__ import annotations
 
 import argparse
+import json
 import sys
-import traceback
 
+from .clients import llm
+from .clients.erp import ErpClient
 from .pipeline import RunOptions, run
 from .settings import load_settings
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="rag", description="RAG AGENT unsure-lead draft run")
-    parser.add_argument("--live", action="store_true",
-                        help="arm Gmail draft creation + DB writes (default: dry)")
-    parser.add_argument("--no-llm", action="store_true",
-                        help="deterministic offline stub instead of calling hermes (testing)")
-    parser.add_argument("--campaign", type=int, default=None,
-                        help="limit to one campaign id (default: all active)")
-    args = parser.parse_args(argv)
+    p = argparse.ArgumentParser(prog="rag", description="RAG AGENT — draft replies for unsure leads")
+    p.add_argument("--live", action="store_true", help="save drafts to the ERP + notify (default: dry)")
+    p.add_argument("--no-llm", action="store_true", help="offline deterministic draft (no gateway)")
+    p.add_argument("--limit", type=int, default=50)
+    args = p.parse_args(argv)
 
     settings = load_settings()
-    if args.live and args.no_llm:
-        raise SystemExit("--live with --no-llm is forbidden: the offline stub is unjudged.")
-
-    opts = RunOptions(
-        live=args.live, use_llm=not args.no_llm, campaign_id=args.campaign,
-    )
+    opts = RunOptions(live=args.live, use_llm=not args.no_llm, limit=args.limit)
+    erp = ErpClient(settings.erp_base_url, settings.arsenal_token)
     try:
-        run(settings, opts)
+        result = run(settings, opts, erp, llm)
+        print(json.dumps({k: v for k, v in result.items() if k != "drafts"}, indent=2))
         return 0
-    except SystemExit:
-        raise
-    except Exception:
-        traceback.print_exc()
-        return 1
+    finally:
+        erp.close()
 
 
 if __name__ == "__main__":

@@ -1,91 +1,70 @@
-"""Per-campaign: research demand-driver news -> write news_intel; if the campaign has no
-templates, forge COLD/FOLLOWUP/FINALPUSH -> write templates. Dry-run default.
+"""AmmoForge core — the function the ERP route calls: run(settings, opts, erp) -> dict.
 
-Both outputs feed Bazooka: news_intel.is_bad_news drives the COLD-AGG choice; templates
-are what Bazooka sends.
+Faithful to n8n workflow rDLhY3sqi6U9xK6t (AMMO FORGE (PG) v2):
+  GET /campaigns/:id/config -> research demand drivers (LLM) -> forge coldEmail + newsBrief
+  (LLM, strict JSON, fail loud) -> POST /campaigns/:id/templates -> notify TEMPLATES_READY.
+
+Dry-run (default): does the research+forge and returns the templates WITHOUT posting.
+--live: posts the templates to the ERP and fires the notification.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
+from zoneinfo import ZoneInfo
 
-from . import db
 from .clients import llm
-from .domain import news as news_domain
-from .domain.templates import explode_blocks
-from .settings import Settings
+from .clients.erp import ErpGateway
+
+TZ = "Europe/Berlin"
 
 
 @dataclass(frozen=True)
 class RunOptions:
+    campaign_id: str
     live: bool = False
-    use_llm: bool = True
-    campaign: str | None = None
-    forge_templates: bool = True
+    use_llm: bool = True  # False => offline deterministic forge (tests / isolated)
 
 
-def _lang(country: str) -> str:
-    c = (country or "").lower()
-    return "German" if any(k in c for k in ("de", "german", "deutsch")) else "English"
+def run(settings, opts: RunOptions, erp: ErpGateway) -> dict:
+    run_id = "forge-" + datetime.now(ZoneInfo(TZ)).strftime("%Y-%m-%d-%H%M")
+    mode = "live" if opts.live else "dry"
+    result: dict = {"runId": run_id, "mode": mode, "campaignId": opts.campaign_id, "status": "ok"}
 
+    if not opts.campaign_id:
+        return {**result, "status": "error", "error": "campaignId is required"}
 
-def run(settings: Settings, opts: RunOptions) -> dict:
-    run_id = "forge-" + datetime.now().strftime("%Y-%m-%d-%H%M%S")
-    today = datetime.now().strftime("%Y-%m-%d")
-    report = [f"# Ammo Forge run {run_id} ({'live' if opts.live else 'dry'})", ""]
-    summary = {"campaigns": 0, "bad_news": 0, "templates_forged": 0}
+    cfg = erp.fetch_campaign_config(opts.campaign_id)
+    result["name"] = cfg.name
+    result["niche"] = cfg.niche
 
-    def log(m: str) -> None:
-        print(m, flush=True)
-        report.append(f"- {m}")
-
-    conn = db.connect(settings.database_url)
-    campaigns = db.fetch_campaigns(conn, opts.campaign)
-    if not campaigns:
-        conn.close()
-        raise SystemExit("No active campaigns to forge.")
-
-    for c in campaigns:
-        summary["campaigns"] += 1
-        niche, city, country = c["niche"], c["region"], c["country"]
-        lang = _lang(country)
-        log(f"=== {c['name']} (niche={niche}, country={country}) ===")
-
-        parsed = (llm.offline_news() if not opts.use_llm
-                  else llm.research_news(settings, niche, city, country, lang))
-        result = news_domain.build_news(parsed, project=c["project"], niche=niche, city=city,
-                                        country=country, run_id=run_id, today=today)
-        log(f"[news] items={result.item_count} bad={result.bad_count} "
-            f"isBadNews={result.is_bad_news} (topSev={result.top_severity}, conf={result.confidence})")
-        if result.is_bad_news:
-            summary["bad_news"] += 1
-        if opts.live:
-            db.write_news_intel(conn, c["id"], result.body, result.is_bad_news)
-            log("[news] written to news_intel")
+    try:
+        if opts.use_llm:
+            research = llm.research_demand_drivers(settings, cfg)
+            forged = llm.forge_templates(settings, cfg, research)
         else:
-            log("[news] (dry) would write news_intel")
+            research = llm.offline_research(cfg)
+            forged = llm.offline_forge(cfg, research)
+    except ValueError as exc:  # parse-fail-loud from the forge step
+        return {**result, "status": "error", "error": str(exc)}
 
-        if opts.forge_templates:
-            if db.has_templates(conn, c["id"]):
-                log("[forge] templates already exist — skip (idempotent)")
-            else:
-                blocks = explode_blocks(niche)
-                if opts.use_llm:
-                    blocks = [llm.polish_block(settings, lang, b, niche, city, c["project"]) for b in blocks]
-                log(f"[forge] {len(blocks)} blocks: " + ", ".join(b["block"] for b in blocks))
-                if opts.live:
-                    db.write_templates(conn, c["id"], blocks)
-                    summary["templates_forged"] += 1
-                    log("[forge] written to templates")
-                else:
-                    log("[forge] (dry) would write templates")
+    result["templates"] = forged.as_templates()
+    result["posted"] = False
+    result["notified"] = False
 
-    conn.close()
-    log(f"[summary] {summary}")
-    path = Path(settings.report_dir) / f"{run_id}.md"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(report) + "\n")
-    print(f"Run report: {path}")
-    print(f"Summary: {summary}")
-    return summary
+    if opts.live:
+        erp.post_templates(opts.campaign_id, forged.as_templates())
+        result["posted"] = True
+        try:
+            erp.post_notification(
+                "TEMPLATES_READY",
+                f"Templates ready: {cfg.name}",
+                "Cold email + reply templates generated",
+                campaign_id=opts.campaign_id,
+                link=f"/campaigns/{opts.campaign_id}",
+            )
+            result["notified"] = True
+        except Exception:  # notification is best-effort (continueRegularOutput in n8n)
+            pass
+
+    return result

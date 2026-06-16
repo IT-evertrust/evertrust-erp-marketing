@@ -34,6 +34,16 @@ const STAGE_WEBHOOK_ENV = {
   SLEEPER_GRENADE: 'N8N_SLEEPER_GRENADE_WEBHOOK_URL',
 } as const satisfies Record<ArsenalStage, keyof Env>;
 
+// ArsenalStage -> the env var holding that stage's Python-agent service base URL.
+// When set, it takes precedence over the n8n webhook (the ERP-native agent path).
+const STAGE_AGENT_ENV = {
+  LEAD_SATELLITE: 'AGENT_LEAD_SATELLITE_URL',
+  AMMO_FORGE: 'AGENT_AMMO_FORGE_URL',
+  REACH_BAZOOKA: 'AGENT_REACH_BAZOOKA_URL',
+  REPLY_GLOCK: 'AGENT_REPLY_GLOCK_URL',
+  SLEEPER_GRENADE: 'AGENT_SLEEPER_GRENADE_URL',
+} as const satisfies Record<ArsenalStage, keyof Env>;
+
 // ArsenalStage -> the stored override column on the singleton row.
 const STAGE_WEBHOOK_COLUMN = {
   LEAD_SATELLITE: 'leadSatelliteWebhookUrl',
@@ -100,6 +110,13 @@ export class WorkflowConfigService {
     const row = await this.row();
     const stored = row ? (row[STAGE_WEBHOOK_COLUMN[stage]] as string | null) : null;
     return clean(stored) ?? clean(this.config.get(STAGE_WEBHOOK_ENV[stage]));
+  }
+
+  // The effective Python-agent service base URL for a stage, or undefined when
+  // unset. When set, ArsenalService dispatches to the agent (POST /<agent>/run)
+  // instead of the n8n webhook (env-only — no stored override yet).
+  getStageAgentUrl(stage: ArsenalStage): string | undefined {
+    return clean(this.config.get(STAGE_AGENT_ENV[stage]));
   }
 
   // The effective AIM ("deploy campaign") webhook URL, or undefined when unset.

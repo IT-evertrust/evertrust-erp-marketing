@@ -1,3 +1,5 @@
+"""Run configuration for ContractMaker. Reads the central agents .env; talks to the ERP machine API.
+Contract PDF generation stays in Google Docs/Drive."""
 from __future__ import annotations
 
 import os
@@ -21,22 +23,21 @@ def _load_dotenv() -> None:
 
 @dataclass(frozen=True)
 class Settings:
-    database_url: str
+    erp_base_url: str = "http://localhost:3001"
+    arsenal_token: str = ""
     llm_base_url: str = ""
     llm_api_key: str = "sk-anything"
-    llm_model: str = "gpt-5-mini"          # n8n used gpt-5-mini for both extractors
+    llm_model: str = "gpt-5-mini"  # n8n ContractMaker (PG) uses gpt-5-mini for both extractors
     google_token_dir: str = str(PACKAGE_ROOT / "tokens")
     report_dir: str = str(PACKAGE_ROOT / "runs")
 
 
 def load_settings() -> Settings:
     _load_dotenv()
-    db = os.environ.get("DATABASE_URL", "")
-    if not db:
-        raise SystemExit("DATABASE_URL is not set. Put it in contractmaker/.env or the environment.")
     return Settings(
-        database_url=db,
-        llm_base_url=os.environ.get("LLM_BASE_URL", ""),
-        llm_api_key=os.environ.get("LLM_API_KEY", "sk-anything"),
-        llm_model=os.environ.get("LLM_MODEL", "gpt-5-mini"),
+        erp_base_url=os.environ.get("ERP_BASE_URL", "http://localhost:3001"),
+        arsenal_token=os.environ.get("ARSENAL_TOKEN", os.environ.get("ARSENAL_INGEST_TOKEN", "")),
+        llm_base_url=os.environ.get("LLM_BASE_URL", os.environ.get("LITELLM_BASE_URL", "")),
+        llm_api_key=os.environ.get("LLM_API_KEY", os.environ.get("LITELLM_API_KEY", "sk-anything")),
+        llm_model=os.environ.get("LLM_MODEL", os.environ.get("FORGE_MODEL", "gpt-5-mini")),
     )

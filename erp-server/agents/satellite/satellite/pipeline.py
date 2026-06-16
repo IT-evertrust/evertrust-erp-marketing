@@ -1,135 +1,126 @@
-"""The run loop: campaign -> profile -> plan -> search -> fetch -> extract -> validate
--> recover -> insert. Same five-beat agent shape as bazooka; the side effect here is
-only a DB insert, but dry-run stays the default for symmetry — research runs are slow
-and you want to eyeball the first fire plan of a new niche before committing rows.
+"""Satellite core — the function the ERP route calls: run(settings, opts, erp, search, fetcher).
+
+Faithful to n8n workflow dCGzrlpaxpxJanbJ (LEAD SATELLITE copy 6 (PG)), with the n8n fan-out/
+Data-Table machinery collapsed into a bounded loop:
+  GET /campaigns/:id/config -> niche gate (targets required) -> build segments (targets x cities
+  x foci, capped) -> per-segment lead research (LLM + web_search) -> dedup -> email recovery
+  (LLM web search + website/Cloudflare decode) -> POST /prospects/bulk -> run callback.
+
+Dry-run (default): research + build prospects, NO ERP writes. --live: bulk-post + callback.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
+from zoneinfo import ZoneInfo
 
-from . import db, extract, geo, profiler, recovery, serp, sitefetch
-from .plan import build_plan
-from .settings import Settings
-from .validate import merge_validate
+from .clients import llm
+from .clients.erp import ErpGateway
+from .clients.search import SearchGateway, UrlFetcher
+from .domain.models import (
+    build_segments,
+    dedup_leads,
+    extract_emails_from_html,
+    leads_to_prospects,
+)
+
+TZ = "Europe/Berlin"
+_SCRAPE_PATHS = ["", "/kontakt", "/contact", "/contacts", "/impressum", "/about"]
+_SCRAPE_MAX_ROWS = 25
 
 
 @dataclass(frozen=True)
 class RunOptions:
-    campaign: str
-    live: bool = False          # actually insert leads
-    force: bool = False         # hunt even if the campaign already has leads
-    use_llm: bool = True        # False => offline extraction (testing only)
-    queries_per_city: int = 2
-    max_queries: int = 600
-    max_candidates: int = 1000
-    max_cities: int = 0
-    extract_batch_size: int = 8
+    campaign_id: str
+    live: bool = False
+    use_llm: bool = True
+    max_segments: int | None = None  # cap segments this run (testing / training wheels)
 
 
-def run(settings: Settings, opts: RunOptions) -> dict:
-    run_id = "sat-" + datetime.now().strftime("%Y-%m-%d-%H%M%S")
-    report_lines: list[str] = [f"# Satellite run {run_id} ({'live' if opts.live else 'dry'})", ""]
+def _recover_via_website(leads, fetcher: UrlFetcher) -> int:
+    recovered = 0
+    scanned = 0
+    for ld in leads:
+        if scanned >= _SCRAPE_MAX_ROWS:
+            break
+        if ld.email or not ld.website:
+            continue
+        scanned += 1
+        base = ld.website if "://" in ld.website else "https://" + ld.website
+        base = base.rstrip("/")
+        dom = base.split("://", 1)[-1].replace("www.", "").split("/")[0]
+        for path in _SCRAPE_PATHS:
+            html = fetcher.get(base + path)
+            email = extract_emails_from_html(html, dom) if html else ""
+            if email:
+                ld.email, ld.status = email, ""
+                recovered += 1
+                break
+    return recovered
 
-    def log(msg: str) -> None:
-        print(msg, flush=True)
-        report_lines.append(f"- {msg}")
 
-    conn = db.connect(settings.database_url)
-    campaign = db.fetch_campaign(conn, opts.campaign)
-    if campaign is None:
-        raise SystemExit(f"No active campaign named {opts.campaign!r}.")
+def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetcher: UrlFetcher) -> dict:
+    run_id = "wf3-" + datetime.now(ZoneInfo(TZ)).strftime("%Y%m%d%H%M%S")
+    mode = "live" if opts.live else "dry"
+    result: dict = {"runId": run_id, "mode": mode, "campaignId": opts.campaign_id, "status": "ok"}
 
-    # skip-if-exists guard (was: Drive search for a 'leads*' file)
-    existing = db.campaign_has_leads(conn, campaign["id"])
-    if existing and not opts.force:
-        log(f"SKIP_HAS_LEADS: campaign already has {existing} leads (use --force to re-hunt)")
-        conn.close()
-        return {"skipped": True, "existing": existing}
-    if existing:
-        log(f"FORCE_REHUNT: {existing} existing leads kept; new domains will be appended")
+    if not opts.campaign_id:
+        return {**result, "status": "error", "error": "campaignId is required"}
 
-    # profiler: required for non-PL/DE; keyword top-up otherwise (skipped without LLM)
-    cc = geo.resolve_builtin(campaign["country"])
-    prof = None
-    if opts.use_llm and settings.llm_base_url:
-        prof = profiler.profile_country(settings, campaign["country"], campaign["niche"], log)
-    elif not cc:
-        raise SystemExit(
-            f"V2 PROFILE ERROR: country '{campaign['country']}' is not built-in (PL/DE) "
-            "and the profiler needs the LLM (--no-llm not possible here)"
-        )
+    cfg = erp.fetch_campaign_config(opts.campaign_id)
+    result["niche"] = cfg.niche
 
-    plan = build_plan(
-        niche=campaign["niche"],
-        country=campaign["country"],
-        region=campaign["region"],
-        profiler=prof,
-        searxng_url=settings.searxng_url,
-        queries_per_city=opts.queries_per_city,
-        max_queries=opts.max_queries,
-        max_cities=opts.max_cities,
-    )
-    log(f"[V2 Plan] {len(plan.queries)} queries | {len(plan.cities)} cities | "
-        f"{len(plan.keywords)} keywords | engines={plan.engines} | kl={plan.ddg_kl}")
+    # Niche gate: targets must exist (NICHE ANALYTICS populates them).
+    if not cfg.targets:
+        try:
+            erp.trigger_niche_analytics(opts.campaign_id)
+        except Exception:
+            pass
+        return {**result, "status": "no_targets",
+                "error": "niche has no targets — NICHE ANALYTICS triggered; retry when ready"}
 
-    cands = serp.collect_candidates(settings, plan, log)
-    gated = serp.gate_candidates(cands, opts.max_candidates, log)
-    prepped = sitefetch.prep_candidates(gated, settings, log)
+    segments = build_segments(cfg)
+    if opts.max_segments is not None:
+        segments = segments[: opts.max_segments]
+    result["segmentsPlanned"] = len(segments)
+    if not segments:
+        return {**result, "status": "no_segments", "error": "missing niche or cities"}
 
-    by_id = {c.id: c for c in gated}
-    companies: list[dict] = []
-    parsed_chunks = failed_chunks = 0
-    for chunk in extract.chunked(prepped, opts.extract_batch_size):
-        if opts.use_llm:
-            result = extract.extract_chunk(settings, chunk, plan.niche, plan.country_name)
-        else:
-            result = extract.offline_extract(chunk)
-        if result is None:
-            failed_chunks += 1
-        else:
-            parsed_chunks += 1
-            companies.extend(result)
-    log(f"[V2 Chunk] {parsed_chunks} chunks parsed, {failed_chunks} failed, "
-        f"{len(companies)} companies returned")
+    leads = []
+    for seg in segments:
+        leads.extend(llm.research_leads(settings, seg, search) if opts.use_llm else llm.offline_research(seg))
+    leads = dedup_leads(leads)
+    result["leadsFound"] = len(leads)
 
-    rows, stats = merge_validate(
-        companies, by_id, parsed_chunks=parsed_chunks, failed_chunks=failed_chunks, log=log
-    )
+    # Email recovery: LLM web-search for missing, then website/Cloudflare-decode scrape.
+    if opts.use_llm:
+        missing = [{"id": i, "name": ld.name, "website": ld.website, "city": ld.city, "country": ld.country}
+                   for i, ld in enumerate(leads) if not ld.email]
+        if missing:
+            got = llm.recover_emails(settings, missing[:600], search)
+            for i, em in got.items():
+                if 0 <= i < len(leads) and not leads[i].email:
+                    leads[i].email, leads[i].status = em, ""
+    result["emailsRecovered"] = _recover_via_website(leads, fetcher)
 
-    recovery.recover_missing_emails(rows, plan, settings, log)
-
-    with_email = sum(1 for r in rows if r.email)
-    tiers: dict[str, int] = {}
-    for r in rows:
-        tiers[r.tier or "-"] = tiers.get(r.tier or "-", 0) + 1
-    summary = {
-        "ok": True, "project": campaign["project"], "niche": plan.niche,
-        "country": plan.country_name, "leads": len(rows), "withEmail": with_email,
-        "emailCoveragePct": round(100 * with_email / len(rows)) if rows else 0,
-        "tiers": tiers, "runId": run_id,
-    }
-    log(f"[V2 Summary] {summary}")
+    prospects = leads_to_prospects(leads)
+    verified = sum(1 for p in prospects if p["emailVerified"])
+    result["prospects"] = len(prospects)
+    result["verified"] = verified
+    result["posted"] = False
 
     if opts.live:
-        inserted = db.insert_leads(conn, campaign["id"], rows)
-        log(f"INSERTED {inserted} leads into campaign {campaign['name']!r}")
-        summary["inserted"] = inserted
-    else:
-        log(f"DRY RUN — {len(rows)} leads NOT inserted (use --live to commit)")
-    conn.close()
+        bulk = erp.post_prospects_bulk(opts.campaign_id, prospects)
+        data = bulk.get("data", bulk) if isinstance(bulk, dict) else {}
+        created = int(data.get("created") or data.get("inserted") or 0)
+        updated = int(data.get("updated") or data.get("upserted") or 0)
+        upserted = (created + updated) if (created or updated) else len(prospects)
+        metrics = {"prospectsUpserted": upserted, "segmentsPlanned": len(segments)}
+        result["metrics"] = metrics
+        result["posted"] = True
+        try:
+            erp.post_run_callback(opts.campaign_id, metrics)
+        except Exception:
+            pass
 
-    report_lines += ["", "## Leads", "",
-                     "| Company | Type | Email | Status | Tier | City | Website |",
-                     "|---|---|---|---|---|---|---|"]
-    for r in rows:
-        report_lines.append(
-            f"| {r.company_name} | {r.company_type} | {r.email} | {r.status} "
-            f"| {r.tier} | {r.city} | {r.website} |"
-        )
-    report_path = Path(settings.report_dir) / f"{run_id}.md"
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text("\n".join(report_lines) + "\n")
-    print(f"Run report: {report_path}")
-    return summary
+    return result
