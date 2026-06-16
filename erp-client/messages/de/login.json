@@ -5,6 +5,7 @@
   },
   "form": {
     "submitting": "Wird angemeldet…",
+    "googleCta": "Mit Google fortfahren",
     "companyHint": "Melden Sie sich mit Ihrem Firmen-Google-Konto an."
   },
   "errors": {

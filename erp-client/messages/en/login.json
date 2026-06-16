@@ -5,6 +5,7 @@
   },
   "form": {
     "submitting": "Signing in…",
+    "googleCta": "Continue with Google",
     "companyHint": "Use your company Google account to sign in."
   },
   "errors": {
