@@ -2,6 +2,7 @@ import { SQL } from 'drizzle-orm';
 import type { DbClient } from '../src/db/db.tokens';
 import type { AppConfigService } from '../src/config/app-config.service';
 import { WorkflowConfigService } from '../src/arsenal/workflow-config.service';
+import { SendersService } from '../src/arsenal/senders.service';
 
 // ---------------------------------------------------------------------------
 // In-memory, tenant-aware fake of the Drizzle client — enough surface for the
@@ -86,6 +87,16 @@ const COLUMN_TO_KEY: Record<string, string> = {
   gmail_thread_id: 'gmailThreadId',
   message_id: 'messageId',
   customer_id: 'customerId',
+  // signature_assets (per-org signature image storage). id/organization_id already
+  // mapped above; these cover the remaining columns so a WHERE/insert over the table
+  // round-trips correctly in the fake.
+  mime_type: 'mimeType',
+  data_base64: 'dataBase64',
+  byte_size: 'byteSize',
+  // org_senders (per-org email senders). id/organization_id already mapped above;
+  // sender_key is the second half of the (organization_id, sender_key) unique lookup.
+  sender_key: 'senderKey',
+  is_default: 'isDefault',
 };
 
 function rowMatches(row: Record<string, unknown>, cond: ParsedCondition): boolean {
@@ -199,6 +210,13 @@ export function makeFakeDb(
     },
 
     // INSERT: db.insert(table).values(v).returning()
+    //   ...optionally with .onConflictDoNothing({ target }) before .returning().
+    // The row is pushed EAGERLY in values() (so callers that `await` the insert
+    // WITHOUT .returning() still persist it, matching Drizzle). onConflictDoNothing
+    // is a fake of the unique constraint: the fake has no index machinery, so it
+    // checks the target column against the rows that EXISTED BEFORE this insert and,
+    // on a duplicate, rolls the just-pushed row back (returning [] like DO NOTHING).
+    // Used by WorkflowConfigService.orgRow's find-or-create.
     insert(table: unknown) {
       const ft = tableFor(table);
       return {
@@ -212,10 +230,26 @@ export function makeFakeDb(
           if ('updatedAt' in v || 'updatedAt' in row) {
             row.updatedAt = (v.updatedAt as unknown) ?? row.createdAt;
           }
-          ft.rows.push(row);
+          // Snapshot the pre-insert rows so onConflictDoNothing can detect a duplicate
+          // against state BEFORE this insert, then push eagerly.
+          const before = ft.rows;
+          ft.rows = [...before, row];
           return {
             returning() {
               return Promise.resolve([{ ...row }]);
+            },
+            onConflictDoNothing(arg?: { target?: unknown }) {
+              const target = arg?.target as { name?: string } | undefined;
+              const col = target?.name;
+              if (col) {
+                const key = COLUMN_TO_KEY[col] ?? col;
+                if (before.some((r) => r[key] === row[key])) {
+                  // Duplicate on the conflict target → undo the push, return nothing.
+                  ft.rows = before;
+                  return { returning: () => Promise.resolve([] as Row[]) };
+                }
+              }
+              return { returning: () => Promise.resolve([{ ...row }]) };
             },
           };
         },
@@ -280,12 +314,14 @@ export function makeFakeDb(
 
 // A real WorkflowConfigService over the fake db + a config stub. With no seeded
 // workflow_config row (the table auto-vivifies to []), every resolver falls back to
-// env (the config stub) — so consumers behave exactly as they did pre-resolver. Use
-// in specs that construct the four resolver-consuming services (arsenal, campaigns,
+// env (the config stub) — so consumers behave exactly as they did pre-resolver. The
+// SendersService it now depends on is constructed over the SAME fake db, so the org
+// sender list resolves to the product DEFAULT_SENDERS until a spec seeds org_senders.
+// Use in specs that construct the resolver-consuming services (arsenal, campaigns,
 // n8n-executions, n8n-backfill) so their changed constructors get a working resolver.
 export function makeWorkflowConfig(
   db: DbClient,
   config: AppConfigService,
 ): WorkflowConfigService {
-  return new WorkflowConfigService(db, config);
+  return new WorkflowConfigService(db, config, new SendersService(db));
 }

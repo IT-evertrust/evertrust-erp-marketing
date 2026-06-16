@@ -1,6 +1,7 @@
 import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 import { eq, type SQL } from 'drizzle-orm';
 import type { Request } from 'express';
+import { isOwner, type UserRole } from '@evertrust/shared';
 import type { AuthUser } from '../auth/auth.types';
 
 // Tenant scoping primitives. Every org-scoped table carries an `organization_id`
@@ -19,6 +20,21 @@ export interface OrgScopedTable {
 // Combine with other predicates via Drizzle's `and(...)`.
 export function tenantScope(orgId: string, table: OrgScopedTable): SQL {
   return eq(table.organizationId, orgId);
+}
+
+// Owner-aware variant — for the USERS ADMIN surface ONLY. The platform OWNER
+// role reaches every org's users, so it returns `undefined` (no tenant
+// confinement); every other role (and an absent role) is confined to its own
+// org. `undefined` composes safely: callers use `cond ? q.where(cond) : q` for a
+// bare list, or `cond ? and(cond, eq(id)) : eq(id)` for an id lookup — never
+// `.where(undefined)`. This is the ONLY sanctioned cross-org seam, and ONLY for
+// user administration; all other data stays tenant-scoped even for an Owner.
+export function adminUserScope(
+  actorRole: UserRole | undefined,
+  orgId: string,
+  table: OrgScopedTable,
+): SQL | undefined {
+  return actorRole && isOwner(actorRole) ? undefined : tenantScope(orgId, table);
 }
 
 // Param decorator that pulls the current tenant's organizationId off req.user

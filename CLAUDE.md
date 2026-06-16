@@ -1,8 +1,12 @@
 # EverTrust ERP & Marketing
 
 pnpm + Turborepo monorepo for the EverTrust ERP and marketing platform (migrated from the
-archived `Ryugwki/evertrust-ERP` repo on 2026-06-11; hosting moved from Render/Vercel to the
-Mac mini):
+archived `Ryugwki/evertrust-ERP` repo on 2026-06-11). LIVE hosting: the ERP API runs on
+**Render** (`evertrust-api.onrender.com`), the web on **Vercel**, and Postgres on **Supabase**.
+The **Mac mini hosts ONLY the local AI stack** (`ai-stack/` — LiteLLM/Ollama/Redis/Qdrant/
+SearXNG), wired to a Mac Pro for inference. NOTE: the Docker compose + the Services table below
+describe a self-hostable ERP stack for local/dev — that is NOT the live deployment (the n8n
+workflows correctly call the Render API). Packages:
 - `erp-server/` — `@evertrust/api`: NestJS 11 backend (22 modules — 17 feature + infra, JWT +
   argon2 auth, L1–L5 RBAC, audit log, Drizzle ORM)
 - `erp-client/` — `@evertrust/web`: Next.js 15 App Router frontend (React 19, Tailwind v4,

@@ -67,6 +67,7 @@ import {
   UpdateArsenalSettingsDto,
   WorkflowConfigDto,
   UpdateWorkflowConfigDto,
+  OrgSenderDto,
   LeadStatsDto,
   TestN8nResultDto,
   RotateIngestTokenResultDto,
@@ -193,6 +194,28 @@ type RequestOptions = {
   body?: unknown;
   signal?: AbortSignal;
 };
+
+// Response of the signature-image endpoints (POST upload, POST {url}, DELETE).
+// The server returns only the resolved URL ({ signatureImageUrl }) — null after a
+// clear. There is no shared DTO for this small response, so it's validated here.
+const SignatureImageResultDto = z.object({
+  signatureImageUrl: z.string().url().nullable(),
+});
+
+// The org's resolved senders (GET, and the body returned by upsert/remove). Validated
+// as an array so a single drifted row fails the whole list loud.
+const OrgSenderListDto = z.array(OrgSenderDto);
+
+// POST /arsenal/config/senders body — the upsert shape. Shared only ships the READ
+// DTO (OrgSenderDto), so the write body is validated here (mirrors the server's
+// UpsertOrgSenderSchema): key + email required, label optional, isDefault optional.
+const UpsertOrgSenderBodyDto = z.object({
+  key: z.string().min(1),
+  email: z.string().email(),
+  label: z.string().nullable().optional(),
+  isDefault: z.boolean().optional(),
+});
+export type UpsertOrgSenderBody = z.infer<typeof UpsertOrgSenderBodyDto>;
 
 // Single choke point for every API call:
 //  - always credentials:'include' so the httpOnly access_token cookie rides along
@@ -918,6 +941,63 @@ export const api = {
         method: 'DELETE',
         schema: WorkflowConfigDto,
       }),
+
+    // Upload a signature image (multipart). Stores the bytes server-side and points
+    // the per-org pref at an absolute hotlinkable URL; returns just that URL. The
+    // caller invalidates the config query so the resolved templates pick it up.
+    uploadSignatureImage: (file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      return uploadRequest<z.infer<typeof SignatureImageResultDto>>(
+        '/arsenal/config/signature-image',
+        form,
+        SignatureImageResultDto,
+      );
+    },
+
+    // Point the signature image at a pasted URL (a Google Drive share link or any
+    // image URL). The server normalizes Drive links to a hotlinkable form.
+    setSignatureImageUrl: (url: string) =>
+      request<z.infer<typeof SignatureImageResultDto>>(
+        '/arsenal/config/signature-image',
+        {
+          method: 'POST',
+          body: { url },
+          schema: SignatureImageResultDto,
+        },
+      ),
+
+    // Clear the signature image (nulls the per-org pref). Already-sent emails keep
+    // resolving their embedded hotlink — this only affects future sends.
+    clearSignatureImage: () =>
+      request<z.infer<typeof SignatureImageResultDto>>(
+        '/arsenal/config/signature-image',
+        { method: 'DELETE', schema: SignatureImageResultDto },
+      ),
+
+    // The org's resolved email senders (its own rows, or DEFAULT_SENDERS when none).
+    listSenders: (signal?: AbortSignal) =>
+      request<OrgSenderDto[]>('/arsenal/config/senders', {
+        schema: OrgSenderListDto,
+        signal,
+      }),
+
+    // Upsert one sender on (org, key). isDefault unsets the others. Returns the
+    // resolved sender list.
+    upsertSender: (input: UpsertOrgSenderBody) =>
+      request<OrgSenderDto[]>('/arsenal/config/senders', {
+        method: 'POST',
+        body: UpsertOrgSenderBodyDto.parse(input),
+        schema: OrgSenderListDto,
+      }),
+
+    // Remove a sender by key. 409 on the last remaining sender, 400 on an unknown
+    // key (surfaced to the caller via ApiError). Returns the resolved list.
+    removeSender: (key: string) =>
+      request<OrgSenderDto[]>(
+        `/arsenal/config/senders/${encodeURIComponent(key)}`,
+        { method: 'DELETE', schema: OrgSenderListDto },
+      ),
   },
 
   // ---- Sales Agent: meetings (Read.ai analyses synced from n8n) ----

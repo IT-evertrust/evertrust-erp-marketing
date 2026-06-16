@@ -1,25 +1,80 @@
 import { createHash } from 'node:crypto';
 import { schema } from '@evertrust/db';
+import { DEFAULT_SENDERS } from '@evertrust/shared';
 import { WorkflowConfigService } from '../src/arsenal/workflow-config.service';
+import { SendersService } from '../src/arsenal/senders.service';
 import type { AppConfigService } from '../src/config/app-config.service';
 import { FakeTable, makeFakeDb } from './fake-db';
 
-// WorkflowConfigService resolves the GLOBAL Growth-Engine wiring as
-// stored-override ?? env. These tests pin the two halves of that contract: env
-// fallback when no row exists, and the stored override winning when one does. The
-// fake db auto-vivifies workflow_config to [] when unseeded.
+// WorkflowConfigService resolves the GLOBAL Growth-Engine INFRA (webhooks, n8n base,
+// ingest token, offsets) as stored-override ?? env from the workflow_config singleton,
+// and the PER-ORG prefs (templates, leads, default sender) as org_config(orgId) value
+// ?? product default. These tests pin both halves: env/default fallback when no row
+// exists, and the stored value winning when one does. The fake db auto-vivifies both
+// tables to [] when unseeded; org_config find-or-create inserts a bare row on first
+// read.
+
+// The org under test for every per-org pref read/write.
+const ORG = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 
 function makeConfig(values: Record<string, string> = {}): AppConfigService {
   return { get: (k: string) => values[k] ?? '' } as unknown as AppConfigService;
 }
 
-// Build the service over an optional seeded singleton row.
-function make(env: Record<string, string> = {}, row?: Record<string, unknown>) {
-  const workflowConfig = new FakeTable(row ? [{ id: 'wc1', singleton: true, ...row }] : []);
-  const { db } = makeFakeDb(
-    new Map<unknown, FakeTable>([[schema.workflowConfig, workflowConfig]]),
+// Build the service over an optional seeded INFRA singleton row and an optional
+// seeded PER-ORG prefs row (org_config for ORG). `row` carries infra OR pref values;
+// it is split across the two backing tables so each spec can keep passing one flat
+// object: infra keys land on workflow_config, pref keys on org_config(ORG).
+const PREF_KEYS = new Set([
+  'defaultTemplate',
+  'signature',
+  'signatureImageUrl',
+  'tone',
+  'templateLanguage',
+  'defaultSender',
+  'salesCalendarId',
+  'maxLeadsPerRun',
+  'maxPerNiche',
+  'dailySendCap',
+  'defaultRegions',
+  'respectSuppressions',
+  'dedupDays',
+  'requireNicheAnalysis',
+]);
+
+function make(
+  env: Record<string, string> = {},
+  row?: Record<string, unknown>,
+  senderRows: Record<string, unknown>[] = [],
+) {
+  const infraVals: Record<string, unknown> = {};
+  const prefVals: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(row ?? {})) {
+    (PREF_KEYS.has(k) ? prefVals : infraVals)[k] = v;
+  }
+  const hasInfra = Object.keys(infraVals).length > 0;
+  const hasPref = Object.keys(prefVals).length > 0;
+
+  const workflowConfig = new FakeTable(
+    hasInfra ? [{ id: 'wc1', singleton: true, ...infraVals }] : [],
   );
-  return { service: new WorkflowConfigService(db, makeConfig(env)), workflowConfig };
+  const orgConfig = new FakeTable(
+    hasPref ? [{ id: 'oc1', organizationId: ORG, ...prefVals }] : [],
+  );
+  const orgSenders = new FakeTable(senderRows);
+  const { db } = makeFakeDb(
+    new Map<unknown, FakeTable>([
+      [schema.workflowConfig, workflowConfig],
+      [schema.orgConfig, orgConfig],
+      [schema.orgSenders, orgSenders],
+    ]),
+  );
+  return {
+    service: new WorkflowConfigService(db, makeConfig(env), new SendersService(db)),
+    workflowConfig,
+    orgConfig,
+    orgSenders,
+  };
 }
 
 const ENV = {
@@ -58,7 +113,7 @@ describe('WorkflowConfigService — env fallback (no stored row)', () => {
 
   it('getEffective reports env values as not-overridden + status flags', async () => {
     const { service } = make(ENV);
-    const eff = await service.getEffective();
+    const eff = await service.getEffective(ORG);
     expect(eff.webhooks.aim).toEqual({ value: 'https://env/aim', overridden: false });
     expect(eff.n8nApiUrl).toEqual({ value: 'https://env-n8n.test', overridden: false });
     expect(eff.n8nApiKeySet).toBe(true);
@@ -82,7 +137,7 @@ describe('WorkflowConfigService — stored override wins', () => {
 
   it('getEffective marks an overridden field and keeps others on env', async () => {
     const { service } = make(ENV, { aimWebhookUrl: 'https://stored/aim' });
-    const eff = await service.getEffective();
+    const eff = await service.getEffective(ORG);
     expect(eff.webhooks.aim).toEqual({ value: 'https://stored/aim', overridden: true });
     expect(eff.webhooks.leadSatellite).toEqual({
       value: 'https://env/lead',
@@ -96,7 +151,7 @@ describe('WorkflowConfigService — stored override wins', () => {
       ingestTokenSetAt: new Date('2026-06-13T00:00:00Z'),
     });
     expect(await service.getIngestTokenHash()).toBe('a'.repeat(64));
-    const eff = await service.getEffective();
+    const eff = await service.getEffective(ORG);
     expect(eff.ingestTokenSource).toBe('rotated');
     expect(eff.ingestTokenSetAt).toBe('2026-06-13T00:00:00.000Z');
   });
@@ -105,11 +160,12 @@ describe('WorkflowConfigService — stored override wins', () => {
 describe('WorkflowConfigService — templates + leads groups', () => {
   it('getEffective: unset row → booleans default to true, caps null, regions []', async () => {
     const { service } = make(ENV); // no stored row
-    const eff = await service.getEffective();
+    const eff = await service.getEffective(ORG);
 
     expect(eff.templates).toEqual({
       default: null,
       signature: null,
+      signatureImageUrl: null,
       tone: null,
       language: null,
     });
@@ -144,11 +200,12 @@ describe('WorkflowConfigService — templates + leads groups', () => {
       dedupDays: 14,
       requireNicheAnalysis: false,
     });
-    const eff = await service.getEffective();
+    const eff = await service.getEffective(ORG);
 
     expect(eff.templates).toEqual({
       default: template,
       signature: 'Best, EverTrust',
+      signatureImageUrl: null,
       tone: 'formal',
       language: 'de',
     });
@@ -164,23 +221,27 @@ describe('WorkflowConfigService — templates + leads groups', () => {
   });
 
   it('update: round-trips a defaultTemplate + caps + a boolean set to false', async () => {
-    const { service, workflowConfig } = make(ENV);
+    const { service, orgConfig } = make(ENV);
     const template = {
       cold: { subject: 'Subject A', body: 'Body A' },
       followup: { subject: 'Subject B', body: 'Body B' },
       finalPush: { subject: 'Subject C', body: 'Body C' },
     };
-    const eff = await service.update({
-      templates: { default: template, tone: 'direct', language: 'en' },
-      leads: {
-        maxLeadsPerRun: 120,
-        dedupDays: 7,
-        defaultRegions: ['NRW'],
-        respectSuppressions: false,
+    const eff = await service.update(
+      {
+        templates: { default: template, tone: 'direct', language: 'en' },
+        leads: {
+          maxLeadsPerRun: 120,
+          dedupDays: 7,
+          defaultRegions: ['NRW'],
+          respectSuppressions: false,
+        },
       },
-    });
+      ORG,
+    );
 
-    expect(workflowConfig.rows).toHaveLength(1);
+    // The prefs land on the PER-ORG org_config row (not the global singleton).
+    expect(orgConfig.rows).toHaveLength(1);
     expect(eff.templates.default).toEqual(template);
     expect(eff.templates.tone).toBe('direct');
     expect(eff.templates.language).toBe('en');
@@ -201,8 +262,125 @@ describe('WorkflowConfigService — templates + leads groups', () => {
         finalPush: { subject: 's', body: 'b' },
       },
     });
-    const eff = await service.update({ templates: { default: null } });
+    const eff = await service.update({ templates: { default: null } }, ORG);
     expect(eff.templates.default).toBeNull();
+  });
+});
+
+describe('WorkflowConfigService — senders resolution', () => {
+  it('getEffective falls back to DEFAULT_SENDERS when the org has none', async () => {
+    const { service } = make(ENV); // no org_senders rows
+    const eff = await service.getEffective(ORG);
+    expect(eff.senders).toEqual(DEFAULT_SENDERS);
+    // The product default's flagged sender isn't authoritative for a fallback list,
+    // but with no org pref the resolved default key is the first DEFAULT_SENDERS key.
+    expect(eff.defaultSender).toBe('info');
+  });
+
+  it('getEffective surfaces the org rows + the flagged isDefault as the default key', async () => {
+    const { service } = make(ENV, undefined, [
+      {
+        id: 's1',
+        organizationId: ORG,
+        senderKey: 'sales',
+        email: 'sales@acme.test',
+        label: 'Sales',
+        isDefault: false,
+        __seq: 1,
+      },
+      {
+        id: 's2',
+        organizationId: ORG,
+        senderKey: 'ceo',
+        email: 'ceo@acme.test',
+        label: null,
+        isDefault: true,
+        __seq: 2,
+      },
+    ]);
+    const eff = await service.getEffective(ORG);
+    expect(eff.senders).toEqual([
+      { key: 'sales', email: 'sales@acme.test', label: 'Sales', isDefault: false },
+      { key: 'ceo', email: 'ceo@acme.test', label: null, isDefault: true },
+    ]);
+    // The org's OWN flagged sender wins as the default key.
+    expect(eff.defaultSender).toBe('ceo');
+  });
+
+  it('an explicit org_config.defaultSender wins over a DEFAULT_SENDERS flag (no org rows)', async () => {
+    const { service } = make(ENV, { defaultSender: 'hanna' }); // no org_senders
+    const eff = await service.getEffective(ORG);
+    expect(eff.senders).toEqual(DEFAULT_SENDERS);
+    expect(eff.defaultSender).toBe('hanna');
+  });
+
+  it('getAutomation carries the resolved senders, the default sender EMAIL, and the calendar', async () => {
+    const { service } = make(ENV, { salesCalendarId: 'cal-org-1' }, [
+      {
+        id: 's1',
+        organizationId: ORG,
+        senderKey: 'ceo',
+        email: 'ceo@acme.test',
+        label: null,
+        isDefault: true,
+        __seq: 1,
+      },
+    ]);
+    const auto = await service.getAutomation(ORG);
+    expect(auto.senders).toEqual([
+      { key: 'ceo', email: 'ceo@acme.test', label: null, isDefault: true },
+    ]);
+    // n8n sets the From from this resolved EMAIL (the flagged default's address).
+    expect(auto.defaultSenderEmail).toBe('ceo@acme.test');
+    expect(auto.salesCalendarId).toBe('cal-org-1');
+    // Templates + Leads still resolve identically to getEffective().
+    expect(auto.templates).toEqual({
+      default: null,
+      signature: null,
+      signatureImageUrl: null,
+      tone: null,
+      language: null,
+    });
+  });
+
+  it('getAutomation default email falls back to DEFAULT_SENDERS when the org has none', async () => {
+    const { service } = make(ENV); // no org_senders, no org_config
+    const auto = await service.getAutomation(ORG);
+    expect(auto.senders).toEqual(DEFAULT_SENDERS);
+    // info is the first DEFAULT_SENDERS entry → its email is the resolved From.
+    expect(auto.defaultSenderEmail).toBe('info@evertrust-germany.de');
+  });
+});
+
+describe('WorkflowConfigService — salesCalendarId resolution', () => {
+  it('getEffective: org_config value wins over the env product default', async () => {
+    const { service } = make(
+      { ...ENV, SALES_CALENDAR_ID: 'env-cal' },
+      { salesCalendarId: 'org-cal' },
+    );
+    expect((await service.getEffective(ORG)).salesCalendarId).toBe('org-cal');
+  });
+
+  it('getEffective: falls back to the env SALES_CALENDAR_ID when org_config is unset', async () => {
+    const { service } = make({ ...ENV, SALES_CALENDAR_ID: 'env-cal' });
+    expect((await service.getEffective(ORG)).salesCalendarId).toBe('env-cal');
+  });
+
+  it('getEffective: null when neither org_config nor env is set', async () => {
+    const { service } = make(ENV); // no SALES_CALENDAR_ID env
+    expect((await service.getEffective(ORG)).salesCalendarId).toBeNull();
+  });
+
+  it('update: sets the per-org salesCalendarId, then null clears it back to env', async () => {
+    const { service, orgConfig } = make({ ...ENV, SALES_CALENDAR_ID: 'env-cal' });
+    let eff = await service.update({ salesCalendarId: 'org-cal' }, ORG);
+    expect(eff.salesCalendarId).toBe('org-cal');
+    // It is a PER-ORG pref — lands on org_config, not the global singleton.
+    expect(orgConfig.rows).toHaveLength(1);
+
+    eff = await service.update({ salesCalendarId: null }, ORG);
+    // Cleared → falls back to the env product default.
+    expect(eff.salesCalendarId).toBe('env-cal');
   });
 });
 
@@ -236,7 +414,7 @@ describe('WorkflowConfigService.getLeadStats', () => {
         [schema.workflowConfig, workflowConfig],
       ]),
     );
-    return new WorkflowConfigService(db, makeConfig(ENV));
+    return new WorkflowConfigService(db, makeConfig(ENV), new SendersService(db));
   }
 
   it('counts leads/prospects/suppressions scoped to the org', async () => {
@@ -257,14 +435,14 @@ describe('WorkflowConfigService.getLeadStats', () => {
 describe('WorkflowConfigService — update (singleton upsert)', () => {
   it('creates the singleton when none exists and applies the override', async () => {
     const { service, workflowConfig } = make(ENV);
-    const eff = await service.update({ webhooks: { aim: 'https://put/aim' } });
+    const eff = await service.update({ webhooks: { aim: 'https://put/aim' } }, ORG);
     expect(workflowConfig.rows).toHaveLength(1);
     expect(eff.webhooks.aim).toEqual({ value: 'https://put/aim', overridden: true });
   });
 
   it('clears an override back to env when null is sent', async () => {
     const { service } = make(ENV, { aimWebhookUrl: 'https://stored/aim' });
-    const eff = await service.update({ webhooks: { aim: null } });
+    const eff = await service.update({ webhooks: { aim: null } }, ORG);
     expect(eff.webhooks.aim).toEqual({ value: 'https://env/aim', overridden: false });
   });
 
@@ -273,8 +451,8 @@ describe('WorkflowConfigService — update (singleton upsert)', () => {
       aimWebhookUrl: 'https://stored/aim',
       n8nApiUrl: 'https://stored-n8n.test',
     });
-    // only touch defaultSender — webhooks/n8nApiUrl must persist
-    const eff = await service.update({ defaultSender: 'hanna' });
+    // only touch defaultSender (a PER-ORG pref) — webhooks/n8nApiUrl must persist
+    const eff = await service.update({ defaultSender: 'hanna' }, ORG);
     expect(eff.defaultSender).toBe('hanna');
     expect(eff.webhooks.aim.value).toBe('https://stored/aim');
     expect(eff.n8nApiUrl.value).toBe('https://stored-n8n.test');
@@ -282,10 +460,10 @@ describe('WorkflowConfigService — update (singleton upsert)', () => {
 
   it('does not create a second row on a subsequent update', async () => {
     const { service, workflowConfig } = make(ENV);
-    await service.update({ followupOffsetDays: 2 });
-    await service.update({ finalPushOffsetDays: 4 });
+    await service.update({ followupOffsetDays: 2 }, ORG);
+    await service.update({ finalPushOffsetDays: 4 }, ORG);
     expect(workflowConfig.rows).toHaveLength(1);
-    const eff = await service.getEffective();
+    const eff = await service.getEffective(ORG);
     expect(eff.followupOffsetDays).toBe(2);
     expect(eff.finalPushOffsetDays).toBe(4);
   });
@@ -307,7 +485,7 @@ describe('WorkflowConfigService.rotateIngestToken', () => {
     expect(stored).toBe(expected);
 
     // ...and the rotation is surfaced via getEffective() with the same set-at.
-    const eff = await service.getEffective();
+    const eff = await service.getEffective(ORG);
     expect(eff.ingestTokenSource).toBe('rotated');
     expect(eff.ingestTokenSet).toBe(true);
     expect(eff.ingestTokenSetAt).toBe(setAt.toISOString());
@@ -334,7 +512,7 @@ describe('WorkflowConfigService.clearIngestToken', () => {
     expect(await service.getIngestTokenHash()).toBeNull();
 
     // env-token is still set, so the source falls back to 'env' (not 'none').
-    const eff = await service.getEffective();
+    const eff = await service.getEffective(ORG);
     expect(eff.ingestTokenSource).toBe('env');
     expect(eff.ingestTokenSetAt).toBeNull();
   });

@@ -15,18 +15,21 @@ export const HealthDto = z.object({
 });
 export type HealthDto = z.infer<typeof HealthDto>;
 
-// User role mirrors the `user_role` pgEnum in @evertrust/db. Four authority
-// tiers, highest → lowest: SUPER_ADMIN (full control incl. user management),
-// ADMIN (everything except managing users), MANAGER (lead-level: pricing
-// approval, approvals decisions, campaign launches), EMPLOYEE (operational read
-// + day-to-day write). Authority is enforced via permissions, never the role
-// literal — see ROLE_PERMISSIONS. Kept as a literal union here so
-// @evertrust/shared has no dependency on the DB package.
-export const UserRole = z.enum(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'EMPLOYEE']);
+// User role mirrors the `user_role` pgEnum in @evertrust/db. Five authority
+// tiers, highest → lowest: OWNER (platform owner — the ONLY cross-org role:
+// full control PLUS access to every org's users on the admin surface),
+// SUPER_ADMIN (full control within its OWN org, incl. user management), ADMIN
+// (everything except managing users), MANAGER (lead-level: pricing approval,
+// approvals decisions, campaign launches), EMPLOYEE (operational read +
+// day-to-day write). Authority is enforced via permissions, never the role
+// literal — see ROLE_PERMISSIONS; the cross-org reach is gated by isOwner().
+// Kept as a literal union here so @evertrust/shared has no dependency on the DB.
+export const UserRole = z.enum(['OWNER', 'SUPER_ADMIN', 'ADMIN', 'MANAGER', 'EMPLOYEE']);
 export type UserRole = z.infer<typeof UserRole>;
 
 // Human-readable role labels for UI display (SSOT so api + web never drift).
 export const ROLE_LABELS: Record<UserRole, string> = {
+  OWNER: 'Owner',
   SUPER_ADMIN: 'Super Admin',
   ADMIN: 'Admin',
   MANAGER: 'Manager',
@@ -122,7 +125,11 @@ export const PermissionEnum = z.enum(
 // ADMIN is SUPER_ADMIN minus users:manage; MANAGER and EMPLOYEE are explicit
 // allow-lists. Changing access policy means changing this table, nothing else.
 export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
-  // Super Admin (CEO / owner): every permission, including user management.
+  // Owner (platform owner): every permission, AND the only role whose reach
+  // crosses the org boundary — but ONLY over the Users admin surface (see
+  // isOwner / users.service). All other data stays tenant-scoped for an Owner.
+  OWNER: [...PERMISSIONS],
+  // Super Admin (CEO / org owner): every permission, within its OWN org only.
   SUPER_ADMIN: [...PERMISSIONS],
   // Admin: everything except managing other users.
   ADMIN: PERMISSIONS.filter((p) => p !== 'users:manage'),
@@ -179,14 +186,23 @@ export function hasPermission(role: UserRole, perm: Permission): boolean {
 }
 
 // A user's EFFECTIVE permissions: their explicit per-user set when customized,
-// otherwise their role's defaults. SUPER_ADMIN ALWAYS holds every permission
-// (full control, not editable) so the org can never be locked out of admin.
+// otherwise their role's defaults. OWNER and SUPER_ADMIN ALWAYS hold every
+// permission (full control, not editable) so the org can never be locked out of
+// admin.
 export function effectivePermissions(
   role: UserRole,
   stored: readonly string[] | null | undefined,
 ): Permission[] {
-  if (role === 'SUPER_ADMIN') return [...PERMISSIONS];
+  if (role === 'OWNER' || role === 'SUPER_ADMIN') return [...PERMISSIONS];
   return stored ? ([...stored] as Permission[]) : permissionsForRole(role);
+}
+
+// True for the platform Owner — the only role whose authority crosses the org
+// boundary. That reach is confined to the Users admin surface (list/edit/reset/
+// delete users in any org); all other data stays tenant-scoped even for an
+// Owner. Granting the Owner role is itself Owner-only (enforced in the API).
+export function isOwner(role: UserRole): boolean {
+  return role === 'OWNER';
 }
 
 // ---- Organization (tenant) contract ----
@@ -552,6 +568,11 @@ export const AdminUserDto = z.object({
   permissions: z.array(PermissionEnum).nullable(),
   active: z.boolean(),
   createdAt: z.string(),
+  // The owning organization. Surfaced so the Owner's cross-org user list can
+  // show which org each user belongs to. Optional for rolling-deploy safety
+  // (an older API may omit them); for non-Owners every row is the caller's org.
+  organizationId: z.string().uuid().optional(),
+  organizationName: z.string().nullable().optional(),
 });
 export type AdminUserDto = z.infer<typeof AdminUserDto>;
 
@@ -1070,6 +1091,27 @@ export const CAMPAIGN_SENDER_LABELS: Record<CampaignSender, string> = {
   hanna: 'hanna@evertrust-germany.de',
 };
 
+// One outreach sender mailbox for an organization. `key` is the stable per-org
+// identifier the campaign's `sender` field and the config `defaultSender` reference
+// (validated against the org's sender keys at the service layer, NOT in the DTO);
+// `email` is the real Gmail identity BAZOOKA sends from; `label` is an optional
+// display name; `isDefault` marks the org's fallback sender.
+export const OrgSenderDto = z.object({
+  key: z.string().min(1),
+  email: z.string().email(),
+  label: z.string().nullable().optional(),
+  isDefault: z.boolean(),
+});
+export type OrgSenderDto = z.infer<typeof OrgSenderDto>;
+
+// The product-default sender list. The API falls back to this when an organization
+// has no senders of its own configured — the same two legacy Gmail identities the
+// team has always sent from, so existing 'info'/'hanna' references stay resolvable.
+export const DEFAULT_SENDERS: OrgSenderDto[] = [
+  { key: 'info', email: 'info@evertrust-germany.de', label: 'Info', isDefault: true },
+  { key: 'hanna', email: 'hanna@evertrust-germany.de', label: 'Hanna', isDefault: false },
+];
+
 export const CreateCampaignDto = z.object({
   name: z.string().max(60).optional(),
   // The campaign's niche by DISPLAY name; the API find-or-creates the niche row
@@ -1083,11 +1125,11 @@ export const CreateCampaignDto = z.object({
   gmailLabel: z.string().min(1).max(120),
   salesCalendarId: z.string().min(1).max(200),
   whatsappNumber: z.string().min(1).max(40),
-  // Which mailbox BAZOOKA sends this campaign's outreach from. Optional on the wire
-  // (defaults to info@) so older clients + existing campaigns stay on info@.
-  sender: z
-    .enum([...CAMPAIGN_SENDERS] as [CampaignSender, ...CampaignSender[]])
-    .default('info'),
+  // Which mailbox BAZOOKA sends this campaign's outreach from — a per-org sender KEY
+  // (validated against the org's senders at the service layer, not here). Optional on
+  // the wire (defaults to 'info') so older clients + existing campaigns stay on info@.
+  // Legacy 'info'/'hanna' keys remain valid strings.
+  sender: z.string().min(1).default('info'),
 });
 export type CreateCampaignDto = z.infer<typeof CreateCampaignDto>;
 
@@ -2463,9 +2505,10 @@ export const ConfigFieldDto = z.object({
 });
 export type ConfigFieldDto = z.infer<typeof ConfigFieldDto>;
 
-// The default Gmail sending alias. Mirrors campaigns.sender (plain text, not a
-// pgEnum) — constrained to the two real Gmail identities the team sends from.
-export const DefaultSender = z.enum(['info', 'hanna']);
+// The org's default Gmail sending alias. Mirrors campaigns.sender (plain text, not a
+// pgEnum) — a per-org sender KEY, validated against the org's senders at the service
+// layer rather than in the DTO. Legacy 'info'/'hanna' keys remain valid strings.
+export const DefaultSender = z.string().min(1);
 export type DefaultSender = z.infer<typeof DefaultSender>;
 
 // Outreach tone + template language. Stored as plain text on workflow_config (the
@@ -2500,10 +2543,32 @@ export type DefaultTemplateDto = z.infer<typeof DefaultTemplateDto>;
 export const WorkflowTemplatesDto = z.object({
   default: DefaultTemplateDto.nullable(),
   signature: z.string().nullable(),
+  // Per-org signature image. Optional + nullable for backward compatibility:
+  // omitted/null = no signature image set. Stored as a hotlinkable image URL —
+  // run `driveImageUrl()` on a pasted Google Drive share link before persisting.
+  signatureImageUrl: z.string().url().nullable().optional(),
   tone: OutreachTone.nullable(),
   language: TemplateLanguage.nullable(),
 });
 export type WorkflowTemplatesDto = z.infer<typeof WorkflowTemplatesDto>;
+
+// Normalize a Google Drive share link into a hotlinkable image URL of the form
+// `https://lh3.googleusercontent.com/d/<FILE_ID>`. Handles the common Drive share
+// shapes (`/file/d/<id>/view`, `open?id=<id>`, `uc?id=<id>`) and an already-correct
+// lh3 URL. If no Drive file id can be extracted (any other URL — e.g. a same-origin
+// `/public/signature-image/<uuid>` path or an arbitrary https URL), the input is
+// returned UNCHANGED (trimmed). Pure + total: never throws, no I/O.
+export function driveImageUrl(input: string): string {
+  const trimmed = (input ?? '').trim();
+  // Match the file id across every supported Drive/lh3 shape. Drive file ids are
+  // URL-safe base64 (letters, digits, '-' and '_'); take the first match found.
+  const id =
+    trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/)?.[1] ??
+    trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/)?.[1] ??
+    trimmed.match(/lh3\.googleusercontent\.com\/d\/([a-zA-Z0-9_-]+)/)?.[1] ??
+    null;
+  return id ? `https://lh3.googleusercontent.com/d/${id}` : trimmed;
+}
 
 // Configuration > Leads — lead-generation governance. The caps are raw stored
 // values (null = unset = no cap). `defaultRegions` is the stored array (never null —
@@ -2542,6 +2607,11 @@ export const WorkflowConfigDto = z.object({
   ingestTokenSource: z.enum(['rotated', 'env', 'none']),
   ingestTokenSetAt: z.string().nullable(),
   defaultSender: DefaultSender.nullable(),
+  // The resolved per-org sender list (the org's own senders, or DEFAULT_SENDERS when
+  // it has none). Managed via dedicated sender CRUD endpoints, not the PUT body below.
+  senders: z.array(OrgSenderDto),
+  // The org's default Google Calendar id sales bookings land on (null = unset).
+  salesCalendarId: z.string().nullable(),
   followupOffsetDays: z.number().int().nullable(),
   finalPushOffsetDays: z.number().int().nullable(),
   // Configuration > Templates / Leads — see WorkflowTemplatesDto / WorkflowLeadsDto
@@ -2575,6 +2645,14 @@ const NullableCap = z.preprocess(
   z.number().int().min(0, 'Must be 0 or more').nullable(),
 );
 
+// A nullable free-text override (e.g. the sales calendar id): a non-empty string sets
+// it, an empty string OR null clears it, omit leaves it unchanged. Empty-string→null
+// so a cleared form input reads as "clear".
+const NullableText = z.preprocess(
+  (v) => (v === '' ? null : v),
+  z.string().nullable(),
+);
+
 // Default target regions: an array of NON-EMPTY strings, each trimmed. Blank/
 // whitespace-only entries are rejected (not silently dropped) so a bad form row
 // surfaces as a validation error rather than vanishing.
@@ -2591,6 +2669,11 @@ const DefaultRegions = z.array(
 const UpdateTemplates = z.object({
   default: DefaultTemplateDto.nullable().optional(),
   signature: z.string().nullable().optional(),
+  // null clears the signature image, omit leaves it unchanged. Empty string → null
+  // so a cleared form input reads as "clear" rather than failing URL validation.
+  signatureImageUrl: z
+    .preprocess((v) => (v === '' ? null : v), z.string().url().nullable())
+    .optional(),
   tone: OutreachTone.nullable().optional(),
   language: TemplateLanguage.nullable().optional(),
 });
@@ -2624,6 +2707,9 @@ export const UpdateWorkflowConfigDto = z.object({
     .optional(),
   n8nApiUrl: NullableUrlOverride.optional(),
   defaultSender: DefaultSender.nullable().optional(),
+  // The org's default sales calendar id. Empty string OR null clears it, omit leaves
+  // it unchanged. The senders LIST is managed via dedicated CRUD endpoints, not here.
+  salesCalendarId: NullableText.optional(),
   followupOffsetDays: NullableOffsetDays.optional(),
   finalPushOffsetDays: NullableOffsetDays.optional(),
   templates: UpdateTemplates.optional(),

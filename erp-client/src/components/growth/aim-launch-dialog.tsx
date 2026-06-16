@@ -4,15 +4,10 @@ import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { Crosshair } from 'lucide-react';
-import {
-  type CreateCampaignDto,
-  type CampaignSender,
-  CAMPAIGN_SENDERS,
-  CAMPAIGN_SENDER_LABELS,
-  slugify,
-} from '@evertrust/shared';
+import { type CreateCampaignDto, slugify } from '@evertrust/shared';
 import { useCreateCampaign } from '@/hooks/use-campaigns';
 import { useNiches } from '@/hooks/use-niches';
+import { useOrgSenders } from '@/hooks/use-arsenal';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -34,9 +29,9 @@ import {
 } from '@/components/ui/select';
 
 // The AIM "Lock & Load" form, keyed by the CreateCampaignDto fields. Target is
-// gone (target archetypes now live on niche_targets, derived per-niche); the old
-// "State / City" is renamed Region (still free text — a city/voivodeship the Lead
-// Satellite expands into searches); niche is pick-or-create (existing or new name).
+// gone (target archetypes now live on niche_targets, derived per-niche); Region
+// is a fixed zone (REGION_OPTIONS) the Lead Satellite seeds its city searches
+// from; niche is pick-or-create (existing or new name).
 type FormState = {
   name: string;
   nicheName: string;
@@ -45,19 +40,38 @@ type FormState = {
   project: string;
   gmailLabel: string;
   whatsappNumber: string;
-  sender: CampaignSender;
+  // A per-org sender KEY (validated server-side against the org's resolved senders).
+  // Sourced from the org's senders list; defaults to the org default (or 'info').
+  sender: string;
 };
+
+// AIM Region zones (strict dropdown). Values are sent to n8n as-is and seed the
+// Lead Satellite's city searches, so they stay stable English strings.
+// "Anywhere" is the catch-all default (omitted from the Gmail label).
+// "Near border (DE-PL)" targets the German–Polish border — we run German tenders,
+// so near-border means BOTH sides of the DE/PL border (the n8n Lead Satellite
+// expands it into border-city searches).
+const REGION_OPTIONS = [
+  'Anywhere',
+  'North',
+  'South',
+  'East',
+  'West',
+  'Central',
+  'Near border (DE-PL)',
+] as const;
 
 const EMPTY_FORM: FormState = {
   name: '',
   nicheName: '',
   country: '',
-  region: '',
+  region: 'Anywhere',
   project: '',
   gmailLabel: '',
   whatsappNumber: '',
-  // sender defaults to info@ so its Select shows a valid choice and submit never
-  // posts an empty value (the wire default is also 'info').
+  // sender is seeded from the org's default sender once the list loads (see the
+  // effect below); 'info' is the safe initial/fallback (the wire default is 'info'
+  // too) so the Select shows a valid choice before the senders query resolves.
   sender: 'info',
 };
 
@@ -108,8 +122,49 @@ export function AimLaunchDialog() {
   // carries `industryName`, so we sort by industry then niche and label each
   // option "Industry ▸ Niche" — display only, the value stays the bare niche name.
   const niches = useNiches(open);
+  // The org's resolved senders (its own, or DEFAULT_SENDERS). Drives the From-alias
+  // picker; the default-flagged sender seeds the form's initial selection.
+  const senders = useOrgSenders();
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
+
+  // Track whether the user has hand-picked a sender, so the auto-seed (below) only
+  // sets the org default until they choose.
+  const [senderEdited, setSenderEdited] = useState(false);
+
+  // The org default sender key (the isDefault row, else the first sender, else
+  // 'info' when the list is empty/unloaded — matching the wire default).
+  const defaultSenderKey = useMemo(() => {
+    const list = senders.data ?? [];
+    return (list.find((s) => s.isDefault) ?? list[0])?.key ?? 'info';
+  }, [senders.data]);
+
+  // The sender Select options: the org's resolved senders, each labelled
+  // "Label (email)" (or just the email). Falls back to a single 'info' option when
+  // the list is empty/unloaded, and always includes the current selection so a
+  // legacy key (e.g. on a pre-existing draft) still renders a valid choice.
+  const senderOptions = useMemo(() => {
+    const list = senders.data ?? [];
+    const opts =
+      list.length > 0
+        ? list.map((s) => ({
+            key: s.key,
+            label: s.label?.trim() ? `${s.label} (${s.email})` : s.email,
+          }))
+        : [{ key: 'info', label: 'info@evertrust-germany.de' }];
+    if (!opts.some((o) => o.key === form.sender)) {
+      opts.push({ key: form.sender, label: form.sender });
+    }
+    return opts;
+  }, [senders.data, form.sender]);
+
+  // Seed the form's sender from the org default once the list loads, until the user
+  // picks one themselves. Re-seeds when the dialog reopens (senderEdited resets in
+  // reset()).
+  useEffect(() => {
+    if (senderEdited) return;
+    setForm((f) => (f.sender === defaultSenderKey ? f : { ...f, sender: defaultSenderKey }));
+  }, [defaultSenderKey, senderEdited]);
 
   // Niche options grouped by industry: industries first (alphabetical), Unassigned
   // last; niches alphabetical within each. `optionLabel` is what the datalist shows.
@@ -156,6 +211,7 @@ export function AimLaunchDialog() {
   function reset() {
     setForm(EMPTY_FORM);
     setLabelEdited(false);
+    setSenderEdited(false);
   }
 
   function submit() {
@@ -266,17 +322,25 @@ export function AimLaunchDialog() {
             />
           </div>
 
-          {/* Region — free text (was "State / City"); the Lead Satellite expands
-              it into per-city searches, e.g. "Warszawa, Kraków" or "Mazowieckie" */}
+          {/* Region — a fixed zone the Lead Satellite seeds its city searches
+              from. "Near border (DE-PL)" = the German–Polish border (both sides). */}
           <div className="grid gap-2">
             <Label htmlFor={`${fieldId}-region`}>{t('regionLabel')}</Label>
-            <Input
-              id={`${fieldId}-region`}
+            <Select
               value={form.region}
-              placeholder={t('regionPlaceholder')}
-              maxLength={120}
-              onChange={(e) => set('region', e.target.value)}
-            />
+              onValueChange={(v) => set('region', v)}
+            >
+              <SelectTrigger id={`${fieldId}-region`} className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {REGION_OPTIONS.map((opt) => (
+                  <SelectItem key={opt} value={opt}>
+                    {opt}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Project */}
@@ -323,20 +387,24 @@ export function AimLaunchDialog() {
             />
           </div>
 
-          {/* Sender alias — which Gmail identity BAZOOKA sends from */}
+          {/* Sender alias — which org mailbox BAZOOKA sends from. Options come from
+              the org's resolved senders; the default-flagged one is pre-selected. */}
           <div className="grid gap-2">
             <Label htmlFor={`${fieldId}-sender`}>{t('senderLabel')}</Label>
             <Select
               value={form.sender}
-              onValueChange={(v) => set('sender', v as CampaignSender)}
+              onValueChange={(v) => {
+                setSenderEdited(true);
+                set('sender', v);
+              }}
             >
               <SelectTrigger id={`${fieldId}-sender`} className="w-full">
                 <SelectValue placeholder="info" />
               </SelectTrigger>
               <SelectContent>
-                {CAMPAIGN_SENDERS.map((opt) => (
-                  <SelectItem key={opt} value={opt}>
-                    {CAMPAIGN_SENDER_LABELS[opt]}
+                {senderOptions.map((opt) => (
+                  <SelectItem key={opt.key} value={opt.key}>
+                    {opt.label}
                   </SelectItem>
                 ))}
               </SelectContent>

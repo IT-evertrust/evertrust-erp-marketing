@@ -1,7 +1,23 @@
-import { Body, Controller, Delete, Get, Post, Put, Req } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Req,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
+import { z } from 'zod';
 import type { Request } from 'express';
 import type {
   LeadStatsDto,
+  OrgSenderDto,
   RotateIngestTokenResultDto,
   TestN8nResultDto,
   WorkflowConfigDto,
@@ -10,7 +26,33 @@ import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { OrgId } from '../common/tenant';
 import { setAuditContext } from '../common/audit-context';
 import { WorkflowConfigService } from './workflow-config.service';
-import { UpdateWorkflowConfigBodyDto } from './arsenal.dto';
+import { SendersService } from './senders.service';
+import {
+  MAX_SIGNATURE_BYTES,
+  SignatureAssetsService,
+} from './signature-assets.service';
+import { UpdateWorkflowConfigBodyDto, UpsertOrgSenderBodyDto } from './arsenal.dto';
+
+// The JSON body shape for the link-based path: { url: <a valid URL> }. Validated
+// manually (not the global ZodValidationPipe) because this route also accepts a
+// multipart file, so it can't declare a single createZodDto @Body() type.
+const SignatureLinkBody = z.object({ url: z.string().url() });
+
+// Build the ABSOLUTE origin (protocol + host) for the current request, used as the
+// base of the public signature-image URL so it hotlinks straight from an email.
+// There is no self/base-URL env var (see env.schema.ts), so it is derived from the
+// request: the X-Forwarded-Proto header wins when present (behind Render/Vercel's
+// TLS-terminating proxy `req.protocol` reports http), else `req.protocol`; the host
+// comes from the Host header via Express.
+function requestBaseUrl(req: Request): string {
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  const proto =
+    (typeof forwardedProto === 'string' ? forwardedProto.split(',')[0]?.trim() : '') ||
+    req.protocol;
+  const host = req.get('host');
+  if (!host) throw new BadRequestException('Cannot resolve request host');
+  return `${proto}://${host}`;
+}
 
 // Admin control panel for the GLOBAL Growth-Engine workflow config (the n8n wiring
 // that is otherwise env-only). Single-tenant app → these edit the one global
@@ -25,13 +67,19 @@ import { UpdateWorkflowConfigBodyDto } from './arsenal.dto';
 // routes live under /arsenal/config while lead-stats sits at /arsenal/lead-stats.
 @Controller()
 export class WorkflowConfigController {
-  constructor(private readonly workflowConfig: WorkflowConfigService) {}
+  constructor(
+    private readonly workflowConfig: WorkflowConfigService,
+    private readonly signatureAssets: SignatureAssetsService,
+    private readonly senders: SendersService,
+  ) {}
 
-  // The resolved config (stored override ?? env per field) for the Configuration UI.
+  // The resolved config for the Configuration UI: GLOBAL infra (override ?? env) +
+  // the caller org's PER-ORG prefs (templates/leads/default sender). `@OrgId()` pulls
+  // req.user.organizationId off the JWT.
   @RequirePermissions('admin:config')
   @Get('arsenal/config')
-  get(): Promise<WorkflowConfigDto> {
-    return this.workflowConfig.getEffective();
+  get(@OrgId() orgId: string): Promise<WorkflowConfigDto> {
+    return this.workflowConfig.getEffective(orgId);
   }
 
   // Org-scoped counts (leads / prospects / suppressions) for the Configuration
@@ -42,21 +90,69 @@ export class WorkflowConfigController {
     return this.workflowConfig.getLeadStats(orgId);
   }
 
-  // Apply a partial override (a value sets it, null/"" clears it back to env, an
-  // omitted field is unchanged); returns the freshly resolved config. Audited.
+  // Apply a partial override (a value sets it, null/"" clears it back to env/default,
+  // an omitted field is unchanged); INFRA fields write the global singleton, PREF
+  // fields write the caller org's org_config row. Returns the freshly resolved config.
+  // Audited.
   @RequirePermissions('admin:config')
   @Put('arsenal/config')
   async update(
     @Body() body: UpdateWorkflowConfigBodyDto,
+    @OrgId() orgId: string,
     @Req() req: Request,
   ): Promise<WorkflowConfigDto> {
-    const after = await this.workflowConfig.update(body);
+    const after = await this.workflowConfig.update(body, orgId);
     setAuditContext(req, {
       entity: 'workflow_config',
       action: 'UPDATE',
       after,
     });
     return after;
+  }
+
+  // The caller org's RESOLVED sender list (its own org_senders rows, or the product
+  // DEFAULT_SENDERS when it has none). Read-only → not audited.
+  @RequirePermissions('admin:config')
+  @Get('arsenal/config/senders')
+  listSenders(@OrgId() orgId: string): Promise<OrgSenderDto[]> {
+    return this.senders.list(orgId);
+  }
+
+  // Upsert a PER-ORG sender on (organizationId, key). When isDefault is set, the flag
+  // is cleared on the org's other senders in the same write so at most one default
+  // exists. Returns the resolved list. Audited.
+  @RequirePermissions('admin:config')
+  @Post('arsenal/config/senders')
+  async upsertSender(
+    @Body() body: UpsertOrgSenderBodyDto,
+    @OrgId() orgId: string,
+    @Req() req: Request,
+  ): Promise<OrgSenderDto[]> {
+    const senders = await this.senders.upsert(orgId, body);
+    setAuditContext(req, {
+      entity: 'org_senders',
+      action: 'UPSERT',
+      after: { key: body.key, email: body.email, isDefault: body.isDefault ?? false },
+    });
+    return senders;
+  }
+
+  // Remove a PER-ORG sender by its key. Guarded: the last remaining sender cannot be
+  // deleted (409). Returns the resolved list. Audited.
+  @RequirePermissions('admin:config')
+  @Delete('arsenal/config/senders/:key')
+  async deleteSender(
+    @Param('key') key: string,
+    @OrgId() orgId: string,
+    @Req() req: Request,
+  ): Promise<OrgSenderDto[]> {
+    const senders = await this.senders.remove(orgId, key);
+    setAuditContext(req, {
+      entity: 'org_senders',
+      action: 'DELETE',
+      after: { key },
+    });
+    return senders;
   }
 
   // Probe the n8n public API with the resolved base URL + env key. Read-only (never
@@ -86,14 +182,85 @@ export class WorkflowConfigController {
   // ARSENAL_INGEST_TOKEN. Returns the freshly resolved config (mirrors PUT). Audited.
   @RequirePermissions('admin:config')
   @Delete('arsenal/config/ingest-token')
-  async clearIngestToken(@Req() req: Request): Promise<WorkflowConfigDto> {
+  async clearIngestToken(
+    @OrgId() orgId: string,
+    @Req() req: Request,
+  ): Promise<WorkflowConfigDto> {
     await this.workflowConfig.clearIngestToken();
-    const after = await this.workflowConfig.getEffective();
+    const after = await this.workflowConfig.getEffective(orgId);
     setAuditContext(req, {
       entity: 'workflow_config',
       action: 'CLEAR_TOKEN',
       after,
     });
     return after;
+  }
+
+  // Set the caller org's signature image. Accepts EITHER a multipart `file` (stored
+  // as a signature_assets row; signatureImageUrl → the absolute public serve URL) OR
+  // a JSON body { url } (normalized via driveImageUrl and stored directly, no asset
+  // row). The file uses in-memory multer storage so the bytes are base64-encoded into
+  // the DB (no disk write — unlike the document uploads). Returns { signatureImageUrl }.
+  // Audited.
+  @RequirePermissions('admin:config')
+  @Post('arsenal/config/signature-image')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      limits: { fileSize: MAX_SIGNATURE_BYTES },
+    }),
+  )
+  async setSignatureImage(
+    @OrgId() orgId: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Req() req: Request,
+  ): Promise<{ signatureImageUrl: string }> {
+    let result: { signatureImageUrl: string };
+    if (file) {
+      result = await this.signatureAssets.storeUpload(
+        orgId,
+        {
+          buffer: file.buffer,
+          mimetype: file.mimetype,
+          originalname: file.originalname,
+          size: file.size,
+        },
+        requestBaseUrl(req),
+      );
+    } else {
+      // No file → expect a JSON { url }. Validate manually (the route also serves
+      // multipart, so it can't use a single createZodDto @Body() type).
+      const parsed = SignatureLinkBody.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        throw new BadRequestException(
+          'Provide a multipart `file` or a JSON body { url } with a valid URL',
+        );
+      }
+      result = await this.signatureAssets.setLink(orgId, parsed.data.url);
+    }
+
+    setAuditContext(req, {
+      entity: 'workflow_config',
+      action: 'UPDATE',
+      after: { signatureImageUrl: result.signatureImageUrl },
+    });
+    return result;
+  }
+
+  // Clear the caller org's signature image (null on org_config.signatureImageUrl).
+  // Does not delete stored asset rows. Audited.
+  @RequirePermissions('admin:config')
+  @Delete('arsenal/config/signature-image')
+  async clearSignatureImage(
+    @OrgId() orgId: string,
+    @Req() req: Request,
+  ): Promise<{ signatureImageUrl: null }> {
+    await this.signatureAssets.clear(orgId);
+    setAuditContext(req, {
+      entity: 'workflow_config',
+      action: 'UPDATE',
+      after: { signatureImageUrl: null },
+    });
+    return { signatureImageUrl: null };
   }
 }

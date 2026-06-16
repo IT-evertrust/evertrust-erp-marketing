@@ -146,6 +146,8 @@ export const queryKeys = {
     settings: () => ['arsenal', 'settings'] as const,
     // The editable Growth-Engine workflow config (webhooks, n8n wiring, cadence).
     config: () => ['arsenal', 'config'] as const,
+    // The org's resolved email senders (Configuration > Senders + the AIM sender picker).
+    senders: () => ['arsenal', 'senders'] as const,
     // Org-scoped lead/prospect/suppression tallies for the Configuration metric strip.
     leadStats: () => ['arsenal', 'lead-stats'] as const,
     // Phase 7+: live per-stage n8n execution status.

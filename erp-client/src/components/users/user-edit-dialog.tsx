@@ -6,10 +6,12 @@ import { toast } from 'sonner';
 import {
   Department,
   Position,
+  ROLE_LABELS,
   UserRole,
   type AdminUserDto,
   type UpdateUserDto,
 } from '@evertrust/shared';
+import { useMe } from '@/hooks/use-auth';
 import { useUpdateUser } from '@/hooks/use-admin-users';
 import { Button } from '@/components/ui/button';
 import {
@@ -46,6 +48,7 @@ export function UserEditDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const t = useTranslations('users');
+  const { data: me } = useMe();
   const update = useUpdateUser();
   const [name, setName] = useState(user.name);
   const [phone, setPhone] = useState(user.phone ?? '');
@@ -65,7 +68,17 @@ export function UserEditDialog({
     }
   }, [open, user]);
 
-  const roleLocked = user.role === 'SUPER_ADMIN';
+  // Mirror the API role-grant rule (only an Owner grants OWNER; SUPER_ADMIN needs
+  // Owner or Super Admin) and lock the select for SUPER_ADMIN / non-Owner-on-Owner.
+  const canGrantOwner = me?.role === 'OWNER';
+  const canGrantSuperAdmin = me?.role === 'OWNER' || me?.role === 'SUPER_ADMIN';
+  const ownerLocked = user.role === 'OWNER' && me?.role !== 'OWNER';
+  const roleLocked = user.role === 'SUPER_ADMIN' || ownerLocked;
+  const roleOptions = UserRole.options.filter((r) => {
+    if (r === 'OWNER') return canGrantOwner;
+    if (r === 'SUPER_ADMIN') return canGrantSuperAdmin;
+    return true;
+  });
 
   function save() {
     const patch: UpdateUserDto = { name, position, department };
@@ -112,7 +125,7 @@ export function UserEditDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {UserRole.options.map((r) => (
+                {roleOptions.map((r) => (
                   <SelectItem key={r} value={r}>
                     {t(`role.${r}`)}
                   </SelectItem>
@@ -121,7 +134,7 @@ export function UserEditDialog({
             </Select>
             {roleLocked ? (
               <p className="text-xs text-amber-600 dark:text-amber-400">
-                {t('editProfile.roleLocked')}
+                {t('editProfile.roleLocked', { role: ROLE_LABELS[user.role] })}
               </p>
             ) : null}
           </div>

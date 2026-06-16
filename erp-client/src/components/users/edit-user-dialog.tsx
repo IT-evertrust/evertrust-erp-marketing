@@ -17,6 +17,7 @@ import {
   type Position,
   type UserRole,
 } from '@evertrust/shared';
+import { useMe } from '@/hooks/use-auth';
 import { useUpdateUser } from '@/hooks/use-admin-users';
 import { Button } from '@/components/ui/button';
 import {
@@ -50,8 +51,23 @@ export function EditUserDialog({
   onOpenChange: (o: boolean) => void;
 }) {
   const t = useTranslations('users');
+  const { data: me } = useMe();
   const update = useUpdateUser();
   const isSA = user.role === 'SUPER_ADMIN';
+  // OWNER & SUPER_ADMIN both hold every permission (see ROLE_PERMISSIONS), so
+  // both render as "full access" with the permission grid frozen.
+  const fullAccess = user.role === 'OWNER' || isSA;
+  // Mirror the API: only an Owner can grant OWNER; SUPER_ADMIN needs Owner or
+  // Super Admin. And an Owner target is locked for any non-Owner viewer.
+  const canGrantOwner = me?.role === 'OWNER';
+  const canGrantSuperAdmin = me?.role === 'OWNER' || me?.role === 'SUPER_ADMIN';
+  const ownerLocked = user.role === 'OWNER' && me?.role !== 'OWNER';
+  const roleLocked = isSA || ownerLocked;
+  const roleOptions = (Object.keys(ROLE_LABELS) as UserRole[]).filter((r) => {
+    if (r === 'OWNER') return canGrantOwner;
+    if (r === 'SUPER_ADMIN') return canGrantSuperAdmin;
+    return true;
+  });
   const [role, setRole] = useState<UserRole>(user.role);
   const [position, setPosition] = useState<Position | ''>(user.position ?? '');
   const [department, setDepartment] = useState<Department | ''>(user.department ?? '');
@@ -78,8 +94,8 @@ export function EditUserDialog({
           role,
           position: position || null,
           department: department || null,
-          // SUPER_ADMIN perms are ignored server-side; otherwise null = follow role default.
-          ...(isSA ? {} : { permissions: sameAsRole ? null : [...perms] }),
+          // OWNER/SUPER_ADMIN perms are ignored server-side; otherwise null = follow role default.
+          ...(fullAccess ? {} : { permissions: sameAsRole ? null : [...perms] }),
         },
       },
       {
@@ -104,12 +120,12 @@ export function EditUserDialog({
           <label className="flex flex-col gap-1 text-xs text-muted-foreground">
             {t('editAccess.role')}
             <select
-              disabled={isSA}
+              disabled={roleLocked}
               value={role}
               onChange={(e) => setRole(e.target.value as UserRole)}
               className="h-9 rounded-md border bg-card px-2 text-sm text-foreground disabled:opacity-60"
             >
-              {(Object.keys(ROLE_LABELS) as UserRole[]).map((r) => (
+              {roleOptions.map((r) => (
                 <option key={r} value={r}>{t(`role.${r}`)}</option>
               ))}
             </select>
@@ -144,9 +160,11 @@ export function EditUserDialog({
 
         <div className="mt-2 flex items-center justify-between">
           <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-            {isSA ? t('editAccess.permsSuperAdmin') : t('editAccess.permsEffective')}
+            {fullAccess
+              ? t('editAccess.permsFullAccess', { role: ROLE_LABELS[user.role] })
+              : t('editAccess.permsEffective')}
           </p>
-          {!isSA ? (
+          {!fullAccess ? (
             <Button variant="ghost" size="sm" onClick={resetDefaults}>
               <RotateCcw className="size-3.5" /> {t('editAccess.resetDefaults')}
             </Button>
@@ -163,8 +181,8 @@ export function EditUserDialog({
                 >
                   <input
                     type="checkbox"
-                    checked={isSA || perms.has(p)}
-                    disabled={isSA}
+                    checked={fullAccess || perms.has(p)}
+                    disabled={fullAccess}
                     onChange={() => toggle(p)}
                     className="accent-violet-500"
                   />

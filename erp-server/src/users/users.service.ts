@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import * as argon2 from 'argon2';
 import { schema } from '@evertrust/db';
 import { effectivePermissions } from '@evertrust/shared';
@@ -22,7 +22,7 @@ import type {
   UserStatsDto,
 } from '@evertrust/shared';
 import { DB, type DbClient } from '../db/db.tokens';
-import { tenantScope } from '../common/tenant';
+import { adminUserScope, tenantScope } from '../common/tenant';
 
 export interface UpdateNameResult {
   before: { name: string };
@@ -94,10 +94,17 @@ export class UsersService {
     return { before: { name: prev.name }, after };
   }
 
-  // Full user directory for the management table (users:manage). Tenant-scoped.
-  // createdAt is serialized to ISO so it matches the AdminUserDto wire shape.
-  async listAllForOrg(orgId: string): Promise<AdminUserDto[]> {
-    const rows = await this.db
+  // Full user directory for the management table (users:manage). Tenant-scoped
+  // for everyone EXCEPT the platform Owner, who sees every org's users (the only
+  // cross-org seam — user administration only). Each row carries its org id +
+  // name so the Owner's list can show which org a user belongs to. createdAt is
+  // serialized to ISO so it matches the AdminUserDto wire shape.
+  async listAllForOrg(
+    orgId: string,
+    actorRole?: UserRole,
+  ): Promise<AdminUserDto[]> {
+    const orgCond = adminUserScope(actorRole, orgId, schema.users);
+    const base = this.db
       .select({
         id: schema.users.id,
         name: schema.users.name,
@@ -109,14 +116,33 @@ export class UsersService {
         permissions: schema.users.permissions,
         active: schema.users.active,
         createdAt: schema.users.createdAt,
+        organizationId: schema.users.organizationId,
       })
-      .from(schema.users)
-      .where(tenantScope(orgId, schema.users))
-      .orderBy(asc(schema.users.name));
+      .from(schema.users);
+    const rows = await (orgCond ? base.where(orgCond) : base).orderBy(
+      asc(schema.users.name),
+    );
+
+    // Resolve org names in one extra query (no join — keeps the in-memory fake +
+    // the read simple). A non-Owner sees only its own org; an Owner spans orgs.
+    // Best-effort: a missing org degrades to null, never an error.
+    const orgIds = [...new Set(rows.map((r) => r.organizationId))];
+    const orgs = orgIds.length
+      ? await this.db
+          .select({
+            id: schema.organizations.id,
+            name: schema.organizations.name,
+          })
+          .from(schema.organizations)
+          .where(inArray(schema.organizations.id, orgIds))
+      : [];
+    const nameById = new Map(orgs.map((o) => [o.id, o.name]));
+
     return rows.map((r) => ({
       ...r,
       permissions: r.permissions as Permission[] | null,
       createdAt: new Date(r.createdAt).toISOString(),
+      organizationName: nameById.get(r.organizationId) ?? null,
     }));
   }
 
@@ -130,11 +156,17 @@ export class UsersService {
     actingUserId: string,
     userId: string,
     dto: UpdateUserDto,
+    actorRole?: UserRole,
   ): Promise<UpdateUserResult> {
-    const scope = and(
-      tenantScope(orgId, schema.users),
-      eq(schema.users.id, userId),
-    );
+    // Only an Owner may grant the Owner role (cross-org privilege-escalation
+    // guard). Checked first so the error is role-shaped, not a 404.
+    if (dto.role === 'OWNER' && actorRole !== 'OWNER') {
+      throw new ForbiddenException('Only an Owner can grant the Owner role');
+    }
+    const orgCond = adminUserScope(actorRole, orgId, schema.users);
+    const scope = orgCond
+      ? and(orgCond, eq(schema.users.id, userId))
+      : eq(schema.users.id, userId);
 
     const existing = await this.db
       .select({
@@ -153,6 +185,12 @@ export class UsersService {
 
     const prev = existing[0];
     if (!prev) throw new NotFoundException('User not found');
+
+    // The Owner is the top tier: only another Owner may modify an Owner (role,
+    // status, permissions, identity). Mirrors the Super Admin protection below.
+    if (prev.role === 'OWNER' && actorRole !== 'OWNER') {
+      throw new ForbiddenException('Only an Owner can modify an Owner');
+    }
 
     // Super Admin is protected: its role can't be changed (no demoting the top
     // admin / locking the org out).
@@ -263,7 +301,15 @@ export class UsersService {
   // Create a new user + their argon2 login credential, in one transaction. No
   // public register flow exists, so a users:manage admin sets the initial
   // password here. Email must be globally unique (409 on clash).
-  async createUser(orgId: string, dto: CreateUserDto): Promise<AdminUserDto> {
+  async createUser(
+    orgId: string,
+    dto: CreateUserDto,
+    actorRole?: UserRole,
+  ): Promise<AdminUserDto> {
+    // Granting the Owner role is Owner-only (privilege-escalation guard).
+    if (dto.role === 'OWNER' && actorRole !== 'OWNER') {
+      throw new ForbiddenException('Only an Owner can grant the Owner role');
+    }
     const existing = await this.db
       .select({ id: schema.users.id })
       .from(schema.users)
@@ -323,11 +369,12 @@ export class UsersService {
     orgId: string,
     actingUserId: string,
     userId: string,
+    actorRole?: UserRole,
   ): Promise<{ name: string; email: string }> {
-    const scope = and(
-      tenantScope(orgId, schema.users),
-      eq(schema.users.id, userId),
-    );
+    const orgCond = adminUserScope(actorRole, orgId, schema.users);
+    const scope = orgCond
+      ? and(orgCond, eq(schema.users.id, userId))
+      : eq(schema.users.id, userId);
     const rows = await this.db
       .select({
         name: schema.users.name,
@@ -341,6 +388,10 @@ export class UsersService {
     if (!prev) throw new NotFoundException('User not found');
     if (userId === actingUserId) {
       throw new ForbiddenException('You cannot delete your own account');
+    }
+    // Only an Owner can delete an Owner (top tier protects itself).
+    if (prev.role === 'OWNER' && actorRole !== 'OWNER') {
+      throw new ForbiddenException('Only an Owner can delete an Owner');
     }
     if (prev.role === 'SUPER_ADMIN') {
       throw new ForbiddenException('A Super Admin cannot be deleted');
@@ -369,20 +420,35 @@ export class UsersService {
   // Real per-user contribution stats for the profile page (no fabricated data):
   // campaigns this user deployed, arsenal stages they triggered, and their
   // audited actions + a recent-activity feed. Tenant-scoped; 404 if not in org.
-  async getStats(orgId: string, userId: string): Promise<UserStatsDto> {
+  async getStats(
+    orgId: string,
+    userId: string,
+    actorRole?: UserRole,
+  ): Promise<UserStatsDto> {
+    const orgCond = adminUserScope(actorRole, orgId, schema.users);
     const u = await this.db
-      .select({ id: schema.users.id })
+      .select({
+        id: schema.users.id,
+        organizationId: schema.users.organizationId,
+      })
       .from(schema.users)
-      .where(and(tenantScope(orgId, schema.users), eq(schema.users.id, userId)))
+      .where(
+        orgCond
+          ? and(orgCond, eq(schema.users.id, userId))
+          : eq(schema.users.id, userId),
+      )
       .limit(1);
     if (!u[0]) throw new NotFoundException('User not found');
+    // Sub-stats are scoped to the TARGET user's org (matters when an Owner views
+    // a user in another org; for a non-Owner this equals orgId).
+    const targetOrg = u[0].organizationId as string;
 
     const campaigns = await this.db
       .select({ id: schema.campaigns.id })
       .from(schema.campaigns)
       .where(
         and(
-          tenantScope(orgId, schema.campaigns),
+          tenantScope(targetOrg, schema.campaigns),
           eq(schema.campaigns.activatedBy, userId),
         ),
       );
@@ -401,7 +467,7 @@ export class UsersService {
       .from(schema.auditLog)
       .where(
         and(
-          tenantScope(orgId, schema.auditLog),
+          tenantScope(targetOrg, schema.auditLog),
           eq(schema.auditLog.actorId, userId),
         ),
       )
@@ -427,14 +493,30 @@ export class UsersService {
     userId: string,
     password: string,
   ): Promise<void> {
+    const orgCond = adminUserScope(actingUserRole, orgId, schema.users);
     const u = await this.db
       .select({ id: schema.users.id, role: schema.users.role })
       .from(schema.users)
-      .where(and(tenantScope(orgId, schema.users), eq(schema.users.id, userId)))
+      .where(
+        orgCond
+          ? and(orgCond, eq(schema.users.id, userId))
+          : eq(schema.users.id, userId),
+      )
       .limit(1);
     const target = u[0];
     if (!target) throw new NotFoundException('User not found');
-    if (target.role === 'SUPER_ADMIN' && actingUserRole !== 'SUPER_ADMIN') {
+    // Only an Owner can reset an Owner's password.
+    if (target.role === 'OWNER' && actingUserRole !== 'OWNER') {
+      throw new ForbiddenException(
+        "Only an Owner can reset an Owner's password",
+      );
+    }
+    // A Super Admin's password is resettable only by a Super Admin or the Owner.
+    if (
+      target.role === 'SUPER_ADMIN' &&
+      actingUserRole !== 'SUPER_ADMIN' &&
+      actingUserRole !== 'OWNER'
+    ) {
       throw new ForbiddenException(
         "Only a Super Admin can reset a Super Admin's password",
       );

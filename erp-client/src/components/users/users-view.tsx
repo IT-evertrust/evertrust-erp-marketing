@@ -19,6 +19,7 @@ import {
   PERMISSIONS,
   ROLE_LABELS,
   effectivePermissions,
+  isOwner,
   type AdminUserDto,
   type Department,
   type UserRole,
@@ -55,15 +56,17 @@ import { DeleteUserDialog } from '@/components/users/delete-user-dialog';
 import { cn } from '@/lib/utils';
 
 const ROLE_PILL: Record<UserRole, string> = {
+  OWNER: 'border-amber-500/30 bg-amber-500/10 text-amber-500',
   SUPER_ADMIN: 'border-violet-500/30 bg-violet-500/10 text-violet-500',
   ADMIN: 'border-sky-500/30 bg-sky-500/10 text-sky-500',
-  MANAGER: 'border-amber-500/30 bg-amber-500/10 text-amber-500',
+  MANAGER: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500',
   EMPLOYEE: 'border-border bg-muted text-muted-foreground',
 };
 const ROLE_AV: Record<UserRole, string> = {
+  OWNER: 'bg-amber-500/15 text-amber-300',
   SUPER_ADMIN: 'bg-violet-500/15 text-violet-300',
   ADMIN: 'bg-sky-500/15 text-sky-300',
-  MANAGER: 'bg-amber-500/15 text-amber-300',
+  MANAGER: 'bg-emerald-500/15 text-emerald-300',
   EMPLOYEE: 'bg-muted text-muted-foreground',
 };
 const DEPTS = Object.keys(DEPARTMENT_LABELS) as Department[];
@@ -87,6 +90,9 @@ export function UsersView() {
   const t = useTranslations('users');
   const usersQ = useAdminUsers();
   const me = useMe();
+  // OWNER is the platform owner — the only role that sees users across orgs, so
+  // only they get the extra "Org" column showing each member's organization.
+  const isOwn = me.data ? isOwner(me.data.role) : false;
   const [q, setQ] = useState('');
   const [roleF, setRoleF] = useState<'all' | UserRole>('all');
   const [deptF, setDeptF] = useState<'all' | Department>('all');
@@ -115,7 +121,7 @@ export function UsersView() {
   const activeCount = all.filter((u) => u.active).length;
   const adminCount = all.filter((u) => u.role === 'SUPER_ADMIN' || u.role === 'ADMIN').length;
   const deptCount = new Set(all.map((u) => u.department).filter(Boolean)).size;
-  const cols = layout === 'flat' ? 8 : 7;
+  const cols = (layout === 'flat' ? 8 : 7) + (isOwn ? 1 : 0);
 
   return (
     <div className="flex flex-col gap-5">
@@ -218,6 +224,7 @@ export function UsersView() {
               <TableRow>
                 <TableHead>{t('table.member')}</TableHead>
                 <TableHead>{t('table.role')}</TableHead>
+                {isOwn ? <TableHead>{t('table.org')}</TableHead> : null}
                 {layout === 'flat' ? <TableHead>{t('table.department')}</TableHead> : null}
                 <TableHead>{t('table.position')}</TableHead>
                 <TableHead>{t('table.access')}</TableHead>
@@ -239,6 +246,8 @@ export function UsersView() {
                     key={u.id}
                     u={u}
                     showDept
+                    showOrg={isOwn}
+                    viewerIsOwner={isOwn}
                     selfId={me.data?.id}
                     onDetails={() => setDetailUser(u)}
                     onEdit={() => setEditUser(u)}
@@ -278,6 +287,8 @@ export function UsersView() {
                             key={u.id}
                             u={u}
                             showDept={false}
+                            showOrg={isOwn}
+                            viewerIsOwner={isOwn}
                             selfId={me.data?.id}
                             onDetails={() => setDetailUser(u)}
                             onEdit={() => setEditUser(u)}
@@ -309,6 +320,8 @@ export function UsersView() {
 function UserRowCells({
   u,
   showDept,
+  showOrg,
+  viewerIsOwner,
   selfId,
   onDetails,
   onEdit,
@@ -316,6 +329,8 @@ function UserRowCells({
 }: {
   u: AdminUserDto;
   showDept: boolean;
+  showOrg: boolean;
+  viewerIsOwner: boolean;
   selfId?: string;
   onDetails: () => void;
   onEdit: () => void;
@@ -325,7 +340,10 @@ function UserRowCells({
   const update = useUpdateUser();
   const isSA = u.role === 'SUPER_ADMIN';
   const isSelf = u.id === selfId;
-  const protectedRow = isSA || isSelf;
+  // An OWNER target is locked for anyone who isn't themselves an Owner — mirrors
+  // the API rule that only an Owner can act on an Owner.
+  const ownerLocked = u.role === 'OWNER' && !viewerIsOwner;
+  const protectedRow = isSA || isSelf || ownerLocked;
   const total = PERMISSIONS.length;
 
   const toggleActive = () => {
@@ -360,6 +378,11 @@ function UserRowCells({
           {t(`role.${u.role}`)}
         </span>
       </TableCell>
+      {showOrg ? (
+        <TableCell className="text-[13px]">
+          {u.organizationName ?? <span className="text-muted-foreground">—</span>}
+        </TableCell>
+      ) : null}
       {showDept ? (
         <TableCell className="text-[13px]">
           {u.department ? t(`department.${u.department}`) : <span className="text-muted-foreground">—</span>}
@@ -396,7 +419,9 @@ function UserRowCells({
               protectedRow
                 ? isSA
                   ? t('toggle.protectedSuperAdmin')
-                  : t('toggle.protectedSelf')
+                  : ownerLocked
+                    ? t('toggle.protectedOwner')
+                    : t('toggle.protectedSelf')
                 : u.active
                   ? t('toggle.deactivate')
                   : t('toggle.reactivate')
@@ -418,7 +443,7 @@ function UserRowCells({
           <span className={cn('text-[12.5px]', !u.active && 'text-muted-foreground')}>
             {u.active ? t('status.active') : t('status.deactivated')}
           </span>
-          {isSA ? <Lock className="size-3 text-muted-foreground" /> : null}
+          {isSA || ownerLocked ? <Lock className="size-3 text-muted-foreground" /> : null}
         </div>
       </TableCell>
       <TableCell className="text-[12.5px] text-muted-foreground">{joined(u.createdAt)}</TableCell>
@@ -439,7 +464,12 @@ function UserRowCells({
             <DropdownMenuSeparator />
             {protectedRow ? (
               <DropdownMenuItem disabled>
-                <Lock className="size-4" /> {isSA ? t('menu.protectedSuperAdmin') : t('menu.protectedSelf')}
+                <Lock className="size-4" />{' '}
+                {isSA
+                  ? t('menu.protectedSuperAdmin')
+                  : ownerLocked
+                    ? t('menu.protectedOwner')
+                    : t('menu.protectedSelf')}
               </DropdownMenuItem>
             ) : (
               <>
