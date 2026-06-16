@@ -1,0 +1,30 @@
+{
+  "title": "Analysen",
+  "description": "Stufenübergreifende Leistung und Kanal-Auswertung.",
+  "period": {
+    "label": "Zeitraum",
+    "last30": "Letzte 30 Tage",
+    "quarter": "Dieses Quartal",
+    "ytd": "Jahr bis heute"
+  },
+  "repliesByWeek": {
+    "title": "Antworten pro Woche",
+    "noData": "Noch kein Antwort-Zeitverlauf — wird sichtbar, sobald wöchentliche Antwortdaten erfasst werden."
+  },
+  "channelMix": {
+    "title": "Kanal-Mix",
+    "noData": "Noch keine Kanal-Auswertung — Outbound-Kanäle verbinden, um dies zu füllen."
+  },
+  "tiles": {
+    "avgReplyRate": "Ø Antwortrate",
+    "meetingRate": "Meeting-Rate",
+    "winRate": "Abschlussrate",
+    "avgDealSize": "Ø Dealgröße",
+    "noSource": "Datenquelle ausstehend"
+  },
+  "scorecards": {
+    "title": "Team-Scorecards",
+    "description": "Live-KPI-Scorecards aus echten ERP-Daten — die Kacheln oben werden aktiv, sobald ihre Quellen verbunden sind."
+  },
+  "loadError": "Analysen konnten nicht geladen werden: {message}"
+}

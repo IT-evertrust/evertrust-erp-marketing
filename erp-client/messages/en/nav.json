@@ -1,19 +1,17 @@
 {
   "dashboard": "Dashboard",
-  "marketing": "Marketing",
-  "niches": "Niches",
-  "drafts": "Reply drafts",
-  "suppressions": "Suppressions",
-  "keyAccount": "Key Account",
-  "sales": "Sales",
-  "performance": "Performance",
-  "users": "Users",
+  "reach": "Reach",
+  "engage": "Engage",
+  "activate": "Activate",
+  "nurture": "Nurture",
+  "analytics": "Analytics",
+  "reports": "Reports",
   "general": "General",
   "configuration": "Configuration",
+  "userManagement": "User management",
   "group": {
-    "Acquisition": "Acquisition",
-    "Management": "Management",
-    "Administration": "Administration",
-    "Settings": "Settings"
+    "rean": "R.E.A.N. Sequence",
+    "insights": "Insights",
+    "settings": "Settings"
   }
 }

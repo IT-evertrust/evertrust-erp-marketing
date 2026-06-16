@@ -53,21 +53,27 @@ import { UserCreateDialog } from '@/components/users/user-create-dialog';
 import { EditUserDialog } from '@/components/users/edit-user-dialog';
 import { UserDetailsDialog } from '@/components/users/user-details-dialog';
 import { DeleteUserDialog } from '@/components/users/delete-user-dialog';
+import { ToneBadge, type ToneName } from '@/components/rean/tone-badge';
+import { StatTile, type StatAccent } from '@/components/rean/stat-tile';
 import { cn } from '@/lib/utils';
 
-const ROLE_PILL: Record<UserRole, string> = {
-  OWNER: 'border-amber-500/30 bg-amber-500/10 text-amber-500',
-  SUPER_ADMIN: 'border-violet-500/30 bg-violet-500/10 text-violet-500',
-  ADMIN: 'border-sky-500/30 bg-sky-500/10 text-sky-500',
-  MANAGER: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500',
-  EMPLOYEE: 'border-border bg-muted text-muted-foreground',
+// R.E.A.N. mockup role pills (b-amber / b-violet / b-sky / b-emerald / b-muted),
+// authority warm→neutral as in role-styles.ts.
+const ROLE_TONE: Record<UserRole, ToneName> = {
+  OWNER: 'amber',
+  SUPER_ADMIN: 'violet',
+  ADMIN: 'sky',
+  MANAGER: 'emerald',
+  EMPLOYEE: 'muted',
 };
-const ROLE_AV: Record<UserRole, string> = {
-  OWNER: 'bg-amber-500/15 text-amber-300',
-  SUPER_ADMIN: 'bg-violet-500/15 text-violet-300',
-  ADMIN: 'bg-sky-500/15 text-sky-300',
-  MANAGER: 'bg-emerald-500/15 text-emerald-300',
-  EMPLOYEE: 'bg-muted text-muted-foreground',
+// Gradient avatar per role, matching the mockup's
+// `background:linear-gradient(135deg,…)` chips on the user rows.
+const ROLE_AV_GRADIENT: Record<UserRole, string> = {
+  OWNER: 'bg-gradient-to-br from-amber-400 to-rose-400 text-white',
+  SUPER_ADMIN: 'bg-gradient-to-br from-violet-400 to-sky-400 text-white',
+  ADMIN: 'bg-gradient-to-br from-sky-400 to-violet-400 text-white',
+  MANAGER: 'bg-gradient-to-br from-emerald-400 to-sky-400 text-white',
+  EMPLOYEE: 'bg-gradient-to-br from-zinc-400 to-zinc-500 text-white',
 };
 const DEPTS = Object.keys(DEPARTMENT_LABELS) as Department[];
 const NO_DEPT = '__none__';
@@ -105,7 +111,7 @@ export function UsersView() {
   const [detailUser, setDetailUser] = useState<AdminUserDto | null>(null);
   const [deleteUser, setDeleteUser] = useState<AdminUserDto | null>(null);
 
-  const all = usersQ.data ?? [];
+  const all = useMemo(() => usersQ.data ?? [], [usersQ.data]);
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return all.filter((u) => {
@@ -154,17 +160,17 @@ export function UsersView() {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {([
-          ['members', all.length],
-          ['active', activeCount],
-          ['admins', adminCount],
-          ['departments', deptCount],
-        ] as [string, number][]).map(([k, v]) => (
-          <div key={k} className="rounded-xl border bg-card px-4 py-3">
-            <div className="text-xl font-bold tabular-nums">
-              {usersQ.isLoading ? <Skeleton className="h-6 w-8" /> : v}
-            </div>
-            <div className="mt-0.5 text-[10.5px] uppercase tracking-wide text-muted-foreground/70">{t(`stats.${k}`)}</div>
-          </div>
+          ['members', all.length, 'emerald'],
+          ['active', activeCount, 'sky'],
+          ['admins', adminCount, 'violet'],
+          ['departments', deptCount, 'amber'],
+        ] as [string, number, StatAccent][]).map(([k, v, accent]) => (
+          <StatTile
+            key={k}
+            accent={accent}
+            label={t(`stats.${k}`)}
+            value={usersQ.isLoading ? <Skeleton className="h-6 w-8" /> : v}
+          />
         ))}
       </div>
 
@@ -365,7 +371,7 @@ function UserRowCells({
       <TableCell>
         <div className="flex items-center gap-3">
           <Avatar className="size-8">
-            <AvatarFallback className={cn('text-xs font-semibold', ROLE_AV[u.role])}>{initials(u.name)}</AvatarFallback>
+            <AvatarFallback className={cn('text-xs font-semibold', ROLE_AV_GRADIENT[u.role])}>{initials(u.name)}</AvatarFallback>
           </Avatar>
           <div className="min-w-0">
             <div className="truncate text-[13.5px] font-semibold">{u.name}</div>
@@ -374,9 +380,7 @@ function UserRowCells({
         </div>
       </TableCell>
       <TableCell>
-        <span className={cn('inline-flex rounded-full border px-2.5 py-0.5 text-[11.5px] font-semibold', ROLE_PILL[u.role])}>
-          {t(`role.${u.role}`)}
-        </span>
+        <ToneBadge tone={ROLE_TONE[u.role]}>{t(`role.${u.role}`)}</ToneBadge>
       </TableCell>
       {showOrg ? (
         <TableCell className="text-[13px]">
@@ -440,9 +444,9 @@ function UserRowCells({
               )}
             />
           </button>
-          <span className={cn('text-[12.5px]', !u.active && 'text-muted-foreground')}>
+          <ToneBadge tone={u.active ? 'emerald' : 'muted'}>
             {u.active ? t('status.active') : t('status.deactivated')}
-          </span>
+          </ToneBadge>
           {isSA || ownerLocked ? <Lock className="size-3 text-muted-foreground" /> : null}
         </div>
       </TableCell>

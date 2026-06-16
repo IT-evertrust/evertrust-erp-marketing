@@ -1,8 +1,18 @@
 {
   "general": {
     "header": {
-      "title": "Allgemein",
-      "description": "Darstellung und App-Einstellungen."
+      "title": "Allgemeine Einstellungen",
+      "description": "Organisationsprofil und Arbeitsbereich-Standards."
+    },
+    "org": {
+      "title": "Organisationsprofil",
+      "description": "Die Identität Ihrer Organisation im gesamten Arbeitsbereich.",
+      "nameLabel": "Organisationsname",
+      "namePlaceholder": "Organisationsname",
+      "nameHint": "Aus Ihrer Anmeldung ermittelt. Das Umbenennen einer Organisation ist hier noch nicht möglich.",
+      "timezoneLabel": "Zeitzone",
+      "timezoneHint": "Für Terminplanung und Bericht-Zeitstempel. Demnächst verfügbar.",
+      "comingSoon": "Demnächst"
     },
     "appearance": {
       "title": "Darstellung",
@@ -129,12 +139,21 @@
       "connecting": "Weiterleitung…",
       "notConfigured": "Bitten Sie Ihren Administrator, Google-Connect einzurichten.",
       "empty": "Noch keine Google-Konten verbunden.",
+      "helper": "Verbundene Postfächer treiben die Outreach (Gmail — Gesendet & Antworten) und die Terminbuchung (Kalender — Slots). Ein Postfach ist der Org-Standard.",
+      "columnMailbox": "Postfach",
+      "columnScopes": "Berechtigungen",
+      "columnDefault": "Standard",
       "scopeGmail": "E-Mail senden",
       "scopeCalendar": "Kalender",
+      "scopeGmailBadge": "Gmail",
+      "scopeCalendarBadge": "Kalender",
+      "scopeNoCalendar": "Kein Kalender",
       "scopeNone": "Kein Zugriff",
       "statusConnected": "Verbunden",
       "statusRevoked": "Widerrufen",
       "statusError": "Fehler",
+      "setDefaultGmail": "Standard für Gmail",
+      "setDefaultCalendar": "Standard für Kalender",
       "defaultGmailBadge": "Standard · Gmail",
       "defaultCalendarBadge": "Standard · Kalender",
       "defaultGmailLabel": "Standard für Gmail",

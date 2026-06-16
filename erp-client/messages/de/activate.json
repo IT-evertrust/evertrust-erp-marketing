@@ -1,0 +1,43 @@
+{
+  "title": "Aktivierung",
+  "description": "Nutzt den verbundenen Google Kalender, um belegte und freie Slots zu scannen, vor dem Gespräch zu briefen und es danach auszuwerten.",
+  "account": {
+    "service": "Google · Kalender",
+    "stats": "{meetings, plural, =0 {Keine Meetings} one {# Meeting} other {# Meetings}} · {slots, plural, =0 {keine freien Slots} one {# freier Slot} other {# freie Slots}}",
+    "statsLoading": "Kalender wird synchronisiert…",
+    "statsError": "Kalender nicht verfügbar"
+  },
+  "tabs": {
+    "book": "Meeting-Buchung",
+    "research": "Vorab-Recherche",
+    "after": "After-Sales-Analyse"
+  },
+  "book": {
+    "slots": {
+      "title": "Termin wählen",
+      "pill": "Google Kalender",
+      "comingSoon": "Terminbuchung kommt bald",
+      "comingSoonBody": "Das Auswählen eines freien Slots und das direkte Buchen in deinen Google Kalender ist noch nicht angebunden. Vorerst ist der Kalender schreibgeschützt — verwalte Buchungen in Google Kalender."
+    },
+    "upcoming": {
+      "title": "Anstehende Meetings",
+      "loading": "Meetings werden geladen…",
+      "error": "Meetings konnten nicht geladen werden.",
+      "emptyTitle": "Keine anstehenden Meetings",
+      "emptyBody": "Synchronisierte Meetings aus deinem verbundenen Google Kalender erscheinen hier.",
+      "untitled": "Meeting ohne Titel",
+      "noCompany": "Kein Unternehmen",
+      "noDate": "Kein Datum festgelegt",
+      "confirmed": "bestätigt",
+      "scored": "Bewertung {score}"
+    }
+  },
+  "research": {
+    "comingSoon": "Vorab-Recherche kommt bald",
+    "comingSoonBody": "Das Erstellen eines KI-Vorab-Briefings aus einem Firmennamen ist noch nicht an ein Backend angebunden. Es wird vor dem Gespräch den Interessenten, aktuelle Neuigkeiten und Gesprächspunkte zusammenfassen."
+  },
+  "after": {
+    "comingSoon": "After-Sales-Analyse kommt bald",
+    "comingSoonBody": "Read-AI-artige Gesprächszusammenfassungen — wichtige Momente, Stimmung und nächste Schritte aus einem aufgezeichneten Gespräch — sind auf dieser Seite noch nicht an ein Backend angebunden."
+  }
+}

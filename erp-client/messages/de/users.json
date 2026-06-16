@@ -1,11 +1,11 @@
 {
-  "title": "Team & Zugriff",
-  "description": "Alle in Ihrem Arbeitsbereich — Rollen, Abteilungen und ihre Berechtigungen.",
+  "title": "Benutzerverwaltung",
+  "description": "Teammitglieder, Rollen und Zugriff.",
   "layout": {
     "flat": "Flach",
     "grouped": "Gruppiert"
   },
-  "addMember": "Mitglied hinzufügen",
+  "addMember": "Benutzer einladen",
   "stats": {
     "members": "Mitglieder",
     "active": "Aktiv",

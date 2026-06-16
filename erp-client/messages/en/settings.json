@@ -1,8 +1,18 @@
 {
   "general": {
     "header": {
-      "title": "General",
-      "description": "Appearance and app preferences."
+      "title": "General settings",
+      "description": "Organization profile and workspace defaults."
+    },
+    "org": {
+      "title": "Organization profile",
+      "description": "Your organization's identity across the workspace.",
+      "nameLabel": "Organization name",
+      "namePlaceholder": "Organization name",
+      "nameHint": "Resolved from your sign-in. Renaming an organization isn't available here yet.",
+      "timezoneLabel": "Timezone",
+      "timezoneHint": "Used for scheduling and report timestamps. Coming soon.",
+      "comingSoon": "Coming soon"
     },
     "appearance": {
       "title": "Appearance",
@@ -129,12 +139,21 @@
       "connecting": "Redirecting…",
       "notConfigured": "Ask your admin to configure Google connect.",
       "empty": "No Google accounts connected yet.",
+      "helper": "Connected mailboxes power outreach (Gmail — sent & replies) and meeting booking (Calendar — slots). One mailbox is the org default.",
+      "columnMailbox": "Mailbox",
+      "columnScopes": "Scopes",
+      "columnDefault": "Default",
       "scopeGmail": "Send email",
       "scopeCalendar": "Calendar",
+      "scopeGmailBadge": "Gmail",
+      "scopeCalendarBadge": "Calendar",
+      "scopeNoCalendar": "No calendar",
       "scopeNone": "No access",
       "statusConnected": "Connected",
       "statusRevoked": "Revoked",
       "statusError": "Error",
+      "setDefaultGmail": "Default for Gmail",
+      "setDefaultCalendar": "Default for Calendar",
       "defaultGmailBadge": "Default · Gmail",
       "defaultCalendarBadge": "Default · Calendar",
       "defaultGmailLabel": "Default for Gmail",

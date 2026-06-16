@@ -55,10 +55,12 @@ import { timeAgo } from '@/lib/arsenal-sequence';
 import { Can } from '@/components/auth/can';
 import { PageHeader } from '@/components/common/page-header';
 import { BazookaSchedule } from '@/components/growth/bazooka-schedule';
+import { ToneBadge } from '@/components/rean/tone-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -82,6 +84,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 
@@ -256,16 +266,40 @@ function N8nTestResult({ result }: { result: TestN8nResultDto }) {
 function OverrideBadge({ overridden }: { overridden: boolean }) {
   const t = useTranslations('settings');
   return overridden ? (
-    <Badge
-      variant="outline"
-      className="border-emerald-500/30 bg-emerald-500/10 font-medium text-emerald-700 dark:text-emerald-400"
-    >
-      {t('config.badge.custom')}
-    </Badge>
+    <ToneBadge tone="emerald">{t('config.badge.custom')}</ToneBadge>
   ) : (
     <Badge variant="outline" className="text-muted-foreground">
       {t('config.badge.envDefault')}
     </Badge>
+  );
+}
+
+
+// A card with the mockup's "card-head" layout: title on the left, an optional
+// action (e.g. a Connect button) flush right, then the body. `description` renders
+// as the muted helper line under the head, matching the prototype's `.muted` row.
+function SettingsCard({
+  title,
+  description,
+  action,
+  children,
+}: {
+  title: string;
+  description?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        {description ? <CardDescription>{description}</CardDescription> : null}
+        {/* CardAction lands top-right via the header grid's reserved slot — the
+            mockup's "card-head" layout (title left, Connect button right). */}
+        {action ? <CardAction>{action}</CardAction> : null}
+      </CardHeader>
+      <CardContent className="flex flex-col gap-6">{children}</CardContent>
+    </Card>
   );
 }
 
@@ -616,21 +650,13 @@ function SignatureImageControl({ url }: { url: string | null }) {
   );
 }
 
-// Map a Google account's granted scopes to a short human summary ("Send email ·
-// Calendar"). We only flag the two scopes the product cares about; anything else is
-// ignored. Empty → "No access".
-function scopeSummary(
-  scopes: string[],
-  labels: { gmail: string; calendar: string; none: string },
-): string {
-  const parts: string[] = [];
-  if (scopes.some((s) => s.includes('gmail') || s.includes('mail.google'))) {
-    parts.push(labels.gmail);
-  }
-  if (scopes.some((s) => s.includes('calendar'))) {
-    parts.push(labels.calendar);
-  }
-  return parts.length > 0 ? parts.join(' · ') : labels.none;
+// Which of the two product scopes a Google account granted — drives the scope
+// badges in the Workspace table (Gmail = sky, Calendar = violet).
+function scopeFlags(scopes: string[]): { gmail: boolean; calendar: boolean } {
+  return {
+    gmail: scopes.some((s) => s.includes('gmail') || s.includes('mail.google')),
+    calendar: scopes.some((s) => s.includes('calendar')),
+  };
 }
 
 // Radix Select forbids an empty-string item value, so the "None" option uses this
@@ -728,30 +754,23 @@ function GoogleAccountsControl() {
     REVOKED: t('config.google.statusRevoked'),
     ERROR: t('config.google.statusError'),
   };
-  const scopeLabels = {
-    gmail: t('config.google.scopeGmail'),
-    calendar: t('config.google.scopeCalendar'),
-    none: t('config.google.scopeNone'),
-  };
   const gmailDefaultId =
     list.find((a) => a.isDefaultGmail)?.id ?? GOOGLE_DEFAULT_NONE;
   const calendarDefaultId =
     list.find((a) => a.isDefaultCalendar)?.id ?? GOOGLE_DEFAULT_NONE;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t('config.google.title')}</CardTitle>
-        <CardDescription>{t('config.google.description')}</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-6">
-        {/* Connect — open to any authenticated user. Disabled with a hint when the
-            API reports it isn't configured for Google connect (503 from start). */}
-        <div className="flex flex-col gap-2">
+    <SettingsCard
+      title={t('config.google.title')}
+      description={t('config.google.description')}
+      action={
+        /* Connect — open to any authenticated user. Disabled with a hint when the
+           API reports it isn't configured for Google connect (503 from start). */
+        <div className="flex flex-col items-end gap-1">
           <Button
             type="button"
             variant="outline"
-            className="self-start"
+            size="sm"
             onClick={handleConnect}
             disabled={connecting || !connectConfigured}
           >
@@ -760,144 +779,229 @@ function GoogleAccountsControl() {
             ) : (
               <Plug className="size-4" />
             )}
-            {connecting ? t('config.google.connecting') : t('config.google.connect')}
+            {connecting
+              ? t('config.google.connecting')
+              : t('config.google.connect')}
           </Button>
           {!connectConfigured ? (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-right text-xs text-muted-foreground">
               {t('config.google.notConfigured')}
             </p>
           ) : null}
         </div>
+      }
+    >
+      <p className="text-sm text-muted-foreground">{t('config.google.helper')}</p>
 
-        {/* List + defaults + disconnect — admin-only (server enforces admin:config). */}
-        <Can permission="admin:config">
-          {accounts.isLoading ? (
-            <Skeleton className="h-24 w-full rounded-lg" />
-          ) : list.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {t('config.google.empty')}
-            </p>
-          ) : (
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-2">
-                {list.map((a) => {
-                  const rowBusy = busy && pendingId === a.id;
-                  return (
-                    <div
-                      key={a.id}
-                      className="flex items-center gap-3 rounded-lg border p-3"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="truncate text-sm font-medium">
-                            {a.displayName?.trim() ? a.displayName : a.email}
-                          </span>
-                          <Badge variant="outline" className="font-medium">
-                            {ROLE_LABELS[a.role]}
-                          </Badge>
-                          {a.isDefaultGmail ? (
-                            <Badge
-                              variant="outline"
-                              className="border-emerald-500/30 bg-emerald-500/10 font-medium text-emerald-700 dark:text-emerald-400"
-                            >
-                              {t('config.google.defaultGmailBadge')}
-                            </Badge>
-                          ) : null}
-                          {a.isDefaultCalendar ? (
-                            <Badge
-                              variant="outline"
-                              className="border-emerald-500/30 bg-emerald-500/10 font-medium text-emerald-700 dark:text-emerald-400"
-                            >
-                              {t('config.google.defaultCalendarBadge')}
-                            </Badge>
-                          ) : null}
-                        </div>
-                        <p className="truncate font-mono text-xs text-muted-foreground">
-                          {a.email}
-                        </p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {scopeSummary(a.scopes, scopeLabels)} ·{' '}
-                          {statusLabel[a.status]}
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0 text-muted-foreground hover:text-destructive"
-                        aria-label={t('config.google.disconnectAria', {
-                          account: a.email,
-                        })}
-                        onClick={() => handleDisconnect(a)}
-                        disabled={busy}
-                      >
-                        {rowBusy ? (
-                          <Loader2 className="size-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="size-4" />
-                        )}
-                      </Button>
-                    </div>
-                  );
-                })}
+      {/* List + defaults + disconnect — admin-only (server enforces admin:config). */}
+      <Can permission="admin:config">
+        {accounts.isLoading ? (
+          <Skeleton className="h-24 w-full rounded-lg" />
+        ) : list.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {t('config.google.empty')}
+          </p>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {/* Mailbox table — email + scope badges (Gmail = sky, Calendar =
+                violet, none = muted), a per-row default control (emerald badge
+                when set, "Set default" buttons otherwise), and disconnect. */}
+            <div className="overflow-x-auto rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t('config.google.columnMailbox')}</TableHead>
+                    <TableHead>{t('config.google.columnScopes')}</TableHead>
+                    <TableHead className="text-right">
+                      {t('config.google.columnDefault')}
+                    </TableHead>
+                    <TableHead className="w-0" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {list.map((a) => {
+                    const rowBusy = busy && pendingId === a.id;
+                    const flags = scopeFlags(a.scopes);
+                    return (
+                      <TableRow key={a.id}>
+                        {/* Mailbox: display name (bold) over the email + status. */}
+                        <TableCell>
+                          <div className="flex min-w-0 flex-col gap-0.5">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-semibold">
+                                {a.displayName?.trim()
+                                  ? a.displayName
+                                  : a.email}
+                              </span>
+                              <ToneBadge tone="muted">
+                                {ROLE_LABELS[a.role]}
+                              </ToneBadge>
+                            </div>
+                            <span className="truncate font-mono text-xs text-muted-foreground">
+                              {a.email}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {statusLabel[a.status]}
+                            </span>
+                          </div>
+                        </TableCell>
+                        {/* Scopes: Gmail = sky, Calendar = violet, neither =
+                            muted "No access". */}
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1.5">
+                            {flags.gmail ? (
+                              <ToneBadge tone="sky">
+                                {t('config.google.scopeGmailBadge')}
+                              </ToneBadge>
+                            ) : null}
+                            {flags.calendar ? (
+                              <ToneBadge tone="violet">
+                                {t('config.google.scopeCalendarBadge')}
+                              </ToneBadge>
+                            ) : (
+                              <ToneBadge tone="muted">
+                                {t('config.google.scopeNoCalendar')}
+                              </ToneBadge>
+                            )}
+                            {!flags.gmail && !flags.calendar ? (
+                              <ToneBadge tone="muted">
+                                {t('config.google.scopeNone')}
+                              </ToneBadge>
+                            ) : null}
+                          </div>
+                        </TableCell>
+                        {/* Default: emerald "Default" badge when set for a role,
+                            else a "Set default" button per role (Gmail/Calendar).
+                            Repoints the org default via the same handler the
+                            selectors below use. */}
+                        <TableCell className="text-right">
+                          <div className="flex flex-col items-end gap-1.5">
+                            {a.isDefaultGmail ? (
+                              <ToneBadge tone="emerald">
+                                {t('config.google.defaultGmailBadge')}
+                              </ToneBadge>
+                            ) : flags.gmail ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs text-muted-foreground"
+                                onClick={() =>
+                                  handleSetDefault('defaultGmailAccountId', a.id)
+                                }
+                                disabled={busy}
+                              >
+                                <Star className="size-3.5" />
+                                {t('config.google.setDefaultGmail')}
+                              </Button>
+                            ) : null}
+                            {a.isDefaultCalendar ? (
+                              <ToneBadge tone="emerald">
+                                {t('config.google.defaultCalendarBadge')}
+                              </ToneBadge>
+                            ) : flags.calendar ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs text-muted-foreground"
+                                onClick={() =>
+                                  handleSetDefault(
+                                    'defaultCalendarAccountId',
+                                    a.id,
+                                  )
+                                }
+                                disabled={busy}
+                              >
+                                <Star className="size-3.5" />
+                                {t('config.google.setDefaultCalendar')}
+                              </Button>
+                            ) : null}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="shrink-0 text-muted-foreground hover:text-destructive"
+                            aria-label={t('config.google.disconnectAria', {
+                              account: a.email,
+                            })}
+                            onClick={() => handleDisconnect(a)}
+                            disabled={busy}
+                          >
+                            {rowBusy ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="size-4" />
+                            )}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+
+            {/* Default selectors — which account campaigns send from / book into.
+                Kept alongside the per-row buttons (the split Gmail/Calendar
+                default is more correct than the mockup's single defaultMailbox). */}
+            <div className="grid gap-3 border-t pt-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <Label>{t('config.google.defaultGmailLabel')}</Label>
+                <Select
+                  value={gmailDefaultId}
+                  onValueChange={(v) =>
+                    handleSetDefault('defaultGmailAccountId', v)
+                  }
+                  disabled={busy}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('config.google.defaultNone')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={GOOGLE_DEFAULT_NONE}>
+                      {t('config.google.defaultNone')}
+                    </SelectItem>
+                    {list.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-
-              {/* Default selectors — which account campaigns send from / book into. */}
-              <div className="grid gap-3 border-t pt-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <Label>{t('config.google.defaultGmailLabel')}</Label>
-                  <Select
-                    value={gmailDefaultId}
-                    onValueChange={(v) =>
-                      handleSetDefault('defaultGmailAccountId', v)
-                    }
-                    disabled={busy}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('config.google.defaultNone')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={GOOGLE_DEFAULT_NONE}>
-                        {t('config.google.defaultNone')}
+              <div className="flex flex-col gap-1.5">
+                <Label>{t('config.google.defaultCalendarLabel')}</Label>
+                <Select
+                  value={calendarDefaultId}
+                  onValueChange={(v) =>
+                    handleSetDefault('defaultCalendarAccountId', v)
+                  }
+                  disabled={busy}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={t('config.google.defaultNone')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={GOOGLE_DEFAULT_NONE}>
+                      {t('config.google.defaultNone')}
+                    </SelectItem>
+                    {list.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.email}
                       </SelectItem>
-                      {list.map((a) => (
-                        <SelectItem key={a.id} value={a.id}>
-                          {a.email}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label>{t('config.google.defaultCalendarLabel')}</Label>
-                  <Select
-                    value={calendarDefaultId}
-                    onValueChange={(v) =>
-                      handleSetDefault('defaultCalendarAccountId', v)
-                    }
-                    disabled={busy}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder={t('config.google.defaultNone')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={GOOGLE_DEFAULT_NONE}>
-                        {t('config.google.defaultNone')}
-                      </SelectItem>
-                      {list.map((a) => (
-                        <SelectItem key={a.id} value={a.id}>
-                          {a.email}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
-          )}
-        </Can>
-      </CardContent>
-    </Card>
+          </div>
+        )}
+      </Can>
+    </SettingsCard>
   );
 }
 
@@ -986,86 +1090,93 @@ function SendersControl() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{t('config.senders.title')}</CardTitle>
-        <CardDescription>{t('config.senders.description')}</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-6">
-        {senders.isLoading ? (
-          <Skeleton className="h-24 w-full rounded-lg" />
-        ) : list.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {t('config.senders.empty')}
-          </p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {list.map((s) => {
-              const rowBusy = busy && pendingKey === s.key;
-              return (
-                <div
-                  key={s.key}
-                  className="flex items-center gap-3 rounded-lg border p-3"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate text-sm font-medium">
-                        {s.label?.trim() ? s.label : s.key}
-                      </span>
-                      {s.isDefault ? (
-                        <Badge
-                          variant="outline"
-                          className="border-emerald-500/30 bg-emerald-500/10 font-medium text-emerald-700 dark:text-emerald-400"
-                        >
-                          {t('config.senders.defaultBadge')}
-                        </Badge>
-                      ) : null}
-                    </div>
-                    <p className="truncate font-mono text-xs text-muted-foreground">
+    <SettingsCard
+      title={t('config.senders.title')}
+      description={t('config.senders.description')}
+    >
+      {senders.isLoading ? (
+        <Skeleton className="h-24 w-full rounded-lg" />
+      ) : list.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {t('config.senders.empty')}
+        </p>
+      ) : (
+        <div className="overflow-x-auto rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('config.senders.labelLabel')}</TableHead>
+                <TableHead>{t('config.senders.emailLabel')}</TableHead>
+                <TableHead className="w-0" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {list.map((s) => {
+                const rowBusy = busy && pendingKey === s.key;
+                return (
+                  <TableRow key={s.key}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">
+                          {s.label?.trim() ? s.label : s.key}
+                        </span>
+                        {s.isDefault ? (
+                          <ToneBadge tone="emerald">
+                            {t('config.senders.defaultBadge')}
+                          </ToneBadge>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
                       {s.email}
-                    </p>
-                  </div>
-                  {s.isDefault ? null : (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="shrink-0 text-muted-foreground"
-                      onClick={() => handleSetDefault(s)}
-                      disabled={busy}
-                    >
-                      <Star className="size-4" />
-                      {t('config.senders.makeDefault')}
-                    </Button>
-                  )}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="shrink-0 text-muted-foreground hover:text-destructive"
-                    onClick={() => handleRemove(s)}
-                    // Refuse to remove the last sender (the server guards too).
-                    disabled={busy || list.length <= 1}
-                    aria-label={t('config.senders.removeAria', {
-                      sender: s.label?.trim() ? s.label : s.key,
-                    })}
-                    title={
-                      list.length <= 1
-                        ? t('config.senders.removeLastBlocked')
-                        : undefined
-                    }
-                  >
-                    {rowBusy && remove.isPending ? (
-                      <span className="size-4 animate-pulse rounded-full bg-muted-foreground/40" />
-                    ) : (
-                      <Trash2 className="size-4" />
-                    )}
-                  </Button>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        {s.isDefault ? null : (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-muted-foreground"
+                            onClick={() => handleSetDefault(s)}
+                            disabled={busy}
+                          >
+                            <Star className="size-3.5" />
+                            {t('config.senders.makeDefault')}
+                          </Button>
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="shrink-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => handleRemove(s)}
+                          // Refuse to remove the last sender (the server guards too).
+                          disabled={busy || list.length <= 1}
+                          aria-label={t('config.senders.removeAria', {
+                            sender: s.label?.trim() ? s.label : s.key,
+                          })}
+                          title={
+                            list.length <= 1
+                              ? t('config.senders.removeLastBlocked')
+                              : undefined
+                          }
+                        >
+                          {rowBusy && remove.isPending ? (
+                            <span className="size-4 animate-pulse rounded-full bg-muted-foreground/40" />
+                          ) : (
+                            <Trash2 className="size-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
         {/* Add row — key + email (+ optional label), with a "set as default" toggle. */}
         <div className="flex flex-col gap-3 border-t pt-4">
@@ -1134,8 +1245,7 @@ function SendersControl() {
             </Button>
           </div>
         </div>
-      </CardContent>
-    </Card>
+    </SettingsCard>
   );
 }
 

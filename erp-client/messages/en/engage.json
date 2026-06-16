@@ -1,0 +1,72 @@
+{
+  "header": {
+    "title": "Engage — reply triage",
+    "description": "Reply Sorter reads the connected Gmail mailbox and triages replies into Interested, Unsure, or Not interested. Copy a suggested reply, or open the prospect for the full thread."
+  },
+  "account": {
+    "service": "Google · Gmail",
+    "connected": "Connected",
+    "notConnected": "No mailbox connected",
+    "noMailboxLabel": "No Gmail account linked",
+    "defaultSuffix": "default",
+    "stats": "{drafts, plural, =0 {No drafts awaiting} =1 {# draft awaiting} other {# drafts awaiting}} · {interested} interested",
+    "statsUnavailable": "Mailbox stats unavailable",
+    "connectHint": "Connect a Gmail account under Configuration to triage replies here."
+  },
+  "triage": {
+    "interested": "Interested",
+    "unsure": "Unsure",
+    "notInterested": "Not interested",
+    "emptyColumn": "Nothing here yet"
+  },
+  "verdict": {
+    "INTERESTED": "Interested",
+    "NOT_INTERESTED": "Not interested",
+    "SNOOZE": "Snooze",
+    "MEETING_REQUEST": "Meeting request",
+    "UNSURE": "Unsure",
+    "AUTO_REPLY": "Auto-reply",
+    "BOUNCE": "Bounce"
+  },
+  "drafts": {
+    "title": "Reply drafts",
+    "description": "RAG-suggested replies awaiting a human. Copy the draft into your reply, or open the prospect for the full thread.",
+    "loadError": "Could not load reply drafts: {message}",
+    "emptyTitle": "No drafts awaiting review",
+    "emptyDescription": "When the reply classifier drafts a suggested response, it appears here for approval.",
+    "now": "now {verdict}",
+    "nowTitle": "The prospect's current verdict has since changed",
+    "copied": "Draft copied to clipboard.",
+    "copyError": "Could not copy — your browser blocked clipboard access.",
+    "copyDraft": "Copy draft",
+    "openProspect": "Open prospect",
+    "showConversation": "Show conversation",
+    "hideConversation": "Hide conversation"
+  },
+  "draftReview": {
+    "heading": "RAG draft review",
+    "sync": "Sync from leads",
+    "syncing": "Scanning…",
+    "loadError": "Could not load drafts: {message}",
+    "notConnected": "Draft Review isn’t connected yet — set <code>N8N_API_URL</code> on the API so it can read the RAG Agent workflow.",
+    "empty": "No drafts awaiting review. Hit <strong>Sync from leads</strong> to scan every campaign’s leads sheet for unsure replies, or wait for the RAG Agent’s hourly run.",
+    "noDraftId": "This draft has no Gmail draft id — it can’t be sent from here.",
+    "sent": "Sent to {target}.",
+    "sendFailed": "Send failed.",
+    "awaitingReview": "Awaiting review",
+    "unknown": "Unknown",
+    "notSendable": "not sendable",
+    "gmailDraftBadge": "✉ Gmail draft · not sent",
+    "unsureAreaLabel": "unsure area",
+    "contextHeading": "Context — why this needs a reply",
+    "unsureAbout": "Unsure about",
+    "why": "Why",
+    "draftedReply": "Drafted reply — edit before sending",
+    "subjectPlaceholder": "Subject",
+    "bodyPlaceholder": "Reply body",
+    "notSendableWarning": "⚠ This draft predates draft-id capture, so it can’t be sent from the ERP. Newer drafts carry a Gmail draft id and are sendable.",
+    "sending": "Sending…",
+    "approveSend": "✓ Approve & send",
+    "sendHint": "n8n sends the final text on approve · then deletes the draft"
+  }
+}

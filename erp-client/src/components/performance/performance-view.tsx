@@ -86,7 +86,10 @@ function scoreZone(s: number): ScorecardZone {
   return 'RED';
 }
 
-export function PerformanceView() {
+// `hideHeader` suppresses the internal PageHeader masthead when the view is
+// embedded under another page that already supplies one (e.g. the Analytics
+// page renders this as its "Team scorecards" section).
+export function PerformanceView({ hideHeader = false }: { hideHeader?: boolean }) {
   const t = useTranslations('performance');
   const scorecards = useScorecards('WEEKLY');
   const overview = useOverview('WEEKLY');
@@ -110,10 +113,9 @@ export function PerformanceView() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        title={t('title')}
-        description={t('description')}
-      />
+      {hideHeader ? null : (
+        <PageHeader title={t('title')} description={t('description')} />
+      )}
 
       {scorecards.isError ? (
         <p className="text-sm text-destructive">

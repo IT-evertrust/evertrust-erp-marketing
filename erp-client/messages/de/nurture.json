@@ -1,0 +1,40 @@
+{
+  "title": "Pflege",
+  "subtitle": "Deals durch die Pipeline bewegen und beim Vertragsabschluss unterstützen.",
+  "campaignPlaceholder": "Kampagne wählen",
+  "loadError": "Kampagnen konnten nicht geladen werden: {message}",
+  "tabs": {
+    "pipeline": "Vertriebs-Pipeline",
+    "contracts": "Vertrags-Assistent"
+  },
+  "noCampaigns": {
+    "title": "Noch keine Kampagnen",
+    "body": "Starte eine Kampagne in der Aktivierung, um eine Pipeline an Interessenten aufzubauen."
+  },
+  "pickCampaign": {
+    "title": "Kampagne wählen",
+    "body": "Wähle oben eine Kampagne, um ihre Pipeline und Verträge zu sehen."
+  },
+  "pipeline": {
+    "columnEmpty": "Keine Deals",
+    "verified": "verifiziert",
+    "followups": "{count} Follow-up gesendet",
+    "moveBack": "Eine Stufe zurück",
+    "moveForward": "Eine Stufe weiter",
+    "movedToast": "{name} verschoben nach {stage}"
+  },
+  "contracts": {
+    "listTitle": "Verträge",
+    "listEmpty": "Für diese Kampagne wurden noch keine Verträge erstellt.",
+    "dealPlaceholder": "Deal wählen",
+    "templatePlaceholder": "Vorlage wählen",
+    "template": {
+      "MSA": "MSA-Vorlage",
+      "SOW": "SOW-Vorlage",
+      "NDA": "NDA"
+    },
+    "generate": "Vertrag erstellen",
+    "comingSoonTitle": "Vertragsentwurf folgt in Kürze",
+    "comingSoonBody": "Wähle einen Deal und eine Vorlage, um einen Vertrag zu entwerfen. Das automatische Entwerfen ist noch nicht angebunden — erstellte Verträge erscheinen anschließend in der Liste unten."
+  }
+}

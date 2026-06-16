@@ -1,9 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
-import { Archive, Ban, Loader2, Search } from 'lucide-react';
+import {
+  Archive,
+  Ban,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  MoreHorizontal,
+  Search,
+} from 'lucide-react';
 import type { ProspectDto, ProspectStatus } from '@evertrust/shared';
 import {
   useProspectsBoard,
@@ -27,35 +35,39 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { MoreHorizontal } from 'lucide-react';
+import { Board, BoardCard, BoardColumn, type BoardTone } from '@/components/rean/board';
 import { cn } from '@/lib/utils';
-import { formatDateTime } from '@/lib/tender-format';
-import {
-  PROSPECT_STATUS_CLASS,
-  PROSPECT_STATUS_ORDER,
-} from '@/lib/growth-format';
+import { PROSPECT_STATUS_ORDER } from '@/lib/growth-format';
 import { ProspectDetailDrawer } from './prospect-detail-drawer';
 
-const PAGE_SIZE = 25;
+// Big page so the kanban shows a meaningful slice of the pipeline at once.
+const PAGE_SIZE = 200;
 const ALL = '__all__';
 
-// The cold-outreach board for one campaign: statusCounts chips (click to filter),
-// a search box, pagination, a per-row status override, and a click-to-open drawer
-// with the conversation timeline. All data is real (GET /prospects/board).
+// Per-column header accent (mockup: Won = emerald, Lost-ish = rose). Maps the live
+// ProspectStatus funnel onto the kit's BoardColumn tones.
+const COLUMN_TONE: Record<ProspectStatus, BoardTone> = {
+  NEW: 'default',
+  EMAILED: 'sky',
+  REPLIED: 'violet',
+  INTERESTED: 'emerald',
+  MEETING_SCHEDULED: 'emerald',
+  RE_ENGAGED: 'amber',
+  NOT_INTERESTED: 'default',
+  DO_NOT_CONTACT: 'rose',
+};
+
+// The cold-outreach pipeline for one campaign, reframed as the mockup kanban
+// (`.board` / `.col` / `.kcard`): one column per ProspectStatus, each card a real
+// prospect with ‹ › move controls (a live status override) plus an archive /
+// do-not-contact menu and click-to-open detail drawer. Search + status filter are
+// preserved; data is real (GET /prospects/board, polled).
 export function ProspectsBoard({ campaignId }: { campaignId: string }) {
   const t = useTranslations('marketing');
+  const tn = useTranslations('nurture');
   const [status, setStatus] = useState<ProspectStatus | null>(null);
   const [query, setQuery] = useState('');
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(0);
   const [openId, setOpenId] = useState<string | null>(null);
 
   const q = useProspectsBoard({
@@ -63,68 +75,29 @@ export function ProspectsBoard({ campaignId }: { campaignId: string }) {
     status: status ?? undefined,
     q: search || undefined,
     limit: PAGE_SIZE,
-    offset: page * PAGE_SIZE,
+    offset: 0,
   });
 
-  const data = q.data;
-  const items = data?.items ?? [];
-  const total = data?.total ?? 0;
-  const counts = data?.statusCounts ?? {};
-  const totalAll = PROSPECT_STATUS_ORDER.reduce(
-    (sum, s) => sum + (counts[s] ?? 0),
-    0,
-  );
-  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const items = useMemo(() => q.data?.items ?? [], [q.data]);
+  const counts = q.data?.statusCounts ?? {};
+
+  // Group the page's prospects into columns. When a status filter is active only
+  // that column fills; the rest render empty so the funnel shape stays legible.
+  const byStatus = useMemo(() => {
+    const map = {} as Record<ProspectStatus, ProspectDto[]>;
+    for (const s of PROSPECT_STATUS_ORDER) map[s] = [];
+    for (const p of items) (map[p.status] ??= []).push(p);
+    return map;
+  }, [items]);
 
   function applySearch(e: React.FormEvent) {
     e.preventDefault();
-    setPage(0);
     setSearch(query.trim());
-  }
-
-  function pickStatus(next: ProspectStatus | null) {
-    setPage(0);
-    setStatus(next);
   }
 
   return (
     <div className="flex flex-col gap-4">
-      {/* statusCounts chips — click to filter */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <button
-          type="button"
-          onClick={() => pickStatus(null)}
-          className={cn(
-            'rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
-            status === null
-              ? 'border-foreground/30 bg-foreground/10 text-foreground'
-              : 'border-border text-muted-foreground hover:bg-accent/50',
-          )}
-        >
-          {t('prospects.all')} <span className="tabular-nums">{totalAll}</span>
-        </button>
-        {PROSPECT_STATUS_ORDER.map((s) => {
-          const n = counts[s] ?? 0;
-          return (
-            <button
-              key={s}
-              type="button"
-              onClick={() => pickStatus(s)}
-              className={cn(
-                'rounded-full border px-2.5 py-1 text-xs font-medium transition-colors',
-                status === s
-                  ? PROSPECT_STATUS_CLASS[s]
-                  : 'border-border text-muted-foreground hover:bg-accent/50',
-              )}
-            >
-              {t(`status.${s}`)}{' '}
-              <span className="tabular-nums">{n}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* search + status select */}
+      {/* search + status filter */}
       <div className="flex flex-wrap items-center gap-2">
         <form onSubmit={applySearch} className="relative">
           <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -137,7 +110,9 @@ export function ProspectsBoard({ campaignId }: { campaignId: string }) {
         </form>
         <Select
           value={status ?? ALL}
-          onValueChange={(v) => pickStatus(v === ALL ? null : (v as ProspectStatus))}
+          onValueChange={(v) =>
+            setStatus(v === ALL ? null : (v as ProspectStatus))
+          }
         >
           <SelectTrigger className="w-[200px]">
             <SelectValue placeholder={t('prospects.allStatuses')} />
@@ -156,9 +131,9 @@ export function ProspectsBoard({ campaignId }: { campaignId: string }) {
         ) : null}
       </div>
 
-      {/* table */}
+      {/* board */}
       {q.isLoading ? (
-        <Skeleton className="h-64 w-full rounded-lg" />
+        <Skeleton className="h-72 w-full rounded-lg" />
       ) : q.isError ? (
         <p className="text-sm text-destructive">
           {t('prospects.loadError', { message: q.error.message })}
@@ -170,64 +145,31 @@ export function ProspectsBoard({ campaignId }: { campaignId: string }) {
             : t('prospects.empty')}
         </p>
       ) : (
-        <div className="overflow-hidden rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t('prospects.colCompany')}</TableHead>
-                <TableHead>{t('prospects.colEmail')}</TableHead>
-                <TableHead>{t('prospects.colLocation')}</TableHead>
-                <TableHead>{t('prospects.colStatus')}</TableHead>
-                <TableHead>{t('prospects.colLastContacted')}</TableHead>
-                <TableHead className="w-px" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items.map((p) => (
-                <ProspectRow
-                  key={p.id}
-                  prospect={p}
-                  onOpen={() => setOpenId(p.id)}
-                />
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+        <Board>
+          {PROSPECT_STATUS_ORDER.map((s) => (
+            <BoardColumn
+              key={s}
+              title={t(`status.${s}`)}
+              count={counts[s] ?? byStatus[s].length}
+              tone={COLUMN_TONE[s]}
+            >
+              {byStatus[s].length === 0 ? (
+                <p className="rounded-lg border border-dashed border-border/50 px-3 py-4 text-center text-[11px] text-muted-foreground/70">
+                  {tn('pipeline.columnEmpty')}
+                </p>
+              ) : (
+                byStatus[s].map((p) => (
+                  <DealCard
+                    key={p.id}
+                    prospect={p}
+                    onOpen={() => setOpenId(p.id)}
+                  />
+                ))
+              )}
+            </BoardColumn>
+          ))}
+        </Board>
       )}
-
-      {/* pagination */}
-      {total > PAGE_SIZE ? (
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span className="tabular-nums">
-            {t('prospects.pageRange', {
-              from: page * PAGE_SIZE + 1,
-              to: Math.min((page + 1) * PAGE_SIZE, total),
-              total,
-            })}
-          </span>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPage((p) => Math.max(0, p - 1))}
-              disabled={page === 0}
-            >
-              {t('prospects.previous')}
-            </Button>
-            <span className="tabular-nums">
-              {page + 1} / {pageCount}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
-              disabled={page >= pageCount - 1}
-            >
-              {t('prospects.next')}
-            </Button>
-          </div>
-        </div>
-      ) : null}
 
       <ProspectDetailDrawer
         prospectId={openId}
@@ -239,7 +181,11 @@ export function ProspectsBoard({ campaignId }: { campaignId: string }) {
   );
 }
 
-function ProspectRow({
+// One kanban card (mockup `.kcard`): company title, location subtitle, and a
+// footer with a status badge on the left + ‹ › move controls / overflow menu on
+// the right. ‹ › walk the prospect through PROSPECT_STATUS_ORDER via a real
+// status mutation; the menu offers archive / do-not-contact.
+function DealCard({
   prospect: p,
   onOpen,
 }: {
@@ -247,14 +193,39 @@ function ProspectRow({
   onOpen: () => void;
 }) {
   const t = useTranslations('marketing');
+  const tn = useTranslations('nurture');
   const setStatus = useUpdateProspectStatus();
 
+  const idx = PROSPECT_STATUS_ORDER.indexOf(p.status);
+  const prev = idx > 0 ? PROSPECT_STATUS_ORDER[idx - 1] : null;
+  const next =
+    idx >= 0 && idx < PROSPECT_STATUS_ORDER.length - 1
+      ? PROSPECT_STATUS_ORDER[idx + 1]
+      : null;
+
+  function move(to: ProspectStatus | null) {
+    if (!to) return;
+    setStatus.mutate(
+      { id: p.id, patch: { status: to } },
+      {
+        onSuccess: () =>
+          toast.success(
+            tn('pipeline.movedToast', {
+              name: p.companyName || p.email,
+              stage: t(`status.${to}`),
+            }),
+          ),
+        onError: (e) => toast.error(e.message ?? t('prospects.statusError')),
+      },
+    );
+  }
+
   function override(
-    status: ProspectStatus,
+    to: ProspectStatus,
     toastKey: 'archivedToast' | 'suppressedToast',
   ) {
     setStatus.mutate(
-      { id: p.id, patch: { status } },
+      { id: p.id, patch: { status: to } },
       {
         onSuccess: () =>
           toast.success(
@@ -265,62 +236,96 @@ function ProspectRow({
     );
   }
 
+  const location = [p.city, p.country].filter(Boolean).join(', ');
+
   return (
-    <TableRow
-      className="cursor-pointer"
+    <BoardCard
       onClick={onOpen}
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') onOpen();
-      }}
-    >
-      <TableCell className="font-medium">{p.companyName || '—'}</TableCell>
-      <TableCell className="text-muted-foreground">{p.email}</TableCell>
-      <TableCell className="text-muted-foreground">
-        {[p.city, p.country].filter(Boolean).join(', ') || '—'}
-      </TableCell>
-      <TableCell>
-        <Badge variant="outline" className={PROSPECT_STATUS_CLASS[p.status]}>
-          {t(`status.${p.status}`)}
-        </Badge>
-      </TableCell>
-      <TableCell className="tabular-nums text-muted-foreground">
-        {p.lastContactedAt ? formatDateTime(p.lastContactedAt) : '—'}
-      </TableCell>
-      <TableCell onClick={(e) => e.stopPropagation()}>
-        <Can permission="campaigns:write">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-8 text-muted-foreground"
-                aria-label={t('prospects.rowActions', { name: p.companyName || p.email })}
-                disabled={setStatus.isPending}
+      title={p.companyName || p.email}
+      subtitle={location || p.email}
+      footer={
+        <>
+          {p.emailVerified ? (
+            <Badge
+              variant="outline"
+              className="border-emerald-500/30 bg-emerald-500/10 text-[10px] font-medium text-emerald-400"
+            >
+              {tn('pipeline.verified')}
+            </Badge>
+          ) : (
+            <span className="text-[11px] text-muted-foreground/70">
+              {p.followupCount > 0
+                ? tn('pipeline.followups', { count: p.followupCount })
+                : '—'}
+            </span>
+          )}
+          <div
+            className="flex items-center gap-1"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Can permission="campaigns:write">
+              <button
+                type="button"
+                aria-label={tn('pipeline.moveBack')}
+                disabled={!prev || setStatus.isPending}
+                onClick={() => move(prev ?? null)}
+                className={cn(
+                  'grid size-6 place-items-center rounded-md border bg-muted text-muted-foreground transition-colors',
+                  'hover:border-muted-foreground/50 hover:text-foreground',
+                  'disabled:cursor-not-allowed disabled:opacity-40',
+                )}
               >
-                <MoreHorizontal />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                disabled={p.status === 'NOT_INTERESTED'}
-                onSelect={() => override('NOT_INTERESTED', 'archivedToast')}
+                <ChevronLeft className="size-3.5" />
+              </button>
+              <button
+                type="button"
+                aria-label={tn('pipeline.moveForward')}
+                disabled={!next || setStatus.isPending}
+                onClick={() => move(next ?? null)}
+                className={cn(
+                  'grid size-6 place-items-center rounded-md border bg-muted text-muted-foreground transition-colors',
+                  'hover:border-muted-foreground/50 hover:text-foreground',
+                  'disabled:cursor-not-allowed disabled:opacity-40',
+                )}
               >
-                <Archive />
-                {t('prospects.markNotInterested')}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                variant="destructive"
-                disabled={p.status === 'DO_NOT_CONTACT'}
-                onSelect={() => override('DO_NOT_CONTACT', 'suppressedToast')}
-              >
-                <Ban />
-                {t('prospects.doNotContact')}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </Can>
-      </TableCell>
-    </TableRow>
+                <ChevronRight className="size-3.5" />
+              </button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-6 text-muted-foreground"
+                    aria-label={t('prospects.rowActions', {
+                      name: p.companyName || p.email,
+                    })}
+                    disabled={setStatus.isPending}
+                  >
+                    <MoreHorizontal className="size-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    disabled={p.status === 'NOT_INTERESTED'}
+                    onSelect={() => override('NOT_INTERESTED', 'archivedToast')}
+                  >
+                    <Archive />
+                    {t('prospects.markNotInterested')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    variant="destructive"
+                    disabled={p.status === 'DO_NOT_CONTACT'}
+                    onSelect={() => override('DO_NOT_CONTACT', 'suppressedToast')}
+                  >
+                    <Ban />
+                    {t('prospects.doNotContact')}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </Can>
+          </div>
+        </>
+      }
+    />
   );
 }

@@ -1,0 +1,43 @@
+{
+  "title": "Activate",
+  "description": "Uses the connected Google Calendar to scan booked and free slots, brief before the call, and analyze it after.",
+  "account": {
+    "service": "Google · Calendar",
+    "stats": "{meetings, plural, =0 {No meetings} one {# meeting} other {# meetings}} · {slots, plural, =0 {no free slots} one {# free slot} other {# free slots}}",
+    "statsLoading": "Syncing calendar…",
+    "statsError": "Calendar unavailable"
+  },
+  "tabs": {
+    "book": "Meeting Booker",
+    "research": "Pre-meeting Research",
+    "after": "After-sales Analysis"
+  },
+  "book": {
+    "slots": {
+      "title": "Pick a slot",
+      "pill": "Google Calendar",
+      "comingSoon": "Slot booking is coming soon",
+      "comingSoonBody": "Picking a free slot and booking it directly into your Google Calendar isn't wired up yet. For now, the calendar is read-only — manage bookings in Google Calendar."
+    },
+    "upcoming": {
+      "title": "Upcoming meetings",
+      "loading": "Loading meetings…",
+      "error": "Could not load meetings.",
+      "emptyTitle": "No upcoming meetings",
+      "emptyBody": "Synced meetings from your connected Google Calendar will appear here.",
+      "untitled": "Untitled meeting",
+      "noCompany": "No company",
+      "noDate": "No date set",
+      "confirmed": "confirmed",
+      "scored": "score {score}"
+    }
+  },
+  "research": {
+    "comingSoon": "Pre-meeting research is coming soon",
+    "comingSoonBody": "Generating an AI pre-meeting brief from a company name isn't wired to a backend yet. It will summarize the prospect, recent news, and talking points before your call."
+  },
+  "after": {
+    "comingSoon": "After-sales analysis is coming soon",
+    "comingSoonBody": "Read-AI-style call summaries — key moments, sentiment, and next steps from a recorded call — aren't wired to a backend on this page yet."
+  }
+}

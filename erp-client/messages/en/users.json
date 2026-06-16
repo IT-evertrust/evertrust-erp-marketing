@@ -1,11 +1,11 @@
 {
-  "title": "Team & access",
-  "description": "Everyone in your workspace — roles, departments, and what they can do.",
+  "title": "User management",
+  "description": "Team members, roles, and access.",
   "layout": {
     "flat": "Flat",
     "grouped": "Grouped"
   },
-  "addMember": "Add member",
+  "addMember": "Invite user",
   "stats": {
     "members": "Members",
     "active": "Active",

@@ -5,7 +5,7 @@
 import { useTranslations } from 'next-intl';
 import { useRequirePermission } from '@/lib/permissions';
 import { AppShell } from '@/components/shell/app-shell';
-import { PerformanceView } from '@/components/performance/performance-view';
+import { AnalyticsView } from '@/components/performance/analytics-view';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function PerformancePage() {
@@ -17,7 +17,7 @@ export default function PerformancePage() {
       {isLoading ? (
         <Skeleton className="h-64 w-full rounded-lg" />
       ) : allowed ? (
-        <PerformanceView />
+        <AnalyticsView />
       ) : (
         <p className="text-sm text-muted-foreground">{t('redirecting')}</p>
       )}

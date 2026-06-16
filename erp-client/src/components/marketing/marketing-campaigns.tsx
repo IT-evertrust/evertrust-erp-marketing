@@ -1,19 +1,22 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { ArrowRight, ChevronDown, ExternalLink, Files } from 'lucide-react';
-import {
-  isArsenalRunOk,
-  type ArsenalRunDto,
-  type CampaignDto,
-} from '@evertrust/shared';
+import { ArrowRight, ExternalLink, Files } from 'lucide-react';
+import { type CampaignDto } from '@evertrust/shared';
 import { useCampaigns, useCampaignFiles } from '@/hooks/use-campaigns';
-import { useArsenalRuns, useMarketingReport } from '@/hooks/use-arsenal';
+import { useMarketingReport } from '@/hooks/use-arsenal';
+import { StatTile } from '@/components/rean/stat-tile';
 import { Can } from '@/components/auth/can';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -31,41 +34,31 @@ import {
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { CAMPAIGN_LIFECYCLE_BADGE, timeAgo } from '@/lib/arsenal-sequence';
+import { AimLaunchDialog } from '@/components/growth/aim-launch-dialog';
 import { RunStageButton } from '@/components/growth/run-stage-button';
 import { DeleteCampaignButton } from '@/components/growth/delete-campaign-button';
 
-// Marketing → "Campaigns" tab (mockup design): KPI tiles + the launched campaigns
-// as lifecycle-pill cards with a real per-campaign mini funnel and an expandable
-// per-stage activity log.
+// Reach → "Campaigns" tab (R.E.A.N. mockup): a "Create campaign" prompt card, five
+// KPI tiles (campaigns / active / leads / replies / meetings — all REAL from the
+// weekly marketing report), and the campaigns table with the mockup's columns
+// (Campaign · Niche · Geo · Sender · Status · Leads). Per-campaign Leads come from
+// the report funnel (null → "—" until n8n reports); every row keeps its live
+// manage / details / Drive / run / delete affordances.
 export function MarketingCampaigns() {
-  const t = useTranslations('marketing');
+  const t = useTranslations('growth.reach.campaigns');
   const campaigns = useCampaigns();
-  const runs = useArsenalRuns();
   const report = useMarketingReport('week', null);
-  const [openId, setOpenId] = useState<string | null>(null);
 
   const list = campaigns.data ?? [];
-  const runList = runs.data ?? [];
   const f = report.data?.funnel;
 
-  const runsByCampaign = useMemo(() => {
-    const m = new Map<string, ArsenalRunDto[]>();
-    for (const r of runList) {
-      if (!r.campaignId) continue;
-      const arr = m.get(r.campaignId);
-      if (arr) arr.push(r);
-      else m.set(r.campaignId, [r]);
-    }
-    return m;
-  }, [runList]);
-
   const active = list.filter((c) => c.lifecycle === 'ACTIVE').length;
-  const tiles: { key: string; value: number | null }[] = [
-    { key: 'campaigns', value: list.length },
-    { key: 'active', value: active },
-    { key: 'leads', value: f?.leadsFound ?? null },
-    { key: 'replies', value: f?.repliesHandled ?? null },
-    { key: 'meetings', value: f?.meetingsBooked ?? null },
+  const tiles: { key: string; value: number | null; accent: 'emerald' | 'sky' | 'violet' | 'amber' }[] = [
+    { key: 'campaigns', value: list.length, accent: 'emerald' },
+    { key: 'active', value: active, accent: 'emerald' },
+    { key: 'leads', value: f?.leadsFound ?? null, accent: 'sky' },
+    { key: 'replies', value: f?.repliesHandled ?? null, accent: 'violet' },
+    { key: 'meetings', value: f?.meetingsBooked ?? null, accent: 'amber' },
   ];
 
   return (
@@ -73,193 +66,174 @@ export function MarketingCampaigns() {
       {/* KPI tiles */}
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
         {tiles.map((tile) => (
-          <div key={tile.key} className="rounded-xl border bg-card px-3.5 py-2.5">
-            <div className="text-lg font-bold tabular-nums">
-              {campaigns.isLoading ? (
+          <StatTile
+            key={tile.key}
+            accent={tile.accent}
+            label={t(`tiles.${tile.key}`)}
+            value={
+              campaigns.isLoading ? (
                 <Skeleton className="h-6 w-8" />
               ) : tile.value === null ? (
                 <span className="text-muted-foreground/50">—</span>
               ) : (
                 tile.value
-              )}
-            </div>
-            <div className="text-[10.5px] uppercase tracking-wide text-muted-foreground/70">
-              {t(`campaigns.tiles.${tile.key}`)}
-            </div>
-          </div>
+              )
+            }
+          />
         ))}
       </div>
 
-      {/* header */}
-      <div>
-        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70">
-          {t('campaigns.deployedLabel')}
-        </p>
-        <p className="mt-0.5 text-xs text-muted-foreground">
-          {t('campaigns.deployedHint')}
-        </p>
-      </div>
+      {/* Create campaign prompt — the AIM launch dialog lives behind the button */}
+      <Can permission="campaigns:write">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between gap-2 text-base">
+              <span>{t('createTitle')}</span>
+              <span className="text-xs font-normal text-muted-foreground">
+                {t('createMeta')}
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-3">
+            <AimLaunchDialog />
+            <span className="text-xs text-muted-foreground">
+              {t('createHint')}
+            </span>
+          </CardContent>
+        </Card>
+      </Can>
 
-      {/* campaign cards */}
-      {campaigns.isLoading ? (
-        <Skeleton className="h-24 w-full" />
-      ) : campaigns.isError ? (
-        <p className="text-sm text-destructive">
-          {t('campaigns.loadError', { message: campaigns.error.message })}
-        </p>
-      ) : list.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          {t.rich('campaigns.empty', { b: (chunks) => <span className="font-medium">{chunks}</span> })}
-        </p>
-      ) : (
-        <ul className="flex flex-col gap-2.5">
-          {list.map((c) => (
-            <CampaignCard
-              key={c.id}
-              campaign={c}
-              runs={runsByCampaign.get(c.id) ?? []}
-              open={openId === c.id}
-              onToggle={() => setOpenId((p) => (p === c.id ? null : c.id))}
-            />
-          ))}
-        </ul>
-      )}
+      {/* Campaigns table */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between gap-2 text-base">
+            <span>{t('tableTitle')}</span>
+            {!campaigns.isLoading && !campaigns.isError ? (
+              <span className="text-xs font-normal text-muted-foreground tabular-nums">
+                {t('count', { count: list.length })}
+              </span>
+            ) : null}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {campaigns.isLoading ? (
+            <Skeleton className="h-40 w-full" />
+          ) : campaigns.isError ? (
+            <p className="text-sm text-destructive">
+              {t('loadError', { message: campaigns.error.message })}
+            </p>
+          ) : list.length === 0 ? (
+            <p className="rounded-lg border border-dashed px-6 py-10 text-center text-sm text-muted-foreground">
+              {t('empty')}
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t('col.campaign')}</TableHead>
+                    <TableHead>{t('col.niche')}</TableHead>
+                    <TableHead>{t('col.geo')}</TableHead>
+                    <TableHead>{t('col.sender')}</TableHead>
+                    <TableHead>{t('col.lifecycle')}</TableHead>
+                    <TableHead className="text-right">{t('col.leads')}</TableHead>
+                    <TableHead className="w-px" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {list.map((c) => (
+                    <CampaignRow key={c.id} campaign={c} />
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
-function CampaignCard({
-  campaign: c,
-  runs,
-  open,
-  onToggle,
-}: {
-  campaign: CampaignDto;
-  runs: ArsenalRunDto[];
-  open: boolean;
-  onToggle: () => void;
-}) {
-  const t = useTranslations('marketing');
+function CampaignRow({ campaign: c }: { campaign: CampaignDto }) {
+  const t = useTranslations('growth.reach.campaigns');
+  const tMarketing = useTranslations('marketing');
   const pill = CAMPAIGN_LIFECYCLE_BADGE[c.lifecycle];
-  // Per-campaign funnel from the report endpoint (REAL; null/"—" until n8n reports).
+  // Per-campaign leads from the report endpoint (REAL; "—" until n8n reports).
   const cReport = useMarketingReport('week', c.id);
-  const cf = cReport.data?.funnel;
-  const mini: { k: string; label: string; v: number | null }[] = [
-    { k: 'leads', label: t('campaigns.mini.leads'), v: cf?.leadsFound ?? null },
-    { k: 'emails', label: t('campaigns.mini.emails'), v: cf?.emailsSent ?? null },
-    { k: 'replies', label: t('campaigns.mini.replies'), v: cf?.repliesHandled ?? null },
-    { k: 'meetings', label: t('campaigns.mini.meetings'), v: cf?.meetingsBooked ?? null },
-  ];
-  const shown = runs.slice(0, 8);
+  const leads = cReport.data?.funnel?.leadsFound ?? null;
   const [filesOpen, setFilesOpen] = useState(false);
 
   return (
-    <li className="overflow-hidden rounded-xl border bg-card">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 p-3.5">
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-expanded={open}
-          className="flex min-w-0 items-center gap-2 text-left"
-        >
-          <ChevronDown
-            className={cn(
-              'size-4 shrink-0 text-muted-foreground transition-transform',
-              open && 'rotate-180',
-            )}
-          />
-          <span className="truncate text-sm font-semibold" title={c.project}>
-            {c.name || c.project}
-          </span>
-        </button>
+    <TableRow>
+      <TableCell className="font-medium">
+        <span className="truncate" title={c.project}>
+          {c.name || c.project}
+        </span>
+      </TableCell>
+      <TableCell className="text-muted-foreground">{c.nicheName ?? '—'}</TableCell>
+      <TableCell className="text-muted-foreground">
+        {[c.region, c.country].filter(Boolean).join(', ') || '—'}
+      </TableCell>
+      <TableCell className="text-muted-foreground">{c.sender}</TableCell>
+      <TableCell>
         <span
           className={cn(
             'rounded-full border px-2.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide',
             pill.className,
           )}
         >
-          {t(`lifecycle.${c.lifecycle}`)}
+          {tMarketing(`lifecycle.${c.lifecycle}`)}
         </span>
-        <span className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-xs text-muted-foreground">
-          {mini.map((m) => (
-            <span key={m.k}>
-              {m.label}{' '}
-              <b className="text-foreground tabular-nums">
-                {m.v === null ? '—' : m.v}
-              </b>
-            </span>
-          ))}
-        </span>
-        <span className="ml-auto flex items-center gap-1.5">
+      </TableCell>
+      <TableCell className="text-right tabular-nums">
+        {cReport.isLoading ? (
+          <Skeleton className="ml-auto h-4 w-6" />
+        ) : leads === null ? (
+          <span className="text-muted-foreground/50">—</span>
+        ) : (
+          leads.toLocaleString()
+        )}
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center justify-end gap-1.5">
           <Can permission="campaigns:write">
             <RunStageButton
               stage="LEAD_SATELLITE"
               campaignId={c.id}
-              label={t('campaigns.runStage')}
+              label={tMarketing('campaigns.runStage')}
               variant="outline"
               size="sm"
             />
           </Can>
           <Button variant="outline" size="sm" onClick={() => setFilesOpen(true)}>
             <Files />
-            {t('common.details')}
+            {tMarketing('common.details')}
           </Button>
           {c.driveFolderUrl ? (
             <Button asChild variant="outline" size="sm">
               <a href={c.driveFolderUrl} target="_blank" rel="noreferrer">
                 <ExternalLink />
-                {t('common.open')}
+                {tMarketing('common.open')}
               </a>
             </Button>
           ) : null}
           <Button asChild variant="outline" size="sm">
             <Link href={`/marketing/${c.id}`}>
-              {t('common.manage')}
+              {t('manage')}
               <ArrowRight />
             </Link>
           </Button>
           <Can permission="campaigns:write">
             <DeleteCampaignButton campaign={c} />
           </Can>
-        </span>
-      </div>
-
-      {open ? (
-        <div className="border-t bg-background/50 px-3.5 py-2.5">
-          {shown.length === 0 ? (
-            <p className="py-1 text-xs text-muted-foreground">
-              {t('campaigns.activityEmpty')}
-            </p>
-          ) : (
-            <ul className="flex flex-col gap-1.5">
-              {shown.map((r) => (
-                <li key={r.id} className="flex items-center gap-2 text-xs">
-                  <span
-                    className={cn(
-                      'size-1.5 shrink-0 rounded-full',
-                      isArsenalRunOk(r.status) ? 'bg-emerald-500' : 'bg-destructive',
-                    )}
-                  />
-                  <span className="font-medium text-foreground">
-                    {t(`stage.${r.stage}`)}
-                  </span>
-                  <span className="text-muted-foreground">{timeAgo(r.createdAt)}</span>
-                  {r.detail ? (
-                    <span className="truncate text-muted-foreground">· {r.detail}</span>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
-      ) : null}
-
+      </TableCell>
       <CampaignFilesDialog
         campaign={c}
         open={filesOpen}
         onOpenChange={setFilesOpen}
       />
-    </li>
+    </TableRow>
   );
 }
 
@@ -326,31 +300,31 @@ function CampaignFilesDialog({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {files.map((f) => {
-                  const ft = fileType(f.mimeType);
+                {files.map((file) => {
+                  const ft = fileType(file.mimeType);
                   const cells = (
                     <>
-                      <TableCell className="font-medium">{f.name}</TableCell>
+                      <TableCell className="font-medium">{file.name}</TableCell>
                       <TableCell className="text-muted-foreground">
                         {ft.key ? t(`campaigns.fileType.${ft.key}`) : (ft.raw ?? t('campaigns.fileType.file'))}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {f.modifiedTime ? timeAgo(f.modifiedTime) : '—'}
+                        {file.modifiedTime ? timeAgo(file.modifiedTime) : '—'}
                       </TableCell>
                       <TableCell>
-                        {f.webViewLink ? (
+                        {file.webViewLink ? (
                           <ExternalLink className="size-3.5 text-muted-foreground" />
                         ) : null}
                       </TableCell>
                     </>
                   );
-                  return f.webViewLink ? (
+                  return file.webViewLink ? (
                     <TableRow
-                      key={f.id}
+                      key={file.id}
                       className="cursor-pointer"
                       onClick={() =>
                         window.open(
-                          f.webViewLink!,
+                          file.webViewLink!,
                           '_blank',
                           'noopener,noreferrer',
                         )
@@ -359,7 +333,7 @@ function CampaignFilesDialog({
                       {cells}
                     </TableRow>
                   ) : (
-                    <TableRow key={f.id}>{cells}</TableRow>
+                    <TableRow key={file.id}>{cells}</TableRow>
                   );
                 })}
               </TableBody>

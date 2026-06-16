@@ -3,73 +3,83 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* EverTrust "R.E.A.N." palette — dark-first, emerald accent. shadcn's semantic
+   token NAMES are unchanged; only their VALUES are retuned to the mockup.
+   - `--primary`/`--ring`/`--sidebar-primary` carry the emerald accent (#34d399);
+     `--primary-foreground` is the dark emerald-tint ink (#06281d) the mockup uses
+     on emerald buttons.
+   - `--accent` stays a SUBTLE surface (= card-2) on purpose: in shadcn it's the
+     hover/active surface token, not a brand colour — turning it emerald would tint
+     every hover. Emerald-coloured chrome comes from `--primary`.
+   - chart-1..5 = emerald / sky / violet / amber / rose (the mockup's accent set).
+   Surfaces/borders/muted/fg mirror the mockup hex (converted to OKLCH). */
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --background: oklch(0.9737 0.0026 286.35); /* #f6f6f8 */
+  --foreground: oklch(0.202 0.0079 285.67); /* #16161a */
+  --card: oklch(1 0 0); /* #fff */
+  --card-foreground: oklch(0.202 0.0079 285.67);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.202 0.0079 285.67);
+  --primary: oklch(0.7729 0.1535 163.22); /* emerald #34d399 */
+  --primary-foreground: oklch(0.2488 0.0444 167.54); /* #06281d */
+  --secondary: oklch(0.9707 0.0027 286.35); /* card-2 #f5f5f7 */
+  --secondary-foreground: oklch(0.202 0.0079 285.67);
+  --muted: oklch(0.9707 0.0027 286.35);
+  --muted-foreground: oklch(0.5316 0.0171 285.81); /* #6b6b76 */
+  --accent: oklch(0.9707 0.0027 286.35); /* subtle hover surface (= card-2) */
+  --accent-foreground: oklch(0.202 0.0079 285.67);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --border: oklch(0.9261 0.0054 286.29); /* #e6e6ea */
+  --input: oklch(0.9261 0.0054 286.29);
+  --ring: oklch(0.7729 0.1535 163.22); /* emerald focus ring */
+  --chart-1: oklch(0.7729 0.1535 163.22); /* emerald */
+  --chart-2: oklch(0.7535 0.139 232.66); /* sky */
+  --chart-3: oklch(0.709 0.1592 293.54); /* violet */
+  --chart-4: oklch(0.8369 0.1644 84.43); /* amber */
+  --chart-5: oklch(0.7106 0.1661 22.22); /* rose */
+  --sidebar: oklch(0.9884 0.0013 286.38); /* #fbfbfc */
+  --sidebar-foreground: oklch(0.202 0.0079 285.67);
+  --sidebar-primary: oklch(0.7729 0.1535 163.22); /* emerald */
+  --sidebar-primary-foreground: oklch(0.2488 0.0444 167.54);
+  --sidebar-accent: oklch(0.9707 0.0027 286.35);
+  --sidebar-accent-foreground: oklch(0.202 0.0079 285.67);
+  --sidebar-border: oklch(0.9261 0.0054 286.29);
+  --sidebar-ring: oklch(0.7729 0.1535 163.22);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: oklch(0.1457 0.0043 285.86); /* #0a0a0c */
+  --foreground: oklch(0.9851 0 89.88); /* #fafafa */
+  --card: oklch(0.1926 0.006 285.82); /* #141417 */
+  --card-foreground: oklch(0.9851 0 89.88);
+  --popover: oklch(0.1926 0.006 285.82);
+  --popover-foreground: oklch(0.9851 0 89.88);
+  --primary: oklch(0.7729 0.1535 163.22); /* emerald #34d399 */
+  --primary-foreground: oklch(0.2488 0.0444 167.54); /* #06281d */
+  --secondary: oklch(0.22 0.0097 285.58); /* card-2 #1a1a1f */
+  --secondary-foreground: oklch(0.9851 0 89.88);
+  --muted: oklch(0.22 0.0097 285.58);
+  --muted-foreground: oklch(0.6403 0.0163 285.93); /* #8b8b96 */
+  --accent: oklch(0.22 0.0097 285.58); /* subtle hover surface (= card-2) */
+  --accent-foreground: oklch(0.9851 0 89.88);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --border: oklch(0.2711 0.011 285.64); /* #26262c */
+  --input: oklch(0.2711 0.011 285.64);
+  --ring: oklch(0.7729 0.1535 163.22); /* emerald focus ring */
+  --chart-1: oklch(0.7729 0.1535 163.22); /* emerald */
+  --chart-2: oklch(0.7535 0.139 232.66); /* sky */
+  --chart-3: oklch(0.709 0.1592 293.54); /* violet */
+  --chart-4: oklch(0.8369 0.1644 84.43); /* amber */
+  --chart-5: oklch(0.7106 0.1661 22.22); /* rose */
+  --sidebar: oklch(0.1652 0.0062 285.7); /* #0e0e11 */
+  --sidebar-foreground: oklch(0.9851 0 89.88);
+  --sidebar-primary: oklch(0.7729 0.1535 163.22); /* emerald */
+  --sidebar-primary-foreground: oklch(0.2488 0.0444 167.54);
+  --sidebar-accent: oklch(0.22 0.0097 285.58);
+  --sidebar-accent-foreground: oklch(0.9851 0 89.88);
+  --sidebar-border: oklch(0.2711 0.011 285.64);
+  --sidebar-ring: oklch(0.7729 0.1535 163.22);
 }
 
 /* Display density (Settings → General → Display). Tailwind v4 derives its whole

@@ -1,0 +1,18 @@
+{
+  "comingSoon": {
+    "badge": "Coming soon",
+    "body": "This surface is being rebuilt as part of the redesign and will arrive in a later phase."
+  },
+  "activate": {
+    "title": "Activate",
+    "description": "Step 3 of the R.E.A.N. sequence — turn engaged prospects into booked meetings."
+  },
+  "nurture": {
+    "title": "Nurture",
+    "description": "Step 4 of the R.E.A.N. sequence — keep warm relationships moving toward a close."
+  },
+  "reports": {
+    "title": "Reports",
+    "description": "Exportable performance and outreach reports across the R.E.A.N. sequence."
+  }
+}

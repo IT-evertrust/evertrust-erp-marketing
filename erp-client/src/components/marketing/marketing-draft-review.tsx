@@ -40,7 +40,8 @@ function keyOf(d: MarketingDraftDto, i: number) {
 }
 
 export function MarketingDraftReview() {
-  const t = useTranslations('marketing');
+  // Reads from the dedicated `engage` namespace (Reply Sorter), not `marketing`.
+  const t = useTranslations('engage');
   const drafts = useMarketingDrafts();
   const send = useSendDraft();
   const scan = useScanLeads();

@@ -35,7 +35,7 @@ import {
   TabsTrigger,
 } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
-import { StatTile } from '@/components/common/stat-tile';
+import { StatTile } from '@/components/rean/stat-tile';
 import { cn } from '@/lib/utils';
 import { formatDateTime } from '@/lib/tender-format';
 import { ROLE_STYLES } from './role-styles';
@@ -117,12 +117,15 @@ export function ProfileView({ userId }: { userId: string }) {
 
       {/* header card */}
       <Card className="overflow-hidden">
-        <div className="h-20 bg-gradient-to-r from-amber-500/30 via-violet-500/20 to-sky-500/20" />
+        <div className="h-20 bg-gradient-to-r from-emerald-500/30 via-sky-500/20 to-violet-500/20" />
         <CardContent className="pt-0">
           <div className="-mt-8 flex flex-wrap items-end gap-4">
             <Avatar className="size-20 rounded-2xl border-4 border-background">
               <AvatarFallback
-                className={cn('rounded-2xl text-2xl font-semibold', styles.tint)}
+                className={cn(
+                  'rounded-2xl bg-gradient-to-br text-2xl font-semibold text-white',
+                  styles.gradient,
+                )}
               >
                 {initials(user.name)}
               </AvatarFallback>
@@ -186,30 +189,41 @@ export function ProfileView({ userId }: { userId: string }) {
         <StatTile
           label={t('profile.tiles.campaignsLaunched')}
           value={stats.data ? stats.data.campaignsLaunched : '—'}
-          accent="bg-sky-400"
+          accent="sky"
         />
         <StatTile
           label={t('profile.tiles.stagesRun')}
           value={stats.data ? stats.data.stagesRun : '—'}
-          accent="bg-violet-400"
+          accent="violet"
         />
         <StatTile
           label={t('profile.tiles.actionsLogged')}
           value={stats.data ? stats.data.actionsLogged : '—'}
-          accent="bg-emerald-400"
+          accent="emerald"
         />
         <StatTile
           label={t('profile.tiles.permissions')}
           value={`${perms.length} / ${PERMISSIONS.length}`}
+          accent="amber"
           hint={t('profile.tiles.granted')}
         />
       </div>
 
       <Tabs defaultValue="access">
-        <TabsList>
-          <TabsTrigger value="access">{t('profile.tabs.access')}</TabsTrigger>
-          <TabsTrigger value="account">{t('profile.tabs.account')}</TabsTrigger>
-          <TabsTrigger value="activity">{t('profile.tabs.activity')}</TabsTrigger>
+        <TabsList className="h-auto w-fit rounded-[10px] border bg-card p-1">
+          {(['access', 'account', 'activity'] as const).map((v) => (
+            <TabsTrigger
+              key={v}
+              value={v}
+              className={cn(
+                'rounded-md px-3 py-1.5 text-xs font-semibold text-muted-foreground',
+                'data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-600 data-[state=active]:shadow-none',
+                'dark:data-[state=active]:bg-emerald-500/10 dark:data-[state=active]:text-emerald-400 dark:data-[state=active]:border-transparent',
+              )}
+            >
+              {t(`profile.tabs.${v}`)}
+            </TabsTrigger>
+          ))}
         </TabsList>
 
         {/* Access */}

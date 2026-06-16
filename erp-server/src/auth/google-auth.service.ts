@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 import {
   companyEmailDomain,
@@ -33,7 +33,8 @@ import { TOKEN_VERIFIER, type TokenVerifier } from './token-verifier';
 //        b. else org with that domain exists → create the user as EMPLOYEE.
 //        c. else                            → create the org + first user as
 //           SUPER_ADMIN (the org owner; never OWNER — that's the reserved
-//           cross-org platform role).
+//           cross-org platform role). At most ONE SA per org: if the joined org
+//           somehow already has a SUPER_ADMIN, the new user is EMPLOYEE instead.
 //   5. Mint the JWT EXACTLY as AuthService.login does (same payload + signer).
 //
 // Google users have NO password, so we NEVER write an auth_credentials row.
@@ -86,7 +87,15 @@ export class GoogleAuthService {
 
     // (b)/(c) Provision: join the org that owns this domain, or create it.
     const org = await this.resolveOrCreateOrg(domain);
-    const role: UserRole = org.created ? 'SUPER_ADMIN' : 'EMPLOYEE';
+    // Role rule: the FIRST user of a BRAND-NEW org becomes that org's single
+    // SUPER_ADMIN (its owner); anyone joining an EXISTING org is an EMPLOYEE.
+    // Defensive guard: an org may have AT MOST ONE Super Admin, so even on the
+    // brand-new-org path, if that org somehow ALREADY has a SUPER_ADMIN, the new
+    // user is an EMPLOYEE — we never mint a 2nd SA. (never OWNER — that's the
+    // reserved cross-org platform role.)
+    const orgHasSuperAdmin = await this.orgHasSuperAdmin(org.id);
+    const role: UserRole =
+      org.created && !orgHasSuperAdmin ? 'SUPER_ADMIN' : 'EMPLOYEE';
 
     const inserted = await this.db
       .insert(schema.users)
@@ -145,6 +154,23 @@ export class GoogleAuthService {
       .where(eq(schema.organizations.id, id))
       .limit(1);
     return rows[0]?.name;
+  }
+
+  // Org invariant: at most one Super Admin per org. True when this org already
+  // has a SUPER_ADMIN — used to never self-provision a 2nd one. OWNER (the
+  // cross-org platform role) is deliberately not counted here.
+  private async orgHasSuperAdmin(orgId: string): Promise<boolean> {
+    const rows = await this.db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(
+        and(
+          eq(schema.users.organizationId, orgId),
+          eq(schema.users.role, 'SUPER_ADMIN'),
+        ),
+      )
+      .limit(1);
+    return rows.length > 0;
   }
 
   // Find the org for a domain, or create it. RACE-SAFE: the create relies on the
