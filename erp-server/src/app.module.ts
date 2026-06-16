@@ -28,6 +28,7 @@ import { DocumentsModule } from './documents/documents.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { CustomersModule } from './customers/customers.module';
 import { PerformanceModule } from './performance/performance.module';
+import { GoogleModule } from './google/google.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from './auth/guards/permissions.guard';
 import { AuditInterceptor } from './common/audit.interceptor';
@@ -61,6 +62,7 @@ import { AuditInterceptor } from './common/audit.interceptor';
     SuppliersModule,
     CustomersModule,
     PerformanceModule,
+    GoogleModule,
   ],
   providers: [
     // Zod DTOs are the contract: validate every request body/param/query.

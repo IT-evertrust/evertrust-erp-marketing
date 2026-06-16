@@ -2,21 +2,22 @@
 
 import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { LoginDto, LoginResponseDto, MeDto, UpdateMyNameDto } from '@evertrust/shared';
+import type { LoginResponseDto, MeDto, UpdateMyNameDto } from '@evertrust/shared';
 import { ApiError, api } from '@/lib/api';
 import { getLandingPath } from '@/lib/preferences';
 import { queryKeys } from '@/lib/query-keys';
 
-// Login: verify credentials against the API, then hand the returned token to our
-// own route handler so a web-origin mirror cookie exists for middleware gating.
-// On success we seed the user cache and navigate to the user's chosen landing
-// page (Settings → General → Display; defaults to /dashboard).
-export function useLogin() {
+// Google-only login: hand the Google ID token (the GIS credential) to the API,
+// then mirror the returned token to our own route handler so a web-origin cookie
+// exists for middleware gating. On success we seed the user cache and navigate to
+// the user's chosen landing page (Settings → General → Display; defaults to
+// /dashboard). The API verifies the ID token and resolves/auto-provisions the org.
+export function useGoogleLogin() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  return useMutation<LoginResponseDto, ApiError, LoginDto>({
-    mutationFn: async (input) => {
-      const result = await api.login(input);
+  return useMutation<LoginResponseDto, ApiError, string>({
+    mutationFn: async (idToken) => {
+      const result = await api.googleLogin(idToken);
       await fetch('/api/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

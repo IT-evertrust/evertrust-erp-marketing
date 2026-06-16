@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import type { LucideIcon } from 'lucide-react';
@@ -10,6 +11,8 @@ import {
   Check,
   Copy,
   ImageOff,
+  Loader2,
+  Plug,
   Plus,
   ShieldOff,
   Star,
@@ -20,6 +23,7 @@ import {
   X,
 } from 'lucide-react';
 import type {
+  ConnectedGoogleAccountDto,
   DefaultTemplateDto,
   OrgSenderDto,
   OutreachTone,
@@ -28,13 +32,17 @@ import type {
   UpdateWorkflowConfigDto,
   WorkflowConfigDto,
 } from '@evertrust/shared';
+import { ROLE_LABELS } from '@evertrust/shared';
 import {
   useClearIngestToken,
   useClearSignatureImage,
+  useDisconnectGoogleAccount,
+  useGoogleAccounts,
   useLeadStats,
   useOrgSenders,
   useRemoveSender,
   useRotateIngestToken,
+  useSetGoogleDefaults,
   useSetSignatureImageUrl,
   useTestN8n,
   useUpdateWorkflowConfig,
@@ -42,6 +50,7 @@ import {
   useUpsertSender,
   useWorkflowConfig,
 } from '@/hooks/use-arsenal';
+import { ApiError, api } from '@/lib/api';
 import { timeAgo } from '@/lib/arsenal-sequence';
 import { Can } from '@/components/auth/can';
 import { PageHeader } from '@/components/common/page-header';
@@ -604,6 +613,291 @@ function SignatureImageControl({ url }: { url: string | null }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// Map a Google account's granted scopes to a short human summary ("Send email ·
+// Calendar"). We only flag the two scopes the product cares about; anything else is
+// ignored. Empty → "No access".
+function scopeSummary(
+  scopes: string[],
+  labels: { gmail: string; calendar: string; none: string },
+): string {
+  const parts: string[] = [];
+  if (scopes.some((s) => s.includes('gmail') || s.includes('mail.google'))) {
+    parts.push(labels.gmail);
+  }
+  if (scopes.some((s) => s.includes('calendar'))) {
+    parts.push(labels.calendar);
+  }
+  return parts.length > 0 ? parts.join(' · ') : labels.none;
+}
+
+// Radix Select forbids an empty-string item value, so the "None" option uses this
+// sentinel; it maps back to null (clear the default) when calling the API.
+const GOOGLE_DEFAULT_NONE = '__none__';
+
+// Configuration > Connected Google accounts — per-org Gmail/Calendar OAuth.
+// The Connect button is open to any authenticated user (it just kicks off the OAuth
+// redirect); the list, default selectors and disconnect are admin-only (server
+// enforces admin:config) and gated with <Can>. On return from the consent screen the
+// callback redirects to /settings/configuration?google=connected|error — we toast and
+// clean the param on mount. Immediate-action mutations, like the senders editor.
+function GoogleAccountsControl() {
+  const t = useTranslations('settings');
+  const router = useRouter();
+  const accounts = useGoogleAccounts();
+  const setDefaults = useSetGoogleDefaults();
+  const disconnect = useDisconnectGoogleAccount();
+
+  // Whether the API is configured for Google connect. null = unknown (until the
+  // connect probe runs or the start call returns); false after a 503 from start.
+  const [connectConfigured, setConnectConfigured] = useState(true);
+  const [connecting, setConnecting] = useState(false);
+  // Which account id is mid-mutation, so we disable just that row's controls.
+  const [pendingId, setPendingId] = useState<string | null>(null);
+
+  const list = accounts.data ?? [];
+  const busy = setDefaults.isPending || disconnect.isPending;
+
+  // On return from Google's consent screen the callback appends ?google=connected|error.
+  // Read it from the URL (client-only — avoids the useSearchParams Suspense/prerender
+  // requirement), toast once, refetch the list, then strip the param so a refresh
+  // doesn't re-toast. Runs once on mount.
+  useEffect(() => {
+    const param = new URLSearchParams(window.location.search).get('google');
+    if (param !== 'connected' && param !== 'error') return;
+    if (param === 'connected') {
+      toast.success(t('config.google.toastConnected'));
+      void accounts.refetch();
+    } else {
+      toast.error(t('config.google.toastConnectError'));
+    }
+    router.replace('/settings/configuration');
+    // Mount-only: the param is consumed and stripped here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Kick off the OAuth flow: ask the API for the consent URL, then leave the app with
+  // a full-page redirect (NOT router.push — we must hand off to Google). A 503 means
+  // the API isn't configured for connect; show the disabled hint instead of crashing.
+  async function handleConnect() {
+    setConnecting(true);
+    try {
+      const res = await api.google.start();
+      window.location.href = res.url;
+    } catch (err) {
+      setConnecting(false);
+      if (err instanceof ApiError && err.status === 503) {
+        setConnectConfigured(false);
+        return;
+      }
+      toast.error(
+        err instanceof Error ? err.message : t('config.google.toastConnectError'),
+      );
+    }
+  }
+
+  // Repoint the org default Gmail or Calendar account. The "None" sentinel maps to
+  // null (clear the default). The server returns the resolved list (cache-seeded).
+  function handleSetDefault(
+    field: 'defaultGmailAccountId' | 'defaultCalendarAccountId',
+    value: string,
+  ) {
+    setDefaults.mutate(
+      { [field]: value === GOOGLE_DEFAULT_NONE ? null : value },
+      {
+        onSuccess: () => toast.success(t('config.google.toastDefaultsSet')),
+        onError: (err) => toast.error(err.message || t('config.google.toastError')),
+      },
+    );
+  }
+
+  function handleDisconnect(a: ConnectedGoogleAccountDto) {
+    if (!window.confirm(t('config.google.disconnectConfirm'))) return;
+    setPendingId(a.id);
+    disconnect.mutate(a.id, {
+      onSuccess: () => toast.success(t('config.google.toastDisconnected')),
+      onError: (err) => toast.error(err.message || t('config.google.toastError')),
+      onSettled: () => setPendingId(null),
+    });
+  }
+
+  const statusLabel: Record<ConnectedGoogleAccountDto['status'], string> = {
+    CONNECTED: t('config.google.statusConnected'),
+    REVOKED: t('config.google.statusRevoked'),
+    ERROR: t('config.google.statusError'),
+  };
+  const scopeLabels = {
+    gmail: t('config.google.scopeGmail'),
+    calendar: t('config.google.scopeCalendar'),
+    none: t('config.google.scopeNone'),
+  };
+  const gmailDefaultId =
+    list.find((a) => a.isDefaultGmail)?.id ?? GOOGLE_DEFAULT_NONE;
+  const calendarDefaultId =
+    list.find((a) => a.isDefaultCalendar)?.id ?? GOOGLE_DEFAULT_NONE;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t('config.google.title')}</CardTitle>
+        <CardDescription>{t('config.google.description')}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-6">
+        {/* Connect — open to any authenticated user. Disabled with a hint when the
+            API reports it isn't configured for Google connect (503 from start). */}
+        <div className="flex flex-col gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="self-start"
+            onClick={handleConnect}
+            disabled={connecting || !connectConfigured}
+          >
+            {connecting ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Plug className="size-4" />
+            )}
+            {connecting ? t('config.google.connecting') : t('config.google.connect')}
+          </Button>
+          {!connectConfigured ? (
+            <p className="text-xs text-muted-foreground">
+              {t('config.google.notConfigured')}
+            </p>
+          ) : null}
+        </div>
+
+        {/* List + defaults + disconnect — admin-only (server enforces admin:config). */}
+        <Can permission="admin:config">
+          {accounts.isLoading ? (
+            <Skeleton className="h-24 w-full rounded-lg" />
+          ) : list.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {t('config.google.empty')}
+            </p>
+          ) : (
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                {list.map((a) => {
+                  const rowBusy = busy && pendingId === a.id;
+                  return (
+                    <div
+                      key={a.id}
+                      className="flex items-center gap-3 rounded-lg border p-3"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="truncate text-sm font-medium">
+                            {a.displayName?.trim() ? a.displayName : a.email}
+                          </span>
+                          <Badge variant="outline" className="font-medium">
+                            {ROLE_LABELS[a.role]}
+                          </Badge>
+                          {a.isDefaultGmail ? (
+                            <Badge
+                              variant="outline"
+                              className="border-emerald-500/30 bg-emerald-500/10 font-medium text-emerald-700 dark:text-emerald-400"
+                            >
+                              {t('config.google.defaultGmailBadge')}
+                            </Badge>
+                          ) : null}
+                          {a.isDefaultCalendar ? (
+                            <Badge
+                              variant="outline"
+                              className="border-emerald-500/30 bg-emerald-500/10 font-medium text-emerald-700 dark:text-emerald-400"
+                            >
+                              {t('config.google.defaultCalendarBadge')}
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <p className="truncate font-mono text-xs text-muted-foreground">
+                          {a.email}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {scopeSummary(a.scopes, scopeLabels)} ·{' '}
+                          {statusLabel[a.status]}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="shrink-0 text-muted-foreground hover:text-destructive"
+                        aria-label={t('config.google.disconnectAria', {
+                          account: a.email,
+                        })}
+                        onClick={() => handleDisconnect(a)}
+                        disabled={busy}
+                      >
+                        {rowBusy ? (
+                          <Loader2 className="size-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="size-4" />
+                        )}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Default selectors — which account campaigns send from / book into. */}
+              <div className="grid gap-3 border-t pt-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <Label>{t('config.google.defaultGmailLabel')}</Label>
+                  <Select
+                    value={gmailDefaultId}
+                    onValueChange={(v) =>
+                      handleSetDefault('defaultGmailAccountId', v)
+                    }
+                    disabled={busy}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('config.google.defaultNone')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={GOOGLE_DEFAULT_NONE}>
+                        {t('config.google.defaultNone')}
+                      </SelectItem>
+                      {list.map((a) => (
+                        <SelectItem key={a.id} value={a.id}>
+                          {a.email}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label>{t('config.google.defaultCalendarLabel')}</Label>
+                  <Select
+                    value={calendarDefaultId}
+                    onValueChange={(v) =>
+                      handleSetDefault('defaultCalendarAccountId', v)
+                    }
+                    disabled={busy}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={t('config.google.defaultNone')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={GOOGLE_DEFAULT_NONE}>
+                        {t('config.google.defaultNone')}
+                      </SelectItem>
+                      {list.map((a) => (
+                        <SelectItem key={a.id} value={a.id}>
+                          {a.email}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          )}
+        </Can>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1390,6 +1684,11 @@ export function ConfigurationSettings() {
           <Can permission="admin:config">
             <SendersControl />
           </Can>
+
+          {/* Connected Google accounts — per-org Gmail/Calendar OAuth. NOT wrapped in
+              <Can>: the Connect button is open to any authenticated user; the list,
+              default selectors and disconnect gate themselves on admin:config inside. */}
+          <GoogleAccountsControl />
 
           {/* Daily send — the existing ERP-side daily Bazooka control. */}
           <Card>

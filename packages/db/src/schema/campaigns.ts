@@ -45,7 +45,11 @@ export const campaigns = pgTable(
     region: text('region').notNull(),
     project: text('project').notNull(),
     gmailLabel: text('gmail_label').notNull(),
-    salesCalendarId: text('sales_calendar_id').notNull(),
+    // Per-campaign OVERRIDE of the org's sales calendar. NULLABLE: the sales calendar
+    // is resolved at the org level (org_config.salesCalendarId ?? env SALES_CALENDAR_ID
+    // ?? null); a campaign only sets this when the AIM Calendar dropdown picks a
+    // specific Google calendar. Null = fall back to the org/env resolution.
+    salesCalendarId: text('sales_calendar_id'),
     whatsappNumber: text('whatsapp_number').notNull(),
     // Gmail sending alias (the AIM workflow config.json `sender`, e.g. 'info').
     sender: text('sender').notNull().default('info'),

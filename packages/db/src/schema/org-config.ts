@@ -8,6 +8,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+import { googleAccounts } from './google-accounts';
 import { organizations } from './org';
 
 // PER-ORGANIZATION configuration (multi-tenant SaaS). One row per org — holds the
@@ -47,6 +48,14 @@ export const orgConfig = pgTable(
     // Calendar this org books sales meetings into. Opaque provider id (e.g. a
     // Google Calendar id). Null = fall back to the product default.
     salesCalendarId: text('sales_calendar_id'),
+    // Default connected Google account for sending Gmail. Null = none chosen.
+    defaultGmailAccountId: uuid('default_gmail_account_id').references(
+      () => googleAccounts.id,
+    ),
+    // Default connected Google account for Calendar operations. Null = none chosen.
+    defaultCalendarAccountId: uuid('default_calendar_account_id').references(
+      () => googleAccounts.id,
+    ),
     // --- Lead governance (per-org) ---
     maxLeadsPerRun: integer('max_leads_per_run'),
     maxPerNiche: integer('max_per_niche'),

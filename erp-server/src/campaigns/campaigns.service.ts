@@ -168,7 +168,7 @@ export class CampaignsService {
         region: dto.region,
         project: dto.project,
         gmailLabel: dto.gmailLabel,
-        salesCalendarId: dto.salesCalendarId,
+        salesCalendarId: dto.salesCalendarId ?? null,
         whatsappNumber: dto.whatsappNumber,
         sender,
         lifecycle: 'DRAFT',

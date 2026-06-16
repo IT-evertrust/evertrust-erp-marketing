@@ -30,9 +30,17 @@ async function seed(): Promise<void> {
   }
 
   // Single-tenant bootstrap: every seeded row is scoped to this organization.
+  // domain is the join key for Google-login auto-provisioning: future
+  // @evertrust-germany.de logins resolve to THIS org rather than spawning a
+  // duplicate. Set on fresh bootstrap; the early-return guard above keeps the
+  // whole seed idempotent, so an existing org is never re-stamped here.
   const [org] = await db
     .insert(organizations)
-    .values({ name: 'Evertrust GmbH', slug: 'evertrust' })
+    .values({
+      name: 'Evertrust GmbH',
+      slug: 'evertrust',
+      domain: 'evertrust-germany.de',
+    })
     .returning();
   if (!org) throw new Error('Failed to seed organization');
 

@@ -162,6 +162,16 @@ Slash commands in `.claude/commands/`:
 
 ## Core Principles
 
+- **Multi-Tenant by Default (non-negotiable)**: This is a scalable, sellable, multi-tenant
+  SaaS automation ERP — many customer organizations run **simultaneously and fully isolated**.
+  Every step carries an organization: every table row, query, scheduled job, queue task, agent
+  dispatch, and outbound call MUST carry/resolve an `organizationId` (the tenant root; children
+  inherit via parent FK; use `tenantScope()`/`@OrgId()`). Every org owns its **own config +
+  credentials** (email senders/sending domain, sales calendar, WhatsApp, branding, tokens,
+  webhook/agent URLs) — resolve **per-org (`org value ?? env default`)**, never hardcode an
+  EverTrust value and never reuse one org's creds for another tenant. `OWNER` is the only
+  cross-org role. New code (ERP services, the agent-orchestration platform, the Python agents,
+  n8n nodes) is org-scoped from line one. Plan: `docs/specs/multi-tenant-conversion.md`.
 - **Simplicity First**: Make every change as simple as possible. Impact minimal code.
 - **No Laziness**: Find root causes. No temporary fixes. Senior developer standards.
 - **Minimal Impact**: Changes should only touch what's necessary. Avoid introducing bugs.

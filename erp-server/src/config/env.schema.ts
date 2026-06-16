@@ -26,6 +26,29 @@ export const EnvSchema = z.object({
   // The account AUTH_DISABLED impersonates. Blank = the first active SUPER_ADMIN.
   AUTH_DISABLED_USER_EMAIL: z.string().default(''),
 
+  // Google-only login. The OAuth 2.0 Web client ID (the `aud` every Google ID
+  // token issued to this app carries). The API verifies incoming ID tokens
+  // against this audience — there is NO client secret (we never run the
+  // server-side code-exchange flow, only ID-token verification). Blank = Google
+  // login is NOT configured: POST /auth/google returns 503 instead of erroring
+  // deep in the verifier, so the API is safe to boot before the ID is set.
+  GOOGLE_CLIENT_ID: z.string().default(''),
+
+  // Per-org Google connect — the SEPARATE authorization-code flow (NOT the GIS
+  // login, which needs no secret). The OAuth web client's secret, used only to
+  // exchange an auth code for tokens server-side. Blank = connect is OFF.
+  GOOGLE_CLIENT_SECRET: z.string().default(''),
+  // The redirect URI registered for the connect web client — Google sends the auth
+  // code here (the API's /google/connect/callback). Blank = connect is OFF.
+  GOOGLE_OAUTH_REDIRECT_URI: z.string().default(''),
+  // Base64-encoded 32-byte (AES-256) key for encrypting Google refresh/access tokens
+  // at rest. Blank or wrong-length = connect is OFF (tokens are never stored plaintext).
+  GOOGLE_TOKEN_ENC_KEY: z.string().default(''),
+  // The web app's public base URL the OAuth callback redirects back to (e.g.
+  // https://app.evertrust-germany.de). Blank = the callback shows a minimal "you can
+  // close this tab" HTML page instead of redirecting.
+  APP_WEB_URL: z.string().default(''),
+
   // Comma-separated allowlist of browser origins for CORS. Empty = no CORS.
   CORS_ORIGINS: z.string().default(''),
 
@@ -120,6 +143,13 @@ export const EnvSchema = z.object({
   // then null. Blank = no product default (an org with no override resolves to null,
   // and the workflow uses its own built-in default calendar).
   SALES_CALENDAR_ID: z.string().default(''),
+
+  // Growth Engine: the Google `authorized_user` token JSON for the ONE account whose
+  // calendars the AIM "scan by org" endpoint lists ({ client_id, client_secret,
+  // refresh_token, type: "authorized_user" }). A single deployment-wide refresh token —
+  // there is NO per-org OAuth and NO browser flow. Blank = not configured, so the scan
+  // degrades to an empty list ({ configured: false, calendars: [] }) instead of failing.
+  GOOGLE_CALENDAR_TOKEN_JSON: z.string().default(''),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

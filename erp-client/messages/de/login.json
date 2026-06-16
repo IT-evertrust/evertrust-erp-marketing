@@ -4,15 +4,14 @@
     "footer": "Evertrust GmbH · Nur für autorisierten Zugriff"
   },
   "form": {
-    "title": "Anmelden",
-    "description": "Zugang zur Evertrust-Konsole.",
-    "emailLabel": "E-Mail",
-    "passwordLabel": "Passwort",
-    "submit": "Anmelden",
     "submitting": "Wird angemeldet…",
-    "errors": {
-      "invalidCredentials": "Ungültige E-Mail-Adresse oder Passwort.",
-      "generic": "Anmeldung fehlgeschlagen. Bitte erneut versuchen."
-    }
+    "companyHint": "Melden Sie sich mit Ihrem Firmen-Google-Konto an."
+  },
+  "errors": {
+    "publicDomain": "Bitte verwenden Sie Ihr Firmen-Google-Konto, kein privates.",
+    "invalidToken": "Google-Anmeldung fehlgeschlagen. Bitte erneut versuchen.",
+    "notConfiguredTitle": "Anmeldung nicht verfügbar",
+    "notConfigured": "Google-Anmeldung ist nicht konfiguriert. Bitte wenden Sie sich an Ihren Administrator.",
+    "generic": "Anmeldung fehlgeschlagen. Bitte erneut versuchen."
   }
 }

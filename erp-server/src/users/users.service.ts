@@ -228,11 +228,15 @@ export class UsersService {
 
     // Email change must stay globally unique (it's the login identity). The
     // Super-Admin-only restriction on email is enforced at the controller.
-    if (dto.email !== undefined && dto.email !== prev.email) {
+    // Normalize to lowercase so the stored identity matches the lowercased lookups
+    // Google login uses (avoids a mixed-case duplicate the unique index would miss).
+    const email =
+      dto.email === undefined ? undefined : dto.email.trim().toLowerCase();
+    if (email !== undefined && email !== prev.email) {
       const clash = await this.db
         .select({ id: schema.users.id })
         .from(schema.users)
-        .where(eq(schema.users.email, dto.email))
+        .where(eq(schema.users.email, email))
         .limit(1);
       if (clash[0] && clash[0].id !== userId) {
         throw new ConflictException('That email is already in use');
@@ -250,7 +254,7 @@ export class UsersService {
       permissions: Permission[] | null;
     }> = {};
     if (dto.name !== undefined) patch.name = dto.name;
-    if (dto.email !== undefined) patch.email = dto.email;
+    if (email !== undefined) patch.email = email;
     if (dto.phone !== undefined) patch.phone = dto.phone;
     if (dto.role !== undefined) patch.role = dto.role;
     if (dto.position !== undefined) patch.position = dto.position;
@@ -310,10 +314,14 @@ export class UsersService {
     if (dto.role === 'OWNER' && actorRole !== 'OWNER') {
       throw new ForbiddenException('Only an Owner can grant the Owner role');
     }
+    // Normalize the email to lowercase so it matches the lowercased lookups Google
+    // login uses (google-auth.service) — otherwise a mixed-case admin-created address
+    // would never be matched there and would duplicate the user/org.
+    const email = dto.email.trim().toLowerCase();
     const existing = await this.db
       .select({ id: schema.users.id })
       .from(schema.users)
-      .where(eq(schema.users.email, dto.email))
+      .where(eq(schema.users.email, email))
       .limit(1);
     if (existing[0]) {
       throw new ConflictException('That email is already in use');
@@ -339,7 +347,7 @@ export class UsersService {
         .values({
           organizationId: orgId,
           name: dto.name,
-          email: dto.email,
+          email,
           phone: dto.phone ?? null,
           role: dto.role,
           position: dto.position ?? null,

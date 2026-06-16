@@ -37,6 +37,7 @@ import {
   LineItemDto,
   ListTendersQuery,
   LoginDto,
+  GoogleLoginDto,
   LoginResponseDto,
   MarketingDraftListDto,
   MarketingReportDto,
@@ -68,6 +69,8 @@ import {
   WorkflowConfigDto,
   UpdateWorkflowConfigDto,
   OrgSenderDto,
+  ConnectedGoogleAccountDto,
+  SetGoogleDefaultsDto,
   LeadStatsDto,
   TestN8nResultDto,
   RotateIngestTokenResultDto,
@@ -111,6 +114,7 @@ import {
   ContractDto,
   ContractStatus,
   SuppressionListItemDto,
+  CalendarListResultDto,
 } from '@evertrust/shared';
 import { API_URL } from './env';
 
@@ -217,6 +221,15 @@ const UpsertOrgSenderBodyDto = z.object({
 });
 export type UpsertOrgSenderBody = z.infer<typeof UpsertOrgSenderBodyDto>;
 
+// The org's connected Google accounts (GET, and the body returned by set-defaults /
+// disconnect). Validated as an array so a single drifted row fails the whole list loud.
+const ConnectedGoogleAccountListDto = z.array(ConnectedGoogleAccountDto);
+
+// GET /google/connect/start response — the consent-screen URL the browser redirects to.
+const GoogleConnectStartDto = z.object({
+  url: z.string().url(),
+});
+
 // Single choke point for every API call:
 //  - always credentials:'include' so the httpOnly access_token cookie rides along
 //    (cross-origin; the API enables CORS with credentials),
@@ -311,6 +324,17 @@ export const api = {
     request<LoginResponseDto>('/auth/login', {
       method: 'POST',
       body: LoginDto.parse(input),
+      schema: LoginResponseDto,
+    }),
+
+  // Google-only login: POST the Google ID token (the GIS credential) to the API,
+  // which verifies it and resolves/auto-provisions the user + org. Returns the same
+  // { accessToken, user } shape as the password path. 401 = invalid token, 403 =
+  // public/free email domain, 503 = GOOGLE_CLIENT_ID not configured on the API.
+  googleLogin: (idToken: string) =>
+    request<LoginResponseDto>('/auth/google', {
+      method: 'POST',
+      body: GoogleLoginDto.parse({ idToken }),
       schema: LoginResponseDto,
     }),
 
@@ -982,6 +1006,14 @@ export const api = {
         signal,
       }),
 
+    // The org's Google calendars (live scan). { configured:false, calendars:[] } when no
+    // Google token is wired or the scan failed — the AIM dialog then uses the org default.
+    listCalendars: (signal?: AbortSignal) =>
+      request<CalendarListResultDto>('/arsenal/config/calendars', {
+        schema: CalendarListResultDto,
+        signal,
+      }),
+
     // Upsert one sender on (org, key). isDefault unsets the others. Returns the
     // resolved sender list.
     upsertSender: (input: UpsertOrgSenderBody) =>
@@ -997,6 +1029,43 @@ export const api = {
       request<OrgSenderDto[]>(
         `/arsenal/config/senders/${encodeURIComponent(key)}`,
         { method: 'DELETE', schema: OrgSenderListDto },
+      ),
+  },
+
+  // ---- Per-org Google connect (Gmail / Calendar OAuth) ----
+  // Connect is open to any authenticated user; list/defaults/disconnect require
+  // admin:config (server-enforced). The caller redirects the full page to `url`.
+  google: {
+    // Begin the OAuth connect flow. Returns the Google consent-screen URL. 503 (an
+    // ApiError with status 503) when the API isn't configured for Google connect —
+    // callers branch on that to show a disabled "ask your admin" hint.
+    start: (signal?: AbortSignal) =>
+      request<z.infer<typeof GoogleConnectStartDto>>('/google/connect/start', {
+        schema: GoogleConnectStartDto,
+        signal,
+      }),
+
+    // The org's connected Google accounts (admin:config).
+    list: (signal?: AbortSignal) =>
+      request<ConnectedGoogleAccountDto[]>('/google/accounts', {
+        schema: ConnectedGoogleAccountListDto,
+        signal,
+      }),
+
+    // Set the org-level default Gmail / Calendar accounts. Returns the resolved
+    // account list (defaults reflected). admin:config.
+    setDefaults: (body: SetGoogleDefaultsDto) =>
+      request<ConnectedGoogleAccountDto[]>('/google/accounts/defaults', {
+        method: 'POST',
+        body: SetGoogleDefaultsDto.parse(body),
+        schema: ConnectedGoogleAccountListDto,
+      }),
+
+    // Disconnect an account by id. Returns the resolved account list. admin:config.
+    disconnect: (id: string) =>
+      request<ConnectedGoogleAccountDto[]>(
+        `/google/accounts/${encodeURIComponent(id)}`,
+        { method: 'DELETE', schema: ConnectedGoogleAccountListDto },
       ),
   },
 
