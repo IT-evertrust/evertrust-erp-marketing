@@ -6,6 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { OAuth2Client } from 'google-auth-library';
 import { and, eq } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 import {
@@ -19,23 +20,33 @@ import type { LoginResponseDto, MeDto, UserRole } from '@evertrust/shared';
 import { AppConfigService } from '../config/app-config.service';
 import { DB, type DbClient } from '../db/db.tokens';
 import type { JwtPayload } from './auth.types';
-import { TOKEN_VERIFIER, type TokenVerifier } from './token-verifier';
+import {
+  TOKEN_VERIFIER,
+  type TokenVerifier,
+  type VerifiedGoogleUser,
+} from './token-verifier';
 
 // Google-only login + domain-based org auto-provisioning.
 //
-// FLOW (loginWithGoogle):
-//   1. Verify the Google ID token (503 if unconfigured, 401 if invalid/wrong aud).
-//   2. Require email_verified — an unverified Google address is rejected (401).
-//   3. Gate on the email DOMAIN: a personal provider (gmail.com, …) can't create
+// Two entry points share the SAME post-verification provisioning (provisionAndIssue):
+//   - loginWithGoogle(idToken): the GIS ID-token path (rendered button / One Tap).
+//   - loginWithGoogleCode(code): the OAuth 2.0 authorization-code path, so the web
+//     can drive a fully custom sign-in button. The code is exchanged server-side
+//     (needs the client SECRET) for an ID token, which is then verified + provisioned
+//     exactly like the idToken path.
+//
+// FLOW (after the Google credential is verified, in provisionAndIssue):
+//   1. Require email_verified — an unverified Google address is rejected (401).
+//   2. Gate on the email DOMAIN: a personal provider (gmail.com, …) can't create
 //      or join a company org → 403.
-//   4. Resolve the principal:
+//   3. Resolve the principal:
 //        a. existing active user by email  → log them in (role/org preserved).
 //        b. else org with that domain exists → create the user as EMPLOYEE.
 //        c. else                            → create the org + first user as
 //           SUPER_ADMIN (the org owner; never OWNER — that's the reserved
 //           cross-org platform role). At most ONE SA per org: if the joined org
 //           somehow already has a SUPER_ADMIN, the new user is EMPLOYEE instead.
-//   5. Mint the JWT EXACTLY as AuthService.login does (same payload + signer).
+//   4. Mint the JWT EXACTLY as AuthService.login does (same payload + signer).
 //
 // Google users have NO password, so we NEVER write an auth_credentials row.
 @Injectable()
@@ -47,6 +58,9 @@ export class GoogleAuthService {
     @Inject(TOKEN_VERIFIER) private readonly verifier: TokenVerifier,
   ) {}
 
+  // GIS ID-token path: the client posts the Google ID token (rendered button /
+  // One Top). Verify it, then provision. The code-exchange flow is NOT needed
+  // here, so only GOOGLE_CLIENT_ID must be configured.
   async loginWithGoogle(idToken: string): Promise<LoginResponseDto> {
     // 503 BEFORE we touch the verifier: Google login isn't configured yet, so
     // fail with a clear "not available" instead of an opaque verifier error.
@@ -63,6 +77,52 @@ export class GoogleAuthService {
       throw new UnauthorizedException('Invalid Google token');
     }
 
+    return this.provisionAndIssue(verified);
+  }
+
+  // OAuth 2.0 authorization-code path (GIS `initCodeClient`, popup/postmessage
+  // mode), so the web can use a fully custom sign-in button. Unlike the ID-token
+  // path this exchange needs the client SECRET, so BOTH GOOGLE_CLIENT_ID and
+  // GOOGLE_CLIENT_SECRET must be configured (503 otherwise). The redirect_uri is
+  // the literal 'postmessage' — the GIS popup convention; no Console redirect-URI
+  // registration is required for it. After exchange we verify the returned
+  // id_token with the SAME TokenVerifier (audience = GOOGLE_CLIENT_ID), then
+  // share provisionAndIssue with the ID-token path. Any exchange/verify failure
+  // maps to a single generic 401.
+  async loginWithGoogleCode(code: string): Promise<LoginResponseDto> {
+    const clientId = this.config.get('GOOGLE_CLIENT_ID');
+    const clientSecret = this.config.get('GOOGLE_CLIENT_SECRET');
+    if (!clientId || !clientSecret) {
+      throw new ServiceUnavailableException('Google login is not configured');
+    }
+
+    let verified;
+    try {
+      const oauth = new OAuth2Client(clientId, clientSecret, 'postmessage');
+      const { tokens } = await oauth.getToken({
+        code,
+        redirect_uri: 'postmessage',
+      });
+      const idToken = tokens.id_token;
+      if (!idToken) throw new Error('No id_token in token response');
+      // Verify the exchanged ID token exactly as the idToken path does.
+      verified = await this.verifier.verify(idToken);
+    } catch {
+      // Bad/expired code, exchange failure, or invalid id_token — all map to a
+      // single generic 401 so we don't leak which check failed.
+      throw new UnauthorizedException('Invalid Google token');
+    }
+
+    return this.provisionAndIssue(verified);
+  }
+
+  // Shared post-verification provisioning: given a verified Google identity,
+  // gate on email_verified + domain, resolve/auto-provision the user + org, and
+  // mint the session JWT. Reused by BOTH loginWithGoogle and loginWithGoogleCode
+  // so the provisioning rules live in exactly one place.
+  private async provisionAndIssue(
+    verified: VerifiedGoogleUser,
+  ): Promise<LoginResponseDto> {
     if (!verified.emailVerified) {
       throw new UnauthorizedException('Google email is not verified');
     }

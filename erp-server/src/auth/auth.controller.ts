@@ -14,7 +14,11 @@ import { CurrentUser } from './decorators/current-user.decorator';
 import type { AuthUser } from './auth.types';
 import { AuthService } from './auth.service';
 import { GoogleAuthService } from './google-auth.service';
-import { GoogleLoginBodyDto, LoginBodyDto } from './auth.dto';
+import {
+  GoogleCodeLoginBodyDto,
+  GoogleLoginBodyDto,
+  LoginBodyDto,
+} from './auth.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -47,6 +51,21 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<LoginResponseDto> {
     const result = await this.google.loginWithGoogle(body.idToken);
+    this.setAuthCookie(res, result.accessToken);
+    return result;
+  }
+
+  // Public. The OAuth 2.0 authorization-code variant of POST /auth/google, so the
+  // web can use a fully custom sign-in button (the GIS rendered button can't be
+  // restyled). Exchanges the GIS authorization `code` server-side, then behaves
+  // EXACTLY like POST /auth/google: same cookie, same LoginResponse body.
+  @Public()
+  @Post('google/code')
+  async googleCode(
+    @Body() body: GoogleCodeLoginBodyDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<LoginResponseDto> {
+    const result = await this.google.loginWithGoogleCode(body.code);
     this.setAuthCookie(res, result.accessToken);
     return result;
   }

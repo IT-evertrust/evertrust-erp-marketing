@@ -31,9 +31,11 @@ export default function LoginPage() {
         <div className="absolute -bottom-40 left-1/2 size-[30rem] -translate-x-1/2 rounded-full bg-muted-foreground/[0.06] blur-[140px]" />
       </div>
 
-      <div className="relative flex w-full max-w-sm flex-col items-center gap-6">
+      <div className="relative flex w-full max-w-sm flex-col items-center gap-7">
         <LoginForm />
-        <p className="text-xs text-muted-foreground">{t('brand.footer')}</p>
+        <p className="text-center text-xs text-muted-foreground/70">
+          {t('brand.footer')}
+        </p>
       </div>
     </main>
   );

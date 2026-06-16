@@ -201,6 +201,18 @@ export const GoogleLoginDto = z.object({
 });
 export type GoogleLoginDto = z.infer<typeof GoogleLoginDto>;
 
+// Google login via the OAuth 2.0 AUTHORIZATION-CODE flow: the client runs the
+// GIS `initCodeClient` popup (scope 'openid email profile') and posts the
+// short-lived authorization `code`. The API exchanges it server-side (needs the
+// client SECRET) for an ID token, then resolves/auto-provisions exactly as the
+// idToken path does. This exists purely so the web can use a fully custom
+// sign-in button (the GIS-rendered button can't be restyled; the code flow can
+// be triggered from any element). The idToken flow above is unaffected.
+export const GoogleCodeLoginDto = z.object({
+  code: z.string().min(1),
+});
+export type GoogleCodeLoginDto = z.infer<typeof GoogleCodeLoginDto>;
+
 // ---- Email-domain → org provisioning helpers (SSOT for api + web) ----
 // Personal / free / consumer mailbox providers. A login from one of these MUST
 // NOT auto-create a company organization (the domain is not a company). Lowercase.

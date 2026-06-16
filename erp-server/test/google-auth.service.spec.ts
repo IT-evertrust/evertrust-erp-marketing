@@ -14,6 +14,15 @@ import type {
 } from '../src/auth/token-verifier';
 import { FakeTable, makeFakeDb } from './fake-db';
 
+// google-auth-library is mocked so the authorization-CODE path never hits the
+// network: OAuth2Client.getToken is a jest mock the tests pin per-case. The
+// ID-token path doesn't touch OAuth2Client (it uses the injected verifier), so
+// this mock only affects loginWithGoogleCode.
+const getToken = jest.fn();
+jest.mock('google-auth-library', () => ({
+  OAuth2Client: jest.fn().mockImplementation(() => ({ getToken })),
+}));
+
 // GoogleAuthService is exercised with a FAKE TokenVerifier (no network) over the
 // in-memory fake db. The verifier returns whatever the test pins, so we drive
 // every branch: existing-user login, EMPLOYEE join on a known domain, brand-new
@@ -23,12 +32,13 @@ import { FakeTable, makeFakeDb } from './fake-db';
 const EVERTRUST_ORG = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const ALICE = 'a1111111-1111-1111-1111-111111111111';
 
-// A fake config that only needs to answer GOOGLE_CLIENT_ID (set unless a test
-// overrides it to '' to drive the 503 path) and the cookie flags the controller
-// reads. Cast through unknown — the service only calls .get().
+// A fake config that answers GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET (both set
+// unless a test overrides them to '' to drive a 503 path) and the cookie flags
+// the controller reads. Cast through unknown — the service only calls .get().
 function fakeConfig(overrides: Record<string, unknown> = {}): AppConfigService {
   const values: Record<string, unknown> = {
     GOOGLE_CLIENT_ID: 'test-google-client-id.apps.googleusercontent.com',
+    GOOGLE_CLIENT_SECRET: 'test-google-client-secret',
     COOKIE_SAMESITE: 'lax',
     COOKIE_SECURE: false,
     ...overrides,
@@ -252,6 +262,98 @@ describe('GoogleAuthService — loginWithGoogle', () => {
       fakeConfig({ GOOGLE_CLIENT_ID: '' }),
     );
     await expect(service.loginWithGoogle('tok')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+  });
+});
+
+describe('GoogleAuthService — loginWithGoogleCode (authorization-code path)', () => {
+  beforeEach(() => {
+    getToken.mockReset();
+  });
+
+  it('exchanges the code, verifies the id_token, and provisions via the SHARED path (existing user)', async () => {
+    // The exchange returns an id_token; the FAKE verifier maps it to Alice.
+    getToken.mockResolvedValue({ tokens: { id_token: 'exchanged-id-token' } });
+    const { service, jwt, authCredentials, users } = make(
+      fakeVerifier(verified({ email: 'alice@evertrust-germany.de' })),
+    );
+
+    const res = await service.loginWithGoogleCode('auth-code');
+
+    // Identical outcome to the idToken path: same user, no credential row.
+    expect(res.user.id).toBe(ALICE);
+    expect(res.user.role).toBe('SUPER_ADMIN');
+    expect(res.user.organizationId).toBe(EVERTRUST_ORG);
+    expect(users.rows).toHaveLength(1);
+    expect(authCredentials.rows).toHaveLength(0);
+    // The code was exchanged with the literal 'postmessage' redirect_uri.
+    expect(getToken).toHaveBeenCalledWith({
+      code: 'auth-code',
+      redirect_uri: 'postmessage',
+    });
+    const payload = jwt.verify<{ sub: string; role: string; org: string }>(
+      res.accessToken,
+    );
+    expect(payload).toMatchObject({
+      sub: ALICE,
+      role: 'SUPER_ADMIN',
+      org: EVERTRUST_ORG,
+    });
+  });
+
+  it('shares the public-domain 403 gate with the idToken path', async () => {
+    getToken.mockResolvedValue({ tokens: { id_token: 'exchanged-id-token' } });
+    const { service } = make(
+      fakeVerifier(verified({ email: 'someone@gmail.com' })),
+    );
+    await expect(service.loginWithGoogleCode('auth-code')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+  });
+
+  it('maps an exchange failure to 401', async () => {
+    getToken.mockRejectedValue(new Error('invalid_grant'));
+    const { service } = make(fakeVerifier(verified()));
+    await expect(service.loginWithGoogleCode('bad-code')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('maps a missing id_token in the token response to 401', async () => {
+    getToken.mockResolvedValue({ tokens: { access_token: 'only-access' } });
+    const { service } = make(fakeVerifier(verified()));
+    await expect(service.loginWithGoogleCode('auth-code')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('maps an invalid exchanged id_token (verifier throws) to 401', async () => {
+    getToken.mockResolvedValue({ tokens: { id_token: 'exchanged-id-token' } });
+    const { service } = make(fakeVerifier(new Error('bad signature')));
+    await expect(service.loginWithGoogleCode('auth-code')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('returns 503 when GOOGLE_CLIENT_SECRET is not configured (code flow needs the secret)', async () => {
+    const { service } = make(
+      fakeVerifier(verified()),
+      fakeConfig({ GOOGLE_CLIENT_SECRET: '' }),
+    );
+    await expect(service.loginWithGoogleCode('auth-code')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    // Configured-check fails BEFORE any exchange attempt.
+    expect(getToken).not.toHaveBeenCalled();
+  });
+
+  it('returns 503 when GOOGLE_CLIENT_ID is not configured', async () => {
+    const { service } = make(
+      fakeVerifier(verified()),
+      fakeConfig({ GOOGLE_CLIENT_ID: '' }),
+    );
+    await expect(service.loginWithGoogleCode('auth-code')).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );
   });

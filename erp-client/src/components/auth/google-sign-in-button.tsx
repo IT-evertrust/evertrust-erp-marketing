@@ -4,9 +4,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Script from 'next/script';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
+import { Loader2 } from 'lucide-react';
 import { ApiError } from '@/lib/api';
-import { useGoogleLogin } from '@/hooks/use-auth';
+import { useGoogleCodeLogin } from '@/hooks/use-auth';
 import { GOOGLE_CLIENT_ID } from '@/lib/env';
+import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const GSI_SRC = 'https://accounts.google.com/gsi/client';
@@ -35,34 +37,58 @@ function messageForError(
   return t('errors.generic');
 }
 
-// Google Identity Services "Continue with Google".
+// The multi-colour Google "G" glyph as inline SVG (Google's brand mark). Inlined so
+// the icon sits inside OUR design-system button instead of Google's un-themeable
+// rendered pill — no extra request, no extra dependency.
+function GoogleGlyph() {
+  return (
+    <svg viewBox="0 0 48 48" aria-hidden className="size-5 shrink-0">
+      <path
+        fill="#EA4335"
+        d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+      />
+      <path
+        fill="#4285F4"
+        d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+      />
+      <path
+        fill="#34A853"
+        d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+      />
+    </svg>
+  );
+}
+
+// "Continue with Google" — a fully custom, on-brand control over the GIS OAuth 2.0
+// authorization-code popup flow.
 //
-// We render Google's OFFICIAL GIS button VISIBLY. An earlier version laid a custom
-// design-system button on top and made the real Google button transparent
-// (opacity-0) to "own the click" — but GIS's clickjacking protection silently
-// refuses to process a click on an obscured/transparent button, so it was dead. The
-// GIS button also can't be triggered programmatically (its iframe), and id.prompt()
-// / One-Tap is FedCM-cooldown-gated. So the working, supported control is the real
-// button, shown as-is. The credential (ID token) arrives via initialize()'s
-// callback → /auth/google.
+// Why not Google's rendered button: it can't be themed (the white "Continue as…"
+// pill) and can't be hidden behind a custom button (GIS clickjacking protection
+// silently kills clicks on an obscured/transparent button). `oauth2.initCodeClient`
+// (ux_mode 'popup') CAN be triggered programmatically from any element, so we own the
+// styling. On click we open the consent popup; on success the short-lived auth `code`
+// arrives in the callback and we POST it to /auth/google/code, which exchanges it
+// server-side (it holds the client SECRET) and sets the auth cookie.
 //
-// NOTE: GIS only renders on an Authorized JavaScript origin (the Google OAuth
-// client). On an unlisted origin (e.g. a random preview port) the button won't
-// appear — add the origin in Google Console.
+// NOTE: the popup only completes on an Authorized JavaScript origin (the Google OAuth
+// client). On an unlisted origin (e.g. a random preview port) it errors — add the
+// origin in Google Console.
 export function GoogleSignInButton() {
   const t = useTranslations('login');
-  const login = useGoogleLogin();
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const slotRef = useRef<HTMLDivElement>(null);
+  const login = useGoogleCodeLogin();
+  const clientRef = useRef<GoogleCodeClient | null>(null);
   const [scriptReady, setScriptReady] = useState(false);
-  const [width, setWidth] = useState(320);
 
-  // The GIS credential callback runs outside React's event system, so wrap the
-  // mutation here. login.mutate is stable across renders (React Query), but we
-  // keep it in deps for correctness.
-  const handleCredential = useCallback(
-    (idToken: string) => {
-      login.mutate(idToken, {
+  // The GIS callback runs outside React's event system, so wrap the mutation here.
+  // login.mutate is stable across renders (React Query), but we keep it in deps for
+  // correctness.
+  const submit = useCallback(
+    (code: string) => {
+      login.mutate(code, {
         onError: (error) => {
           toast.error(messageForError(error, t));
         },
@@ -71,72 +97,76 @@ export function GoogleSignInButton() {
     [login, t],
   );
 
-  // GIS needs an explicit pixel width (200–400); track the container so the button
-  // spans the card.
-  useEffect(() => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const update = () =>
-      setWidth(Math.min(400, Math.max(200, Math.round(el.offsetWidth))));
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
+  // Build the code client ONCE per ready+configured state. requestCode() (called on
+  // click) opens the consent popup; the callback fires with `code` on success or
+  // `error` when the user closes/denies the popup.
   useEffect(() => {
     if (!scriptReady || !GOOGLE_CLIENT_ID) return;
-    const gis = window.google?.accounts.id;
-    const target = slotRef.current;
-    if (!gis || !target) return;
+    const oauth2 = window.google?.accounts.oauth2;
+    if (!oauth2) return;
 
-    gis.initialize({
+    clientRef.current = oauth2.initCodeClient({
       client_id: GOOGLE_CLIENT_ID,
-      callback: (response) => handleCredential(response.credential),
-      use_fedcm_for_prompt: true,
+      scope: 'openid email profile',
+      ux_mode: 'popup',
+      callback: (response) => {
+        if (response.code) {
+          submit(response.code);
+        } else {
+          toast.error(messageForError(undefined, t));
+        }
+      },
     });
-    target.replaceChildren();
-    gis.renderButton(target, {
-      type: 'standard',
-      theme: 'filled_black',
-      size: 'large',
-      text: 'continue_with',
-      shape: 'pill',
-      logo_alignment: 'left',
-      width,
-    });
-  }, [scriptReady, handleCredential, width]);
+  }, [scriptReady, submit, t]);
+
+  const handleClick = useCallback(() => {
+    clientRef.current?.requestCode();
+  }, []);
 
   // Build-time misconfiguration: no client ID inlined. Show the same "not
   // configured" message the API would 503 with, and skip loading GIS entirely.
   if (!GOOGLE_CLIENT_ID) {
     return (
-      <Alert variant="destructive" className="w-full max-w-sm text-left">
+      <Alert variant="destructive" className="w-full text-left">
         <AlertTitle>{t('errors.notConfiguredTitle')}</AlertTitle>
         <AlertDescription>{t('errors.notConfigured')}</AlertDescription>
       </Alert>
     );
   }
 
+  // Disabled until GIS is ready (the client must exist before requestCode) or while
+  // the login mutation is in flight. The button is our own design-system control —
+  // a full-width pill on the dark surface with the Google glyph + our i18n label.
+  const disabled = !scriptReady || login.isPending;
+
   return (
-    <div className="flex w-full flex-col items-center gap-3">
+    <>
       <Script
         src={GSI_SRC}
         strategy="afterInteractive"
         onReady={() => setScriptReady(true)}
       />
-      {/* GIS renders its real (clickable) button into this centered slot. min-h
-          reserves space so the card doesn't jump while the script loads. */}
-      <div
-        ref={wrapRef}
-        aria-busy={!scriptReady}
-        className="flex min-h-11 w-full justify-center"
+      <Button
+        type="button"
+        variant="outline"
+        size="lg"
+        onClick={handleClick}
+        disabled={disabled}
+        aria-busy={login.isPending}
+        className="w-full rounded-full border-border/70 bg-card/60 font-medium hover:bg-accent"
       >
-        <div ref={slotRef} />
-      </div>
-      {login.isPending ? (
-        <p className="text-sm text-muted-foreground">{t('form.submitting')}</p>
-      ) : null}
-    </div>
+        {login.isPending ? (
+          <>
+            <Loader2 className="size-4 animate-spin" aria-hidden />
+            {t('form.submitting')}
+          </>
+        ) : (
+          <>
+            <GoogleGlyph />
+            {t('form.googleCta')}
+          </>
+        )}
+      </Button>
+    </>
   );
 }
