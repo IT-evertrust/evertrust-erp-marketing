@@ -1,35 +1,64 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from '@tanstack/react-query';
 import type { LoginResponseDto, MeDto, UpdateMyNameDto } from '@evertrust/shared';
 import { ApiError, api } from '@/lib/api';
 import { getLandingPath } from '@/lib/preferences';
 import { queryKeys } from '@/lib/query-keys';
 
-// Google-only login: hand the Google ID token (the GIS credential) to the API,
-// then mirror the returned token to our own route handler so a web-origin cookie
-// exists for middleware gating. On success we seed the user cache and navigate to
-// the user's chosen landing page (Settings → General → Display; defaults to
-// /dashboard). The API verifies the ID token and resolves/auto-provisions the org.
+// Both Google login paths return the same { accessToken, user }. After the API call
+// we mirror the token to our own route handler so a web-origin httpOnly cookie exists
+// for middleware gating (the API's cookie is cross-origin), then return the result.
+async function mirrorSession(result: LoginResponseDto): Promise<LoginResponseDto> {
+  await fetch('/api/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token: result.accessToken }),
+  });
+  return result;
+}
+
+// Shared success handler for both Google flows: seed the user cache so the shell
+// renders without a round-trip, then navigate to the user's chosen landing page
+// (Settings → General → Display; defaults to /dashboard) and refresh so server
+// components re-read the new cookie.
+function onLoginSuccess(
+  queryClient: QueryClient,
+  router: ReturnType<typeof useRouter>,
+  result: LoginResponseDto,
+): void {
+  queryClient.setQueryData(queryKeys.me, result.user);
+  router.replace(getLandingPath());
+  router.refresh();
+}
+
+// Google login via the ID-token flow (the GIS-rendered button's credential callback).
+// The API verifies the ID token and resolves/auto-provisions the user + org.
 export function useGoogleLogin() {
   const router = useRouter();
   const queryClient = useQueryClient();
   return useMutation<LoginResponseDto, ApiError, string>({
-    mutationFn: async (idToken) => {
-      const result = await api.googleLogin(idToken);
-      await fetch('/api/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: result.accessToken }),
-      });
-      return result;
-    },
-    onSuccess: (result) => {
-      queryClient.setQueryData(queryKeys.me, result.user);
-      router.replace(getLandingPath());
-      router.refresh();
-    },
+    mutationFn: (idToken) => api.googleLogin(idToken).then(mirrorSession),
+    onSuccess: (result) => onLoginSuccess(queryClient, router, result),
+  });
+}
+
+// Google login via the OAuth 2.0 authorization-code flow (the custom GIS
+// `initCodeClient` popup button). The API exchanges the short-lived `code`
+// server-side for an ID token, then resolves/auto-provisions exactly as the
+// ID-token path does — identical success flow, identical 401/403/503 contract.
+export function useGoogleCodeLogin() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  return useMutation<LoginResponseDto, ApiError, string>({
+    mutationFn: (code) => api.googleCodeLogin(code).then(mirrorSession),
+    onSuccess: (result) => onLoginSuccess(queryClient, router, result),
   });
 }
 

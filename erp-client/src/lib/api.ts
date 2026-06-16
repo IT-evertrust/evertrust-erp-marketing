@@ -25,6 +25,7 @@ import {
   HealthDto,
   LoginDto,
   GoogleLoginDto,
+  GoogleCodeLoginDto,
   LoginResponseDto,
   MarketingDraftListDto,
   MarketingReportDto,
@@ -280,6 +281,19 @@ export const api = {
     request<LoginResponseDto>('/auth/google', {
       method: 'POST',
       body: GoogleLoginDto.parse({ idToken }),
+      schema: LoginResponseDto,
+    }),
+
+  // Google login via the OAuth 2.0 AUTHORIZATION-CODE flow. The client runs the GIS
+  // `initCodeClient` popup (scope 'openid email profile') and POSTs the short-lived
+  // authorization `code`; the API exchanges it server-side (it holds the client
+  // SECRET) for an ID token, then resolves/auto-provisions exactly as the idToken
+  // path does. Same { accessToken, user } response, same 401/403/503 status contract.
+  // This path exists so the web can use a fully custom (restyleable) sign-in button.
+  googleCodeLogin: (code: string) =>
+    request<LoginResponseDto>('/auth/google/code', {
+      method: 'POST',
+      body: GoogleCodeLoginDto.parse({ code }),
       schema: LoginResponseDto,
     }),
 
