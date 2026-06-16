@@ -12,6 +12,30 @@ import { Button } from '@/components/ui/button';
 
 const GSI_SRC = 'https://accounts.google.com/gsi/client';
 
+// Maps the API's HTTP status to a translated, human message. The backend already
+// returns precise prose (e.g. "Use your company Google account"), but we key off
+// the status so the copy stays in our i18n catalog and consistent with the locale.
+function messageForError(
+  error: unknown,
+  t: ReturnType<typeof useTranslations>,
+): string {
+  if (error instanceof ApiError) {
+    switch (error.status) {
+      case 403:
+        return t('errors.publicDomain');
+      case 401:
+        return t('errors.invalidToken');
+      case 503:
+        return t('errors.notConfigured');
+      default:
+        // Network error (status 0) or anything unexpected — prefer the API's own
+        // message when present, else the generic fallback.
+        return error.message || t('errors.generic');
+    }
+  }
+  return t('errors.generic');
+}
+
 // Official multi-colour Google "G", inline so the brand mark renders identically in
 // light and dark without an asset request. Sized by the Button's `[&_svg]:size-4`.
 function GoogleGlyph() {
@@ -37,38 +61,19 @@ function GoogleGlyph() {
   );
 }
 
-// Maps the API's HTTP status to a translated, human message. The backend already
-// returns precise prose (e.g. "Use your company Google account"), but we key off
-// the status so the copy stays in our i18n catalog and consistent with the locale.
-function messageForError(
-  error: unknown,
-  t: ReturnType<typeof useTranslations>,
-): string {
-  if (error instanceof ApiError) {
-    switch (error.status) {
-      case 403:
-        return t('errors.publicDomain');
-      case 401:
-        return t('errors.invalidToken');
-      case 503:
-        return t('errors.notConfigured');
-      default:
-        // Network error (status 0) or anything unexpected — prefer the API's own
-        // message when present, else the generic fallback.
-        return error.message || t('errors.generic');
-    }
-  }
-  return t('errors.generic');
-}
-
-// Google Identity Services "Sign in with Google" button. Loads the GIS client via
-// next/script, renders the official Google button, and on the credential callback
-// hands the ID token to /auth/google. This is the ONLY sign-in path (Google-only).
+// "Sign in with Google". We render Google's OFFICIAL GIS button but make it
+// transparent and lay it exactly over our own design-system button: Google's button
+// must handle the click itself (its iframe can't be triggered programmatically, and
+// id.prompt()/One-Tap is silently suppressed by FedCM cooldowns), so the real,
+// working control sits on top — invisibly — while our <Button> below provides the
+// look. The credential (ID token) arrives via initialize()'s callback → /auth/google.
 export function GoogleSignInButton() {
   const t = useTranslations('login');
   const login = useGoogleLogin();
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const slotRef = useRef<HTMLDivElement>(null);
   const [scriptReady, setScriptReady] = useState(false);
-  const initializedRef = useRef(false);
+  const [width, setWidth] = useState(320);
 
   // The GIS credential callback runs outside React's event system, so wrap the
   // mutation here. login.mutate is stable across renders (React Query), but we
@@ -84,29 +89,42 @@ export function GoogleSignInButton() {
     [login, t],
   );
 
-  // Initialize GIS once the client script is ready. We deliberately do NOT call
-  // renderButton — instead our own <Button> below invokes id.prompt() so the
-  // sign-in control matches the design system (no Google-styled iframe). The
-  // credential (ID token) still arrives through this callback, so /auth/google is
-  // unchanged. FedCM drives the account chooser (use_fedcm_for_prompt).
+  // Track the wrapper's width so the (invisible) Google button is rendered at the
+  // same width and fully covers our visual button's click target. GIS needs an
+  // explicit pixel width (200–400).
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const update = () =>
+      setWidth(Math.min(400, Math.max(200, Math.round(el.offsetWidth))));
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   useEffect(() => {
     if (!scriptReady || !GOOGLE_CLIENT_ID) return;
     const gis = window.google?.accounts.id;
-    if (!gis) return;
+    const target = slotRef.current;
+    if (!gis || !target) return;
+
     gis.initialize({
       client_id: GOOGLE_CLIENT_ID,
       callback: (response) => handleCredential(response.credential),
       use_fedcm_for_prompt: true,
     });
-    initializedRef.current = true;
-  }, [scriptReady, handleCredential]);
-
-  const startSignIn = useCallback(() => {
-    if (!initializedRef.current) return;
-    // Opens the FedCM / One Tap account chooser; the selection fires the
-    // credential callback wired in initialize().
-    window.google?.accounts.id.prompt();
-  }, []);
+    target.replaceChildren();
+    gis.renderButton(target, {
+      type: 'standard',
+      theme: 'filled_black',
+      size: 'large',
+      text: 'continue_with',
+      shape: 'pill',
+      logo_alignment: 'center',
+      width,
+    });
+  }, [scriptReady, handleCredential, width]);
 
   // Build-time misconfiguration: no client ID inlined. Show the same "not
   // configured" message the API would 503 with, and skip loading GIS entirely.
@@ -127,29 +145,44 @@ export function GoogleSignInButton() {
         strategy="afterInteractive"
         onReady={() => setScriptReady(true)}
       />
-      <Button
-        type="button"
-        variant="outline"
-        onClick={startSignIn}
-        disabled={!scriptReady || busy}
-        aria-busy={busy}
-        className="h-11 w-full gap-3 rounded-xl"
-      >
-        {busy ? (
-          <>
-            <span
-              aria-hidden="true"
-              className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent"
-            />
-            {t('form.submitting')}
-          </>
-        ) : (
-          <>
-            <GoogleGlyph />
-            {t('form.googleCta')}
-          </>
-        )}
-      </Button>
+      <div ref={wrapRef} className="relative w-full">
+        {/* Visual control (design system). Decorative only: pointer-events-none +
+            aria-hidden so the real Google button overlaid on top owns the click and
+            the accessibility semantics. */}
+        <Button
+          type="button"
+          variant="outline"
+          tabIndex={-1}
+          aria-hidden="true"
+          disabled={busy}
+          className="pointer-events-none h-11 w-full gap-3 rounded-xl"
+        >
+          {busy ? (
+            <>
+              <span
+                aria-hidden="true"
+                className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent"
+              />
+              {t('form.submitting')}
+            </>
+          ) : (
+            <>
+              <GoogleGlyph />
+              {t('form.googleCta')}
+            </>
+          )}
+        </Button>
+        {/* The OFFICIAL GIS button — transparent, stretched over the visual button so
+            the user's real click lands on it. Hidden from view (opacity-0) and from
+            re-clicks while a sign-in is in flight. */}
+        <div
+          ref={slotRef}
+          aria-busy={!scriptReady}
+          className={`absolute inset-0 flex items-center justify-center opacity-0 [&_iframe]:!h-full ${
+            busy ? 'pointer-events-none' : ''
+          }`}
+        />
+      </div>
     </div>
   );
 }
