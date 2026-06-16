@@ -1,5 +1,3 @@
-import type { ListTendersQuery } from '@evertrust/shared';
-
 // Central registry of TanStack Query keys so cache reads/invalidations stay in
 // sync. Each resource exposes `all` (the invalidation root — invalidating it
 // catches every list/detail under it), plus the specific list/detail keys.
@@ -20,32 +18,6 @@ export const queryKeys = {
     all: ['admin-users'] as const,
     list: () => ['admin-users', 'list'] as const,
     stats: (id: string) => ['admin-users', 'stats', id] as const,
-  },
-
-  tenders: {
-    all: ['tenders'] as const,
-    list: (query?: ListTendersQuery) => ['tenders', 'list', query ?? {}] as const,
-    detail: (id: string) => ['tenders', 'detail', id] as const,
-    // Phase 4: the tender's ACTIVE assignment and its TYPE 1 documents.
-    assignment: (id: string) => ['tenders', 'assignment', id] as const,
-    documents: (id: string) => ['tenders', 'documents', id] as const,
-    // Phase 5a: the tender's LV line items and its computed pricing view.
-    lineItems: (id: string) => ['tenders', 'line-items', id] as const,
-    pricing: (id: string) => ['tenders', 'pricing', id] as const,
-    // Phase 6: the tender's customer-approval requests (gate state).
-    approvals: (id: string) => ['tenders', 'approvals', id] as const,
-    // Phase 5c: the tender's dispatched supplier RFQs.
-    rfqs: (id: string) => ['tenders', 'rfqs', id] as const,
-    // Phase 7: the tender's submission readiness (gate state + receipts).
-    submission: (id: string) => ['tenders', 'submission', id] as const,
-    // Phase 6b: the org-wide deadline at-risk worklist (no id — it's a roll-up).
-    deadlineRisk: () => ['tenders', 'deadline-risk'] as const,
-  },
-
-  // Phase 5a: a single line's price observations (keyed by line-item id).
-  lineItems: {
-    all: ['line-items'] as const,
-    observations: (id: string) => ['line-items', 'observations', id] as const,
   },
 
   // Growth Engine: the org's campaigns (the AIM sequence).
@@ -208,12 +180,6 @@ export const queryKeys = {
       ['leads', 'list', stage ?? 'all', campaignId ?? 'all'] as const,
   },
 
-  suppliers: {
-    all: ['suppliers'] as const,
-    list: () => ['suppliers', 'list'] as const,
-    detail: (id: string) => ['suppliers', 'detail', id] as const,
-  },
-
   customers: {
     all: ['customers'] as const,
     list: () => ['customers', 'list'] as const,
@@ -228,7 +194,5 @@ export const queryKeys = {
     overview: (period: string) => ['performance', 'overview', period] as const,
     brief: (period: string) => ['performance', 'brief', period] as const,
     definitions: () => ['performance', 'definitions'] as const,
-    contributions: (tenderId: string) =>
-      ['performance', 'contributions', tenderId] as const,
   },
 };

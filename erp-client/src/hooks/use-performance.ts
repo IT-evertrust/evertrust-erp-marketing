@@ -3,13 +3,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   CreateKpiValueDto,
-  CreateTenderContributionDto,
   KpiDefinitionDto,
   KpiPeriod,
   PerformanceBriefDto,
   PerformanceOverviewDto,
   ScorecardDto,
-  TenderContributionDto,
 } from '@evertrust/shared';
 import { ApiError, api } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
@@ -63,36 +61,5 @@ export function useCreateKpiValue() {
     mutationFn: (input) => api.performance.createKpiValue(input),
     onSuccess: () =>
       void qc.invalidateQueries({ queryKey: queryKeys.performance.all }),
-  });
-}
-
-// ---- Tender revenue attribution ----
-export function useTenderContributions(tenderId: string) {
-  return useQuery<TenderContributionDto[], ApiError>({
-    queryKey: queryKeys.performance.contributions(tenderId),
-    queryFn: ({ signal }) => api.performance.contributions(tenderId, signal),
-    enabled: !!tenderId,
-  });
-}
-
-export function useAddContribution(tenderId: string) {
-  const qc = useQueryClient();
-  return useMutation<{ ok: true }, ApiError, CreateTenderContributionDto>({
-    mutationFn: (input) => api.performance.addContribution(tenderId, input),
-    onSuccess: () =>
-      void qc.invalidateQueries({
-        queryKey: queryKeys.performance.contributions(tenderId),
-      }),
-  });
-}
-
-export function useRemoveContribution(tenderId: string) {
-  const qc = useQueryClient();
-  return useMutation<{ ok: true }, ApiError, string>({
-    mutationFn: (cid) => api.performance.removeContribution(tenderId, cid),
-    onSuccess: () =>
-      void qc.invalidateQueries({
-        queryKey: queryKeys.performance.contributions(tenderId),
-      }),
   });
 }

@@ -10,32 +10,19 @@ import {
   LinkMeetingDto,
   AnalyzeMeetingDto,
   PersonaListDto,
-  ApprovalRequestDto,
   ArsenalBackfillResultDto,
   ArsenalExecutionsDto,
   ArsenalRunDto,
   ArsenalSettingsDto,
   ArsenalStage,
-  AssignmentDto,
-  AssignTenderDto,
   CampaignDto,
   CampaignFilesDto,
-  CreateApprovalRequestDto,
   CreateCampaignDto,
   NotificationDto,
   UpdateCampaignLifecycleDto,
   CreateCustomerDto,
-  CreateLineItemDto,
-  CreatePriceObservationDto,
-  CreateRfqDto,
-  CreateSupplierDto,
-  CreateTenderDto,
   CustomerDto,
-  DecideApprovalDto,
-  DocumentDto,
   HealthDto,
-  LineItemDto,
-  ListTendersQuery,
   LoginDto,
   GoogleLoginDto,
   LoginResponseDto,
@@ -50,21 +37,8 @@ import {
   PerformanceBriefDto,
   KpiDefinitionDto,
   CreateKpiValueDto,
-  TenderContributionDto,
-  CreateTenderContributionDto,
   MeDto,
-  PriceAssistResultDto,
-  PriceObservationDto,
-  RfqDto,
   RunArsenalDto,
-  SubmissionReadinessDto,
-  SubmissionReceiptDto,
-  SubmitTenderDto,
-  SupplierDto,
-  TenderDeadlineRiskDto,
-  TenderDto,
-  TenderPricingDto,
-  TransitionTenderDto,
   UpdateArsenalSettingsDto,
   WorkflowConfigDto,
   UpdateWorkflowConfigDto,
@@ -75,13 +49,8 @@ import {
   TestN8nResultDto,
   RotateIngestTokenResultDto,
   UpdateCustomerDto,
-  UpdateLineItemDto,
   UpdateMyNameDto,
-  UpdateSupplierDto,
-  UpdateTenderDto,
   UpdateUserDto,
-  UploadDocumentDto,
-  UpsertPricingDto,
   UserListItemDto,
   CreateLeadDto,
   UpdateLeadDto,
@@ -120,21 +89,9 @@ import { API_URL } from './env';
 
 // List responses validated as arrays of the element schema, so a single drifted
 // row fails the whole list loud instead of rendering undefined down the page.
-const TenderListDto = z.array(TenderDto);
-const SupplierListDto = z.array(SupplierDto);
 const CustomerListDto = z.array(CustomerDto);
 const UserListDto = z.array(UserListItemDto);
 const AdminUserListDto = z.array(AdminUserDto);
-const DocumentListDto = z.array(DocumentDto);
-// Phase 5a pricing: list shapes validated as arrays so a single drifted row
-// fails the whole list loud instead of rendering undefined down the page.
-const LineItemListDto = z.array(LineItemDto);
-const PriceObservationListDto = z.array(PriceObservationDto);
-// Phase 6: the tender's approval requests, validated as an array so a single
-// drifted row fails the whole list loud.
-const ApprovalListDto = z.array(ApprovalRequestDto);
-// Phase 6b: the org's deadline at-risk worklist.
-const TenderDeadlineRiskListDto = z.array(TenderDeadlineRiskDto);
 // Growth Engine: the org's campaigns.
 const CampaignListDto = z.array(CampaignDto);
 // Growth Engine: the niche management list — catalog rows enriched with rollup
@@ -167,18 +124,6 @@ const NotificationListDto = z.array(NotificationDto);
 // Arsenal: recent ERP→n8n trigger runs.
 const ArsenalRunListDto = z.array(ArsenalRunDto);
 const LeadListDto = z.array(LeadDto);
-// Phase 5c: the RFQs dispatched for a tender.
-const RfqListDto = z.array(RfqDto);
-// GET /tenders/:id/assignment returns the ACTIVE assignment or null.
-const AssignmentOrNullDto = AssignmentDto.nullable();
-
-// Build a `?status=...` query string from the (optional) typed list filter. Kept
-// tiny and explicit; only adds keys that are set.
-function tendersQuery(query?: z.infer<typeof ListTendersQuery>): string {
-  if (!query?.status) return '';
-  const params = new URLSearchParams({ status: query.status });
-  return `?${params.toString()}`;
-}
 
 // Thrown for any non-2xx response. `status` lets callers branch (e.g. 401 ->
 // show "invalid credentials") without parsing prose error bodies.
@@ -352,178 +297,6 @@ export const api = {
   users: {
     list: (signal?: AbortSignal) =>
       request<UserListItemDto[]>('/users', { schema: UserListDto, signal }),
-  },
-
-  // ---- Tenders ----
-  tenders: {
-    list: (query?: z.infer<typeof ListTendersQuery>, signal?: AbortSignal) =>
-      request<TenderDto[]>(`/tenders${tendersQuery(query)}`, {
-        schema: TenderListDto,
-        signal,
-      }),
-
-    get: (id: string, signal?: AbortSignal) =>
-      request<TenderDto>(`/tenders/${id}`, { schema: TenderDto, signal }),
-
-    // Phase 6 (R31): the org's deadline at-risk worklist (most urgent first).
-    deadlineRisk: (signal?: AbortSignal) =>
-      request<TenderDeadlineRiskDto[]>('/tenders/deadline-risk', {
-        schema: TenderDeadlineRiskListDto,
-        signal,
-      }),
-
-    create: (input: z.infer<typeof CreateTenderDto>) =>
-      request<TenderDto>('/tenders', {
-        method: 'POST',
-        body: CreateTenderDto.parse(input),
-        schema: TenderDto,
-      }),
-
-    update: (id: string, input: z.infer<typeof UpdateTenderDto>) =>
-      request<TenderDto>(`/tenders/${id}`, {
-        method: 'PATCH',
-        body: UpdateTenderDto.parse(input),
-        schema: TenderDto,
-      }),
-
-    transition: (id: string, input: z.infer<typeof TransitionTenderDto>) =>
-      request<TenderDto>(`/tenders/${id}/transition`, {
-        method: 'POST',
-        body: TransitionTenderDto.parse(input),
-        schema: TenderDto,
-      }),
-
-    // ---- Phase 4: assignment ----
-    getAssignment: (id: string, signal?: AbortSignal) =>
-      request<AssignmentDto | null>(`/tenders/${id}/assignment`, {
-        schema: AssignmentOrNullDto,
-        signal,
-      }),
-
-    assign: (id: string, input: z.infer<typeof AssignTenderDto>) =>
-      request<AssignmentDto>(`/tenders/${id}/assign`, {
-        method: 'POST',
-        body: AssignTenderDto.parse(input),
-        schema: AssignmentDto,
-      }),
-
-    // ---- Phase 4: TYPE 1 documents ----
-    listDocuments: (id: string, signal?: AbortSignal) =>
-      request<DocumentDto[]>(`/tenders/${id}/documents`, {
-        schema: DocumentListDto,
-        signal,
-      }),
-
-    uploadDocument: (
-      id: string,
-      file: File,
-      input: z.infer<typeof UploadDocumentDto>,
-    ) => {
-      const form = new FormData();
-      form.append('file', file);
-      form.append('type', input.type);
-      if (input.kind) form.append('kind', input.kind);
-      return uploadRequest<DocumentDto>(
-        `/tenders/${id}/documents`,
-        form,
-        DocumentDto,
-      );
-    },
-
-    // ---- Phase 5a: LV line items (read/create are tender-scoped) ----
-    listLineItems: (id: string, signal?: AbortSignal) =>
-      request<LineItemDto[]>(`/tenders/${id}/line-items`, {
-        schema: LineItemListDto,
-        signal,
-      }),
-
-    createLineItem: (id: string, input: z.infer<typeof CreateLineItemDto>) =>
-      request<LineItemDto>(`/tenders/${id}/line-items`, {
-        method: 'POST',
-        body: CreateLineItemDto.parse(input),
-        schema: LineItemDto,
-      }),
-
-    // ---- Phase 5a: computed pricing view + margin + finalize ----
-    getPricing: (id: string, signal?: AbortSignal) =>
-      request<TenderPricingDto>(`/tenders/${id}/pricing`, {
-        schema: TenderPricingDto,
-        signal,
-      }),
-
-    setMargin: (id: string, input: z.infer<typeof UpsertPricingDto>) =>
-      request<TenderPricingDto>(`/tenders/${id}/pricing`, {
-        method: 'PUT',
-        body: UpsertPricingDto.parse(input),
-        schema: TenderPricingDto,
-      }),
-
-    // Lock pricing FINAL; the server also transitions the tender to
-    // CUSTOMER_PRICING (so callers invalidate the tender query too).
-    finalizePricing: (id: string) =>
-      request<TenderPricingDto>(`/tenders/${id}/pricing/finalize`, {
-        method: 'POST',
-        schema: TenderPricingDto,
-      }),
-
-    // ---- Phase 6: customer-approval gate (list + open a request) ----
-    listApprovals: (id: string, signal?: AbortSignal) =>
-      request<ApprovalRequestDto[]>(`/tenders/${id}/approvals`, {
-        schema: ApprovalListDto,
-        signal,
-      }),
-
-    requestApproval: (
-      id: string,
-      input: z.infer<typeof CreateApprovalRequestDto>,
-    ) =>
-      request<ApprovalRequestDto>(`/tenders/${id}/approvals`, {
-        method: 'POST',
-        body: CreateApprovalRequestDto.parse(input),
-        schema: ApprovalRequestDto,
-      }),
-
-    // ---- Phase 5c: Hermes supplier RFQ (list + dispatch) ----
-    listRfqs: (id: string, signal?: AbortSignal) =>
-      request<RfqDto[]>(`/tenders/${id}/rfqs`, {
-        schema: RfqListDto,
-        signal,
-      }),
-
-    // Dispatch an RFQ to suppliers (fires the Hermes webhook server-side). Returns
-    // the recorded row (status DISPATCHED | FAILED — the webhook is best-effort).
-    sendRfq: (id: string, input: z.infer<typeof CreateRfqDto>) =>
-      request<RfqDto>(`/tenders/${id}/rfqs`, {
-        method: 'POST',
-        body: CreateRfqDto.parse(input),
-        schema: RfqDto,
-      }),
-
-    // ---- Phase 7: submission readiness (the gate state) + the submit act ----
-    submission: (id: string, signal?: AbortSignal) =>
-      request<SubmissionReadinessDto>(`/tenders/${id}/submission`, {
-        schema: SubmissionReadinessDto,
-        signal,
-      }),
-
-    // Record the human submission proof; the API enforces the full gate, logs the
-    // receipt and advances the tender to SUBMITTED. Returns the receipt.
-    submit: (id: string, input: z.infer<typeof SubmitTenderDto>) =>
-      request<SubmissionReceiptDto>(`/tenders/${id}/submit`, {
-        method: 'POST',
-        body: SubmitTenderDto.parse(input),
-        schema: SubmissionReceiptDto,
-      }),
-  },
-
-  // ---- Phase 6: approvals addressed by their own id (record a decision) ----
-  approvals: {
-    decide: (id: string, input: z.infer<typeof DecideApprovalDto>) =>
-      request<ApprovalRequestDto>(`/approvals/${id}/decide`, {
-        method: 'POST',
-        body: DecideApprovalDto.parse(input),
-        schema: ApprovalRequestDto,
-      }),
   },
 
   // ---- Admin: user management (users:manage) ----
@@ -1213,82 +986,6 @@ export const api = {
       }),
   },
 
-  // ---- Phase 5a: line items addressed by their own id (update/delete) ----
-  lineItems: {
-    update: (id: string, input: z.infer<typeof UpdateLineItemDto>) =>
-      request<LineItemDto>(`/line-items/${id}`, {
-        method: 'PATCH',
-        body: UpdateLineItemDto.parse(input),
-        schema: LineItemDto,
-      }),
-
-    delete: (id: string) =>
-      request<void>(`/line-items/${id}`, { method: 'DELETE' }),
-
-    // A line's price evidence (newest-first; the engine treats input order as
-    // such on equal-weight ties).
-    listObservations: (id: string, signal?: AbortSignal) =>
-      request<PriceObservationDto[]>(`/line-items/${id}/observations`, {
-        schema: PriceObservationListDto,
-        signal,
-      }),
-
-    addObservation: (
-      id: string,
-      input: z.infer<typeof CreatePriceObservationDto>,
-    ) =>
-      request<PriceObservationDto>(`/line-items/${id}/observations`, {
-        method: 'POST',
-        body: CreatePriceObservationDto.parse(input),
-        schema: PriceObservationDto,
-      }),
-
-    // Phase 5b: ask Claude for a unit-price SUGGESTION (never auto-applied — the
-    // human records it as an AI_ESTIMATE observation). { configured:false } when
-    // Claude isn't wired up; { error } on a model failure (the call still 200s).
-    priceAssist: (id: string) =>
-      request<PriceAssistResultDto>(`/line-items/${id}/price-assist`, {
-        method: 'POST',
-        schema: PriceAssistResultDto,
-      }),
-  },
-
-  // ---- Phase 5a: price observations addressed by their own id (delete) ----
-  priceObservations: {
-    delete: (id: string) =>
-      request<void>(`/price-observations/${id}`, { method: 'DELETE' }),
-  },
-
-  // ---- Documents (binary download) ----
-  documents: {
-    // The browser navigates/links straight to this URL; the httpOnly auth cookie
-    // rides along (same-site) so no Authorization header is needed.
-    downloadUrl: (id: string) => `${API_URL}/documents/${id}/download`,
-  },
-
-  // ---- Suppliers ----
-  suppliers: {
-    list: (signal?: AbortSignal) =>
-      request<SupplierDto[]>('/suppliers', { schema: SupplierListDto, signal }),
-
-    get: (id: string, signal?: AbortSignal) =>
-      request<SupplierDto>(`/suppliers/${id}`, { schema: SupplierDto, signal }),
-
-    create: (input: z.infer<typeof CreateSupplierDto>) =>
-      request<SupplierDto>('/suppliers', {
-        method: 'POST',
-        body: CreateSupplierDto.parse(input),
-        schema: SupplierDto,
-      }),
-
-    update: (id: string, input: z.infer<typeof UpdateSupplierDto>) =>
-      request<SupplierDto>(`/suppliers/${id}`, {
-        method: 'PATCH',
-        body: UpdateSupplierDto.parse(input),
-        schema: SupplierDto,
-      }),
-  },
-
   // ---- Customers ----
   customers: {
     list: (signal?: AbortSignal) =>
@@ -1350,27 +1047,5 @@ export const api = {
         body: CreateKpiValueDto.parse(input),
         schema: z.object({ ok: z.literal(true) }),
       }),
-
-    contributions: (tenderId: string, signal?: AbortSignal) =>
-      request<TenderContributionDto[]>(
-        `/tenders/${tenderId}/contributions`,
-        { schema: z.array(TenderContributionDto), signal },
-      ),
-
-    addContribution: (
-      tenderId: string,
-      input: z.infer<typeof CreateTenderContributionDto>,
-    ) =>
-      request<{ ok: true }>(`/tenders/${tenderId}/contributions`, {
-        method: 'POST',
-        body: CreateTenderContributionDto.parse(input),
-        schema: z.object({ ok: z.literal(true) }),
-      }),
-
-    removeContribution: (tenderId: string, contributionId: string) =>
-      request<{ ok: true }>(
-        `/tenders/${tenderId}/contributions/${contributionId}`,
-        { method: 'DELETE', schema: z.object({ ok: z.literal(true) }) },
-      ),
   },
 };
