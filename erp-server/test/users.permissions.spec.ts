@@ -82,7 +82,7 @@ describe('PermissionsGuard honors per-user effective permissions', () => {
       id: 'u-x',
       role: 'EMPLOYEE',
       organizationId: 'org1',
-      permissions: ['tenders:read', 'users:manage'],
+      permissions: ['campaigns:read', 'users:manage'],
     };
     expect(guard.canActivate(ctxUpdate(granted))).toBe(true);
   });
@@ -94,7 +94,7 @@ describe('PermissionsGuard honors per-user effective permissions', () => {
       id: 'u-y',
       role: 'SUPER_ADMIN',
       organizationId: 'org1',
-      permissions: ['tenders:read'],
+      permissions: ['campaigns:read'],
     };
     expect(() => guard.canActivate(ctxUpdate(stripped))).toThrow(
       ForbiddenException,

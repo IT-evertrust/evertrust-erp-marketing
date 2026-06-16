@@ -35,58 +35,6 @@ export const userPositionEnum = pgEnum('user_position', [
   'SPECIALIST',
 ]);
 
-export const tenderRegimeEnum = pgEnum('tender_regime', [
-  'VOB_A',
-  'VgV',
-  'UVgO',
-]);
-
-export const tenderStatusEnum = pgEnum('tender_status', [
-  'NOT_STARTED',
-  'PIC_PRICING',
-  'CUSTOMER_PRICING',
-  'DOCUMENTS',
-  'SUBMITTED',
-  'AWARDED',
-  'LOST',
-]);
-
-export const documentTypeEnum = pgEnum('document_type', ['TYPE1', 'TYPE2']);
-
-export const ocrStatusEnum = pgEnum('ocr_status', ['PENDING', 'DONE', 'FAILED']);
-
-// Provenance of a single price_observation. Named `price_obs_source` (NOT
-// reusing any prior enum name) so drizzle never has to ALTER an existing enum's
-// values — value changes on a live enum are unreliable (see tasks/lessons.md).
-// REAL vs estimate weighting lives in @evertrust/shared (SOURCE_WEIGHT).
-export const priceObsSourceEnum = pgEnum('price_obs_source', [
-  'SUPPLIER_QUOTE',
-  'MANUAL',
-  'AI_ESTIMATE',
-  'COMPETITOR_WINNER',
-  'OUR_SUBMITTED',
-  'OUR_BENCHMARK',
-  'IBAU_HISTORICAL',
-]);
-
-export const pricingStatusEnum = pgEnum('pricing_status', [
-  'DRAFT',
-  'REVIEW',
-  'FINAL',
-]);
-
-export const approvalTypeEnum = pgEnum('approval_type', [
-  'PRICING',
-  'CUSTOMER',
-  'QC',
-]);
-
-export const approvalStatusEnum = pgEnum('approval_status', [
-  'PENDING',
-  'APPROVED',
-  'REJECTED',
-]);
-
 export const auditActorTypeEnum = pgEnum('audit_actor_type', [
   'USER',
   'SYSTEM',
@@ -124,12 +72,6 @@ export const arsenalRunStatusEnum = pgEnum('arsenal_run_status', [
   'SUCCESS',
   'ERROR',
 ]);
-
-// Outcome of a Hermes supplier-RFQ dispatch (Phase 5c). Same 2-state ERP→n8n
-// hand-off model as arsenal runs: DISPATCHED = the Hermes webhook accepted the RFQ
-// (n8n emails suppliers async); FAILED = the ERP could not reach it / non-2xx.
-// Supplier replies land as SUPPLIER_QUOTE price observations, not on this row.
-export const rfqStatusEnum = pgEnum('rfq_status', ['DISPATCHED', 'FAILED']);
 
 // Key Account hot-lead pipeline stage. Mirrors the n8n hot_leads vocabulary:
 // INTERESTED / MEETING_SCHEDULED (the "Hot Reason"), ONGOING (deal in progress —
@@ -173,14 +115,6 @@ export const scorecardZoneEnum = pgEnum('scorecard_zone', [
   'YELLOW',
   'ORANGE',
   'RED',
-]);
-// Revenue attribution role on a tender (who found/qualified/validated/sold/managed).
-export const contributionRoleEnum = pgEnum('contribution_role', [
-  'RESEARCH',
-  'QUALIFICATION',
-  'VALIDATION',
-  'SALES',
-  'ACCOUNT_MANAGER',
 ]);
 // AI Management Layer report cadence + scope.
 export const reportPeriodEnum = pgEnum('report_period', ['DAILY', 'WEEKLY']);

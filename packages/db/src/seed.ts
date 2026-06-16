@@ -6,8 +6,6 @@ import {
   authCredentials,
   customers,
   organizations,
-  suppliers,
-  tenders,
   users,
 } from './schema';
 
@@ -74,64 +72,12 @@ async function seed(): Promise<void> {
       .map((u) => ({ userId: u.id, passwordHash })),
   );
 
-  const [customer] = await db
-    .insert(customers)
-    .values({
-      name: 'Stadtwerke Musterstadt',
-      contact: 'einkauf@musterstadt.de',
-      niches: ['water', 'energy'],
-      organizationId: org.id,
-    })
-    .returning();
-
-  await db.insert(suppliers).values([
-    {
-      name: 'Rohr & Ventil GmbH',
-      niches: ['water'],
-      capabilities: ['valves', 'pipes'],
-      fitScore: '0.84',
-      contact: 'sales@rohrventil.de',
-      organizationId: org.id,
-    },
-    {
-      name: 'ElektroTech AG',
-      niches: ['energy'],
-      capabilities: ['cabling', 'transformers'],
-      fitScore: '0.71',
-      contact: 'vertrieb@elektrotech.de',
-      organizationId: org.id,
-    },
-  ]);
-
-  await db.insert(tenders).values([
-    {
-      vergabeId: 'DE-2026-000123',
-      source: 'dtvp',
-      title: 'Erneuerung Trinkwasserleitung Nord',
-      buyer: 'Stadt Musterstadt',
-      customerId: customer?.id,
-      regime: 'VgV',
-      niche: 'water',
-      status: 'PIC_PRICING',
-      estimatedValue: '450000.00',
-      isAboveThreshold: true,
-      location: 'Musterstadt',
-      organizationId: org.id,
-    },
-    {
-      vergabeId: 'DE-2026-000456',
-      source: 'evergabe',
-      title: 'Wartung Trafostationen',
-      buyer: 'Landkreis Beispiel',
-      regime: 'UVgO',
-      niche: 'energy',
-      status: 'NOT_STARTED',
-      estimatedValue: '85000.00',
-      isAboveThreshold: false,
-      location: 'Beispielstadt',
-      organizationId: org.id,
-    },
-  ]);
+  await db.insert(customers).values({
+    name: 'Stadtwerke Musterstadt',
+    contact: 'einkauf@musterstadt.de',
+    niches: ['water', 'energy'],
+    organizationId: org.id,
+  });
 
   // Reference seeded users so the bindings are not flagged as unused.
   console.log(`Seeded users: ${admin?.email}, ${pic?.email}`);

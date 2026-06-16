@@ -11,7 +11,7 @@ import {
   uuid,
   vector,
 } from 'drizzle-orm/pg-core';
-import { tenders, users } from './core';
+import { users } from './core';
 import { organizations } from './org';
 import { auditActorTypeEnum } from './enums';
 
@@ -54,7 +54,6 @@ export const workflowExecutions = pgTable(
     n8nExecutionId: text('n8n_execution_id').notNull(),
     workflowName: text('workflow_name').notNull(),
     source: text('source').notNull(),
-    tenderId: uuid('tender_id').references(() => tenders.id),
     status: text('status').notNull(),
     retries: integer('retries').notNull().default(0),
     startedAt: timestamp('started_at', { withTimezone: true }),
@@ -67,7 +66,6 @@ export const workflowExecutions = pgTable(
     uniqueIndex('workflow_executions_n8n_execution_id_uq').on(
       t.n8nExecutionId,
     ),
-    index('workflow_executions_tender_id_idx').on(t.tenderId),
     index('workflow_executions_organization_id_idx').on(t.organizationId),
   ],
 );
@@ -80,7 +78,6 @@ export const aiRuns = pgTable(
     organizationId: uuid('organization_id')
       .notNull()
       .references(() => organizations.id),
-    tenderId: uuid('tender_id').references(() => tenders.id),
     taskType: text('task_type').notNull(),
     model: text('model').notNull(),
     tokensIn: integer('tokens_in').notNull(),
@@ -90,10 +87,7 @@ export const aiRuns = pgTable(
     escalated: boolean('escalated').notNull().default(false),
     at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [
-    index('ai_runs_tender_id_idx').on(t.tenderId),
-    index('ai_runs_organization_id_idx').on(t.organizationId),
-  ],
+  (t) => [index('ai_runs_organization_id_idx').on(t.organizationId)],
 );
 
 // Polymorphic association via (refType, refId) — intentionally NO FK so any
