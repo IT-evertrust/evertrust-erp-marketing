@@ -8,6 +8,7 @@ import { AUTH_COOKIE } from '@/lib/env';
 // landing page is public for everyone, signed in or not.
 const PROTECTED_PREFIXES = [
   '/dashboard',
+  '/automation',
   '/marketing',
   '/activate',
   '/nurture',

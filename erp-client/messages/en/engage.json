@@ -9,9 +9,32 @@
     "notConnected": "No mailbox connected",
     "noMailboxLabel": "No Gmail account linked",
     "defaultSuffix": "default",
-    "stats": "{drafts, plural, =0 {No drafts awaiting} =1 {# draft awaiting} other {# drafts awaiting}} · {interested} interested",
+    "stats": "{replies, plural, =0 {No replies} =1 {# reply} other {# replies}} · {interested} interested",
     "statsUnavailable": "Mailbox stats unavailable",
     "connectHint": "Connect a Gmail account under Configuration to triage replies here."
+  },
+  "connect": {
+    "title": "No mailbox connected",
+    "description": "Connect the organization's Gmail account so Engage can read and triage inbound replies.",
+    "cta": "Go to Configuration"
+  },
+  "scan": {
+    "button": "Scan inbox",
+    "scanning": "Scanning…",
+    "done": "Scanned {scanned} {scanned, plural, =1 {reply} other {replies}} · {interested} interested · {unsure} unsure · {notInterested} not interested · {drafted} drafted.",
+    "notConfigured": "No Gmail mailbox connected — connect one under Configuration first.",
+    "failed": "Scan failed: {message}"
+  },
+  "send": {
+    "label": "Suggested reply — edit before sending",
+    "button": "Approve & send",
+    "sent": "Reply sent.",
+    "failed": "Send failed: {message}"
+  },
+  "redraft": {
+    "button": "Re-draft",
+    "done": "Reply re-drafted.",
+    "failed": "Re-draft failed: {message}"
   },
   "triage": {
     "interested": "Interested",
@@ -32,8 +55,9 @@
     "title": "Reply drafts",
     "description": "RAG-suggested replies awaiting a human. Copy the draft into your reply, or open the prospect for the full thread.",
     "loadError": "Could not load reply drafts: {message}",
-    "emptyTitle": "No drafts awaiting review",
+    "emptyTitle": "No replies yet",
     "emptyDescription": "When the reply classifier drafts a suggested response, it appears here for approval.",
+    "emptyScanHint": "No replies yet — Scan inbox to triage.",
     "now": "now {verdict}",
     "nowTitle": "The prospect's current verdict has since changed",
     "copied": "Draft copied to clipboard.",

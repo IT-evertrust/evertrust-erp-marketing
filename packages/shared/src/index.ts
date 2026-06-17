@@ -485,6 +485,47 @@ export const MeetingDto = z.object({
 export type MeetingDto = z.infer<typeof MeetingDto>;
 export const MeetingListDto = z.array(MeetingDto);
 
+// --- Activate · live Google Calendar (read) -------------------------------
+// Real upcoming meetings + proposed free slots read from the org's connected
+// default Google Calendar. Powers the Activate page; both endpoints degrade to a
+// `configured: false` shell (never an error) when the org has not connected a
+// default calendar mailbox or the Google API is unreachable — the UI shows an
+// empty/connect state instead of failing.
+
+// One upcoming event from the org's primary calendar. `attendees` are the
+// EXTERNAL attendee emails only (the org's own self/account email is filtered
+// out). `start`/`end` are ISO strings; `location`/`meetingUrl` are null when the
+// event has none.
+export const CalendarEventDto = z.object({
+  id: z.string(),
+  title: z.string(),
+  start: z.string(),
+  end: z.string(),
+  attendees: z.array(z.string()),
+  location: z.string().nullable(),
+  meetingUrl: z.string().nullable(),
+});
+export type CalendarEventDto = z.infer<typeof CalendarEventDto>;
+
+// GET /meetings/calendar/upcoming — the next few real events. `configured` is
+// false (and `events` empty, `account` null) when no default calendar is
+// connected or Google is unreachable.
+export const CalendarUpcomingDto = z.object({
+  configured: z.boolean(),
+  account: z.object({ email: z.string() }).nullable(),
+  events: z.array(CalendarEventDto),
+});
+export type CalendarUpcomingDto = z.infer<typeof CalendarUpcomingDto>;
+
+// GET /meetings/calendar/free-slots — up to 6 proposed 30-minute openings within
+// weekday business hours (09:00–17:00 Europe/Berlin) over the next 7 days.
+// `configured` mirrors CalendarUpcomingDto. Each slot has ISO `start`/`end`.
+export const CalendarFreeSlotsDto = z.object({
+  configured: z.boolean(),
+  slots: z.array(z.object({ start: z.string(), end: z.string() })),
+});
+export type CalendarFreeSlotsDto = z.infer<typeof CalendarFreeSlotsDto>;
+
 // PATCH /sales/meetings/:id — manual campaign link (null clears it).
 export const LinkMeetingDto = z.object({
   campaignId: z.string().uuid().nullable(),
@@ -725,6 +766,8 @@ export const GOOGLE_CONNECT_SCOPES: readonly string[] = [
   'email',
   'profile',
   'https://www.googleapis.com/auth/gmail.send',
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.compose',
   'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/calendar.readonly',
 ];
@@ -1951,6 +1994,65 @@ export const ReplyDraftDto = z.object({
   latestVerdict: ReplyVerdict,
 });
 export type ReplyDraftDto = z.infer<typeof ReplyDraftDto>;
+
+// ===========================================================================
+// Engage · ERP-DIRECT Gmail reply pipeline (no n8n, no Python agent)
+// ---------------------------------------------------------------------------
+// The ERP reads the org's connected default Gmail mailbox, classifies each reply
+// with the ERP's own Claude (INTERESTED | UNSURE | NOT_INTERESTED — a subset of
+// ReplyVerdict), stores it on the existing reply_classifications +
+// outreach_messages tables, drafts a suggested reply, and can send an approved
+// reply via the same connected Google account. All endpoints are JWT-auth +
+// org-scoped (@OrgId). NEVER-THROW on the Google/AI boundary: failures degrade
+// to `configured: false`, never a 500.
+
+// One row of the Engage review queue (a classified inbound reply). `prospectId`
+// is the matched org prospect (present for every stored row; nullable in the
+// contract for forward-compat). `classification` is the verdict the Engage UI
+// shows. `suggestedReply` is the Claude-drafted answer (null when not drafted —
+// only INTERESTED / UNSURE get a draft).
+export const EngageReplyDto = z.object({
+  id: z.string().uuid(),
+  prospectId: z.string().uuid().nullable(),
+  fromEmail: z.string(),
+  company: z.string().nullable(),
+  subject: z.string().nullable(),
+  snippet: z.string().nullable(),
+  classification: ReplyVerdict,
+  reason: z.string().nullable(),
+  suggestedReply: z.string().nullable(),
+  receivedAt: z.string(),
+});
+export type EngageReplyDto = z.infer<typeof EngageReplyDto>;
+
+// GET /engage/replies — the Engage queue. `configured` is false (and `replies`
+// empty, `account` null) when the org has no connected default Gmail mailbox or
+// Google is unreachable. `account` is the mailbox the queue was read from.
+export const EngageReplyListDto = z.object({
+  configured: z.boolean(),
+  account: z.object({ email: z.string() }).nullable(),
+  replies: z.array(EngageReplyDto),
+});
+export type EngageReplyListDto = z.infer<typeof EngageReplyListDto>;
+
+// POST /engage/scan — read recent Gmail replies, classify + draft via Claude,
+// upsert the ledger + verdict log. `configured` is false when no default Gmail
+// mailbox is connected or Google/AI is unreachable; the counters are then zero.
+export const EngageScanResultDto = z.object({
+  configured: z.boolean(),
+  scanned: z.number(),
+  interested: z.number(),
+  unsure: z.number(),
+  notInterested: z.number(),
+  drafted: z.number(),
+});
+export type EngageScanResultDto = z.infer<typeof EngageScanResultDto>;
+
+// POST /engage/replies/:id/send — the approved reply text to send via Gmail.
+export const EngageSendBodyDto = z.object({
+  text: z.string().min(1).max(20000),
+});
+export type EngageSendBodyDto = z.infer<typeof EngageSendBodyDto>;
 
 // ---- Outreach messages (the conversation ledger) ----
 // Mirror of the message_direction pgEnum: Bazooka sends (OUTBOUND) and the Gmail

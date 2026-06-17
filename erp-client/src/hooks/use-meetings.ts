@@ -1,7 +1,12 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { MeetingDto, MeetingSyncResultDto } from '@evertrust/shared';
+import type {
+  CalendarFreeSlotsDto,
+  CalendarUpcomingDto,
+  MeetingDto,
+  MeetingSyncResultDto,
+} from '@evertrust/shared';
 import { ApiError, api } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
 
@@ -62,5 +67,28 @@ export function useDeleteMeeting() {
     mutationFn: (id) => api.meetings.remove(id),
     onSuccess: () =>
       void qc.invalidateQueries({ queryKey: queryKeys.meetings.all }),
+  });
+}
+
+// Activate · Meeting Booker: the next real events from the org's connected
+// Google Calendar. Refetches on focus so the list stays fresh; a modest
+// staleTime avoids hammering Google on quick tab switches.
+export function useCalendarUpcoming() {
+  return useQuery<CalendarUpcomingDto, ApiError>({
+    queryKey: queryKeys.meetings.calendarUpcoming(),
+    queryFn: ({ signal }) => api.meetings.calendarUpcoming(signal),
+    refetchOnWindowFocus: true,
+    staleTime: 60_000,
+  });
+}
+
+// Activate · Meeting Booker: proposed free slots from the same calendar
+// (display-only — there is no booking endpoint yet).
+export function useCalendarFreeSlots() {
+  return useQuery<CalendarFreeSlotsDto, ApiError>({
+    queryKey: queryKeys.meetings.calendarFreeSlots(),
+    queryFn: ({ signal }) => api.meetings.calendarFreeSlots(signal),
+    refetchOnWindowFocus: true,
+    staleTime: 60_000,
   });
 }

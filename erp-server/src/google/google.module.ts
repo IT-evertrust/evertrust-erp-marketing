@@ -5,6 +5,8 @@ import { TokenCrypto } from './token-crypto';
 import { GoogleOAuthService } from './google-oauth.service';
 import { GoogleAccountsService } from './google-accounts.service';
 import { GoogleConnectController } from './google-connect.controller';
+import { GoogleCalendarReadService } from './google-calendar-read.service';
+import { GoogleCalendarReadController } from './google-calendar-read.controller';
 
 // Per-org Google connect (increment 1): the OAuth authorization-code flow + the
 // admin endpoints to list/default/disconnect connected accounts, plus the token
@@ -21,6 +23,10 @@ import { GoogleConnectController } from './google-connect.controller';
 // it sits at the bottom of the dependency graph (workflow-config imports it, never the
 // reverse — that is how the calendar-list refactor avoids a circular module dep). Its
 // remaining deps (DB + AppConfigService) are global.
+//
+// The Activate read endpoints (GET /meetings/calendar/{upcoming,free-slots}) live
+// here too: GoogleCalendarReadService consumes GoogleAccountsService (already provided
+// in this module) to read the org's default calendar — no extra cross-module wiring.
 @Module({
   imports: [
     JwtModule.registerAsync({
@@ -33,8 +39,13 @@ import { GoogleConnectController } from './google-connect.controller';
       }),
     }),
   ],
-  controllers: [GoogleConnectController],
-  providers: [TokenCrypto, GoogleOAuthService, GoogleAccountsService],
+  controllers: [GoogleConnectController, GoogleCalendarReadController],
+  providers: [
+    TokenCrypto,
+    GoogleOAuthService,
+    GoogleAccountsService,
+    GoogleCalendarReadService,
+  ],
   exports: [GoogleAccountsService],
 })
 export class GoogleModule {}
