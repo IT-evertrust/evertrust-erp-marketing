@@ -151,3 +151,12 @@ vite.config.ts.timestamp-*
 # macOS
 .DS_Store
 **/.DS_Store
+
+# Google OAuth secrets (never commit)
+client_secret.json
+**/client_secret.json
+**/tokens/
+
+# Hermes test console — local LLM gateway key (never commit)
+erp-agents/mock-ui/config.local.js
+**/mock-ui/config.local.js

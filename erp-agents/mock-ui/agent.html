@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>agent — EVERTRUST</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="back" href="index.html">← all agents</a>
+  <h1 id="title">agent</h1>
+  <p class="sub" id="subtitle"></p>
+
+  <div class="row" style="margin-bottom:8px">
+    <button id="run">Run</button>
+    <span class="dot" id="dot"></span>
+    <span class="status" id="status">idle</span>
+  </div>
+
+  <div class="panel">
+    <h2>Latest output</h2>
+    <div id="output"><div class="status">No run yet this page load. Click Run.</div></div>
+  </div>
+
+  <div class="panel">
+    <div class="row" style="justify-content:space-between">
+      <h2 style="margin:0">Run history</h2>
+      <button class="ghost" id="clear">Clear history</button>
+    </div>
+    <div id="history" style="margin-top:12px"></div>
+  </div>
+
+<script src="app.js"></script>
+<script>
+  const key = new URLSearchParams(location.search).get("key");
+  const a = AGENT_MAP[key];
+  const $ = id => document.getElementById(id);
+
+  if (!a) {
+    document.body.innerHTML = '<a class="back" href="index.html">← all agents</a><p class="err-box">Unknown agent "' + key + '".</p>';
+  } else {
+    document.title = a.name + " — EVERTRUST";
+    $("title").textContent = "Run " + a.name;
+    $("subtitle").innerHTML = `package <code>${a.pkg}</code> · POST <code>${a.url}</code> · body <code>${JSON.stringify(a.body)}</code>`;
+    if (!a.ready) { $("status").textContent = "service not wired yet — Run will fail until its server is up"; }
+
+    $("run").addEventListener("click", doRun);
+    $("clear").addEventListener("click", () => { clearHist(key); renderHistory(); });
+    renderHistory();
+  }
+
+  async function doRun() {
+    $("dot").className = "dot run"; $("status").textContent = "running…";
+    $("output").innerHTML = '<div class="status">waiting for ' + a.url + ' …</div>';
+    const rec = await runAgent(a);
+    if (rec.ok) {
+      $("dot").className = "dot ok"; $("status").textContent = "ok (" + rec.ms + "ms)";
+      $("output").innerHTML = renderResult(rec.data);
+    } else {
+      $("dot").className = "dot err"; $("status").textContent = "failed";
+      $("output").innerHTML = `<div class="err-box">⚠ ${rec.error}</div>`;
+    }
+    renderHistory();
+  }
+
+  function summarize(rec) {
+    if (!rec.ok) return "failed";
+    const c = rec.counts ? Object.entries(rec.counts).map(([k, v]) => `${k}:${v}`).join(" ") : "";
+    return `${rec.mode || "?"} · ${c}${typeof rec.emailsSent !== "undefined" ? " · sent:" + rec.emailsSent : ""}`;
+  }
+
+  function renderHistory() {
+    const hist = loadHist(key);
+    if (!hist.length) { $("history").innerHTML = '<div class="status">No runs recorded yet.</div>'; return; }
+    $("history").innerHTML = hist.map((rec, i) => `
+      <div class="hist-item">
+        <div class="hist-head">
+          <span class="dot ${rec.ok ? "ok" : "err"}"></span>
+          <span class="hist-time">${fmtTime(rec.ts)}</span>
+          <span class="hist-sum">${summarize(rec)}</span>
+          <span class="hist-time">${rec.ms}ms</span>
+        </div>
+        <details style="margin-top:8px">
+          <summary class="status">view output</summary>
+          ${rec.ok ? renderResult(rec.data) : `<div class="err-box">⚠ ${rec.error}</div>`}
+        </details>
+      </div>`).join("");
+  }
+</script>
+</body>
+</html>

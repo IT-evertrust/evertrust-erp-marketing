@@ -7,6 +7,13 @@
       "runtimeArgs": ["run", "dev"],
       "cwd": "erp-client",
       "port": 3000
+    },
+    {
+      "name": "mock-ui",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "5500"],
+      "cwd": "erp-agents/mock-ui",
+      "port": 5500
     }
   ]
 }
