@@ -766,8 +766,10 @@ export const GOOGLE_CONNECT_SCOPES: readonly string[] = [
   'email',
   'profile',
   'https://www.googleapis.com/auth/gmail.send',
-  'https://www.googleapis.com/auth/gmail.readonly',
-  'https://www.googleapis.com/auth/gmail.compose',
+  // gmail.metadata (headers + Gmail snippet, NO message body) is a SENSITIVE scope —
+  // it sidesteps the RESTRICTED-scope verification + CASA audit that gmail.readonly
+  // would force. Engage triages on subject + snippet only.
+  'https://www.googleapis.com/auth/gmail.metadata',
   'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/calendar.readonly',
 ];
