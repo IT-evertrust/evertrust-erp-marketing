@@ -47,7 +47,7 @@
   "config": {
     "header": {
       "title": "Configuration",
-      "description": "Automation & integrations for your workspace."
+      "description": "Integrations and AI engine — admin only."
     },
     "badge": {
       "custom": "Custom",
@@ -133,9 +133,9 @@
       "toastError": "Could not update senders."
     },
     "google": {
-      "title": "Connected Google accounts",
-      "description": "Gmail and Calendar accounts your team has connected. Pick which one campaigns send from and which calendar meetings land on.",
-      "connect": "Connect Google account",
+      "title": "Google Workspace",
+      "description": "Connected mailboxes power Engage (Gmail — sent & replies) and Activate (Calendar — slots). One mailbox is the org default.",
+      "connect": "Connect account",
       "connecting": "Redirecting…",
       "notConfigured": "Ask your admin to configure Google connect.",
       "empty": "No Google accounts connected yet.",
@@ -152,6 +152,9 @@
       "statusConnected": "Connected",
       "statusRevoked": "Revoked",
       "statusError": "Error",
+      "defaultBadge": "Default",
+      "setDefault": "Set default",
+      "toastDefaultSet": "Default mailbox updated.",
       "setDefaultGmail": "Default for Gmail",
       "setDefaultCalendar": "Default for Calendar",
       "defaultGmailBadge": "Default · Gmail",
@@ -167,6 +170,29 @@
       "toastDisconnected": "Google account disconnected.",
       "toastConnectError": "Could not connect the Google account.",
       "toastError": "Could not update Google accounts."
+    },
+    "other": {
+      "title": "Other integrations",
+      "emailLabel": "Transactional email",
+      "emailSublabel": "Sequence Sender (per-org send)",
+      "docusignLabel": "DocuSign",
+      "docusignSublabel": "Contract Assist",
+      "connected": "Connected",
+      "notConnected": "Not connected",
+      "connect": "Connect",
+      "comingSoon": "Coming soon"
+    },
+    "ai": {
+      "title": "AI engine",
+      "modelLabel": "Model",
+      "modelDefault": "Product default",
+      "modelPlaceholder": "Select a model",
+      "gatewayLabel": "Gateway",
+      "gatewayPlaceholder": "LiteLLM · Mac mini",
+      "save": "Save",
+      "saving": "Saving…",
+      "toastSaved": "Configuration saved.",
+      "toastError": "Could not save the AI engine config."
     },
     "templates": {
       "title": "Templates",

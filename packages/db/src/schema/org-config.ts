@@ -56,6 +56,17 @@ export const orgConfig = pgTable(
     defaultCalendarAccountId: uuid('default_calendar_account_id').references(
       () => googleAccounts.id,
     ),
+    // SINGLE org-default Google mailbox — used for BOTH Gmail send and Calendar.
+    // Replaces the two-pointer default_gmail/default_calendar model at the app
+    // layer (those columns are kept for back-compat but no longer read). Null = none.
+    defaultMailboxAccountId: uuid('default_mailbox_account_id').references(
+      () => googleAccounts.id,
+    ),
+    // Per-org AI model preference (e.g. 'claude-opus-4-8'). Null = product default
+    // (env ANTHROPIC_MODEL).
+    aiModel: text('ai_model'),
+    // Per-org AI gateway label (e.g. 'LiteLLM · Mac mini'). Null = default.
+    aiGateway: text('ai_gateway'),
     // --- Lead governance (per-org) ---
     maxLeadsPerRun: integer('max_leads_per_run'),
     maxPerNiche: integer('max_per_niche'),

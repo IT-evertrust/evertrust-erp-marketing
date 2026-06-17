@@ -14,6 +14,7 @@ import type { Response } from 'express';
 import { GOOGLE_CONNECT_SCOPES } from '@evertrust/shared';
 import type {
   ConnectedGoogleAccountDto,
+  SetDefaultMailboxDto,
   SetGoogleDefaultsDto,
 } from '@evertrust/shared';
 import { AppConfigService } from '../config/app-config.service';
@@ -22,7 +23,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import type { AuthUser } from '../auth/auth.types';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { OrgId } from '../common/tenant';
-import { SetGoogleDefaultsBodyDto } from './google.dto';
+import { SetDefaultMailboxBodyDto, SetGoogleDefaultsBodyDto } from './google.dto';
 import { GoogleOAuthService } from './google-oauth.service';
 import { GoogleAccountsService } from './google-accounts.service';
 
@@ -129,6 +130,8 @@ export class GoogleConnectController {
   }
 
   // Set the org's default Gmail / Calendar account(s). Returns the refreshed list.
+  // LEGACY two-pointer endpoint — kept until the web migrates to the single-mailbox
+  // POST accounts/default below.
   @RequirePermissions('admin:config')
   @Post('accounts/defaults')
   setDefaults(
@@ -136,6 +139,20 @@ export class GoogleConnectController {
     @Body() body: SetGoogleDefaultsBodyDto,
   ): Promise<ConnectedGoogleAccountDto[]> {
     return this.accounts.setDefaults(orgId, body as SetGoogleDefaultsDto);
+  }
+
+  // Set the org's SINGLE default mailbox (used for both Gmail send and Calendar).
+  // accountId: uuid|null (null clears). Returns the refreshed list.
+  @RequirePermissions('admin:config')
+  @Post('accounts/default')
+  setDefaultMailbox(
+    @OrgId() orgId: string,
+    @Body() body: SetDefaultMailboxBodyDto,
+  ): Promise<ConnectedGoogleAccountDto[]> {
+    return this.accounts.setDefaultMailbox(
+      orgId,
+      (body as SetDefaultMailboxDto).accountId,
+    );
   }
 
   // Disconnect (delete + best-effort revoke) one of the org's accounts. Returns the

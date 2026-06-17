@@ -152,6 +152,11 @@ export class PerformanceService {
       `Write a management brief. Use ONLY these numbers — do not invent data. ` +
       `KPIs shown as "—" have no data; never guess them.`;
 
+    // Resolve the per-org AI model preference (org_config.ai_model). When unset, the
+    // ClaudeService falls back to env ANTHROPIC_MODEL — keeping the model choice
+    // org-scoped without hardcoding an EverTrust value.
+    const orgModel = await this.resolveAiModel(orgId);
+
     const { data } = await this.claude.structured<PerformanceBriefSummaryT>({
       system:
         'You are an operations performance analyst for a tender business. Be concise, factual, and specific with names and numbers. Never fabricate metrics.',
@@ -170,6 +175,7 @@ export class PerformanceService {
         required: ['headline', 'bullets', 'topAction'],
       },
       maxTokens: 700,
+      model: orgModel ?? undefined,
     });
 
     const { start, end } = currentWeek();
@@ -188,6 +194,19 @@ export class PerformanceService {
       period,
       summary: data,
     };
+  }
+
+  // The org's per-org AI model preference (org_config.ai_model), trimmed; null when
+  // unset/blank or the row does not yet exist — the caller then lets ClaudeService
+  // fall back to env ANTHROPIC_MODEL. Read-only; never creates the org_config row.
+  private async resolveAiModel(orgId: string): Promise<string | null> {
+    const rows = await this.db
+      .select({ aiModel: schema.orgConfig.aiModel })
+      .from(schema.orgConfig)
+      .where(eq(schema.orgConfig.organizationId, orgId))
+      .limit(1);
+    const v = rows[0]?.aiModel?.trim();
+    return v && v.length > 0 ? v : null;
   }
 
   // Idempotently seed the Operational Tender Validation Team KPI catalog (the

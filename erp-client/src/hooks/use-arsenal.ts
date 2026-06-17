@@ -20,6 +20,9 @@ import type {
   CalendarListResultDto,
   ConnectedGoogleAccountDto,
   SetGoogleDefaultsDto,
+  SetDefaultMailboxDto,
+  AiEngineConfigDto,
+  UpdateAiEngineDto,
 } from '@evertrust/shared';
 import { ApiError, api, type UpsertOrgSenderBody } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
@@ -232,6 +235,19 @@ export function useSetGoogleDefaults() {
   });
 }
 
+// Set the org's SINGLE default mailbox (used for both Gmail send + Calendar). The
+// endpoint returns the resolved account list, so seed the cache directly (no
+// refetch). The single-mailbox model that supersedes useSetGoogleDefaults.
+export function useSetDefaultMailbox() {
+  const queryClient = useQueryClient();
+  return useMutation<ConnectedGoogleAccountDto[], ApiError, SetDefaultMailboxDto>({
+    mutationFn: (input) => api.google.setDefaultMailbox(input),
+    onSuccess: (accounts) => {
+      queryClient.setQueryData(queryKeys.google.accounts(), accounts);
+    },
+  });
+}
+
 // Disconnect a Google account by id. Returns the resolved account list (same cache
 // seed as set-defaults). Surfaces server guards to the caller as an ApiError.
 export function useDisconnectGoogleAccount() {
@@ -249,6 +265,28 @@ export function useDisconnectGoogleAccount() {
 export function useTestN8n() {
   return useMutation<TestN8nResultDto, ApiError, void>({
     mutationFn: () => api.arsenal.testN8n(),
+  });
+}
+
+// The org's resolved AI engine config (model + gateway). Backs the Configuration >
+// AI engine card. Each field is null when unset → the product default.
+export function useAiEngineConfig() {
+  return useQuery<AiEngineConfigDto, ApiError>({
+    queryKey: queryKeys.arsenal.aiEngine(),
+    queryFn: ({ signal }) => api.arsenal.getAiEngine(signal),
+    refetchOnWindowFocus: true,
+  });
+}
+
+// Partial-update the AI engine config. Seeds the cache with the freshly-resolved
+// value so the form reflects the saved model/gateway immediately.
+export function useUpdateAiEngineConfig() {
+  const queryClient = useQueryClient();
+  return useMutation<AiEngineConfigDto, ApiError, UpdateAiEngineDto>({
+    mutationFn: (input) => api.arsenal.updateAiEngine(input),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(queryKeys.arsenal.aiEngine(), saved);
+    },
   });
 }
 

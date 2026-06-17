@@ -16,6 +16,7 @@ import { memoryStorage } from 'multer';
 import { z } from 'zod';
 import type { Request } from 'express';
 import type {
+  AiEngineConfigDto,
   CalendarListResultDto,
   LeadStatsDto,
   OrgSenderDto,
@@ -33,7 +34,11 @@ import {
   MAX_SIGNATURE_BYTES,
   SignatureAssetsService,
 } from './signature-assets.service';
-import { UpdateWorkflowConfigBodyDto, UpsertOrgSenderBodyDto } from './arsenal.dto';
+import {
+  UpdateAiEngineBodyDto,
+  UpdateWorkflowConfigBodyDto,
+  UpsertOrgSenderBodyDto,
+} from './arsenal.dto';
 
 // The JSON body shape for the link-based path: { url: <a valid URL> }. Validated
 // manually (not the global ZodValidationPipe) because this route also accepts a
@@ -107,6 +112,33 @@ export class WorkflowConfigController {
     const after = await this.workflowConfig.update(body, orgId);
     setAuditContext(req, {
       entity: 'workflow_config',
+      action: 'UPDATE',
+      after,
+    });
+    return after;
+  }
+
+  // The caller org's resolved AI engine config (per-org model + gateway, each null when
+  // unset → product default). Read-only → not audited.
+  @RequirePermissions('admin:config')
+  @Get('arsenal/config/ai-engine')
+  getAiEngine(@OrgId() orgId: string): Promise<AiEngineConfigDto> {
+    return this.workflowConfig.getAiEngine(orgId);
+  }
+
+  // Apply a partial AI engine update (a value sets it, null/"" clears it to the product
+  // default, an omitted field is unchanged) on the caller org's org_config row. Returns
+  // the freshly resolved config. Audited.
+  @RequirePermissions('admin:config')
+  @Put('arsenal/config/ai-engine')
+  async updateAiEngine(
+    @Body() body: UpdateAiEngineBodyDto,
+    @OrgId() orgId: string,
+    @Req() req: Request,
+  ): Promise<AiEngineConfigDto> {
+    const after = await this.workflowConfig.updateAiEngine(orgId, body);
+    setAuditContext(req, {
+      entity: 'org_config',
       action: 'UPDATE',
       after,
     });

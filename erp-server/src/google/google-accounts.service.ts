@@ -35,6 +35,14 @@ export interface GoogleCallbackTokens {
 // failure must NEVER block deleting the row from our DB.
 const GOOGLE_REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
 
+// Calendar scopes that qualify the single default mailbox for Calendar operations.
+// The default mailbox always has gmail.send; it can ALSO serve Calendar only when its
+// grant includes one of these (incremental authorization keeps scopes additive).
+const CALENDAR_SCOPES = [
+  'https://www.googleapis.com/auth/calendar.events',
+  'https://www.googleapis.com/auth/calendar.readonly',
+] as const;
+
 // PER-ORG connected Google accounts: list/upsert/set-defaults/disconnect, plus the
 // token resolver other services use to get a live access token for the org's chosen
 // default Gmail / Calendar account. Every method is org-scoped — a token resolve only
@@ -55,8 +63,10 @@ export class GoogleAccountsService {
   ) {}
 
   // The org's connected accounts as wire DTOs: a row joined to its connecting user's
-  // role, with isDefaultGmail/isDefaultCalendar derived from org_config. Never exposes
-  // any *_enc field. Ordered newest-connected first.
+  // role, with `isDefault` derived from org_config.defaultMailboxAccountId (the SINGLE
+  // default mailbox). The legacy isDefaultGmail/isDefaultCalendar fields mirror isDefault
+  // so the current web keeps working until its rewrite. Never exposes any *_enc field.
+  // Ordered newest-connected first.
   async listForOrg(orgId: string): Promise<ConnectedGoogleAccountDto[]> {
     const rows = await this.db
       .select({
@@ -77,24 +87,29 @@ export class GoogleAccountsService {
     return rows
       .slice()
       .sort((a, b) => b.connectedAt.getTime() - a.connectedAt.getTime())
-      .map((r) => ({
-        id: r.id,
-        email: r.email,
-        displayName: r.displayName ?? null,
-        role: r.role as UserRole,
-        scopes: r.scopes,
-        status: r.status as GoogleAccountStatus,
-        isDefaultGmail: orgRow.defaultGmailAccountId === r.id,
-        isDefaultCalendar: orgRow.defaultCalendarAccountId === r.id,
-        connectedAt: r.connectedAt.toISOString(),
-      }));
+      .map((r) => {
+        const isDefault = orgRow.defaultMailboxAccountId === r.id;
+        return {
+          id: r.id,
+          email: r.email,
+          displayName: r.displayName ?? null,
+          role: r.role as UserRole,
+          scopes: r.scopes,
+          status: r.status as GoogleAccountStatus,
+          isDefault,
+          // Legacy fields mirror the single default until the web rewrite drops them.
+          isDefaultGmail: isDefault,
+          isDefaultCalendar: isDefault,
+          connectedAt: r.connectedAt.toISOString(),
+        };
+      });
   }
 
   // Persist the result of a completed OAuth callback. Encrypts the refresh token (+
   // access token when present) and upserts on (organization_id, google_sub) so a
   // re-connect of the same Google account updates its tokens in place. AFTER the
-  // upsert, if the org has no default Gmail / Calendar account yet, this freshly
-  // connected account becomes that default (mirrors the senders "first one becomes
+  // upsert, if the org has no default mailbox yet, this freshly connected account
+  // becomes the SINGLE default mailbox (mirrors the senders "first one becomes
   // default" behaviour).
   async upsertFromCallback(
     orgId: string,
@@ -156,11 +171,8 @@ export class GoogleAccountsService {
     if (!savedId) return;
 
     const orgRow = await this.orgRow(orgId);
-    const set: Partial<typeof schema.orgConfig.$inferInsert> = {};
-    if (!orgRow.defaultGmailAccountId) set.defaultGmailAccountId = savedId;
-    if (!orgRow.defaultCalendarAccountId) set.defaultCalendarAccountId = savedId;
-    if (Object.keys(set).length > 0) {
-      await this.persistOrg(orgId, set);
+    if (!orgRow.defaultMailboxAccountId) {
+      await this.persistOrg(orgId, { defaultMailboxAccountId: savedId });
     }
   }
 
@@ -191,6 +203,18 @@ export class GoogleAccountsService {
     return this.listForOrg(orgId);
   }
 
+  // Set (or clear) the org's SINGLE default mailbox. `null` clears the pointer; a uuid
+  // must reference a google_accounts row in THIS org (else 400 'Unknown Google account').
+  // Writes org_config.default_mailbox_account_id. Returns the refreshed list.
+  async setDefaultMailbox(
+    orgId: string,
+    accountId: string | null,
+  ): Promise<ConnectedGoogleAccountDto[]> {
+    if (accountId !== null) await this.assertOwned(orgId, accountId);
+    await this.persistOrg(orgId, { defaultMailboxAccountId: accountId });
+    return this.listForOrg(orgId);
+  }
+
   // Disconnect (delete) an account the org owns. FIRST null out any org_config default
   // pointer that referenced it — the FK is ON DELETE NO ACTION, so deleting while a
   // pointer still references it would throw. Then best-effort revoke the token at
@@ -205,9 +229,12 @@ export class GoogleAccountsService {
       throw new NotFoundException('Google account not found');
     }
 
-    // Clear default pointers that reference this row BEFORE deleting (FK guard).
+    // Clear default pointers that reference this row BEFORE deleting (FK guard) — the
+    // single default mailbox plus the legacy two pointers, any of which may still point
+    // at the row being removed.
     const orgRow = await this.orgRow(orgId);
     const set: Partial<typeof schema.orgConfig.$inferInsert> = {};
+    if (orgRow.defaultMailboxAccountId === id) set.defaultMailboxAccountId = null;
     if (orgRow.defaultGmailAccountId === id) set.defaultGmailAccountId = null;
     if (orgRow.defaultCalendarAccountId === id) {
       set.defaultCalendarAccountId = null;
@@ -231,24 +258,33 @@ export class GoogleAccountsService {
     return this.listForOrg(orgId);
   }
 
-  // Resolve a LIVE access token for the org's default Gmail / Calendar account:
-  // org_config pointer -> the google_accounts row (same org) -> decrypt refresh ->
-  // refresh at Google. Returns null on ANY failure (no default set, missing row,
-  // decrypt error, refresh error) and logs a warn — callers degrade gracefully.
+  // Resolve a LIVE access token for the org's SINGLE default mailbox:
+  // org_config.defaultMailboxAccountId -> the google_accounts row (same org) ->
+  // decrypt refresh -> refresh at Google. For kind==='gmail' the default mailbox is
+  // always eligible (it has gmail.send). For kind==='calendar' the SAME mailbox is
+  // used ONLY when its grant includes a calendar scope; if it has none, return null so
+  // the caller falls back (e.g. to the deployment-wide token). Returns null on ANY
+  // failure (no default set, missing row, no calendar scope, decrypt/refresh error) and
+  // logs a warn — callers degrade gracefully.
   async getAccessTokenForOrg(
     orgId: string,
     kind: 'gmail' | 'calendar',
   ): Promise<{ accessToken: string; account: { id: string; email: string } } | null> {
     try {
       const orgRow = await this.orgRow(orgId);
-      const accountId =
-        kind === 'gmail'
-          ? orgRow.defaultGmailAccountId
-          : orgRow.defaultCalendarAccountId;
+      const accountId = orgRow.defaultMailboxAccountId;
       if (!accountId) return null;
 
       const row = await this.ownedRow(orgId, accountId);
       if (!row) return null;
+
+      // Calendar needs the default mailbox to actually carry a calendar scope.
+      if (
+        kind === 'calendar' &&
+        !row.scopes.some((s) => CALENDAR_SCOPES.includes(s as never))
+      ) {
+        return null;
+      }
 
       const refreshToken = this.crypto.decrypt(row.refreshTokenEnc);
       const { accessToken, expiryDate } =

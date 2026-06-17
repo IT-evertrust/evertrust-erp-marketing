@@ -46,6 +46,9 @@ import {
   OrgSenderDto,
   ConnectedGoogleAccountDto,
   SetGoogleDefaultsDto,
+  SetDefaultMailboxDto,
+  AiEngineConfigDto,
+  UpdateAiEngineDto,
   LeadStatsDto,
   TestN8nResultDto,
   RotateIngestTokenResultDto,
@@ -817,6 +820,24 @@ export const api = {
         `/arsenal/config/senders/${encodeURIComponent(key)}`,
         { method: 'DELETE', schema: OrgSenderListDto },
       ),
+
+    // The org's resolved AI engine config (model + gateway label). Each is null when
+    // unset → the product default. Backs the Configuration > AI engine card.
+    getAiEngine: (signal?: AbortSignal) =>
+      request<z.infer<typeof AiEngineConfigDto>>('/arsenal/config/ai-engine', {
+        schema: AiEngineConfigDto,
+        signal,
+      }),
+
+    // Partial-update the AI engine config: a value sets it, null clears it back to
+    // the product default, an omitted field is left untouched. Returns the resolved
+    // config.
+    updateAiEngine: (input: z.infer<typeof UpdateAiEngineDto>) =>
+      request<z.infer<typeof AiEngineConfigDto>>('/arsenal/config/ai-engine', {
+        method: 'PUT',
+        body: UpdateAiEngineDto.parse(input),
+        schema: AiEngineConfigDto,
+      }),
   },
 
   // ---- Per-org Google connect (Gmail / Calendar OAuth) ----
@@ -845,6 +866,16 @@ export const api = {
       request<ConnectedGoogleAccountDto[]>('/google/accounts/defaults', {
         method: 'POST',
         body: SetGoogleDefaultsDto.parse(body),
+        schema: ConnectedGoogleAccountListDto,
+      }),
+
+    // Set the org's SINGLE default mailbox (used for both Gmail send + Calendar).
+    // `accountId: null` clears it. Returns the resolved account list (the single
+    // `isDefault` flag reflected). admin:config. Supersedes setDefaults at the UI.
+    setDefaultMailbox: (body: SetDefaultMailboxDto) =>
+      request<ConnectedGoogleAccountDto[]>('/google/accounts/default', {
+        method: 'POST',
+        body: SetDefaultMailboxDto.parse(body),
         schema: ConnectedGoogleAccountListDto,
       }),
 

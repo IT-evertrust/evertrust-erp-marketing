@@ -131,6 +131,8 @@ export const queryKeys = {
     calendars: () => ['arsenal', 'calendars'] as const,
     // Org-scoped lead/prospect/suppression tallies for the Configuration metric strip.
     leadStats: () => ['arsenal', 'lead-stats'] as const,
+    // The org's resolved AI engine config (Configuration > AI engine card).
+    aiEngine: () => ['arsenal', 'ai-engine'] as const,
     // Phase 7+: live per-stage n8n execution status.
     executions: () => ['arsenal', 'executions'] as const,
     // Marketing report, scoped by period (day/week/month) + optional campaign.

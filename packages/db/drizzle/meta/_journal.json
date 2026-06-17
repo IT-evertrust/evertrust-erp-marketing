@@ -232,6 +232,13 @@
       "when": 1780580000000,
       "tag": "0032_drop_tender_erp",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1780581000000,
+      "tag": "0033_config_mailbox_ai",
+      "breakpoints": true
     }
   ]
 }
