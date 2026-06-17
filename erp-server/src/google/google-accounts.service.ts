@@ -272,17 +272,40 @@ export class GoogleAccountsService {
   ): Promise<{ accessToken: string; account: { id: string; email: string } } | null> {
     try {
       const orgRow = await this.orgRow(orgId);
-      const accountId = orgRow.defaultMailboxAccountId;
-      if (!accountId) return null;
 
-      const row = await this.ownedRow(orgId, accountId);
-      if (!row) return null;
+      // 1) Prefer the explicit default-mailbox pointer.
+      let row = orgRow.defaultMailboxAccountId
+        ? await this.ownedRow(orgId, orgRow.defaultMailboxAccountId)
+        : undefined;
+      if (orgRow.defaultMailboxAccountId && !row) {
+        this.logger.warn(
+          `getAccessTokenForOrg(${orgId}): default mailbox ${orgRow.defaultMailboxAccountId} no longer exists — falling back to a connected account`,
+        );
+      }
 
-      // Calendar needs the default mailbox to actually carry a calendar scope.
-      if (
-        kind === 'calendar' &&
-        !row.scopes.some((s) => CALENDAR_SCOPES.includes(s as never))
-      ) {
+      // 2) Fallback: when there is no (valid) default pointer — or the default
+      //    can't serve this kind (calendar without a calendar scope) — resolve the
+      //    org's own CONNECTED account(s). So a single connected mailbox works even
+      //    before anyone explicitly "sets default", and a stale pointer self-heals.
+      if (!row || (kind === 'calendar' && !this.hasCalendarScope(row))) {
+        const connected = await this.connectedRows(orgId);
+        const pick =
+          kind === 'calendar'
+            ? connected.find((r) => this.hasCalendarScope(r))
+            : connected[0];
+        if (pick) row = pick;
+      }
+
+      if (!row) {
+        this.logger.warn(
+          `getAccessTokenForOrg(${orgId}, ${kind}): no connected Google account in this org`,
+        );
+        return null;
+      }
+      if (kind === 'calendar' && !this.hasCalendarScope(row)) {
+        this.logger.warn(
+          `getAccessTokenForOrg(${orgId}, calendar): connected account ${row.email} has no calendar scope — reconnect to grant it`,
+        );
         return null;
       }
 
@@ -297,11 +320,36 @@ export class GoogleAccountsService {
       return { accessToken, account: { id: row.id, email: row.email } };
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown error';
+      // Most often a decrypt failure (the GOOGLE_TOKEN_ENC_KEY changed since the
+      // token was stored) or a refused refresh (token revoked) — both fixed by
+      // reconnecting the account. Logged so the cause is visible in the API logs.
       this.logger.warn(
-        `getAccessTokenForOrg(${orgId}, ${kind}) failed: ${msg}`,
+        `getAccessTokenForOrg(${orgId}, ${kind}) token error: ${msg} — reconnect the Google account`,
       );
       return null;
     }
+  }
+
+  // True when an account's grant carries a Calendar scope.
+  private hasCalendarScope(row: GoogleAccountRow): boolean {
+    return row.scopes.some((s) => CALENDAR_SCOPES.includes(s as never));
+  }
+
+  // The org's CONNECTED Google accounts, newest-connected first. The token-resolve
+  // fallback when no valid default-mailbox pointer is set.
+  private async connectedRows(orgId: string): Promise<GoogleAccountRow[]> {
+    const rows = await this.db
+      .select()
+      .from(schema.googleAccounts)
+      .where(
+        and(
+          eq(schema.googleAccounts.organizationId, orgId),
+          eq(schema.googleAccounts.status, 'CONNECTED'),
+        ),
+      );
+    return rows
+      .slice()
+      .sort((a, b) => b.connectedAt.getTime() - a.connectedAt.getTime());
   }
 
   // ----- helpers -----------------------------------------------------------

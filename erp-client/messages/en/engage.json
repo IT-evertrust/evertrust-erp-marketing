@@ -42,6 +42,18 @@
     "notInterested": "Not interested",
     "emptyColumn": "Nothing here yet"
   },
+  "filters": {
+    "all": "All",
+    "interested": "Interested",
+    "unsure": "Unsure",
+    "notInterested": "Not interested",
+    "empty": "No replies match this filter."
+  },
+  "inbox": {
+    "selectPrompt": "Select a reply to view it",
+    "notLinked": "This reply isn't linked to a prospect, so there's no conversation thread to show.",
+    "noDraft": "No suggested reply for this classification — review the message and reason above."
+  },
   "verdict": {
     "INTERESTED": "Interested",
     "NOT_INTERESTED": "Not interested",

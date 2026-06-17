@@ -42,6 +42,18 @@
     "notInterested": "Kein Interesse",
     "emptyColumn": "Noch nichts hier"
   },
+  "filters": {
+    "all": "Alle",
+    "interested": "Interessiert",
+    "unsure": "Unsicher",
+    "notInterested": "Kein Interesse",
+    "empty": "Keine Antworten passen zu diesem Filter."
+  },
+  "inbox": {
+    "selectPrompt": "Wählen Sie eine Antwort zur Ansicht",
+    "notLinked": "Diese Antwort ist keinem Interessenten zugeordnet, daher gibt es keinen Konversationsverlauf.",
+    "noDraft": "Kein Antwortvorschlag für diese Klassifizierung — prüfen Sie die Nachricht und die Begründung oben."
+  },
   "verdict": {
     "INTERESTED": "Interessiert",
     "NOT_INTERESTED": "Kein Interesse",
