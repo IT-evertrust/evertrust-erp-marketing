@@ -155,7 +155,7 @@ async function loadNiches(datalistEl) {
     datalistEl.innerHTML = (Array.isArray(rows) ? rows : [])
       .map(n => {
         const group = n.industryName ? n.industryName : "Unassigned";
-        return `<option value="${(n.name || "").replace(/"/g, "&quot;")}" label="${group} ▸ ${(n.name || "").replace(/"/g, "&quot;")}"></option>`;
+        return `<option value="${(n.name || "").replace(/"/g, "&quot;")}" label="${group} ${(n.name || "").replace(/"/g, "&quot;")}"></option>`;
       })
       .join("");
     datalistEl._niches = rows;
@@ -258,12 +258,12 @@ function mountAim(mountEl) {
 
   const btn = document.createElement("button");
   btn.className = "aim";
-  btn.innerHTML = `<span class="xhair">◎</span>&nbsp; Aim &amp; Launch`;
+  btn.innerHTML = `<span class="xhair"></span>&nbsp; Aim &amp; Launch`;
   mountEl.appendChild(btn);
 
   const pbtn = document.createElement("button");
   pbtn.className = "pipeline";
-  pbtn.innerHTML = `▶&nbsp; Run full pipeline`;
+  pbtn.innerHTML = `&nbsp; Run full pipeline`;
   mountEl.appendChild(pbtn);
 
   const backdrop = document.createElement("div");
@@ -486,7 +486,7 @@ async function runPipeline(campaign) {
   // ③–⑥ the agent stages, in order.
   for (const s of PIPELINE_STEPS) {
     setStep(s.key, "run", "running…");
-    if (s.key === "satellite") startProgress("🛰️ Lead Satellite — searching & scraping (SearXNG)", 190000);
+    if (s.key === "satellite") startProgress("Lead Satellite — searching & scraping (SearXNG)", 190000);
     const r = await postJson(s.url, s.body(campaign));
     if (s.key === "satellite") finishProgress();
     if (r.ok) {
@@ -497,7 +497,7 @@ async function runPipeline(campaign) {
         `<div class="err-box">${s.name} isn't running. Start the agents: <code>erp-agents/scripts/run-pipeline-agents.sh</code></div>`);
       notifyAgentError(s.key, "service offline");
     } else {
-      setStep(s.key, "err", "failed", `<div class="err-box">⚠ ${r.error}</div>`);
+      setStep(s.key, "err", "failed", `<div class="err-box">${r.error}</div>`);
       notifyAgentError(s.key, r.error);
     }
   }
@@ -601,15 +601,15 @@ function outputsStripHtml(c) {
   const sentN = (CAMPAIGN_SENT[c.id] || []).length;
   const chips = [];
   chips.push(o.ammoAt
-    ? { cls: "done", t: "📄 Ammo doc ✓", act: "openDoc" }
-    : { cls: "todo", t: "📄 Ammo doc" });
+    ? { cls: "done", t: "Ammo doc ", act: "openDoc" }
+    : { cls: "todo", t: "Ammo doc" });
   chips.push((o.satelliteAt || leadN)
-    ? { cls: "done", t: `🛰️ ${o.satelliteCount || leadN} leads`, act: "openSheet" }
-    : { cls: "todo", t: "🛰️ leads" });
-  if (o.ammoAt && leadN) chips.push({ cls: "done", t: "✉️ drafts", act: "openDrafts" });
-  if (o.ragAt != null) chips.push({ cls: o.ragDrafts ? "done" : "warn", t: `✉️ ${o.ragDrafts || 0} RAG drafted` });
-  if (o.glockAt != null) chips.push({ cls: o.glockSent ? "done" : "warn", t: `📤 ${o.glockSent || 0} sent (Glock)` });
-  if (sentN) chips.push({ cls: "done", t: `📧 ${sentN} test sent`, act: "openSent" });
+    ? { cls: "done", t: `${o.satelliteCount || leadN} leads`, act: "openSheet" }
+    : { cls: "todo", t: "leads" });
+  if (o.ammoAt && leadN) chips.push({ cls: "done", t: "drafts", act: "openDrafts" });
+  if (o.ragAt != null) chips.push({ cls: o.ragDrafts ? "done" : "warn", t: `${o.ragDrafts || 0} RAG drafted` });
+  if (o.glockAt != null) chips.push({ cls: o.glockSent ? "done" : "warn", t: `${o.glockSent || 0} sent (Glock)` });
+  if (sentN) chips.push({ cls: "done", t: `${sentN} test sent`, act: "openSent" });
   return `<div class="out-strip">${chips.map(i =>
     `<span class="out-chip ${i.cls}"${i.act ? ` data-act="${i.act}" role="button" tabindex="0"` : ""}>${i.t}</span>`).join("")}</div>`;
 }
@@ -625,7 +625,7 @@ function renderSentLog(c) {
   if (title) title.textContent = `Test sends · ${c.project || c.name || "campaign"} (${rows.length})`;
   body.innerHTML = `<div class="muted" style="margin-bottom:10px">All test emails recorded for <b>${esc(c.project || c.name || "")}</b> — scoped to this campaign only.</div>` +
     (rows.length ? `<div class="sendlog">${rows.map(r =>
-      `<div class="send-row"><span class="send-ok">✓ sent</span> <span class="send-to">${esc(r.to)}</span> <span class="send-subj">[${esc(r.subject)}]</span> <span class="muted">— for ${esc(r.company)} · ${esc(fmtTime(r.ts))}</span></div>`).join("")}</div>`
+      `<div class="send-row"><span class="send-ok">sent</span> <span class="send-to">${esc(r.to)}</span> <span class="send-subj">[${esc(r.subject)}]</span> <span class="muted">— for ${esc(r.company)} · ${esc(fmtTime(r.ts))}</span></div>`).join("")}</div>`
       : '<div class="muted">No test sends recorded yet.</div>');
 }
 
@@ -700,7 +700,7 @@ async function quickRun(a) {
   if (panelTitle) panelTitle.innerHTML =
     `Run ${esc(a.name)} · ${esc(a.pkg)}${scope} &nbsp; <a style="font-size:13px" href="agent.html?key=${a.key}">open page →</a>`;
   if (panelBody) panelBody.innerHTML = '<div class="status">waiting for ' + esc(a.url) + ' …</div>';
-  if (a.key === "lead") startProgress("🛰️ Lead Satellite — searching & scraping (SearXNG)", 190000);
+  if (a.key === "lead") startProgress("Lead Satellite — searching & scraping (SearXNG)", 190000);
   try {
     const rec = await runAgent(a);
     if (a.key === "lead") finishProgress();
@@ -715,7 +715,7 @@ async function quickRun(a) {
     } else {
       if (dot) dot.className = "dot err";
       if (st) st.textContent = "failed";
-      if (panelBody) panelBody.innerHTML = `<div class="err-box">⚠ ${esc(rec.error)}</div>`;
+      if (panelBody) panelBody.innerHTML = `<div class="err-box">${esc(rec.error)}</div>`;
       notifyAgentError(a.key, rec.error);
     }
   } finally {
@@ -808,7 +808,7 @@ function captureAgentOutput(key, data) {
       out.satelliteVerified = merged.filter(l => l.emailVerified && l.email).length;
       renderLeadsSidebar(merged);
       if (SELECTED_CAMPAIGN) renderCampaignView(SELECTED_CAMPAIGN);   // refresh the Excel table
-      toast(`🛰️ Lead Satellite — +${incoming.length} this run · ${merged.length} in table`, "ok");
+      toast(`Lead Satellite — +${incoming.length} this run · ${merged.length} in table`, "ok");
     } else {
       // Satellite ran but returned no leads — usually the search backend is down.
       const list = document.getElementById("leads-list");
@@ -818,9 +818,9 @@ function captureAgentOutput(key, data) {
         const why = data.status === "search_unavailable"
           ? "Search backend unavailable (SearXNG down / DuckDuckGo rate-limited)."
           : (data.error || "No leads returned.");
-        list.innerHTML = `<div class="err-box">🛰️ Satellite ran (status: <b>${esc(data.status || "?")}</b>, ${data.queriesRun ?? 0} queries) but found <b>0 leads</b>.<br>${esc(why)}</div>`;
+        list.innerHTML = `<div class="err-box">Satellite ran (status: <b>${esc(data.status || "?")}</b>, ${data.queriesRun ?? 0} queries) but found <b>0 leads</b>.<br>${esc(why)}</div>`;
       }
-      toast(`🛰️ Satellite found 0 leads (${esc(data.status || "?")})`, "warn");
+      toast(`Satellite found 0 leads (${esc(data.status || "?")})`, "warn");
     }
   }
 
@@ -830,14 +830,14 @@ function captureAgentOutput(key, data) {
     renderLeadsActions();
     // The forged doc now persists for this campaign — show it right above the leads sheet.
     if (SELECTED_CAMPAIGN) renderCampaignView(SELECTED_CAMPAIGN);
-    toast("📄 Ammo Forge — outreach doc ready (click the 📄 badge to reopen)", "ok");
+    toast("Ammo Forge — outreach doc ready (click the badge to reopen)", "ok");
   }
 
   if (key === "rag") {
     const n = ragDraftCount(data);
     out.ragDrafts = n; out.ragAt = now;
-    toast(n ? `✉️ RAG — ${n} email${n > 1 ? "s" : ""} drafted (nothing sent)`
-            : "✉️ RAG ran — no drafts produced", n ? "ok" : "warn");
+    toast(n ? `RAG — ${n} email${n > 1 ? "s" : ""} drafted (nothing sent)`
+            : "RAG ran — no drafts produced", n ? "ok" : "warn");
   }
 
   if (key === "reply" || key === "glock") {
@@ -845,8 +845,8 @@ function captureAgentOutput(key, data) {
     const real = typeof data.emailsSent === "number" && data.emailsSent > 0;  // live send vs dry handle
     out.glockSent = n; out.glockAt = now;
     const verb = real ? "sent" : "handled (dry-run)";
-    toast(n ? `📤 Reply Glock — ${n} repl${n > 1 ? "ies" : "y"} ${verb}`
-            : "📤 Reply Glock ran — nothing to send", n ? "ok" : "warn");
+    toast(n ? `Reply Glock — ${n} repl${n > 1 ? "ies" : "y"} ${verb}`
+            : "Reply Glock ran — nothing to send", n ? "ok" : "warn");
   }
 
   persistCampaignState();
@@ -856,7 +856,7 @@ function captureAgentOutput(key, data) {
 // Error-path notification, called by the run drivers when a run fails.
 function notifyAgentError(key, error) {
   const a = AGENT_MAP[key];
-  toast(`⚠️ ${a ? a.name : key} failed — ${String(error || "error").slice(0, 80)}`, "warn", 7000);
+  toast(`${a ? a.name : key} failed — ${String(error || "error").slice(0, 80)}`, "warn", 7000);
 }
 
 function renderLeadsSidebar(leads) {
@@ -890,12 +890,12 @@ function renderLeadsActions() {
   const tpl = CAMPAIGN_TEMPLATES[cid];
   const sentCount = (CAMPAIGN_SENT[cid] || []).length;
   let html = "";
-  if (leads.length) html += `<button class="ghost mini" id="btn-sheet">📄 Leads sheet</button>`;
-  if (tpl) html += `<button class="ghost mini" id="btn-doc">📄 Template Doc</button>`;
-  if (leads.length && tpl) html += `<button class="mini" id="btn-draft">✉️ Draft outreach (${leads.filter(l => l.emailVerified && l.email).length})</button>`;
+  if (leads.length) html += `<button class="ghost mini" id="btn-sheet">Leads sheet</button>`;
+  if (tpl) html += `<button class="ghost mini" id="btn-doc">Template Doc</button>`;
+  if (leads.length && tpl) html += `<button class="mini" id="btn-draft">Draft outreach (${leads.filter(l => l.emailVerified && l.email).length})</button>`;
   else if (leads.length && !tpl) html += `<div class="muted" style="font-size:11px">Run <b>Ammo Forge</b> to draft emails from these leads.</div>`;
-  if (leads.length) html += `<button class="mini" id="btn-testsend">📧 Test send (${leads.length})</button>`;
-  if (sentCount) html += `<div class="sent-chip">✉ ${sentCount} test email${sentCount > 1 ? "s" : ""} sent · this campaign only</div>`;
+  if (leads.length) html += `<button class="mini" id="btn-testsend">Test send (${leads.length})</button>`;
+  if (sentCount) html += `<div class="sent-chip">${sentCount} test email${sentCount > 1 ? "s" : ""} sent · this campaign only</div>`;
   actions.innerHTML = html;
   const sh = document.getElementById("btn-sheet"); if (sh) sh.onclick = () => renderCampaignView(SELECTED_CAMPAIGN);
   const d = document.getElementById("btn-doc"); if (d) d.onclick = () => renderAmmoDoc(tpl);
@@ -956,7 +956,7 @@ function ammoDocHtml(templates) {
   const blocks = parseTemplateBlocks(templates.coldEmail);
   const news = templates.newsBrief || "";
   return `<div class="gdoc">
-      <div class="gdoc-bar">📄 Outreach Templates — ${esc(SELECTED_CAMPAIGN ? (SELECTED_CAMPAIGN.project || "") : "")}
+      <div class="gdoc-bar">Outreach Templates — ${esc(SELECTED_CAMPAIGN ? (SELECTED_CAMPAIGN.project || "") : "")}
         <span class="muted">· Google Docs preview (not created in Drive)</span></div>
       <div class="gdoc-page">
         <h1>Outreach Templates</h1>
@@ -1014,14 +1014,14 @@ function mountLlmToggle() {
   const btn = document.getElementById("llm-toggle");
   if (!btn) return;
   const sync = () => {
-    btn.textContent = "🧠 LLM: " + (USE_LLM ? "on" : "off");
+    btn.textContent = "LLM: " + (USE_LLM ? "on" : "off");
     btn.classList.toggle("on", USE_LLM);
     try { localStorage.setItem("mockui_use_llm", USE_LLM ? "1" : "0"); } catch (e) { /* ignore */ }
   };
   btn.addEventListener("click", () => {
     USE_LLM = !USE_LLM;
     sync();
-    toast(USE_LLM ? "🧠 LLM ON — all agents call the hermes gateway (slower, real output)"
+    toast(USE_LLM ? "LLM ON — all agents call the hermes gateway (slower, real output)"
                   : "LLM OFF — all agents use offline stubs (fast)", USE_LLM ? "ok" : "warn");
   });
   sync();
@@ -1183,7 +1183,7 @@ function downloadLeadsCsv(c) {
   a.href = url; a.download = `leads_${slugify(c.project || c.name || "campaign")}.csv`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  toast(`⬇ Exported ${leads.length} leads to CSV`, "ok");
+  toast(`Exported ${leads.length} leads to CSV`, "ok");
 }
 
 function leadSheetHtml(c, leads) {
@@ -1193,9 +1193,9 @@ function leadSheetHtml(c, leads) {
     ? ` · from ${o.satelliteRuns} run${o.satelliteRuns > 1 ? "s" : ""}${o.satelliteAt ? " · last " + esc(fmtTime(o.satelliteAt)) : ""}`
     : " · sample folder";
   return `<div class="sheet-head">
-      <span class="sheet-cap">📄 Leads sheet · ${esc(c.project || c.name || "campaign")} · ${leads.length} leads · ${verified} with email${runMeta}</span>
+      <span class="sheet-cap">Leads sheet · ${esc(c.project || c.name || "campaign")} · ${leads.length} leads · ${verified} with email${runMeta}</span>
       <span class="sheet-actions">
-        <button class="ghost mini" id="btn-csv">⬇ CSV</button>
+        <button class="ghost mini" id="btn-csv">CSV</button>
         <button class="ghost mini" id="btn-expand">${SHEET_EXPANDED ? "⤡ Collapse" : "⤢ Expand"}</button>
       </span>
     </div>
@@ -1204,7 +1204,7 @@ function leadSheetHtml(c, leads) {
     <tbody>${leads.map(l => `<tr>${_SHEET_COLS.map(([h, k]) => {
       if (k === "status") return `<td><span class="st-pill ${statusClass(l.status)}">${esc(l.status || "")}</span></td>`;
       if (k === "email") return `<td>${l.email
-        ? esc(l.email) + (l.emailVerified ? ' <span class="email-ok" title="verified">✓</span>' : '')
+        ? esc(l.email) + (l.emailVerified ? ' <span class="email-ok" title="verified"></span>' : '')
         : '<span class="muted">—</span>'}</td>`;
       if (k === "website") return `<td class="muted">${esc(String(l.website || "").replace(/^https?:\/\/(www\.)?/, ""))}</td>`;
       const v = l[k]; return `<td>${v != null && v !== "" ? esc(v) : '<span class="muted">·</span>'}</td>`;
@@ -1261,7 +1261,7 @@ async function simulateTestSend(leads, campaign) {
     CAMPAIGN_SENT[cid].push({ to: TEST_TO, subject: TEST_SUBJECT, company: l.companyName || "lead", ts: new Date().toISOString() });
     const row = document.createElement("div");
     row.className = "send-row";
-    row.innerHTML = `<span class="send-ok">✓ sent</span> <span class="send-to">${esc(TEST_TO)}</span> <span class="send-subj">[${esc(TEST_SUBJECT)}]</span> <span class="muted">— for ${esc(l.companyName || "lead")}</span>`;
+    row.innerHTML = `<span class="send-ok">sent</span> <span class="send-to">${esc(TEST_TO)}</span> <span class="send-subj">[${esc(TEST_SUBJECT)}]</span> <span class="muted">— for ${esc(l.companyName || "lead")}</span>`;
     log.appendChild(row);
     log.scrollTop = log.scrollHeight;
     await new Promise(r => setTimeout(r, 45));
@@ -1313,7 +1313,7 @@ function applyTheme(t) {
   document.documentElement.setAttribute("data-theme", t);
   try { localStorage.setItem("mockui_theme", t); } catch (e) { /* ignore */ }
   const b = document.getElementById("theme-toggle");
-  if (b) b.textContent = t === "dark" ? "☀️ Light" : "🌙 Dark";
+  if (b) b.textContent = t === "dark" ? "Light" : "Dark";
 }
 function mountThemeToggle() {
   let t = "light";

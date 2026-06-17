@@ -58,7 +58,7 @@
       $("output").innerHTML = renderResult(rec.data);
     } else {
       $("dot").className = "dot err"; $("status").textContent = "failed";
-      $("output").innerHTML = `<div class="err-box">⚠ ${rec.error}</div>`;
+      $("output").innerHTML = `<div class="err-box">${rec.error}</div>`;
     }
     renderHistory();
   }
@@ -82,7 +82,7 @@
         </div>
         <details style="margin-top:8px">
           <summary class="status">view output</summary>
-          ${rec.ok ? renderResult(rec.data) : `<div class="err-box">⚠ ${rec.error}</div>`}
+          ${rec.ok ? renderResult(rec.data) : `<div class="err-box">${rec.error}</div>`}
         </details>
       </div>`).join("");
   }

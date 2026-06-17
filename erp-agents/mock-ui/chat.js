@@ -69,9 +69,9 @@ async function checkConn() {
     const sel = el("model-select");
     sel.innerHTML = ids.map(id => `<option value="${esc(id)}"${id === MODEL ? " selected" : ""}>${esc(id)}</option>`).join("");
     if (!ids.includes(MODEL) && ids.length) { MODEL = ids[0]; sel.value = MODEL; }
-    pill.textContent = "● connected"; pill.className = "conn-pill ok";
+    pill.textContent = "connected"; pill.className = "conn-pill ok";
   } catch (e) {
-    pill.textContent = "● unreachable"; pill.className = "conn-pill bad";
+    pill.textContent = "unreachable"; pill.className = "conn-pill bad";
     el("model-select").innerHTML = `<option>${esc(MODEL)}</option>`;
   }
 }
@@ -132,7 +132,7 @@ async function send() {
     messages.push({ role: "assistant", content: acc });
   } catch (e) {
     out.classList.add("err");
-    out.textContent = "⚠ " + (e.message || String(e)).slice(0, 300);
+    out.textContent = "" + (e.message || String(e)).slice(0, 300);
   } finally {
     out.classList.remove("streaming");
     BUSY = false;
@@ -151,14 +151,14 @@ function promptForKey() {
 function applyTheme(t) {
   document.documentElement.setAttribute("data-theme", t);
   try { localStorage.setItem(LS.theme, t); } catch (e) { /* ignore */ }
-  const b = el("theme-toggle"); if (b) b.textContent = t === "dark" ? "☀️ Light" : "🌙 Dark";
+  const b = el("theme-toggle"); if (b) b.textContent = t === "dark" ? "Light" : "Dark";
 }
 
 // ---- wire up ---------------------------------------------------------------
 function init() {
   applyTheme(localStorage.getItem(LS.theme) || "light");
   el("system-prompt").value = getSystem();
-  addBubble("assistant", "Hi — I'm hermes with full ERP system context loaded. Ask me anything to test the gateway, or click 📋 System context to see/edit what I know.");
+  addBubble("assistant", "Hi — I'm hermes with full ERP system context loaded. Ask me anything to test the gateway, or click System context to see/edit what I know.");
 
   el("send").addEventListener("click", send);
   el("prompt").addEventListener("keydown", e => {
