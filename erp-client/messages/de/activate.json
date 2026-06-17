@@ -3,6 +3,8 @@
   "description": "Nutzt den verbundenen Google Kalender, um belegte und freie Slots zu scannen, vor dem Gespräch zu briefen und es danach auszuwerten.",
   "account": {
     "service": "Google · Kalender",
+    "connected": "Verbunden · {email}",
+    "notConnected": "Nicht verbunden",
     "stats": "{meetings, plural, =0 {Keine Meetings} one {# Meeting} other {# Meetings}} · {slots, plural, =0 {keine freien Slots} one {# freier Slot} other {# freie Slots}}",
     "statsLoading": "Kalender wird synchronisiert…",
     "statsError": "Kalender nicht verfügbar"
@@ -13,23 +15,27 @@
     "after": "After-Sales-Analyse"
   },
   "book": {
+    "notConnectedTitle": "Google Kalender verbinden",
+    "notConnectedBody": "Für diese Organisation ist noch kein Google-Konto mit Kalenderzugriff verbunden. Verbinde eines in der Konfiguration, um hier anstehende Meetings und freie Slots zu sehen.",
+    "connectCta": "Konfiguration öffnen",
     "slots": {
       "title": "Termin wählen",
       "pill": "Google Kalender",
-      "comingSoon": "Terminbuchung kommt bald",
-      "comingSoonBody": "Das Auswählen eines freien Slots und das direkte Buchen in deinen Google Kalender ist noch nicht angebunden. Vorerst ist der Kalender schreibgeschützt — verwalte Buchungen in Google Kalender."
+      "rangeAria": "Freier Slot von {start} bis {end}",
+      "book": "Buchen",
+      "comingSoon": "Keine freien Slots gefunden",
+      "comingSoonBody": "In den nächsten Werktagen gibt es keine freien Slots, oder der Kalender ist vollständig belegt.",
+      "bookingHint": "Buchung kommt bald — buche den Slot vorerst in Google Kalender."
     },
     "upcoming": {
       "title": "Anstehende Meetings",
       "loading": "Meetings werden geladen…",
       "error": "Meetings konnten nicht geladen werden.",
       "emptyTitle": "Keine anstehenden Meetings",
-      "emptyBody": "Synchronisierte Meetings aus deinem verbundenen Google Kalender erscheinen hier.",
+      "emptyBody": "Anstehende Termine aus deinem verbundenen Google Kalender erscheinen hier.",
       "untitled": "Meeting ohne Titel",
-      "noCompany": "Kein Unternehmen",
-      "noDate": "Kein Datum festgelegt",
-      "confirmed": "bestätigt",
-      "scored": "Bewertung {score}"
+      "noAttendees": "Keine externen Teilnehmer",
+      "join": "Beitreten"
     }
   },
   "research": {

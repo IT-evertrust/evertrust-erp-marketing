@@ -160,3 +160,6 @@ __pycache__/
 .pytest_cache/
 .venv/
 venv/
+
+# Superpowers brainstorming companion scratch
+.superpowers/

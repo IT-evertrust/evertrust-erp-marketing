@@ -161,6 +161,9 @@ export const queryKeys = {
         f.search ?? '',
         f.bucket ?? 'all',
       ] as const,
+    // Activate: live Google Calendar reads (next events + proposed free slots).
+    calendarUpcoming: () => ['meetings', 'calendar', 'upcoming'] as const,
+    calendarFreeSlots: () => ['meetings', 'calendar', 'free-slots'] as const,
   },
 
   // Sales Agent: coaching personas (ERP-managed).
@@ -173,6 +176,12 @@ export const queryKeys = {
   marketing: {
     all: ['marketing'] as const,
     drafts: () => ['marketing', 'drafts'] as const,
+  },
+
+  // Engage: ERP-direct Gmail reply triage queue.
+  engage: {
+    all: ['engage'] as const,
+    replies: () => ['engage', 'replies'] as const,
   },
 
   // Key Account: hot-lead CRM.

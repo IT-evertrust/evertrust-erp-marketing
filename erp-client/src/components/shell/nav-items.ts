@@ -2,12 +2,14 @@ import {
   BarChart3,
   FileText,
   Heart,
+  Layers,
   LayoutDashboard,
   MessageCircle,
   Radio,
   Settings,
   SlidersHorizontal,
   Users,
+  Workflow,
   Zap,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -40,6 +42,7 @@ export type NavItem = {
 
 export const NAV_ITEMS: readonly NavItem[] = [
   { href: '/dashboard', label: 'Dashboard', i18nKey: 'dashboard', icon: LayoutDashboard, permission: null },
+  { href: '/automation', label: 'Automation', i18nKey: 'automation', icon: Workflow, permission: 'campaigns:read' },
 
   // R.E.A.N. sequence: Reach → Engage → Activate → Nurture.
   { href: '/marketing', label: 'Reach', i18nKey: 'reach', icon: Radio, permission: 'campaigns:read', group: 'rean', seq: 1 },
@@ -48,6 +51,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { href: '/nurture', label: 'Nurture', i18nKey: 'nurture', icon: Heart, permission: 'campaigns:read', group: 'rean', seq: 4 },
 
   // Insights.
+  { href: '/sector', label: 'Sector', i18nKey: 'sector', icon: Layers, permission: 'campaigns:read', group: 'insights' },
   { href: '/performance', label: 'Analytics', i18nKey: 'analytics', icon: BarChart3, permission: 'campaigns:read', group: 'insights' },
   { href: '/reports', label: 'Reports', i18nKey: 'reports', icon: FileText, permission: 'campaigns:read', group: 'insights' },
 

@@ -9,9 +9,32 @@
     "notConnected": "Kein Postfach verbunden",
     "noMailboxLabel": "Kein Gmail-Konto verknüpft",
     "defaultSuffix": "Standard",
-    "stats": "{drafts, plural, =0 {Keine Entwürfe offen} =1 {# Entwurf offen} other {# Entwürfe offen}} · {interested} interessiert",
+    "stats": "{replies, plural, =0 {Keine Antworten} =1 {# Antwort} other {# Antworten}} · {interested} interessiert",
     "statsUnavailable": "Postfach-Statistik nicht verfügbar",
     "connectHint": "Verbinden Sie ein Gmail-Konto unter Konfiguration, um Antworten hier zu sortieren."
+  },
+  "connect": {
+    "title": "Kein Postfach verbunden",
+    "description": "Verbinden Sie das Gmail-Konto der Organisation, damit Ansprache eingehende Antworten lesen und sortieren kann.",
+    "cta": "Zur Konfiguration"
+  },
+  "scan": {
+    "button": "Postfach scannen",
+    "scanning": "Wird gescannt…",
+    "done": "{scanned} {scanned, plural, =1 {Antwort} other {Antworten}} gescannt · {interested} interessiert · {unsure} unsicher · {notInterested} kein Interesse · {drafted} entworfen.",
+    "notConfigured": "Kein Gmail-Postfach verbunden — verbinden Sie zuerst eines unter Konfiguration.",
+    "failed": "Scan fehlgeschlagen: {message}"
+  },
+  "send": {
+    "label": "Vorgeschlagene Antwort — vor dem Senden bearbeiten",
+    "button": "Freigeben & senden",
+    "sent": "Antwort gesendet.",
+    "failed": "Senden fehlgeschlagen: {message}"
+  },
+  "redraft": {
+    "button": "Neu entwerfen",
+    "done": "Antwort neu entworfen.",
+    "failed": "Neuentwurf fehlgeschlagen: {message}"
   },
   "triage": {
     "interested": "Interessiert",
@@ -32,8 +55,9 @@
     "title": "Antwortentwürfe",
     "description": "RAG-vorgeschlagene Antworten, die auf einen Menschen warten. Kopieren Sie den Entwurf in Ihre Antwort oder öffnen Sie den Interessenten für den vollständigen Verlauf.",
     "loadError": "Antwortentwürfe konnten nicht geladen werden: {message}",
-    "emptyTitle": "Keine Entwürfe zur Prüfung",
+    "emptyTitle": "Noch keine Antworten",
     "emptyDescription": "Wenn der Antwort-Klassifizierer eine vorgeschlagene Antwort entwirft, erscheint sie hier zur Genehmigung.",
+    "emptyScanHint": "Noch keine Antworten — Postfach scannen, um zu sortieren.",
     "now": "jetzt {verdict}",
     "nowTitle": "Das aktuelle Urteil des Interessenten hat sich inzwischen geändert",
     "copied": "Entwurf in die Zwischenablage kopiert.",

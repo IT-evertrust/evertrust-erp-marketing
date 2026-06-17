@@ -5,6 +5,9 @@ import { db } from './client';
 import {
   authCredentials,
   customers,
+  industries,
+  nicheTargets,
+  niches,
   organizations,
   users,
 } from './schema';
@@ -78,6 +81,60 @@ async function seed(): Promise<void> {
     niches: ['water', 'energy'],
     organizationId: org.id,
   });
+
+  // Sectors: the org's industry → niche → target catalog (the Lead Scraper's hunt
+  // list). Mirrors scripts/0008_seed_sectors.sql for fresh bootstraps. The local
+  // slug helper matches @evertrust/shared slugify() (no cross-package dep here).
+  const slug = (s: string) => s.trim().toLowerCase().replace(/\s+/g, '-');
+  const SECTORS: {
+    industry: string;
+    niches: { name: string; targets: string[] }[];
+  }[] = [
+    {
+      industry: 'IT',
+      niches: [
+        { name: 'Cloud Infrastructure', targets: ['Cloud Provider', 'Managed Service Provider', 'System Integrator', 'Data Center Operator', 'Hosting Provider', 'Cloud Reseller'] },
+        { name: 'Software Development', targets: ['Software Agency', 'SaaS Vendor', 'IT Consultancy', 'System Integrator', 'DevOps Vendor', 'Custom Software Shop'] },
+        { name: 'AI Platform', targets: ['AI Platform Vendor', 'MLOps Provider', 'Data Analytics Platform', 'AI Consultancy', 'AI SaaS Startup', 'AI System Integrator'] },
+        { name: 'Cybersecurity', targets: ['Managed Security Provider', 'Security Consultancy', 'SOC Provider', 'Penetration Testing Firm', 'Security Software Vendor', 'Compliance Auditor'] },
+      ],
+    },
+    {
+      industry: 'Power',
+      niches: [
+        { name: 'LED', targets: ['LED Manufacturer', 'Lighting Distributor', 'LED Installer', 'Electrical Contractor', 'Lighting Designer', 'Retrofit Specialist'] },
+      ],
+    },
+    {
+      industry: 'Transportation & Construction',
+      niches: [
+        { name: 'Container', targets: ['Container Manufacturer', 'Container Dealer', 'Container Modification Firm', 'Container Leasing Provider', 'Modular Building Provider', 'Freight Forwarder'] },
+      ],
+    },
+  ];
+  for (const sector of SECTORS) {
+    const [industry] = await db
+      .insert(industries)
+      .values({ organizationId: org.id, name: sector.industry, slug: slug(sector.industry) })
+      .returning();
+    if (!industry) continue;
+    for (const n of sector.niches) {
+      const [niche] = await db
+        .insert(niches)
+        .values({ organizationId: org.id, name: n.name, slug: slug(n.name), industryId: industry.id })
+        .returning();
+      if (!niche || n.targets.length === 0) continue;
+      await db.insert(nicheTargets).values(
+        n.targets.map((name) => ({
+          nicheId: niche.id,
+          name,
+          slug: slug(name),
+          source: 'MANUAL' as const,
+          enabled: true,
+        })),
+      );
+    }
+  }
 
   // Reference seeded users so the bindings are not flagged as unused.
   console.log(`Seeded users: ${admin?.email}, ${pic?.email}`);

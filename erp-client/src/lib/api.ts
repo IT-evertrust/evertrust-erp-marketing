@@ -88,6 +88,11 @@ import {
   ContractStatus,
   SuppressionListItemDto,
   CalendarListResultDto,
+  CalendarUpcomingDto,
+  CalendarFreeSlotsDto,
+  EngageReplyListDto,
+  EngageScanResultDto,
+  EngageSendBodyDto,
 } from '@evertrust/shared';
 import { API_URL } from './env';
 
@@ -935,6 +940,62 @@ export const api = {
       request<{ id: string }>(`/sales/meetings/${id}`, {
         method: 'DELETE',
         schema: z.object({ id: z.string() }),
+      }),
+
+    // The next few real events from the org's connected Google Calendar.
+    // { configured:false, account:null, events:[] } when no default calendar is
+    // wired or Google is unreachable.
+    calendarUpcoming: (signal?: AbortSignal) =>
+      request<CalendarUpcomingDto>('/meetings/calendar/upcoming', {
+        schema: CalendarUpcomingDto,
+        signal,
+      }),
+
+    // Proposed free slots (weekday business hours, next 7 days) from the same
+    // calendar. { configured:false, slots:[] } when no calendar is connected.
+    calendarFreeSlots: (signal?: AbortSignal) =>
+      request<CalendarFreeSlotsDto>('/meetings/calendar/free-slots', {
+        schema: CalendarFreeSlotsDto,
+        signal,
+      }),
+  },
+
+  // ---- Engage: ERP-direct Gmail reply triage (no n8n, no Python agent) ----
+  // Reads recent inbound replies straight from the org's connected default Gmail
+  // mailbox, classifies + drafts via Claude. { configured:false } when no default
+  // mailbox is connected or Google/AI is unreachable.
+  engage: {
+    // The Engage queue: classified inbound replies (each with the matched prospect
+    // and the Claude-drafted suggested reply, when one exists).
+    replies: (signal?: AbortSignal) =>
+      request<EngageReplyListDto>('/engage/replies', {
+        schema: EngageReplyListDto,
+        signal,
+      }),
+
+    // Scan the mailbox now: read recent replies, classify + draft, upsert the
+    // ledger. Returns the per-bucket counts of what it just triaged.
+    scan: () =>
+      request<EngageScanResultDto>('/engage/scan', {
+        method: 'POST',
+        schema: EngageScanResultDto,
+      }),
+
+    // Approve & send a reply via Gmail. Returns the refreshed queue (the sent
+    // row drops out), so callers can seed the cache from it.
+    send: (id: string, text: string) =>
+      request<EngageReplyListDto>(`/engage/replies/${id}/send`, {
+        method: 'POST',
+        body: EngageSendBodyDto.parse({ text }),
+        schema: EngageReplyListDto,
+      }),
+
+    // Re-draft a reply (re-run Claude on the same inbound). Returns the refreshed
+    // queue with the new suggestedReply.
+    redraft: (id: string) =>
+      request<EngageReplyListDto>(`/engage/replies/${id}/redraft`, {
+        method: 'POST',
+        schema: EngageReplyListDto,
       }),
   },
 

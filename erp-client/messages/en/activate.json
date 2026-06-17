@@ -3,6 +3,8 @@
   "description": "Uses the connected Google Calendar to scan booked and free slots, brief before the call, and analyze it after.",
   "account": {
     "service": "Google · Calendar",
+    "connected": "Connected · {email}",
+    "notConnected": "Not connected",
     "stats": "{meetings, plural, =0 {No meetings} one {# meeting} other {# meetings}} · {slots, plural, =0 {no free slots} one {# free slot} other {# free slots}}",
     "statsLoading": "Syncing calendar…",
     "statsError": "Calendar unavailable"
@@ -13,23 +15,27 @@
     "after": "After-sales Analysis"
   },
   "book": {
+    "notConnectedTitle": "Connect a Google Calendar",
+    "notConnectedBody": "No Google account with Calendar access is connected for this organization yet. Connect one in Configuration to see upcoming meetings and free slots here.",
+    "connectCta": "Open Configuration",
     "slots": {
       "title": "Pick a slot",
       "pill": "Google Calendar",
-      "comingSoon": "Slot booking is coming soon",
-      "comingSoonBody": "Picking a free slot and booking it directly into your Google Calendar isn't wired up yet. For now, the calendar is read-only — manage bookings in Google Calendar."
+      "rangeAria": "Free slot from {start} to {end}",
+      "book": "Book",
+      "comingSoon": "No free slots found",
+      "comingSoonBody": "There are no open slots in the next few business days, or the calendar is fully booked.",
+      "bookingHint": "Booking coming soon — for now, book the slot in Google Calendar."
     },
     "upcoming": {
       "title": "Upcoming meetings",
       "loading": "Loading meetings…",
       "error": "Could not load meetings.",
       "emptyTitle": "No upcoming meetings",
-      "emptyBody": "Synced meetings from your connected Google Calendar will appear here.",
+      "emptyBody": "Upcoming events from your connected Google Calendar will appear here.",
       "untitled": "Untitled meeting",
-      "noCompany": "No company",
-      "noDate": "No date set",
-      "confirmed": "confirmed",
-      "scored": "score {score}"
+      "noAttendees": "No external attendees",
+      "join": "Join"
     }
   },
   "research": {

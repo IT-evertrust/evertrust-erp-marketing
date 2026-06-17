@@ -3,8 +3,9 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
+import Link from 'next/link';
 import { Crosshair } from 'lucide-react';
-import { type CreateCampaignDto, slugify } from '@evertrust/shared';
+import { type CreateCampaignDto } from '@evertrust/shared';
 import { useCreateCampaign } from '@/hooks/use-campaigns';
 import { useNiches } from '@/hooks/use-niches';
 import { useOrgCalendars, useOrgSenders } from '@/hooks/use-arsenal';
@@ -227,13 +228,13 @@ export function AimLaunchDialog() {
       });
   }, [niches.data, t]);
 
-  // Does the typed niche already exist (case/space-insensitive via the shared slug)?
-  // Drives a small "new niche" hint so the user knows one will be created.
-  const nicheIsNew = useMemo(() => {
-    const slug = slugify(form.nicheName);
-    if (!slug) return false;
-    return !(niches.data ?? []).some((n) => n.slug === slug);
-  }, [form.nicheName, niches.data]);
+  // The id of the currently-chosen niche, derived from the stored name (the Select
+  // value). The form still submits nicheName — the API find-or-creates by slug —
+  // but niche creation now lives on the Sector page, so AIM only picks an existing one.
+  const selectedNicheId = useMemo(
+    () => (niches.data ?? []).find((n) => n.name === form.nicheName)?.id,
+    [niches.data, form.nicheName],
+  );
 
   // Keep the Gmail label in sync with niche/country/zone (+ year) until the user
   // types their own.
@@ -306,14 +307,14 @@ export function AimLaunchDialog() {
           {t('trigger')}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>{t('dialogTitle')}</DialogTitle>
           <DialogDescription>{t('dialogDescription')}</DialogDescription>
         </DialogHeader>
-        <div className="grid gap-3">
-          {/* Name (optional) */}
-          <div className="grid gap-2">
+        <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
+          {/* Name (optional) — spans the full width above the paired fields. */}
+          <div className="grid gap-2 sm:col-span-2">
             <Label htmlFor={`${fieldId}-name`}>
               {t('nameLabel')}
               <span className="text-muted-foreground">{t('nameOptional')}</span>
@@ -327,27 +328,40 @@ export function AimLaunchDialog() {
             />
           </div>
 
-          {/* Niche — pick an existing one or type a new name (API find-or-creates).
-              Options are grouped/labelled by industry (display only). */}
+          {/* Niche — pick one of the org's Sectors (defined on the Sector page),
+              grouped/labelled by industry. Stores the niche NAME (the API
+              find-or-creates by slug); creation lives on the Sector page now. */}
           <div className="grid gap-2">
             <Label htmlFor={`${fieldId}-niche`}>{t('nicheLabel')}</Label>
-            <Input
-              id={`${fieldId}-niche`}
-              list={`${fieldId}-niche-options`}
-              value={form.nicheName}
-              placeholder={t('nichePlaceholder')}
-              maxLength={120}
-              autoComplete="off"
-              onChange={(e) => set('nicheName', e.target.value)}
-            />
-            <datalist id={`${fieldId}-niche-options`}>
-              {nicheOptions.map((n) => (
-                <option key={n.id} value={n.name} label={n.optionLabel} />
-              ))}
-            </datalist>
-            <p className="text-xs text-muted-foreground">
-              {nicheIsNew ? t('nicheHintNew') : t('nicheHintExisting')}
-            </p>
+            {nicheOptions.length > 0 ? (
+              <Select
+                value={selectedNicheId}
+                onValueChange={(id) =>
+                  set(
+                    'nicheName',
+                    (niches.data ?? []).find((n) => n.id === id)?.name ?? '',
+                  )
+                }
+              >
+                <SelectTrigger id={`${fieldId}-niche`} className="w-full">
+                  <SelectValue placeholder={t('nichePlaceholder')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {nicheOptions.map((n) => (
+                    <SelectItem key={n.id} value={n.id}>
+                      {n.optionLabel}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {t('nicheEmpty')}
+                <Link href="/sector" className="underline underline-offset-2">
+                  {t('nicheEmptyLink')}
+                </Link>
+              </p>
+            )}
           </div>
 
           {/* Country */}

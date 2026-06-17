@@ -1,9 +1,11 @@
 {
   "dashboard": "Übersicht",
+  "automation": "Automatisierung",
   "reach": "Reichweite",
   "engage": "Ansprache",
   "activate": "Aktivierung",
   "nurture": "Pflege",
+  "sector": "Sektor",
   "analytics": "Analysen",
   "reports": "Berichte",
   "general": "Allgemein",
