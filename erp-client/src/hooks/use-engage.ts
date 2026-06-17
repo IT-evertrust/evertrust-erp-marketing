@@ -30,7 +30,9 @@ export function useScanReplies() {
     onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: queryKeys.engage.all });
       if (!res.configured) {
-        toast.error(t('scan.notConfigured'));
+        // Show the precise server reason when present (e.g. "no Calendar access",
+        // "token could not be refreshed — reconnect"), else the generic hint.
+        toast.error(res.reason ?? t('scan.notConfigured'));
         return;
       }
       toast.success(

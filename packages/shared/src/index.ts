@@ -514,6 +514,8 @@ export const CalendarUpcomingDto = z.object({
   configured: z.boolean(),
   account: z.object({ email: z.string() }).nullable(),
   events: z.array(CalendarEventDto),
+  // When configured=false, a human-readable cause to show the user (else null).
+  reason: z.string().nullable().default(null),
 });
 export type CalendarUpcomingDto = z.infer<typeof CalendarUpcomingDto>;
 
@@ -523,6 +525,7 @@ export type CalendarUpcomingDto = z.infer<typeof CalendarUpcomingDto>;
 export const CalendarFreeSlotsDto = z.object({
   configured: z.boolean(),
   slots: z.array(z.object({ start: z.string(), end: z.string() })),
+  reason: z.string().nullable().default(null),
 });
 export type CalendarFreeSlotsDto = z.infer<typeof CalendarFreeSlotsDto>;
 
@@ -2034,6 +2037,7 @@ export const EngageReplyListDto = z.object({
   configured: z.boolean(),
   account: z.object({ email: z.string() }).nullable(),
   replies: z.array(EngageReplyDto),
+  reason: z.string().nullable().default(null),
 });
 export type EngageReplyListDto = z.infer<typeof EngageReplyListDto>;
 
@@ -2047,6 +2051,8 @@ export const EngageScanResultDto = z.object({
   unsure: z.number(),
   notInterested: z.number(),
   drafted: z.number(),
+  // When configured=false, a human-readable cause to show the user (else null).
+  reason: z.string().nullable().default(null),
 });
 export type EngageScanResultDto = z.infer<typeof EngageScanResultDto>;
 

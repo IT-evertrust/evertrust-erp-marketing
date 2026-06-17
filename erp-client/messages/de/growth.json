@@ -46,6 +46,7 @@
       "noLeads": "Noch keine Leads — Scraper für diese Kampagne ausführen.",
       "selectToView": "Oben eine Kampagne wählen, um ihre gescrapten Leads anzuzeigen.",
       "leadStatus": { "NEW": "Neu", "EMAILED": "Gesendet", "REPLIED": "Geantwortet", "INTERESTED": "Interessiert", "MEETING_SCHEDULED": "Meeting", "NOT_INTERESTED": "Kein Interesse", "RE_ENGAGED": "Reaktiviert", "DO_NOT_CONTACT": "Nicht kontaktieren" },
+      "run": "Lead-Scraper ausführen",
       "criteriaTitle": "Suchkriterien",
       "criteriaMeta": "leads.campaignId",
       "selectLabel": "Kampagne zum Lead-Scraping auswählen",
