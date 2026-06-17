@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hermes — LLM test console</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="main chat-main">
+    <div class="header-row">
+      <div>
+        <h1>🧠 Hermes — LLM test console</h1>
+        <p class="sub">Chat directly with the gateway model to confirm it's working. Pre-loaded with full ERP system context.</p>
+        <div class="chat-toolbar">
+          <a href="index.html" class="ghost mini">← Control panel</a>
+          <select id="model-select" class="mini-select" title="Gateway model"></select>
+          <button id="ctx-toggle" class="ghost mini" title="View / edit the system context">📋 System context</button>
+          <button id="clear-chat" class="ghost mini">🗑 Clear</button>
+          <button id="theme-toggle" class="theme-toggle" title="Toggle light / dark theme">🌙 Dark</button>
+          <span id="conn" class="conn-pill">checking…</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="ctx-panel" class="ctx-panel" hidden>
+      <div class="muted" style="margin-bottom:6px">System prompt sent with every message — edit to change the model's grounding (saved locally):</div>
+      <textarea id="system-prompt" class="ctx-text" spellcheck="false"></textarea>
+      <div class="chat-toolbar"><button id="ctx-save" class="mini">Save context</button><button id="ctx-reset" class="ghost mini">Reset to default</button></div>
+    </div>
+
+    <div id="transcript" class="transcript"></div>
+
+    <div class="composer">
+      <textarea id="prompt" class="composer-input" rows="2" placeholder="Ask hermes anything about the ERP system… (Enter to send, Shift+Enter for newline)"></textarea>
+      <button id="send" class="send-btn">Send</button>
+    </div>
+  </main>
+
+<script src="config.local.js" onerror="window.HERMES=window.HERMES||null"></script>
+<script src="chat.js"></script>
+</body>
+</html>
