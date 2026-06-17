@@ -2,6 +2,7 @@ import {
   BarChart3,
   FileText,
   Heart,
+  Layers,
   LayoutDashboard,
   MessageCircle,
   Radio,
@@ -48,6 +49,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { href: '/nurture', label: 'Nurture', i18nKey: 'nurture', icon: Heart, permission: 'campaigns:read', group: 'rean', seq: 4 },
 
   // Insights.
+  { href: '/sector', label: 'Sector', i18nKey: 'sector', icon: Layers, permission: 'campaigns:read', group: 'insights' },
   { href: '/performance', label: 'Analytics', i18nKey: 'analytics', icon: BarChart3, permission: 'campaigns:read', group: 'insights' },
   { href: '/reports', label: 'Reports', i18nKey: 'reports', icon: FileText, permission: 'campaigns:read', group: 'insights' },
 

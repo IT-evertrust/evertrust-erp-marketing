@@ -143,8 +143,8 @@
   },
   "niches": {
     "header": {
-      "title": "Nischen",
-      "description": "Das gemeinsame Nischen-Vokabular — Segmente, die die Growth Engine durchsucht, nach Branche gruppiert. Verwalten Sie die Ziele jeder Nische."
+      "title": "Sektoren",
+      "description": "Ihre Sektoren — Nischen nach Branche gruppiert, jeweils mit den Ziel-Archetypen, die der Lead-Scraper durchsucht."
     },
     "stat": {
       "industries": "Branchen",
@@ -234,6 +234,8 @@
     "nichePlaceholder": "LED",
     "nicheHintNew": "Neue Nische — sie wird beim Start für Ihre Organisation angelegt.",
     "nicheHintExisting": "Wählen Sie eine bestehende Nische oder geben Sie einen neuen Namen ein.",
+    "nicheEmpty": "Noch keine Sektoren — ",
+    "nicheEmptyLink": "auf der Sektor-Seite anlegen",
     "nicheUnassignedGroup": "Nicht zugeordnet",
     "countryLabel": "Land",
     "countryPlaceholder": "Deutschland",

@@ -143,8 +143,8 @@
   },
   "niches": {
     "header": {
-      "title": "Niches",
-      "description": "The shared niche vocabulary — segments the Growth Engine scrapes, grouped by industry. Manage each niche's targets."
+      "title": "Sectors",
+      "description": "Your sectors — niches grouped by industry, each with the target archetypes the Lead Scraper hunts."
     },
     "stat": {
       "industries": "Industries",
@@ -234,6 +234,8 @@
     "nichePlaceholder": "LED",
     "nicheHintNew": "New niche — it’ll be created for your org on launch.",
     "nicheHintExisting": "Pick an existing niche or type a new name.",
+    "nicheEmpty": "No sectors yet — ",
+    "nicheEmptyLink": "create one on the Sector page",
     "nicheUnassignedGroup": "Unassigned",
     "countryLabel": "Country",
     "countryPlaceholder": "Germany",
