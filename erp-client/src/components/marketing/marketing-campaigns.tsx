@@ -1,13 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { ArrowRight, ExternalLink, Files } from 'lucide-react';
-import { type CampaignDto } from '@evertrust/shared';
-import { useCampaigns, useCampaignFiles } from '@/hooks/use-campaigns';
-import { useMarketingReport } from '@/hooks/use-arsenal';
-import { StatTile } from '@/components/rean/stat-tile';
+import { ArrowRight } from 'lucide-react';
+import type { CampaignDto, ProspectStatus } from '@evertrust/shared';
+import { useCampaigns } from '@/hooks/use-campaigns';
+import { useProspectsBoard } from '@/hooks/use-prospects';
 import { Can } from '@/components/auth/can';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -18,13 +17,6 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
   Table,
   TableBody,
   TableCell,
@@ -33,86 +25,51 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
-import { CAMPAIGN_LIFECYCLE_BADGE, timeAgo } from '@/lib/arsenal-sequence';
+import { CAMPAIGN_LIFECYCLE_BADGE } from '@/lib/arsenal-sequence';
 import { AimLaunchDialog } from '@/components/growth/aim-launch-dialog';
-import { RunStageButton } from '@/components/growth/run-stage-button';
 import { DeleteCampaignButton } from '@/components/growth/delete-campaign-button';
 
-// Reach → "Campaigns" tab (R.E.A.N. mockup): a "Create campaign" prompt card, five
-// KPI tiles (campaigns / active / leads / replies / meetings — all REAL from the
-// weekly marketing report), and the campaigns table with the mockup's columns
-// (Campaign · Niche · Geo · Sender · Status · Leads). Per-campaign Leads come from
-// the report funnel (null → "—" until n8n reports); every row keeps its live
-// manage / details / Drive / run / delete affordances.
+// Reach → "Campaigns" tab (R.E.A.N. mockup, restyled to the Scraper-Campaigns layout).
+// No KPI tiles — two stacked tables: a selectable "Scraper Campaigns" table
+// (Campaign · Niche · Region · Companies · Status; COMPANIES is the live per-campaign
+// prospect total) with the create (+ Campaign) + per-row manage / delete affordances,
+// and a "Leads" table showing the SELECTED campaign's prospects.
 export function MarketingCampaigns() {
-  const t = useTranslations('growth.reach.campaigns');
+  const t = useTranslations('growth.reach');
   const campaigns = useCampaigns();
-  const report = useMarketingReport('week', null);
+  const list = useMemo(() => campaigns.data ?? [], [campaigns.data]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const list = campaigns.data ?? [];
-  const f = report.data?.funnel;
+  // Default to the first campaign once the list loads (and clear the selection if
+  // the chosen campaign disappears, e.g. after a delete).
+  useEffect(() => {
+    if (list.length === 0) {
+      if (selectedId !== null) setSelectedId(null);
+      return;
+    }
+    if (!selectedId || !list.some((c) => c.id === selectedId)) {
+      setSelectedId(list[0]!.id);
+    }
+  }, [list, selectedId]);
 
-  const active = list.filter((c) => c.lifecycle === 'ACTIVE').length;
-  const tiles: { key: string; value: number | null; accent: 'emerald' | 'sky' | 'violet' | 'amber' }[] = [
-    { key: 'campaigns', value: list.length, accent: 'emerald' },
-    { key: 'active', value: active, accent: 'emerald' },
-    { key: 'leads', value: f?.leadsFound ?? null, accent: 'sky' },
-    { key: 'replies', value: f?.repliesHandled ?? null, accent: 'violet' },
-    { key: 'meetings', value: f?.meetingsBooked ?? null, accent: 'amber' },
-  ];
+  const selected = list.find((c) => c.id === selectedId) ?? null;
 
   return (
     <div className="flex flex-col gap-5">
-      {/* KPI tiles */}
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
-        {tiles.map((tile) => (
-          <StatTile
-            key={tile.key}
-            accent={tile.accent}
-            label={t(`tiles.${tile.key}`)}
-            value={
-              campaigns.isLoading ? (
-                <Skeleton className="h-6 w-8" />
-              ) : tile.value === null ? (
-                <span className="text-muted-foreground/50">—</span>
-              ) : (
-                tile.value
-              )
-            }
-          />
-        ))}
-      </div>
-
-      {/* Create campaign prompt — the AIM launch dialog lives behind the button */}
-      <Can permission="campaigns:write">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between gap-2 text-base">
-              <span>{t('createTitle')}</span>
-              <span className="text-xs font-normal text-muted-foreground">
-                {t('createMeta')}
-              </span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-wrap items-center gap-3">
-            <AimLaunchDialog />
-            <span className="text-xs text-muted-foreground">
-              {t('createHint')}
-            </span>
-          </CardContent>
-        </Card>
-      </Can>
-
-      {/* Campaigns table */}
+      {/* ---- Scraper Campaigns ---- */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center justify-between gap-2 text-base">
-            <span>{t('tableTitle')}</span>
-            {!campaigns.isLoading && !campaigns.isError ? (
-              <span className="text-xs font-normal text-muted-foreground tabular-nums">
-                {t('count', { count: list.length })}
+          <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-base">
+            <span>{t('scraper.campaignsTitle')}</span>
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <span className="size-1.5 rounded-full bg-emerald-500" />
+                {t('scraper.active')}
               </span>
-            ) : null}
+              <Can permission="campaigns:write">
+                <AimLaunchDialog />
+              </Can>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -120,29 +77,33 @@ export function MarketingCampaigns() {
             <Skeleton className="h-40 w-full" />
           ) : campaigns.isError ? (
             <p className="text-sm text-destructive">
-              {t('loadError', { message: campaigns.error.message })}
+              {t('campaigns.loadError', { message: campaigns.error.message })}
             </p>
           ) : list.length === 0 ? (
             <p className="rounded-lg border border-dashed px-6 py-10 text-center text-sm text-muted-foreground">
-              {t('empty')}
+              {t('campaigns.empty')}
             </p>
           ) : (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>{t('col.campaign')}</TableHead>
-                    <TableHead>{t('col.niche')}</TableHead>
-                    <TableHead>{t('col.geo')}</TableHead>
-                    <TableHead>{t('col.sender')}</TableHead>
-                    <TableHead>{t('col.lifecycle')}</TableHead>
-                    <TableHead className="text-right">{t('col.leads')}</TableHead>
+                    <TableHead>{t('campaigns.col.campaign')}</TableHead>
+                    <TableHead>{t('campaigns.col.niche')}</TableHead>
+                    <TableHead>{t('scraper.colRegion')}</TableHead>
+                    <TableHead className="text-right">{t('scraper.colCompanies')}</TableHead>
+                    <TableHead>{t('campaigns.col.lifecycle')}</TableHead>
                     <TableHead className="w-px" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {list.map((c) => (
-                    <CampaignRow key={c.id} campaign={c} />
+                    <ScraperCampaignRow
+                      key={c.id}
+                      campaign={c}
+                      selected={c.id === selectedId}
+                      onSelect={() => setSelectedId(c.id)}
+                    />
                   ))}
                 </TableBody>
               </Table>
@@ -150,76 +111,70 @@ export function MarketingCampaigns() {
           )}
         </CardContent>
       </Card>
+
+      {/* ---- Leads (prospects of the selected campaign) ---- */}
+      {selected ? <CampaignLeads campaign={selected} /> : null}
     </div>
   );
 }
 
-function CampaignRow({ campaign: c }: { campaign: CampaignDto }) {
-  const t = useTranslations('growth.reach.campaigns');
-  const tMarketing = useTranslations('marketing');
+function ScraperCampaignRow({
+  campaign: c,
+  selected,
+  onSelect,
+}: {
+  campaign: CampaignDto;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const t = useTranslations('growth.reach');
+  const tM = useTranslations('marketing');
   const pill = CAMPAIGN_LIFECYCLE_BADGE[c.lifecycle];
-  // Per-campaign leads from the report endpoint (REAL; "—" until n8n reports).
-  const cReport = useMarketingReport('week', c.id);
-  const leads = cReport.data?.funnel?.leadsFound ?? null;
-  const [filesOpen, setFilesOpen] = useState(false);
+  // COMPANIES = the campaign's live prospect total (limit 1 → we only read `total`).
+  const board = useProspectsBoard({ campaignId: c.id, limit: 1 });
+  const companies = board.data?.total ?? null;
 
   return (
-    <TableRow>
-      <TableCell className="font-medium">
+    <TableRow
+      onClick={onSelect}
+      data-state={selected ? 'selected' : undefined}
+      className={cn('cursor-pointer', selected && 'bg-muted/50')}
+    >
+      <TableCell className="relative font-medium">
+        {selected ? (
+          <span className="absolute inset-y-0 left-0 w-0.5 rounded-r bg-primary" />
+        ) : null}
         <span className="truncate" title={c.project}>
           {c.name || c.project}
         </span>
       </TableCell>
       <TableCell className="text-muted-foreground">{c.nicheName ?? '—'}</TableCell>
-      <TableCell className="text-muted-foreground">
-        {[c.region, c.country].filter(Boolean).join(', ') || '—'}
-      </TableCell>
-      <TableCell className="text-muted-foreground">{c.sender}</TableCell>
-      <TableCell>
-        <span
-          className={cn(
-            'rounded-full border px-2.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide',
-            pill.className,
-          )}
-        >
-          {tMarketing(`lifecycle.${c.lifecycle}`)}
-        </span>
-      </TableCell>
+      <TableCell className="text-muted-foreground">{c.region || '—'}</TableCell>
       <TableCell className="text-right tabular-nums">
-        {cReport.isLoading ? (
+        {board.isLoading ? (
           <Skeleton className="ml-auto h-4 w-6" />
-        ) : leads === null ? (
+        ) : companies === null ? (
           <span className="text-muted-foreground/50">—</span>
         ) : (
-          leads.toLocaleString()
+          companies.toLocaleString()
         )}
       </TableCell>
       <TableCell>
+        <span
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide',
+            pill.className,
+          )}
+        >
+          <span className="size-1.5 rounded-full bg-current opacity-70" />
+          {tM(`lifecycle.${c.lifecycle}`)}
+        </span>
+      </TableCell>
+      <TableCell onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-end gap-1.5">
-          <Can permission="campaigns:write">
-            <RunStageButton
-              stage="LEAD_SATELLITE"
-              campaignId={c.id}
-              label={tMarketing('campaigns.runStage')}
-              variant="outline"
-              size="sm"
-            />
-          </Can>
-          <Button variant="outline" size="sm" onClick={() => setFilesOpen(true)}>
-            <Files />
-            {tMarketing('common.details')}
-          </Button>
-          {c.driveFolderUrl ? (
-            <Button asChild variant="outline" size="sm">
-              <a href={c.driveFolderUrl} target="_blank" rel="noreferrer">
-                <ExternalLink />
-                {tMarketing('common.open')}
-              </a>
-            </Button>
-          ) : null}
           <Button asChild variant="outline" size="sm">
             <Link href={`/marketing/${c.id}`}>
-              {t('manage')}
+              {t('campaigns.manage')}
               <ArrowRight />
             </Link>
           </Button>
@@ -228,119 +183,108 @@ function CampaignRow({ campaign: c }: { campaign: CampaignDto }) {
           </Can>
         </div>
       </TableCell>
-      <CampaignFilesDialog
-        campaign={c}
-        open={filesOpen}
-        onOpenChange={setFilesOpen}
-      />
     </TableRow>
   );
 }
 
-// Friendly file-type key from a Drive mimeType (translated at the call site).
-// Returns a key from campaigns.fileType.*, or a raw mime subtype as a fallback.
-function fileType(m: string | null): { key: string | null; raw?: string } {
-  if (!m) return { key: 'file' };
-  if (m.includes('spreadsheet')) return { key: 'sheet' };
-  if (m.includes('document')) return { key: 'doc' };
-  if (m.includes('presentation')) return { key: 'slides' };
-  if (m.includes('folder')) return { key: 'folder' };
-  if (m.includes('pdf')) return { key: 'pdf' };
-  if (m.startsWith('text/')) return { key: 'text' };
-  if (m.startsWith('image/')) return { key: 'image' };
-  return { key: null, raw: m.split('/').pop() || undefined };
+// Prospect status → semantic pill tint (house palette; resolves in light + dark).
+const LEAD_STATUS_CLASS: Record<ProspectStatus, string> = {
+  NEW: 'border-border bg-muted text-muted-foreground',
+  EMAILED: 'border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400',
+  REPLIED: 'border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400',
+  INTERESTED: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  MEETING_SCHEDULED:
+    'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  NOT_INTERESTED: 'border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400',
+  RE_ENGAGED: 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  DO_NOT_CONTACT: 'border-border bg-muted text-muted-foreground/70',
+};
+
+function hostOf(url: string | null): string {
+  if (!url) return '—';
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
 }
 
-// Details dialog: a table of every file in the campaign's Drive folder; each row
-// opens that file in Drive. Files are fetched lazily (only while the dialog is open).
-function CampaignFilesDialog({
-  campaign,
-  open,
-  onOpenChange,
-}: {
-  campaign: CampaignDto;
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-}) {
-  const t = useTranslations('marketing');
-  const q = useCampaignFiles(campaign.id, open);
-  const files = q.data?.files ?? [];
+function CampaignLeads({ campaign }: { campaign: CampaignDto }) {
+  const t = useTranslations('growth.reach');
+  const board = useProspectsBoard({ campaignId: campaign.id, limit: 50 });
+  const items = board.data?.items ?? [];
+  const total = board.data?.total ?? items.length;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{t('campaigns.files.title', { name: campaign.name || campaign.project })}</DialogTitle>
-          <DialogDescription>
-            {t('campaigns.files.description')}
-          </DialogDescription>
-        </DialogHeader>
-        {q.isLoading ? (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
+          <span>
+            {t('scraper.leadsTitle')}
+            <span className="text-muted-foreground">
+              {' · '}
+              {campaign.name || campaign.project}
+              {campaign.region ? ` · ${campaign.region}` : ''}
+            </span>
+          </span>
+          <span className="text-xs font-normal uppercase tracking-wide text-muted-foreground tabular-nums">
+            {t('scraper.leadsCount', { count: total })}
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {board.isLoading ? (
           <Skeleton className="h-40 w-full" />
-        ) : q.isError ? (
+        ) : board.isError ? (
           <p className="text-sm text-destructive">
-            {t('campaigns.files.loadError', { message: q.error.message })}
+            {t('campaigns.loadError', { message: board.error.message })}
           </p>
-        ) : q.data && !q.data.configured ? (
-          <p className="text-sm text-muted-foreground">
-            {t.rich('campaigns.files.notConnected', { code: (chunks) => <code>{chunks}</code> })}
-          </p>
-        ) : files.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {t('campaigns.files.empty')}
+        ) : items.length === 0 ? (
+          <p className="rounded-lg border border-dashed px-6 py-10 text-center text-sm text-muted-foreground">
+            {t('scraper.noLeads')}
           </p>
         ) : (
-          <div className="max-h-[60vh] overflow-auto">
+          <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{t('campaigns.files.colName')}</TableHead>
-                  <TableHead className="w-20">{t('campaigns.files.colType')}</TableHead>
-                  <TableHead className="w-28">{t('campaigns.files.colModified')}</TableHead>
-                  <TableHead className="w-10" />
+                  <TableHead>{t('scraper.leadCol.company')}</TableHead>
+                  <TableHead>{t('scraper.leadCol.contact')}</TableHead>
+                  <TableHead>{t('scraper.leadCol.location')}</TableHead>
+                  <TableHead>{t('scraper.leadCol.source')}</TableHead>
+                  <TableHead>{t('scraper.leadCol.status')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {files.map((file) => {
-                  const ft = fileType(file.mimeType);
-                  const cells = (
-                    <>
-                      <TableCell className="font-medium">{file.name}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {ft.key ? t(`campaigns.fileType.${ft.key}`) : (ft.raw ?? t('campaigns.fileType.file'))}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {file.modifiedTime ? timeAgo(file.modifiedTime) : '—'}
-                      </TableCell>
-                      <TableCell>
-                        {file.webViewLink ? (
-                          <ExternalLink className="size-3.5 text-muted-foreground" />
-                        ) : null}
-                      </TableCell>
-                    </>
-                  );
-                  return file.webViewLink ? (
-                    <TableRow
-                      key={file.id}
-                      className="cursor-pointer"
-                      onClick={() =>
-                        window.open(
-                          file.webViewLink!,
-                          '_blank',
-                          'noopener,noreferrer',
-                        )
-                      }
-                    >
-                      {cells}
-                    </TableRow>
-                  ) : (
-                    <TableRow key={file.id}>{cells}</TableRow>
-                  );
-                })}
+                {items.map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="font-medium">
+                      {p.companyName || p.email}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{p.email}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {[p.city, p.country].filter(Boolean).join(', ') || '—'}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {hostOf(p.sourceUrl)}
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className={cn(
+                          'inline-flex items-center rounded-full border px-2 py-0.5 text-[10.5px] font-medium',
+                          LEAD_STATUS_CLASS[p.status],
+                        )}
+                      >
+                        {t(`scraper.leadStatus.${p.status}`)}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+      </CardContent>
+    </Card>
   );
 }
