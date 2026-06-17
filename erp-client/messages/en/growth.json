@@ -36,6 +36,16 @@
       "manage": "Manage"
     },
     "scraper": {
+      "campaignsTitle": "Scraper Campaigns",
+      "active": "Scraper active",
+      "colRegion": "Region",
+      "colCompanies": "Companies",
+      "leadsTitle": "Leads",
+      "leadsCount": "{count, plural, =0 {No companies} one {# company} other {# companies}} · Full list",
+      "leadCol": { "company": "Company", "contact": "Contact", "location": "Location", "source": "Source", "status": "Status" },
+      "noLeads": "No leads yet — run the scraper for this campaign.",
+      "selectToView": "Select a campaign above to view its scraped leads.",
+      "leadStatus": { "NEW": "New", "EMAILED": "Emailed", "REPLIED": "Replied", "INTERESTED": "Interested", "MEETING_SCHEDULED": "Meeting", "NOT_INTERESTED": "Not interested", "RE_ENGAGED": "Re-engaged", "DO_NOT_CONTACT": "Do not contact" },
       "criteriaTitle": "Search criteria",
       "criteriaMeta": "leads.campaignId",
       "selectLabel": "Select a campaign to scrape leads for",

@@ -2,10 +2,9 @@
 
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Mail, Search, Send, Sparkles, Target } from 'lucide-react';
+import { Mail, Search, Send, Sparkles } from 'lucide-react';
 import { PageHeader } from '@/components/common/page-header';
 import { SegmentedTabs } from '@/components/rean/segmented-tabs';
-import { AimLaunchDialog } from '@/components/growth/aim-launch-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,8 +16,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { MarketingFunnelBar } from './marketing-funnel-bar';
-import { MarketingCampaigns } from './marketing-campaigns';
 import { CampaignBoard } from '@/components/growth/campaign-board';
 import { SequenceStrip } from '@/components/growth/sequence-strip';
 
@@ -29,11 +26,10 @@ import { SequenceStrip } from '@/components/growth/sequence-strip';
 // outbound sequence + launch). Every campaign/niche surface is live-wired; the
 // Email + Sequence builders are clearly flagged "coming soon" until their
 // standalone APIs land (today they run through the arsenal stages).
-const TABS = ['campaigns', 'scraper', 'email', 'sequence'] as const;
+const TABS = ['scraper', 'email', 'sequence'] as const;
 type ReachTab = (typeof TABS)[number];
 
 const TAB_ICON: Record<ReachTab, React.ReactNode> = {
-  campaigns: <Target className="size-3.5" />,
   scraper: <Search className="size-3.5" />,
   email: <Mail className="size-3.5" />,
   sequence: <Send className="size-3.5" />,
@@ -41,16 +37,14 @@ const TAB_ICON: Record<ReachTab, React.ReactNode> = {
 
 export function MarketingView() {
   const t = useTranslations('growth.reach');
-  const [tab, setTab] = useState<ReachTab>('campaigns');
+  const [tab, setTab] = useState<ReachTab>('scraper');
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title={t('header.title')}
         description={t('header.description')}
-        actions={<AimLaunchDialog />}
       />
-      <MarketingFunnelBar />
       <SegmentedTabs
         tabs={TABS.map((value) => ({
           value,
@@ -61,7 +55,6 @@ export function MarketingView() {
         onValueChange={(v) => setTab(v as ReachTab)}
       />
       <div>
-        {tab === 'campaigns' ? <MarketingCampaigns /> : null}
         {tab === 'scraper' ? <CampaignBoard /> : null}
         {tab === 'email' ? <ReachEmail /> : null}
         {tab === 'sequence' ? <SequenceStrip /> : null}
