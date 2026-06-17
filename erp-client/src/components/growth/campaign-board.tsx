@@ -3,34 +3,39 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Search } from 'lucide-react';
+import type { CampaignDto, ProspectStatus } from '@evertrust/shared';
 import { useCampaigns } from '@/hooks/use-campaigns';
+import { useProspectsBoard } from '@/hooks/use-prospects';
 import { EmptyState } from '@/components/common/empty-state';
+import { Can } from '@/components/auth/can';
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
-import { NicheTargets } from './niche-targets';
+import { cn } from '@/lib/utils';
+import { CAMPAIGN_LIFECYCLE_BADGE } from '@/lib/arsenal-sequence';
+import { AimLaunchDialog } from '@/components/growth/aim-launch-dialog';
+import { DeleteCampaignButton } from '@/components/growth/delete-campaign-button';
 
-// Reach → "Lead Scraper" tab (R.E.A.N. mockup). Pick a campaign; its niche / geo /
-// sender fill the read-only criteria (the scraper inherits them from the campaign,
-// exactly as the n8n Lead Satellite does), and the niche's targets — the segments
-// the scraper actually runs — render below as the live, editable results surface
-// (every target toggle/add/delete is a real mutation via NicheTargets). Leads the
-// scraper finds attach to the selected campaign and surface in the Campaigns tab.
+// Reach → "Lead Scraper" tab (R.E.A.N. mockup). Two stacked tables, no KPI cards:
+//   1. Scraper Campaigns — every campaign as a selectable row (Campaign · Niche ·
+//      Region · Companies · Status). COMPANIES is the live per-campaign prospect
+//      total. "+ Campaign" launches the AIM dialog; rows keep their Delete affordance.
+//   2. Leads — the prospects the scraper attached to the SELECTED campaign
+//      (Company · Contact · Location · Source · Status), scoped by campaignId.
 export function CampaignBoard() {
-  const t = useTranslations('growth.reach.scraper');
+  const t = useTranslations('growth.reach');
   const campaigns = useCampaigns();
   const list = useMemo(() => campaigns.data ?? [], [campaigns.data]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -55,7 +60,7 @@ export function CampaignBoard() {
   if (campaigns.isError) {
     return (
       <p className="text-sm text-destructive">
-        {t('loadError', { message: campaigns.error.message })}
+        {t('campaigns.loadError', { message: campaigns.error.message })}
       </p>
     );
   }
@@ -63,93 +68,233 @@ export function CampaignBoard() {
     return (
       <EmptyState
         icon={<Search />}
-        title={t('empty.title')}
-        description={t('empty.description')}
+        title={t('scraper.empty.title')}
+        description={t('scraper.empty.description')}
       />
     );
   }
 
   return (
     <div className="flex flex-col gap-5">
+      {/* ---- Scraper Campaigns ---- */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center justify-between gap-2 text-base">
-            <span>{t('criteriaTitle')}</span>
-            <span className="text-xs font-normal text-muted-foreground">
-              {t('criteriaMeta')}
-            </span>
+          <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-base">
+            <span>{t('scraper.campaignsTitle')}</span>
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <span className="size-1.5 rounded-full bg-emerald-500" />
+                {t('scraper.active')}
+              </span>
+              <Can permission="campaigns:write">
+                <AimLaunchDialog />
+              </Can>
+            </div>
           </CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="scraper-campaign">{t('selectLabel')}</Label>
-            <Select
-              value={selectedId ?? undefined}
-              onValueChange={setSelectedId}
-            >
-              <SelectTrigger id="scraper-campaign" className="w-full sm:max-w-md">
-                <SelectValue placeholder={t('selectPlaceholder')} />
-              </SelectTrigger>
-              <SelectContent>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t('campaigns.col.campaign')}</TableHead>
+                  <TableHead>{t('campaigns.col.niche')}</TableHead>
+                  <TableHead>{t('scraper.colRegion')}</TableHead>
+                  <TableHead className="text-right">{t('scraper.colCompanies')}</TableHead>
+                  <TableHead>{t('campaigns.col.lifecycle')}</TableHead>
+                  <TableHead className="w-px" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {list.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name || c.project}
-                  </SelectItem>
+                  <ScraperCampaignRow
+                    key={c.id}
+                    campaign={c}
+                    selected={c.id === selectedId}
+                    onSelect={() => setSelectedId(c.id)}
+                  />
                 ))}
-              </SelectContent>
-            </Select>
+              </TableBody>
+            </Table>
           </div>
-
-          <div className="grid gap-3 sm:grid-cols-3">
-            <ReadOnlyField label={t('nicheLabel')} value={selected?.nicheName ?? '—'} />
-            <ReadOnlyField
-              label={t('geoLabel')}
-              value={
-                selected
-                  ? [selected.region, selected.country].filter(Boolean).join(', ') || '—'
-                  : '—'
-              }
-            />
-            <ReadOnlyField label={t('senderLabel')} value={selected?.sender ?? '—'} />
-          </div>
-
-          <p className="text-xs text-muted-foreground">{t('targetsHint')}</p>
         </CardContent>
       </Card>
 
+      {/* ---- Leads (prospects of the selected campaign) ---- */}
       {selected ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">{t('targetsTitle')}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <NicheTargets nicheId={selected.nicheId} />
-          </CardContent>
-        </Card>
+        <CampaignLeads campaign={selected} />
       ) : (
         <EmptyState
           icon={<Search />}
-          title={t('pick.title')}
-          description={t('pick.description')}
+          title={t('scraper.pick.title')}
+          description={t('scraper.selectToView')}
         />
       )}
     </div>
   );
 }
 
-// A read-only criteria field (mockup's `readonly` inputs that inherit from the
-// chosen campaign). Rendered as a disabled input so it visually matches the form.
-function ReadOnlyField({
-  label,
-  value,
+function ScraperCampaignRow({
+  campaign: c,
+  selected,
+  onSelect,
 }: {
-  label: string;
-  value: string;
+  campaign: CampaignDto;
+  selected: boolean;
+  onSelect: () => void;
 }) {
+  const tM = useTranslations('marketing');
+  const pill = CAMPAIGN_LIFECYCLE_BADGE[c.lifecycle];
+  // COMPANIES = the campaign's live prospect total (limit 1 → cheap; we only read
+  // `total`). Polls with the board hook so new scraped prospects bump the count.
+  const board = useProspectsBoard({ campaignId: c.id, limit: 1 });
+  const companies = board.data?.total ?? null;
+
   return (
-    <div className="grid gap-2">
-      <Label className="text-muted-foreground">{label}</Label>
-      <Input value={value} readOnly tabIndex={-1} className="bg-muted/40" />
-    </div>
+    <TableRow
+      onClick={onSelect}
+      data-state={selected ? 'selected' : undefined}
+      className={cn('cursor-pointer', selected && 'bg-muted/50')}
+    >
+      <TableCell className="relative font-medium">
+        {selected ? (
+          <span className="absolute inset-y-0 left-0 w-0.5 rounded-r bg-primary" />
+        ) : null}
+        <span className="truncate" title={c.project}>
+          {c.name || c.project}
+        </span>
+      </TableCell>
+      <TableCell className="text-muted-foreground">{c.nicheName ?? '—'}</TableCell>
+      <TableCell className="text-muted-foreground">{c.region || '—'}</TableCell>
+      <TableCell className="text-right tabular-nums">
+        {board.isLoading ? (
+          <Skeleton className="ml-auto h-4 w-6" />
+        ) : companies === null ? (
+          <span className="text-muted-foreground/50">—</span>
+        ) : (
+          companies.toLocaleString()
+        )}
+      </TableCell>
+      <TableCell>
+        <span
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide',
+            pill.className,
+          )}
+        >
+          <span className="size-1.5 rounded-full bg-current opacity-70" />
+          {tM(`lifecycle.${c.lifecycle}`)}
+        </span>
+      </TableCell>
+      <TableCell onClick={(e) => e.stopPropagation()}>
+        <div className="flex justify-end">
+          <Can permission="campaigns:write">
+            <DeleteCampaignButton campaign={c} />
+          </Can>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+// Prospect status → semantic pill tint (house palette; resolves in light + dark).
+const LEAD_STATUS_CLASS: Record<ProspectStatus, string> = {
+  NEW: 'border-border bg-muted text-muted-foreground',
+  EMAILED: 'border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400',
+  REPLIED: 'border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400',
+  INTERESTED: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  MEETING_SCHEDULED:
+    'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  NOT_INTERESTED: 'border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400',
+  RE_ENGAGED: 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  DO_NOT_CONTACT: 'border-border bg-muted text-muted-foreground/70',
+};
+
+function hostOf(url: string | null): string {
+  if (!url) return '—';
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
+function CampaignLeads({ campaign }: { campaign: CampaignDto }) {
+  const t = useTranslations('growth.reach');
+  const board = useProspectsBoard({ campaignId: campaign.id, limit: 50 });
+  const items = board.data?.items ?? [];
+  const total = board.data?.total ?? items.length;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
+          <span>
+            {t('scraper.leadsTitle')}
+            <span className="text-muted-foreground">
+              {' · '}
+              {campaign.name || campaign.project}
+              {campaign.region ? ` · ${campaign.region}` : ''}
+            </span>
+          </span>
+          <span className="text-xs font-normal uppercase tracking-wide text-muted-foreground tabular-nums">
+            {t('scraper.leadsCount', { count: total })}
+          </span>
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {board.isLoading ? (
+          <Skeleton className="h-40 w-full" />
+        ) : board.isError ? (
+          <p className="text-sm text-destructive">
+            {t('campaigns.loadError', { message: board.error.message })}
+          </p>
+        ) : items.length === 0 ? (
+          <p className="rounded-lg border border-dashed px-6 py-10 text-center text-sm text-muted-foreground">
+            {t('scraper.noLeads')}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t('scraper.leadCol.company')}</TableHead>
+                  <TableHead>{t('scraper.leadCol.contact')}</TableHead>
+                  <TableHead>{t('scraper.leadCol.location')}</TableHead>
+                  <TableHead>{t('scraper.leadCol.source')}</TableHead>
+                  <TableHead>{t('scraper.leadCol.status')}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell className="font-medium">
+                      {p.companyName || p.email}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{p.email}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {[p.city, p.country].filter(Boolean).join(', ') || '—'}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {hostOf(p.sourceUrl)}
+                    </TableCell>
+                    <TableCell>
+                      <span
+                        className={cn(
+                          'inline-flex items-center rounded-full border px-2 py-0.5 text-[10.5px] font-medium',
+                          LEAD_STATUS_CLASS[p.status],
+                        )}
+                      >
+                        {t(`scraper.leadStatus.${p.status}`)}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
