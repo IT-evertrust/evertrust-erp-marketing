@@ -39,10 +39,14 @@ import { writeMachineAudit } from '../common/machine-audit';
 // classification is not in the org; a clean error string on a Gmail send fail).
 // ===========================================================================
 
-// Gmail query: replies from the last 14 days, excluding our own sent mail, that
-// look like a reply (Re:/AW: subject prefix). q + maxResults cap the scan.
-const GMAIL_QUERY = 'newer_than:14d -in:sent (subject:Re OR subject:AW)';
-const MAX_MESSAGES = 25;
+// gmail.metadata is a SENSITIVE (not restricted) scope: it returns headers + the
+// Gmail snippet but NO body, and it FORBIDS the `q` search param on messages.list.
+// So we list by the INBOX label, fetch format=metadata, and filter to recent replies
+// client-side. Engage triages on subject + snippet only (weaker, but zero CASA audit).
+const INBOX_LABEL = 'INBOX';
+const LIST_MAX = 60; // INBOX list cap (filtered down client-side)
+const LOOKBACK_DAYS = 14; // only consider replies this recent
+const MAX_MESSAGES = 25; // process cap after filtering
 const SNIPPET_MAX = 280;
 const BODY_MAX = 8000;
 
@@ -175,7 +179,9 @@ export function parseGmailMessage(msg: GmailMessage): ParsedReply | null {
     fromEmail: email,
     fromName: name,
     subject: headerValue(headers, 'Subject'),
-    body: extractPlainBody(msg.payload),
+    // metadata format carries no body payload — fall back to the Gmail snippet, which
+    // is the Engage triage surface (subject + snippet).
+    body: extractPlainBody(msg.payload) || (msg.snippet ?? '').trim(),
     rfc822MessageId: headerValue(headers, 'Message-ID'),
     references: headerValue(headers, 'References'),
     receivedAt: Number.isFinite(internalMs) ? new Date(internalMs) : new Date(),
@@ -223,6 +229,12 @@ export function normalizeVerdict(value: string): EngageVerdict {
     : 'UNSURE';
 }
 
+// Reply-subject test (Re:/AW: prefix, case-insensitive). Replaces the server-side `q`
+// filter, which the gmail.metadata scope does not permit. Exported for unit tests.
+export function isReplySubject(subject: string | null): boolean {
+  return !!subject && /^\s*(re|aw)\s*:/i.test(subject);
+}
+
 @Injectable()
 export class EngageService {
   private readonly logger = new Logger(EngageService.name);
@@ -251,10 +263,11 @@ export class EngageService {
     const token = perOrg.accessToken;
 
     try {
-      // 1) List recent reply candidates.
+      // 1) List recent INBOX messages (metadata scope forbids the `q` param); reply +
+      //    recency filtering happens client-side below.
       const listParams = new URLSearchParams({
-        q: GMAIL_QUERY,
-        maxResults: String(MAX_MESSAGES),
+        labelIds: INBOX_LABEL,
+        maxResults: String(LIST_MAX),
       });
       const listRes = await fetch(`${GMAIL_LIST_URL}?${listParams.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -269,18 +282,22 @@ export class EngageService {
       const ids = (list.messages ?? [])
         .map((m) => m.id)
         .filter((id): id is string => !!id)
-        .slice(0, MAX_MESSAGES);
+        .slice(0, LIST_MAX);
 
       // Per-org config: AI model preference (null → env ANTHROPIC_MODEL).
       const model = await this.resolveAiModel(orgId);
       const selfEmail = perOrg.account.email.toLowerCase();
 
       const counters = { scanned: 0, interested: 0, unsure: 0, notInterested: 0, drafted: 0 };
+      const cutoffMs = Date.now() - LOOKBACK_DAYS * 24 * 60 * 60_000;
 
       for (const id of ids) {
+        if (counters.scanned >= MAX_MESSAGES) break; // process cap (after filtering)
         const parsed = await this.fetchMessage(token, id);
         if (!parsed || !parsed.fromEmail) continue;
         if (parsed.fromEmail === selfEmail) continue; // never classify our own mail
+        if (!isReplySubject(parsed.subject)) continue; // replies only (no server q under metadata)
+        if (parsed.receivedAt.getTime() < cutoffMs) continue; // within the lookback window
 
         // Match a prospect by sender email, ORG-SCOPED. No match → skip (the
         // ledger + verdict log require a non-null prospectId; we never fabricate).
@@ -572,7 +589,8 @@ export class EngageService {
     token: string,
     id: string,
   ): Promise<ParsedReply | null> {
-    const params = new URLSearchParams({ format: 'full' });
+    // metadata format = headers + snippet, NO body — all the gmail.metadata scope allows.
+    const params = new URLSearchParams({ format: 'metadata' });
     const res = await fetch(`${GMAIL_GET_URL}/${id}?${params.toString()}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
