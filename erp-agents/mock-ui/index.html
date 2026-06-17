@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EVERTRUST agents — control panel</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="top-progress" class="top-progress" hidden>
+    <div class="tp-bar" id="tp-bar"></div>
+    <div class="tp-label" id="tp-label"></div>
+  </div>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <span>Campaigns</span>
+        <button id="refresh-campaigns" class="icon-btn" title="Refresh campaigns">⟳</button>
+      </div>
+      <div id="campaign-list" class="campaign-list"></div>
+    </aside>
+
+    <main class="main">
+      <div class="header-row">
+        <div>
+          <h1>EVERTRUST agents — control panel</h1>
+          <p class="sub">Pick a campaign on the left, then run any package — scoped to that campaign (dry-run).</p>
+          <div class="dry-badge">🛡️ DRY-RUN — no emails, WhatsApp, or calendar events are sent. Safe to run.</div>
+          <button id="llm-toggle" class="llm-toggle" title="Send useLlm:true so agents call the LiteLLM gateway (needs the stack up on the host)">🧠 LLM: off</button>
+          <a href="chat.html" class="llm-toggle" title="Chat directly with the hermes model to test the gateway">💬 Hermes console</a>
+          <button id="theme-toggle" class="theme-toggle" title="Toggle light / dark theme">🌙 Dark</button>
+        </div>
+        <div id="aim-mount"></div>
+      </div>
+
+      <div id="campaign-info" class="campaign-info" style="display:none"></div>
+
+      <div class="grid" id="grid"></div>
+
+      <div class="panel" id="panel" style="display:none">
+        <h2 id="panel-title"></h2>
+        <div id="panel-body"></div>
+      </div>
+    </main>
+
+    <aside class="leads-sidebar" id="leads-sidebar">
+      <div class="sidebar-head">
+        <span>Leads</span>
+        <span id="leads-count" class="badge lc-draft"></span>
+      </div>
+      <div id="leads-actions" class="leads-actions"></div>
+      <div id="leads-list" class="leads-list"><div class="muted">Run <b>Lead Satellite</b> on a campaign to populate leads here.</div></div>
+    </aside>
+  </div>
+
+<script src="app.js"></script>
+<script>
+  mountThemeToggle();
+  mountAim(document.getElementById("aim-mount"));
+  mountGrid(document.getElementById("grid"));
+  mountLlmToggle();
+  fetchCampaigns();
+  document.getElementById("refresh-campaigns").addEventListener("click", () => fetchCampaigns());
+</script>
+</body>
+</html>

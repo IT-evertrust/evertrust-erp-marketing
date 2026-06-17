@@ -151,3 +151,12 @@ vite.config.ts.timestamp-*
 # macOS
 .DS_Store
 **/.DS_Store
+
+# Python (erp-agents/ services run on their own Python toolchain)
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+.venv/
+venv/
