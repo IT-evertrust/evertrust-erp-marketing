@@ -31,6 +31,13 @@ export interface GoogleCallbackTokens {
   scopes: string[];
 }
 
+// Result of resolving a live access token for an org's mailbox. The failure case
+// carries an end-user-facing `reason` so callers can explain WHY in the UI rather
+// than degrading to a generic "not connected" shell.
+export type MailboxAccess =
+  | { ok: true; accessToken: string; account: { id: string; email: string } }
+  | { ok: false; reason: string };
+
 // Endpoint to revoke a Google OAuth token. Best-effort on disconnect — a revoke
 // failure must NEVER block deleting the row from our DB.
 const GOOGLE_REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
@@ -270,6 +277,18 @@ export class GoogleAccountsService {
     orgId: string,
     kind: 'gmail' | 'calendar',
   ): Promise<{ accessToken: string; account: { id: string; email: string } } | null> {
+    const r = await this.resolveMailbox(orgId, kind);
+    return r.ok ? { accessToken: r.accessToken, account: r.account } : null;
+  }
+
+  // Same resolution as getAccessTokenForOrg, but returns a DISCRIMINATED result that
+  // carries a human-readable `reason` on failure — so callers (Engage scan, Calendar
+  // read) can surface WHY in the UI instead of a generic "not connected" shell. The
+  // reason strings are end-user-facing.
+  async resolveMailbox(
+    orgId: string,
+    kind: 'gmail' | 'calendar',
+  ): Promise<MailboxAccess> {
     try {
       const orgRow = await this.orgRow(orgId);
 
@@ -279,16 +298,16 @@ export class GoogleAccountsService {
         : undefined;
       if (orgRow.defaultMailboxAccountId && !row) {
         this.logger.warn(
-          `getAccessTokenForOrg(${orgId}): default mailbox ${orgRow.defaultMailboxAccountId} no longer exists — falling back to a connected account`,
+          `resolveMailbox(${orgId}): default mailbox ${orgRow.defaultMailboxAccountId} no longer exists — falling back to a connected account`,
         );
       }
 
-      // 2) Fallback: when there is no (valid) default pointer — or the default
-      //    can't serve this kind (calendar without a calendar scope) — resolve the
-      //    org's own CONNECTED account(s). So a single connected mailbox works even
-      //    before anyone explicitly "sets default", and a stale pointer self-heals.
+      // 2) Fallback: when there is no (valid) default pointer — or the default can't
+      //    serve this kind (calendar without a calendar scope) — resolve the org's own
+      //    CONNECTED account(s). So a single connected mailbox works even before anyone
+      //    explicitly "sets default", and a stale pointer self-heals.
+      const connected = await this.connectedRows(orgId);
       if (!row || (kind === 'calendar' && !this.hasCalendarScope(row))) {
-        const connected = await this.connectedRows(orgId);
         const pick =
           kind === 'calendar'
             ? connected.find((r) => this.hasCalendarScope(r))
@@ -297,36 +316,44 @@ export class GoogleAccountsService {
       }
 
       if (!row) {
+        // No usable account. Distinguish "none connected at all" (likely the wrong org
+        // / nothing connected) from "connected but none has the needed scope".
+        const reason =
+          connected.length === 0
+            ? 'No Google account is connected for this organization. Connect one in Configuration.'
+            : kind === 'calendar'
+              ? 'A Google account is connected, but none has Calendar access. Reconnect and allow Calendar.'
+              : 'A Google account is connected, but it is not usable for Gmail. Reconnect it in Configuration.';
         this.logger.warn(
-          `getAccessTokenForOrg(${orgId}, ${kind}): no connected Google account in this org`,
+          `resolveMailbox(${orgId}, ${kind}): no usable account (${connected.length} connected) — ${reason}`,
         );
-        return null;
+        return { ok: false, reason };
       }
       if (kind === 'calendar' && !this.hasCalendarScope(row)) {
-        this.logger.warn(
-          `getAccessTokenForOrg(${orgId}, calendar): connected account ${row.email} has no calendar scope — reconnect to grant it`,
-        );
-        return null;
+        const reason = `The connected account ${row.email} has not granted Calendar access. Reconnect and allow Calendar.`;
+        this.logger.warn(`resolveMailbox(${orgId}, calendar): ${reason}`);
+        return { ok: false, reason };
       }
 
       const refreshToken = this.crypto.decrypt(row.refreshTokenEnc);
       const { accessToken, expiryDate } =
         await this.oauth.refreshAccessToken(refreshToken);
 
-      // Best-effort cache the fresh access token back; the null-return-on-failure
-      // contract is unaffected if this write fails.
+      // Best-effort cache the fresh access token back; the failure contract is
+      // unaffected if this write fails.
       this.cacheAccessToken(row.id, accessToken, expiryDate).catch(() => undefined);
 
-      return { accessToken, account: { id: row.id, email: row.email } };
+      return { ok: true, accessToken, account: { id: row.id, email: row.email } };
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown error';
-      // Most often a decrypt failure (the GOOGLE_TOKEN_ENC_KEY changed since the
-      // token was stored) or a refused refresh (token revoked) — both fixed by
-      // reconnecting the account. Logged so the cause is visible in the API logs.
+      // Most often a decrypt failure (GOOGLE_TOKEN_ENC_KEY changed since the token was
+      // stored) or a refused refresh (token revoked) — both fixed by reconnecting.
+      const reason =
+        'The connected Google token could not be refreshed. Reconnect the account (the server encryption key may have changed).';
       this.logger.warn(
-        `getAccessTokenForOrg(${orgId}, ${kind}) token error: ${msg} — reconnect the Google account`,
+        `resolveMailbox(${orgId}, ${kind}) token error: ${msg} — ${reason}`,
       );
-      return null;
+      return { ok: false, reason };
     }
   }
 

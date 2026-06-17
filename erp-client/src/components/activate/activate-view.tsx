@@ -138,14 +138,16 @@ type FreeSlotsQuery = {
   isError: boolean;
 };
 
-// Shared "connect a Google Calendar" empty state, linking to Configuration.
-function ConnectHint() {
+// Shared "connect a Google Calendar" empty state, linking to Configuration. When the
+// server returns a precise `reason` (no Calendar scope, token error, etc.) show it
+// instead of the generic copy, so the user knows exactly what to fix.
+function ConnectHint({ reason }: { reason?: string | null }) {
   const t = useTranslations('activate');
   return (
     <EmptyState
       icon={<CalendarX />}
       title={t('book.notConnectedTitle')}
-      description={t('book.notConnectedBody')}
+      description={reason ?? t('book.notConnectedBody')}
       action={
         <Button asChild variant="outline" size="sm">
           <Link href="/settings/configuration">{t('book.connectCta')}</Link>
@@ -195,7 +197,7 @@ function BookTab({
               {t('book.upcoming.error')}
             </p>
           ) : !slotsConfigured ? (
-            <ConnectHint />
+            <ConnectHint reason={freeSlots.data?.reason} />
           ) : slots.length === 0 ? (
             <EmptyState
               icon={<CalendarX />}
@@ -237,7 +239,7 @@ function BookTab({
               {t('book.upcoming.error')}
             </p>
           ) : !upcomingConfigured ? (
-            <ConnectHint />
+            <ConnectHint reason={upcoming.data?.reason} />
           ) : events.length === 0 ? (
             <EmptyState
               icon={<CalendarClock />}

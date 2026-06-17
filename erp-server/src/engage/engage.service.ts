@@ -256,10 +256,12 @@ export class EngageService {
       unsure: 0,
       notInterested: 0,
       drafted: 0,
+      reason: null,
     };
 
-    const perOrg = await this.googleAccounts.getAccessTokenForOrg(orgId, 'gmail');
-    if (!perOrg) return empty;
+    const access = await this.googleAccounts.resolveMailbox(orgId, 'gmail');
+    if (!access.ok) return { ...empty, reason: access.reason };
+    const perOrg = access;
     const token = perOrg.accessToken;
 
     try {
@@ -276,7 +278,10 @@ export class EngageService {
         this.logger.warn(
           `Engage Gmail list HTTP ${listRes.status} for org ${orgId} — scan skipped`,
         );
-        return empty;
+        return {
+          ...empty,
+          reason: `Gmail API error (HTTP ${listRes.status}). Reconnect the account and allow Gmail access.`,
+        };
       }
       const list = (await listRes.json()) as GmailListResponse;
       const ids = (list.messages ?? [])
@@ -333,11 +338,14 @@ export class EngageService {
         });
       }
 
-      return { configured: true, ...counters };
+      return { configured: true, ...counters, reason: null };
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown error';
       this.logger.warn(`Engage scan failed for org ${orgId}: ${msg}`);
-      return empty;
+      return {
+        ...empty,
+        reason: 'Could not reach Gmail. Try again, or reconnect the account.',
+      };
     }
   }
 
@@ -346,9 +354,11 @@ export class EngageService {
   // are UNSURE, ORG-SCOPED via the parent prospect, newest-first. Never throws.
   async list(orgId: string): Promise<EngageReplyListDto> {
     let account: { email: string } | null = null;
+    let reason: string | null = null;
     try {
-      const perOrg = await this.googleAccounts.getAccessTokenForOrg(orgId, 'gmail');
-      if (perOrg) account = { email: perOrg.account.email };
+      const access = await this.googleAccounts.resolveMailbox(orgId, 'gmail');
+      if (access.ok) account = { email: access.account.email };
+      else reason = access.reason;
 
       // Org-scoped: only this org's prospects, then their classification rows.
       const prospects = await this.db
@@ -360,7 +370,7 @@ export class EngageService {
         .from(schema.prospects)
         .where(eq(schema.prospects.organizationId, orgId));
       if (prospects.length === 0) {
-        return { configured: account !== null, account, replies: [] };
+        return { configured: account !== null, account, replies: [], reason };
       }
       const byId = new Map(prospects.map((p) => [p.id, p]));
       const prospectIds = prospects.map((p) => p.id);
@@ -407,11 +417,11 @@ export class EngageService {
         };
       });
 
-      return { configured: account !== null, account, replies };
+      return { configured: account !== null, account, replies, reason };
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown error';
       this.logger.warn(`Engage list failed for org ${orgId}: ${msg}`);
-      return { configured: account !== null, account, replies: [] };
+      return { configured: account !== null, account, replies: [], reason };
     }
   }
 

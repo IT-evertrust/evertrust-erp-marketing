@@ -174,13 +174,11 @@ export class GoogleCalendarReadService {
   // returns a `configured: false` shell when the org has no default calendar mailbox
   // or Google is unreachable.
   async upcoming(orgId: string): Promise<CalendarUpcomingDto> {
-    const perOrg = await this.googleAccounts.getAccessTokenForOrg(
-      orgId,
-      'calendar',
-    );
-    if (!perOrg) {
-      return { configured: false, account: null, events: [] };
+    const access = await this.googleAccounts.resolveMailbox(orgId, 'calendar');
+    if (!access.ok) {
+      return { configured: false, account: null, events: [], reason: access.reason };
     }
+    const perOrg = access;
 
     const selfEmail = perOrg.account.email.toLowerCase();
     const selfDomain = selfEmail.split('@')[1] ?? '';
@@ -200,7 +198,12 @@ export class GoogleCalendarReadService {
         this.logger.warn(
           `Calendar events returned HTTP ${res.status} for org ${orgId} — upcoming disabled`,
         );
-        return { configured: false, account: null, events: [] };
+        return {
+          configured: false,
+          account: null,
+          events: [],
+          reason: `Google Calendar API error (HTTP ${res.status}). Reconnect the account and allow Calendar.`,
+        };
       }
 
       const data = (await res.json()) as EventsListResponse;
@@ -237,24 +240,28 @@ export class GoogleCalendarReadService {
         configured: true,
         account: { email: perOrg.account.email },
         events,
+        reason: null,
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown error';
       this.logger.warn(`Calendar upcoming failed for org ${orgId}: ${msg}`);
-      return { configured: false, account: null, events: [] };
+      return {
+        configured: false,
+        account: null,
+        events: [],
+        reason: 'Could not reach Google Calendar. Try again, or reconnect the account.',
+      };
     }
   }
 
   // Proposed free slots over the next 7 days within Europe/Berlin business hours.
   // Never throws — returns a `configured: false` shell on any failure.
   async freeSlots(orgId: string): Promise<CalendarFreeSlotsDto> {
-    const perOrg = await this.googleAccounts.getAccessTokenForOrg(
-      orgId,
-      'calendar',
-    );
-    if (!perOrg) {
-      return { configured: false, slots: [] };
+    const access = await this.googleAccounts.resolveMailbox(orgId, 'calendar');
+    if (!access.ok) {
+      return { configured: false, slots: [], reason: access.reason };
     }
+    const perOrg = access;
 
     try {
       const now = new Date();
@@ -281,7 +288,11 @@ export class GoogleCalendarReadService {
         this.logger.warn(
           `Calendar freeBusy returned HTTP ${res.status} for org ${orgId} — slots disabled`,
         );
-        return { configured: false, slots: [] };
+        return {
+          configured: false,
+          slots: [],
+          reason: `Google Calendar API error (HTTP ${res.status}). Reconnect the account and allow Calendar.`,
+        };
       }
 
       const data = (await res.json()) as FreeBusyResponse;
@@ -298,11 +309,15 @@ export class GoogleCalendarReadService {
         }))
         .filter((b) => Number.isFinite(b.start) && Number.isFinite(b.end));
 
-      return { configured: true, slots: computeFreeSlots(busy, now) };
+      return { configured: true, slots: computeFreeSlots(busy, now), reason: null };
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown error';
       this.logger.warn(`Calendar freeSlots failed for org ${orgId}: ${msg}`);
-      return { configured: false, slots: [] };
+      return {
+        configured: false,
+        slots: [],
+        reason: 'Could not reach Google Calendar. Try again, or reconnect the account.',
+      };
     }
   }
 }

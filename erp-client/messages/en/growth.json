@@ -46,6 +46,7 @@
       "noLeads": "No leads yet — run the scraper for this campaign.",
       "selectToView": "Select a campaign above to view its scraped leads.",
       "leadStatus": { "NEW": "New", "EMAILED": "Emailed", "REPLIED": "Replied", "INTERESTED": "Interested", "MEETING_SCHEDULED": "Meeting", "NOT_INTERESTED": "Not interested", "RE_ENGAGED": "Re-engaged", "DO_NOT_CONTACT": "Do not contact" },
+      "run": "Run Lead Scraper",
       "criteriaTitle": "Search criteria",
       "criteriaMeta": "leads.campaignId",
       "selectLabel": "Select a campaign to scrape leads for",
