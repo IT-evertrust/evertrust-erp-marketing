@@ -1,62 +1,23 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
-import type { LucideIcon } from 'lucide-react';
+import { Loader2, Plus, Trash2 } from 'lucide-react';
+import type { ConnectedGoogleAccountDto } from '@evertrust/shared';
+import { AI_ENGINE_MODELS, ROLE_LABELS } from '@evertrust/shared';
 import {
-  ArrowRight,
-  Check,
-  Copy,
-  ImageOff,
-  Loader2,
-  Plug,
-  Plus,
-  ShieldOff,
-  Star,
-  Target,
-  Trash2,
-  Upload,
-  Users,
-  X,
-} from 'lucide-react';
-import type {
-  ConnectedGoogleAccountDto,
-  DefaultTemplateDto,
-  OrgSenderDto,
-  OutreachTone,
-  TemplateLanguage,
-  TestN8nResultDto,
-  UpdateWorkflowConfigDto,
-  WorkflowConfigDto,
-} from '@evertrust/shared';
-import { ROLE_LABELS } from '@evertrust/shared';
-import {
-  useClearIngestToken,
-  useClearSignatureImage,
+  useAiEngineConfig,
   useDisconnectGoogleAccount,
   useGoogleAccounts,
-  useLeadStats,
-  useOrgSenders,
-  useRemoveSender,
-  useRotateIngestToken,
-  useSetGoogleDefaults,
-  useSetSignatureImageUrl,
-  useTestN8n,
-  useUpdateWorkflowConfig,
-  useUploadSignatureImage,
-  useUpsertSender,
-  useWorkflowConfig,
+  useSetDefaultMailbox,
+  useUpdateAiEngineConfig,
 } from '@/hooks/use-arsenal';
 import { ApiError, api } from '@/lib/api';
-import { timeAgo } from '@/lib/arsenal-sequence';
 import { Can } from '@/components/auth/can';
 import { PageHeader } from '@/components/common/page-header';
-import { BazookaSchedule } from '@/components/growth/bazooka-schedule';
 import { ToneBadge } from '@/components/rean/tone-badge';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -66,14 +27,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -92,210 +45,36 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Textarea } from '@/components/ui/textarea';
-import { cn } from '@/lib/utils';
 
-// The six Growth-Engine webhook stages, in pipeline order, with their friendly
-// labels. The key matches WorkflowConfigDto.webhooks; the label is what operators
-// see (the codenames map to AIM → Lead Satellite → … → Sleeper Grenade).
-const WEBHOOK_STAGES = [
-  { key: 'aim', label: 'AIM · Launch' },
-  { key: 'leadSatellite', label: 'Lead Satellite' },
-  { key: 'ammoForge', label: 'Ammo Forge' },
-  { key: 'reachBazooka', label: 'Reach Bazooka' },
-  { key: 'replyGlock', label: 'Reply Glock' },
-  { key: 'sleeperGrenade', label: 'Sleeper Grenade' },
-] as const satisfies ReadonlyArray<{
-  key: keyof WorkflowConfigDto['webhooks'];
-  label: string;
-}>;
-
-type WebhookKey = (typeof WEBHOOK_STAGES)[number]['key'];
-
-// The three blocks of the default outreach sequence, in send order. The key
-// matches DefaultTemplateDto; the label is i18n-resolved at render via these keys.
-const TEMPLATE_BLOCKS = ['cold', 'followup', 'finalPush'] as const satisfies
-  ReadonlyArray<keyof DefaultTemplateDto>;
-type TemplateBlockKey = (typeof TEMPLATE_BLOCKS)[number];
-
-// Read-only merge tokens admins can drop into a template (shown as chips).
-const TEMPLATE_TOKENS = [
-  '{{Company Name}}',
-  '{{Company Type}}',
-  '{{city}}',
-  '{{project}}',
-] as const;
-
-// Product defaults surfaced as placeholder hints on the lead-cap inputs (these
-// are what the backend assumes when a cap is unset — never persisted by the form).
-const LEAD_HINTS = {
-  maxLeadsPerRun: '25',
-  maxPerNiche: '100',
-  dailySendCap: '40',
-  dedupDays: '30',
-} as const;
-
-// One template block flattened to strings (subject + body), per block key.
-type TemplateBlockForm = { subject: string; body: string };
-
-// The editable subset of the config, flattened into a form. Every value is a
-// string so an empty field reads as "clear the override → fall back to env":
-// webhooks/url empty → null, offsets empty → null, sender '' → "use default".
-// Templates + leads ride the same form: caps are strings ('' = clear), regions an
-// array, and the two lead booleans are real booleans (always sent on change).
-type FormState = {
-  webhooks: Record<WebhookKey, string>;
-  n8nApiUrl: string;
-  // A per-org sender KEY ('' = clear → resolve to the org/product default). The
-  // options come from the resolved senders list, not a fixed enum.
-  defaultSender: string;
-  salesCalendarId: string;
-  followupOffsetDays: string;
-  finalPushOffsetDays: string;
-  templates: {
-    blocks: Record<TemplateBlockKey, TemplateBlockForm>;
-    signature: string;
-    tone: '' | OutreachTone;
-    language: '' | TemplateLanguage;
-  };
-  leads: {
-    maxLeadsPerRun: string;
-    maxPerNiche: string;
-    dailySendCap: string;
-    defaultRegions: string[];
-    respectSuppressions: boolean;
-    dedupDays: string;
-    requireNicheAnalysis: boolean;
-  };
-};
-
-const EMPTY_BLOCK: TemplateBlockForm = { subject: '', body: '' };
-
-// True when no template field carries any content — that's the signal to send
-// `templates.default: null` (clear the baseline) rather than three empty blocks.
-function allBlocksEmpty(blocks: Record<TemplateBlockKey, TemplateBlockForm>) {
-  return TEMPLATE_BLOCKS.every(
-    (k) => blocks[k].subject.trim() === '' && blocks[k].body.trim() === '',
+// Whether a Google account's granted scopes include calendar access. Gmail is always
+// implied (every connect grants the send/read mail scope); calendar is the variable
+// one, so it's the only flag the table needs.
+function hasCalendarScope(scopes: string[]): boolean {
+  return scopes.some(
+    (s) => s.includes('calendar.events') || s.includes('calendar.readonly'),
   );
 }
 
-// Project the GET response onto the form. The {value, overridden} envelope only
-// contributes `value` here (the badge reads `overridden` straight from the data);
-// a null value seeds an empty field.
-function toForm(c: WorkflowConfigDto): FormState {
-  return {
-    webhooks: {
-      aim: c.webhooks.aim.value ?? '',
-      leadSatellite: c.webhooks.leadSatellite.value ?? '',
-      ammoForge: c.webhooks.ammoForge.value ?? '',
-      reachBazooka: c.webhooks.reachBazooka.value ?? '',
-      replyGlock: c.webhooks.replyGlock.value ?? '',
-      sleeperGrenade: c.webhooks.sleeperGrenade.value ?? '',
-    },
-    n8nApiUrl: c.n8nApiUrl.value ?? '',
-    defaultSender: c.defaultSender ?? '',
-    salesCalendarId: c.salesCalendarId ?? '',
-    followupOffsetDays:
-      c.followupOffsetDays == null ? '' : String(c.followupOffsetDays),
-    finalPushOffsetDays:
-      c.finalPushOffsetDays == null ? '' : String(c.finalPushOffsetDays),
-    templates: {
-      blocks: {
-        cold: c.templates.default?.cold ?? EMPTY_BLOCK,
-        followup: c.templates.default?.followup ?? EMPTY_BLOCK,
-        finalPush: c.templates.default?.finalPush ?? EMPTY_BLOCK,
-      },
-      signature: c.templates.signature ?? '',
-      tone: c.templates.tone ?? '',
-      language: c.templates.language ?? '',
-    },
-    leads: {
-      maxLeadsPerRun:
-        c.leads.maxLeadsPerRun == null ? '' : String(c.leads.maxLeadsPerRun),
-      maxPerNiche: c.leads.maxPerNiche == null ? '' : String(c.leads.maxPerNiche),
-      dailySendCap:
-        c.leads.dailySendCap == null ? '' : String(c.leads.dailySendCap),
-      defaultRegions: [...c.leads.defaultRegions],
-      respectSuppressions: c.leads.respectSuppressions,
-      dedupDays: c.leads.dedupDays == null ? '' : String(c.leads.dedupDays),
-      requireNicheAnalysis: c.leads.requireNicheAnalysis,
-    },
-  };
-}
-
-// A small emerald/amber status dot + text, for the read-only secret-status rows.
-function StatusDot({ ok, label }: { ok: boolean; label: string }) {
-  return (
-    <span className="flex items-center gap-2 text-sm text-muted-foreground">
-      <span
-        className={cn(
-          'size-2 rounded-full',
-          ok ? 'bg-emerald-500' : 'bg-amber-500',
-        )}
-      />
-      {label}
-    </span>
-  );
-}
-
-// The inline result of a "Test connection" probe. Tri-state dot: emerald when the
-// call succeeded, amber when n8n is configured but the probe failed, muted when
-// it isn't wired up at all. Appends the workflow count when the probe read one.
-function N8nTestResult({ result }: { result: TestN8nResultDto }) {
-  const t = useTranslations('settings');
-  const tone = result.ok
-    ? 'bg-emerald-500'
-    : result.configured
-      ? 'bg-amber-500'
-      : 'bg-muted-foreground';
-  const text =
-    result.workflowCount != null
-      ? `${result.detail} · ${t('config.n8n.workflowCount', {
-          count: result.workflowCount,
-        })}`
-      : result.detail;
-  return (
-    <p className="flex items-center gap-2 text-xs text-muted-foreground">
-      <span className={cn('size-2 shrink-0 rounded-full', tone)} />
-      {text}
-    </p>
-  );
-}
-
-// Custom (an override is set) vs Env default (falling back to the env var).
-function OverrideBadge({ overridden }: { overridden: boolean }) {
-  const t = useTranslations('settings');
-  return overridden ? (
-    <ToneBadge tone="emerald">{t('config.badge.custom')}</ToneBadge>
-  ) : (
-    <Badge variant="outline" className="text-muted-foreground">
-      {t('config.badge.envDefault')}
-    </Badge>
-  );
-}
-
-
-// A card with the mockup's "card-head" layout: title on the left, an optional
-// action (e.g. a Connect button) flush right, then the body. `description` renders
-// as the muted helper line under the head, matching the prototype's `.muted` row.
+// A card matching the mockup's "card-head" layout: title left, an optional action
+// (e.g. a Connect button) flush right, then the body.
 function SettingsCard({
   title,
   description,
   action,
+  className,
   children,
 }: {
   title: string;
   description?: string;
   action?: React.ReactNode;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
-    <Card>
+    <Card className={className}>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         {description ? <CardDescription>{description}</CardDescription> : null}
-        {/* CardAction lands top-right via the header grid's reserved slot — the
-            mockup's "card-head" layout (title left, Connect button right). */}
         {action ? <CardAction>{action}</CardAction> : null}
       </CardHeader>
       <CardContent className="flex flex-col gap-6">{children}</CardContent>
@@ -303,393 +82,34 @@ function SettingsCard({
   );
 }
 
-// A shortcut row into an existing config surface (niches, suppressions, users).
-function CatalogLink({
-  href,
-  icon: Icon,
-  title,
-  description,
-}: {
-  href: string;
-  icon: LucideIcon;
-  title: string;
-  description: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="flex items-center gap-3 rounded-lg border p-3 hover:bg-accent/50"
-    >
-      <Icon className="size-4 shrink-0 text-muted-foreground" />
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium">{title}</p>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </div>
-      <ArrowRight className="size-4 shrink-0 text-muted-foreground" />
-    </Link>
-  );
-}
-
-// A small accessible toggle (no Switch primitive exists in this kit). An ARIA
-// switch button with a sliding thumb; emerald when on, muted when off.
-function Toggle({
-  checked,
-  onChange,
-  label,
-  description,
-  id,
-}: {
-  checked: boolean;
-  onChange: (next: boolean) => void;
-  label: string;
-  description?: string;
-  id: string;
-}) {
-  const labelId = `${id}-label`;
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <div className="min-w-0 flex-1">
-        <p id={labelId} className="text-sm font-medium">
-          {label}
-        </p>
-        {description ? (
-          <p className="text-xs text-muted-foreground">{description}</p>
-        ) : null}
-      </div>
-      <button
-        type="button"
-        role="switch"
-        id={id}
-        aria-checked={checked}
-        aria-labelledby={labelId}
-        onClick={() => onChange(!checked)}
-        className={cn(
-          'inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border border-transparent transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50',
-          checked ? 'bg-emerald-500' : 'bg-input',
-        )}
-      >
-        <span
-          className={cn(
-            'pointer-events-none size-5 rounded-full bg-background shadow-xs transition-transform',
-            checked ? 'translate-x-5' : 'translate-x-0.5',
-          )}
-        />
-      </button>
-    </div>
-  );
-}
-
-// An editable chip list bound to a string[]. Each region is a removable chip; the
-// trailing input appends a trimmed, non-empty, non-duplicate value on Enter / Add.
-function RegionChips({
-  regions,
-  onChange,
-  addLabel,
-  placeholder,
-  removeAria,
-}: {
-  regions: string[];
-  onChange: (next: string[]) => void;
-  addLabel: string;
-  placeholder: string;
-  removeAria: (region: string) => string;
-}) {
-  const [draft, setDraft] = useState('');
-
-  function add() {
-    const value = draft.trim();
-    if (value === '' || regions.includes(value)) {
-      setDraft('');
-      return;
-    }
-    onChange([...regions, value]);
-    setDraft('');
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      {regions.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          {regions.map((region) => (
-            <span
-              key={region}
-              className="inline-flex items-center gap-1 rounded-md border bg-muted px-2 py-1 text-xs"
-            >
-              {region}
-              <button
-                type="button"
-                onClick={() => onChange(regions.filter((r) => r !== region))}
-                className="text-muted-foreground hover:text-foreground"
-                aria-label={removeAria(region)}
-              >
-                <X className="size-3" />
-              </button>
-            </span>
-          ))}
-        </div>
-      ) : null}
-      <div className="flex max-w-sm items-center gap-2">
-        <Input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              add();
-            }
-          }}
-          placeholder={placeholder}
-        />
-        <Button type="button" variant="outline" onClick={add} disabled={draft.trim() === ''}>
-          {addLabel}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-// One tile in the lead metric strip: a big tabular number over a muted label, or a
-// Skeleton while the count loads.
-function StatTile({
-  label,
-  value,
-  loading,
-}: {
-  label: string;
-  value: number | undefined;
-  loading: boolean;
-}) {
-  return (
-    <div className="flex flex-col gap-1 rounded-lg border p-3">
-      {loading || value == null ? (
-        <Skeleton className="h-7 w-12" />
-      ) : (
-        <span className="text-2xl font-semibold tabular-nums">{value}</span>
-      )}
-      <span className="text-xs text-muted-foreground">{label}</span>
-    </div>
-  );
-}
-
-// Loose URL check (mirrors the server's NullableUrlOverride) so a bad URL fails
-// with a friendly toast instead of a raw ZodError from the client-side parse.
-function isValidUrl(value: string): boolean {
-  try {
-    new URL(value);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// Configuration > Templates — the per-org signature image. Unlike the other
-// template fields this isn't part of the save-bar diff: upload / use-link / remove
-// are immediate-action mutations (like the ingest-token controls), each refetching
-// the config so the preview reflects the resolved URL. `url` is the current value
-// from the resolved config (null = none set). Gate at the call site with <Can>.
-function SignatureImageControl({ url }: { url: string | null }) {
-  const t = useTranslations('settings');
-  const upload = useUploadSignatureImage();
-  const setLink = useSetSignatureImageUrl();
-  const clear = useClearSignatureImage();
-
-  // Hidden file input, driven by the visible Upload button.
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [link, setLink_] = useState('');
-  // The preview can 404 (a broken hotlink / dead Drive share) — track that so we
-  // fall back to the empty state instead of a broken-image glyph.
-  const [imgError, setImgError] = useState(false);
-
-  const busy = upload.isPending || setLink.isPending || clear.isPending;
-
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    // Reset the input so picking the same file twice still fires onChange.
-    e.target.value = '';
-    if (!file) return;
-    setImgError(false);
-    upload.mutate(file, {
-      onSuccess: () => toast.success(t('config.signatureImage.toastUploaded')),
-      onError: (err) =>
-        toast.error(err.message || t('config.signatureImage.toastError')),
-    });
-  }
-
-  function handleUseLink() {
-    const value = link.trim();
-    if (value === '') return;
-    if (!isValidUrl(value)) {
-      toast.error(t('config.signatureImage.invalidUrl'));
-      return;
-    }
-    setImgError(false);
-    setLink.mutate(value, {
-      onSuccess: () => {
-        setLink_('');
-        toast.success(t('config.signatureImage.toastLinked'));
-      },
-      onError: (err) =>
-        toast.error(err.message || t('config.signatureImage.toastError')),
-    });
-  }
-
-  function handleRemove() {
-    clear.mutate(undefined, {
-      onSuccess: () => toast.success(t('config.signatureImage.toastRemoved')),
-      onError: (err) =>
-        toast.error(err.message || t('config.signatureImage.toastError')),
-    });
-  }
-
-  const showImage = url != null && !imgError;
-
-  return (
-    <div className="flex flex-col gap-3 border-t pt-4">
-      <div className="flex flex-col gap-1">
-        <Label>{t('config.signatureImage.label')}</Label>
-        <p className="text-xs text-muted-foreground">
-          {t('config.signatureImage.helper')}
-        </p>
-      </div>
-
-      <div className="flex flex-wrap items-start gap-4">
-        {/* Preview tile — the image, or a muted empty state. */}
-        <div className="flex size-24 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-muted/30">
-          {showImage ? (
-            // eslint-disable-next-line @next/next/no-img-element -- remote hotlink (Drive/served), not a local asset; next/image isn't configured for these hosts.
-            <img
-              src={url}
-              alt={t('config.signatureImage.previewAlt')}
-              className="size-full object-contain"
-              onError={() => setImgError(true)}
-            />
-          ) : (
-            <div className="flex flex-col items-center gap-1 px-2 text-center">
-              <ImageOff className="size-5 text-muted-foreground" />
-              <span className="text-[10px] leading-tight text-muted-foreground">
-                {url != null
-                  ? t('config.signatureImage.brokenPreview')
-                  : t('config.signatureImage.empty')}
-              </span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex min-w-0 flex-1 flex-col gap-3">
-          {/* Upload (hidden file input) + Remove (only when one is set). */}
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleFile}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={busy}
-            >
-              <Upload className="size-4" />
-              {upload.isPending
-                ? t('config.signatureImage.uploading')
-                : t('config.signatureImage.upload')}
-            </Button>
-            {url != null ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="text-muted-foreground"
-                onClick={handleRemove}
-                disabled={busy}
-              >
-                <Trash2 className="size-4" />
-                {clear.isPending
-                  ? t('config.signatureImage.removing')
-                  : t('config.signatureImage.remove')}
-              </Button>
-            ) : null}
-          </div>
-
-          {/* Paste a Drive/image URL → Use link. */}
-          <div className="flex max-w-md items-center gap-2">
-            <Input
-              type="url"
-              inputMode="url"
-              autoComplete="off"
-              spellCheck={false}
-              className="text-xs"
-              placeholder={t('config.signatureImage.linkPlaceholder')}
-              value={link}
-              onChange={(e) => setLink_(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleUseLink();
-                }
-              }}
-              disabled={busy}
-              aria-label={t('config.signatureImage.linkLabel')}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleUseLink}
-              disabled={busy || link.trim() === ''}
-            >
-              {setLink.isPending
-                ? t('config.signatureImage.linking')
-                : t('config.signatureImage.useLink')}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Which of the two product scopes a Google account granted — drives the scope
-// badges in the Workspace table (Gmail = sky, Calendar = violet).
-function scopeFlags(scopes: string[]): { gmail: boolean; calendar: boolean } {
-  return {
-    gmail: scopes.some((s) => s.includes('gmail') || s.includes('mail.google')),
-    calendar: scopes.some((s) => s.includes('calendar')),
-  };
-}
-
-// Radix Select forbids an empty-string item value, so the "None" option uses this
-// sentinel; it maps back to null (clear the default) when calling the API.
-const GOOGLE_DEFAULT_NONE = '__none__';
-
-// Configuration > Connected Google accounts — per-org Gmail/Calendar OAuth.
-// The Connect button is open to any authenticated user (it just kicks off the OAuth
-// redirect); the list, default selectors and disconnect are admin-only (server
-// enforces admin:config) and gated with <Can>. On return from the consent screen the
-// callback redirects to /settings/configuration?google=connected|error — we toast and
-// clean the param on mount. Immediate-action mutations, like the senders editor.
-function GoogleAccountsControl() {
+// ============================================================================
+// Card 1 — Google Workspace
+// ============================================================================
+// Per-org Gmail/Calendar OAuth. The Connect button is open to any authenticated
+// user (it just kicks off the consent redirect); the mailbox table, default control
+// and disconnect are admin-only (server enforces admin:config) and gated with <Can>.
+// On return from the consent screen the callback redirects to
+// /settings/configuration?google=connected|error — we toast and strip the param on
+// mount.
+function GoogleWorkspaceCard() {
   const t = useTranslations('settings');
   const router = useRouter();
   const accounts = useGoogleAccounts();
-  const setDefaults = useSetGoogleDefaults();
+  const setDefaultMailbox = useSetDefaultMailbox();
   const disconnect = useDisconnectGoogleAccount();
 
-  // Whether the API is configured for Google connect. null = unknown (until the
-  // connect probe runs or the start call returns); false after a 503 from start.
+  // Whether the API is configured for Google connect. true until a 503 from start.
   const [connectConfigured, setConnectConfigured] = useState(true);
   const [connecting, setConnecting] = useState(false);
   // Which account id is mid-mutation, so we disable just that row's controls.
   const [pendingId, setPendingId] = useState<string | null>(null);
 
   const list = accounts.data ?? [];
-  const busy = setDefaults.isPending || disconnect.isPending;
+  const busy = setDefaultMailbox.isPending || disconnect.isPending;
 
   // On return from Google's consent screen the callback appends ?google=connected|error.
-  // Read it from the URL (client-only — avoids the useSearchParams Suspense/prerender
-  // requirement), toast once, refetch the list, then strip the param so a refresh
-  // doesn't re-toast. Runs once on mount.
+  // Read it client-side (avoids the useSearchParams Suspense requirement), toast once,
+  // refetch, then strip the param so a refresh doesn't re-toast. Runs once on mount.
   useEffect(() => {
     const param = new URLSearchParams(window.location.search).get('google');
     if (param !== 'connected' && param !== 'error') return;
@@ -705,8 +125,8 @@ function GoogleAccountsControl() {
   }, []);
 
   // Kick off the OAuth flow: ask the API for the consent URL, then leave the app with
-  // a full-page redirect (NOT router.push — we must hand off to Google). A 503 means
-  // the API isn't configured for connect; show the disabled hint instead of crashing.
+  // a full-page redirect (NOT router.push — we hand off to Google). A 503 means the
+  // API isn't configured for connect; show the disabled hint instead of crashing.
   async function handleConnect() {
     setConnecting(true);
     try {
@@ -724,17 +144,17 @@ function GoogleAccountsControl() {
     }
   }
 
-  // Repoint the org default Gmail or Calendar account. The "None" sentinel maps to
-  // null (clear the default). The server returns the resolved list (cache-seeded).
-  function handleSetDefault(
-    field: 'defaultGmailAccountId' | 'defaultCalendarAccountId',
-    value: string,
-  ) {
-    setDefaults.mutate(
-      { [field]: value === GOOGLE_DEFAULT_NONE ? null : value },
+  // Promote a mailbox to the org's single default. The server returns the resolved
+  // list (the single isDefault flag reflected); the hook seeds the cache.
+  function handleSetDefault(a: ConnectedGoogleAccountDto) {
+    if (a.isDefault) return;
+    setPendingId(a.id);
+    setDefaultMailbox.mutate(
+      { accountId: a.id },
       {
-        onSuccess: () => toast.success(t('config.google.toastDefaultsSet')),
+        onSuccess: () => toast.success(t('config.google.toastDefaultSet')),
         onError: (err) => toast.error(err.message || t('config.google.toastError')),
+        onSettled: () => setPendingId(null),
       },
     );
   }
@@ -754,250 +174,149 @@ function GoogleAccountsControl() {
     REVOKED: t('config.google.statusRevoked'),
     ERROR: t('config.google.statusError'),
   };
-  const gmailDefaultId =
-    list.find((a) => a.isDefaultGmail)?.id ?? GOOGLE_DEFAULT_NONE;
-  const calendarDefaultId =
-    list.find((a) => a.isDefaultCalendar)?.id ?? GOOGLE_DEFAULT_NONE;
+
+  // Connect — open to any authenticated user. Disabled with a hint when the API
+  // reports it isn't configured for Google connect (503 from start).
+  const connectButton = (
+    <div className="flex flex-col items-end gap-1">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={handleConnect}
+        disabled={connecting || !connectConfigured}
+      >
+        {connecting ? (
+          <Loader2 className="size-4 animate-spin" />
+        ) : (
+          <Plus className="size-4" />
+        )}
+        {connecting
+          ? t('config.google.connecting')
+          : t('config.google.connect')}
+      </Button>
+      {!connectConfigured ? (
+        <p className="text-right text-xs text-muted-foreground">
+          {t('config.google.notConfigured')}
+        </p>
+      ) : null}
+    </div>
+  );
 
   return (
     <SettingsCard
       title={t('config.google.title')}
       description={t('config.google.description')}
-      action={
-        /* Connect — open to any authenticated user. Disabled with a hint when the
-           API reports it isn't configured for Google connect (503 from start). */
-        <div className="flex flex-col items-end gap-1">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleConnect}
-            disabled={connecting || !connectConfigured}
-          >
-            {connecting ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Plug className="size-4" />
-            )}
-            {connecting
-              ? t('config.google.connecting')
-              : t('config.google.connect')}
-          </Button>
-          {!connectConfigured ? (
-            <p className="text-right text-xs text-muted-foreground">
-              {t('config.google.notConfigured')}
-            </p>
-          ) : null}
-        </div>
-      }
+      action={connectButton}
     >
-      <p className="text-sm text-muted-foreground">{t('config.google.helper')}</p>
-
-      {/* List + defaults + disconnect — admin-only (server enforces admin:config). */}
+      {/* The mailbox table + default + disconnect are admin-only. */}
       <Can permission="admin:config">
         {accounts.isLoading ? (
           <Skeleton className="h-24 w-full rounded-lg" />
         ) : list.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {t('config.google.empty')}
-          </p>
+          <div className="flex flex-col items-start gap-3">
+            <p className="text-sm text-muted-foreground">
+              {t('config.google.empty')}
+            </p>
+            {connectButton}
+          </div>
         ) : (
-          <div className="flex flex-col gap-4">
-            {/* Mailbox table — email + scope badges (Gmail = sky, Calendar =
-                violet, none = muted), a per-row default control (emerald badge
-                when set, "Set default" buttons otherwise), and disconnect. */}
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t('config.google.columnMailbox')}</TableHead>
-                    <TableHead>{t('config.google.columnScopes')}</TableHead>
-                    <TableHead className="text-right">
-                      {t('config.google.columnDefault')}
-                    </TableHead>
-                    <TableHead className="w-0" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {list.map((a) => {
-                    const rowBusy = busy && pendingId === a.id;
-                    const flags = scopeFlags(a.scopes);
-                    return (
-                      <TableRow key={a.id}>
-                        {/* Mailbox: display name (bold) over the email + status. */}
-                        <TableCell>
-                          <div className="flex min-w-0 flex-col gap-0.5">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-semibold">
-                                {a.displayName?.trim()
-                                  ? a.displayName
-                                  : a.email}
-                              </span>
-                              <ToneBadge tone="muted">
-                                {ROLE_LABELS[a.role]}
-                              </ToneBadge>
-                            </div>
-                            <span className="truncate font-mono text-xs text-muted-foreground">
-                              {a.email}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                              {statusLabel[a.status]}
-                            </span>
+          <div className="overflow-x-auto rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t('config.google.columnMailbox')}</TableHead>
+                  <TableHead>{t('config.google.columnScopes')}</TableHead>
+                  <TableHead className="text-right">
+                    {t('config.google.columnDefault')}
+                  </TableHead>
+                  <TableHead className="w-0" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {list.map((a) => {
+                  const rowBusy = busy && pendingId === a.id;
+                  const calendar = hasCalendarScope(a.scopes);
+                  return (
+                    <TableRow key={a.id}>
+                      {/* Mailbox: email (bold) + a small role/status hint. */}
+                      <TableCell>
+                        <div className="flex min-w-0 flex-col gap-0.5">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-semibold">{a.email}</span>
+                            <ToneBadge tone="muted">
+                              {ROLE_LABELS[a.role]}
+                            </ToneBadge>
                           </div>
-                        </TableCell>
-                        {/* Scopes: Gmail = sky, Calendar = violet, neither =
-                            muted "No access". */}
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1.5">
-                            {flags.gmail ? (
-                              <ToneBadge tone="sky">
-                                {t('config.google.scopeGmailBadge')}
-                              </ToneBadge>
-                            ) : null}
-                            {flags.calendar ? (
-                              <ToneBadge tone="violet">
-                                {t('config.google.scopeCalendarBadge')}
-                              </ToneBadge>
-                            ) : (
-                              <ToneBadge tone="muted">
-                                {t('config.google.scopeNoCalendar')}
-                              </ToneBadge>
-                            )}
-                            {!flags.gmail && !flags.calendar ? (
-                              <ToneBadge tone="muted">
-                                {t('config.google.scopeNone')}
-                              </ToneBadge>
-                            ) : null}
-                          </div>
-                        </TableCell>
-                        {/* Default: emerald "Default" badge when set for a role,
-                            else a "Set default" button per role (Gmail/Calendar).
-                            Repoints the org default via the same handler the
-                            selectors below use. */}
-                        <TableCell className="text-right">
-                          <div className="flex flex-col items-end gap-1.5">
-                            {a.isDefaultGmail ? (
-                              <ToneBadge tone="emerald">
-                                {t('config.google.defaultGmailBadge')}
-                              </ToneBadge>
-                            ) : flags.gmail ? (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 px-2 text-xs text-muted-foreground"
-                                onClick={() =>
-                                  handleSetDefault('defaultGmailAccountId', a.id)
-                                }
-                                disabled={busy}
-                              >
-                                <Star className="size-3.5" />
-                                {t('config.google.setDefaultGmail')}
-                              </Button>
-                            ) : null}
-                            {a.isDefaultCalendar ? (
-                              <ToneBadge tone="emerald">
-                                {t('config.google.defaultCalendarBadge')}
-                              </ToneBadge>
-                            ) : flags.calendar ? (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 px-2 text-xs text-muted-foreground"
-                                onClick={() =>
-                                  handleSetDefault(
-                                    'defaultCalendarAccountId',
-                                    a.id,
-                                  )
-                                }
-                                disabled={busy}
-                              >
-                                <Star className="size-3.5" />
-                                {t('config.google.setDefaultCalendar')}
-                              </Button>
-                            ) : null}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
+                          <span className="text-xs text-muted-foreground">
+                            {statusLabel[a.status]}
+                          </span>
+                        </div>
+                      </TableCell>
+                      {/* Scopes: Gmail (sky) always; Calendar (violet) when granted,
+                          else a muted "no calendar" badge. */}
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1.5">
+                          <ToneBadge tone="sky">
+                            {t('config.google.scopeGmailBadge')}
+                          </ToneBadge>
+                          {calendar ? (
+                            <ToneBadge tone="violet">
+                              {t('config.google.scopeCalendarBadge')}
+                            </ToneBadge>
+                          ) : (
+                            <ToneBadge tone="muted">
+                              {t('config.google.scopeNoCalendar')}
+                            </ToneBadge>
+                          )}
+                        </div>
+                      </TableCell>
+                      {/* Default: emerald "Default" badge when set, else a "Set
+                          default" button promoting this mailbox to the org default. */}
+                      <TableCell className="text-right">
+                        {a.isDefault ? (
+                          <ToneBadge tone="emerald">
+                            {t('config.google.defaultBadge')}
+                          </ToneBadge>
+                        ) : (
                           <Button
                             type="button"
                             variant="ghost"
-                            size="icon"
-                            className="shrink-0 text-muted-foreground hover:text-destructive"
-                            aria-label={t('config.google.disconnectAria', {
-                              account: a.email,
-                            })}
-                            onClick={() => handleDisconnect(a)}
+                            size="sm"
+                            className="h-7 px-2 text-xs text-muted-foreground"
+                            onClick={() => handleSetDefault(a)}
                             disabled={busy}
                           >
-                            {rowBusy ? (
-                              <Loader2 className="size-4 animate-spin" />
-                            ) : (
-                              <Trash2 className="size-4" />
-                            )}
+                            {t('config.google.setDefault')}
                           </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-
-            {/* Default selectors — which account campaigns send from / book into.
-                Kept alongside the per-row buttons (the split Gmail/Calendar
-                default is more correct than the mockup's single defaultMailbox). */}
-            <div className="grid gap-3 border-t pt-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <Label>{t('config.google.defaultGmailLabel')}</Label>
-                <Select
-                  value={gmailDefaultId}
-                  onValueChange={(v) =>
-                    handleSetDefault('defaultGmailAccountId', v)
-                  }
-                  disabled={busy}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t('config.google.defaultNone')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={GOOGLE_DEFAULT_NONE}>
-                      {t('config.google.defaultNone')}
-                    </SelectItem>
-                    {list.map((a) => (
-                      <SelectItem key={a.id} value={a.id}>
-                        {a.email}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>{t('config.google.defaultCalendarLabel')}</Label>
-                <Select
-                  value={calendarDefaultId}
-                  onValueChange={(v) =>
-                    handleSetDefault('defaultCalendarAccountId', v)
-                  }
-                  disabled={busy}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={t('config.google.defaultNone')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={GOOGLE_DEFAULT_NONE}>
-                      {t('config.google.defaultNone')}
-                    </SelectItem>
-                    {list.map((a) => (
-                      <SelectItem key={a.id} value={a.id}>
-                        {a.email}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+                        )}
+                      </TableCell>
+                      {/* Subtle per-row disconnect (the mockup omits it, but it's
+                          needed) — a small ghost control with a confirm. */}
+                      <TableCell className="text-right">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="shrink-0 text-muted-foreground hover:text-destructive"
+                          aria-label={t('config.google.disconnectAria', {
+                            account: a.email,
+                          })}
+                          onClick={() => handleDisconnect(a)}
+                          disabled={busy}
+                        >
+                          {rowBusy ? (
+                            <Loader2 className="size-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="size-4" />
+                          )}
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           </div>
         )}
       </Can>
@@ -1005,528 +324,165 @@ function GoogleAccountsControl() {
   );
 }
 
-// The blank add-sender row. Key + email are required; label optional; isDefault
-// promotes the new sender to the org's fallback on save.
-type SenderDraft = { key: string; email: string; label: string; isDefault: boolean };
-const EMPTY_SENDER_DRAFT: SenderDraft = {
-  key: '',
-  email: '',
-  label: '',
-  isDefault: false,
-};
-
-// Configuration > Senders — the per-org outreach mailbox list. Like the signature
-// image, these are immediate-action mutations (add / set-default / remove), each
-// re-resolving the senders + config queries via the hooks. The campaign sender
-// picker reads from the same resolved list. Gate at the call site with <Can>.
-function SendersControl() {
+// ============================================================================
+// Card 2 — Other integrations
+// ============================================================================
+// Two rows: Transactional email (connected when at least one Google account is
+// connected) and DocuSign (a placeholder "Connect" — no backend yet).
+function OtherIntegrationsCard() {
   const t = useTranslations('settings');
-  const senders = useOrgSenders();
-  const upsert = useUpsertSender();
-  const remove = useRemoveSender();
-
-  const [draft, setDraft] = useState<SenderDraft>(EMPTY_SENDER_DRAFT);
-  // Which sender key is mid-mutation, so we can disable just that row's controls.
-  const [pendingKey, setPendingKey] = useState<string | null>(null);
-
-  const list = senders.data ?? [];
-  const busy = upsert.isPending || remove.isPending;
-
-  function setField<K extends keyof SenderDraft>(key: K, value: SenderDraft[K]) {
-    setDraft((d) => ({ ...d, [key]: value }));
-  }
-
-  // Add (or update) a sender from the draft row. Key + a valid email are required.
-  function handleAdd() {
-    const key = draft.key.trim();
-    const email = draft.email.trim();
-    const label = draft.label.trim();
-    if (key === '' || email === '') {
-      toast.error(t('config.senders.missingFields'));
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      toast.error(t('config.senders.invalidEmail'));
-      return;
-    }
-    setPendingKey(key);
-    upsert.mutate(
-      { key, email, label: label === '' ? null : label, isDefault: draft.isDefault },
-      {
-        onSuccess: () => {
-          setDraft(EMPTY_SENDER_DRAFT);
-          toast.success(t('config.senders.toastAdded'));
-        },
-        onError: (err) => toast.error(err.message || t('config.senders.toastError')),
-        onSettled: () => setPendingKey(null),
-      },
-    );
-  }
-
-  // Promote an existing sender to the org default (re-upserts with isDefault: true;
-  // the server unsets the flag on the others).
-  function handleSetDefault(s: OrgSenderDto) {
-    if (s.isDefault) return;
-    setPendingKey(s.key);
-    upsert.mutate(
-      { key: s.key, email: s.email, label: s.label ?? null, isDefault: true },
-      {
-        onSuccess: () => toast.success(t('config.senders.toastDefaultSet')),
-        onError: (err) => toast.error(err.message || t('config.senders.toastError')),
-        onSettled: () => setPendingKey(null),
-      },
-    );
-  }
-
-  // Remove a sender. The button is disabled for the last remaining one; the server
-  // also guards (409) in case of a race.
-  function handleRemove(s: OrgSenderDto) {
-    setPendingKey(s.key);
-    remove.mutate(s.key, {
-      onSuccess: () => toast.success(t('config.senders.toastRemoved')),
-      onError: (err) => toast.error(err.message || t('config.senders.toastError')),
-      onSettled: () => setPendingKey(null),
-    });
-  }
+  const accounts = useGoogleAccounts();
+  const emailConnected = (accounts.data ?? []).length > 0;
 
   return (
-    <SettingsCard
-      title={t('config.senders.title')}
-      description={t('config.senders.description')}
-    >
-      {senders.isLoading ? (
-        <Skeleton className="h-24 w-full rounded-lg" />
-      ) : list.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          {t('config.senders.empty')}
-        </p>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>{t('config.senders.labelLabel')}</TableHead>
-                <TableHead>{t('config.senders.emailLabel')}</TableHead>
-                <TableHead className="w-0" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {list.map((s) => {
-                const rowBusy = busy && pendingKey === s.key;
-                return (
-                  <TableRow key={s.key}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">
-                          {s.label?.trim() ? s.label : s.key}
-                        </span>
-                        {s.isDefault ? (
-                          <ToneBadge tone="emerald">
-                            {t('config.senders.defaultBadge')}
-                          </ToneBadge>
-                        ) : null}
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-mono text-xs text-muted-foreground">
-                      {s.email}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {s.isDefault ? null : (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs text-muted-foreground"
-                            onClick={() => handleSetDefault(s)}
-                            disabled={busy}
-                          >
-                            <Star className="size-3.5" />
-                            {t('config.senders.makeDefault')}
-                          </Button>
-                        )}
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="shrink-0 text-muted-foreground hover:text-destructive"
-                          onClick={() => handleRemove(s)}
-                          // Refuse to remove the last sender (the server guards too).
-                          disabled={busy || list.length <= 1}
-                          aria-label={t('config.senders.removeAria', {
-                            sender: s.label?.trim() ? s.label : s.key,
-                          })}
-                          title={
-                            list.length <= 1
-                              ? t('config.senders.removeLastBlocked')
-                              : undefined
-                          }
-                        >
-                          {rowBusy && remove.isPending ? (
-                            <span className="size-4 animate-pulse rounded-full bg-muted-foreground/40" />
-                          ) : (
-                            <Trash2 className="size-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-
-        {/* Add row — key + email (+ optional label), with a "set as default" toggle. */}
-        <div className="flex flex-col gap-3 border-t pt-4">
-          <Label>{t('config.senders.addTitle')}</Label>
-          <div className="grid gap-2 sm:grid-cols-3">
-            <Input
-              value={draft.key}
-              onChange={(e) => setField('key', e.target.value)}
-              placeholder={t('config.senders.keyPlaceholder')}
-              aria-label={t('config.senders.keyLabel')}
-              maxLength={60}
-              autoComplete="off"
-              spellCheck={false}
-            />
-            <Input
-              type="email"
-              inputMode="email"
-              value={draft.email}
-              onChange={(e) => setField('email', e.target.value)}
-              placeholder={t('config.senders.emailPlaceholder')}
-              aria-label={t('config.senders.emailLabel')}
-              maxLength={200}
-              autoComplete="off"
-              spellCheck={false}
-              className="font-mono text-xs"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleAdd();
-                }
-              }}
-            />
-            <Input
-              value={draft.label}
-              onChange={(e) => setField('label', e.target.value)}
-              placeholder={t('config.senders.labelPlaceholder')}
-              aria-label={t('config.senders.labelLabel')}
-              maxLength={120}
-              autoComplete="off"
-            />
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={draft.isDefault}
-                onChange={(e) => setField('isDefault', e.target.checked)}
-                className="size-4 rounded border-input accent-emerald-500"
-              />
-              {t('config.senders.setDefaultOnAdd')}
-            </label>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleAdd}
-              disabled={
-                busy || draft.key.trim() === '' || draft.email.trim() === ''
-              }
-            >
-              {upsert.isPending && pendingKey === draft.key.trim() ? (
-                <Check className="size-4" />
-              ) : (
-                <Plus className="size-4" />
-              )}
-              {t('config.senders.add')}
-            </Button>
-          </div>
-        </div>
+    <SettingsCard title={t('config.other.title')}>
+      <div className="overflow-x-auto rounded-lg border">
+        <Table>
+          <TableBody>
+            <TableRow>
+              <TableCell className="font-semibold">
+                {t('config.other.emailLabel')}
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {t('config.other.emailSublabel')}
+              </TableCell>
+              <TableCell className="text-right">
+                {emailConnected ? (
+                  <ToneBadge tone="emerald">
+                    {t('config.other.connected')}
+                  </ToneBadge>
+                ) : (
+                  <ToneBadge tone="muted">
+                    {t('config.other.notConnected')}
+                  </ToneBadge>
+                )}
+              </TableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell className="font-semibold">
+                {t('config.other.docusignLabel')}
+              </TableCell>
+              <TableCell className="text-muted-foreground">
+                {t('config.other.docusignSublabel')}
+              </TableCell>
+              <TableCell className="text-right">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => toast(t('config.other.comingSoon'))}
+                >
+                  {t('config.other.connect')}
+                </Button>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
+      </div>
     </SettingsCard>
   );
 }
 
-// Configuration: the editable Growth-Engine control panel, admin-only (the route
-// gates on admin:config). Webhook URLs + the n8n base URL are editable overrides;
-// secrets (n8n API key, ingest token) are status-only, never inputs.
-export function ConfigurationSettings() {
+// ============================================================================
+// Card 3 — AI engine
+// ============================================================================
+// A narrower card: a Model select (from AI_ENGINE_MODELS), a Gateway text input,
+// and a Save button (PUT ai-engine). Initial values load from GET ai-engine.
+const MODEL_UNSET = '__unset__';
+
+function AiEngineCard() {
   const t = useTranslations('settings');
-  const config = useWorkflowConfig();
-  const leadStats = useLeadStats();
-  const update = useUpdateWorkflowConfig();
-  const testN8n = useTestN8n();
-  const rotate = useRotateIngestToken();
-  const clearToken = useClearIngestToken();
+  const config = useAiEngineConfig();
+  const update = useUpdateAiEngineConfig();
   const data = config.data;
 
-  // Localized labels for the ingest-token source (resolved here; can't call
-  // hooks at module scope).
-  const ingestSourceLabel: Record<WorkflowConfigDto['ingestTokenSource'], string> =
-    {
-      rotated: t('config.ingest.sourceRotated'),
-      env: t('config.ingest.sourceEnv'),
-      none: t('config.ingest.sourceNone'),
-    };
+  // Local form state, seeded from the GET. '' gateway clears the override.
+  const [model, setModel] = useState<string>(MODEL_UNSET);
+  const [gateway, setGateway] = useState<string>('');
 
-  // The latest n8n probe result, rendered inline beneath the API URL field.
-  const [n8nResult, setN8nResult] = useState<TestN8nResultDto | null>(null);
-  // The freshly-rotated ingest token — held only to reveal it once in the dialog.
-  // Setting it opens the dialog; clearing it (Done / dismiss) drops the plaintext.
-  const [rotatedToken, setRotatedToken] = useState<string | null>(null);
-
-  // The form is seeded from the GET; `baseline` is the same projection, used to
-  // diff for dirty-tracking and to send only the fields the operator changed.
-  const baseline = useMemo(() => (data ? toForm(data) : null), [data]);
-  const [form, setForm] = useState<FormState | null>(null);
+  // The select options: always the product list, plus the current value if it has
+  // drifted off the list (so a legacy model still renders).
+  const modelOptions = useMemo(() => {
+    const opts = [...AI_ENGINE_MODELS];
+    if (data?.model && !opts.includes(data.model)) opts.push(data.model);
+    return opts;
+  }, [data?.model]);
 
   useEffect(() => {
-    if (baseline) setForm(baseline);
-  }, [baseline]);
+    if (!data) return;
+    setModel(data.model ?? MODEL_UNSET);
+    setGateway(data.gateway ?? '');
+  }, [data]);
 
-  const dirty =
-    !!form && !!baseline && JSON.stringify(form) !== JSON.stringify(baseline);
-
-  // Default-sender Select options, derived from the resolved senders so the cadence
-  // picker tracks the org's mailbox list (not a fixed info/hanna enum). Each option
-  // shows "Label (email)" (or the email). Always includes the current explicit
-  // override so a legacy key still renders a valid choice.
-  const senderOptions = useMemo(() => {
-    const list = data?.senders ?? [];
-    const opts = list.map((s) => ({
-      key: s.key,
-      label: s.label?.trim() ? `${s.label} (${s.email})` : s.email,
-    }));
-    const current = form?.defaultSender ?? '';
-    if (current !== '' && !opts.some((o) => o.key === current)) {
-      opts.push({ key: current, label: current });
-    }
-    return opts;
-  }, [data?.senders, form?.defaultSender]);
-
-  function setWebhook(key: WebhookKey, value: string) {
-    setForm((f) => (f ? { ...f, webhooks: { ...f.webhooks, [key]: value } } : f));
-  }
-
-  function setField<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((f) => (f ? { ...f, [key]: value } : f));
-  }
-
-  function setTemplate<K extends keyof FormState['templates']>(
-    key: K,
-    value: FormState['templates'][K],
-  ) {
-    setForm((f) =>
-      f ? { ...f, templates: { ...f.templates, [key]: value } } : f,
+  function handleSave() {
+    update.mutate(
+      {
+        model: model === MODEL_UNSET ? null : model,
+        gateway: gateway.trim() === '' ? null : gateway.trim(),
+      },
+      {
+        onSuccess: () => toast.success(t('config.ai.toastSaved')),
+        onError: (err) => toast.error(err.message || t('config.ai.toastError')),
+      },
     );
   }
 
-  function setBlock(
-    block: TemplateBlockKey,
-    field: keyof TemplateBlockForm,
-    value: string,
-  ) {
-    setForm((f) =>
-      f
-        ? {
-            ...f,
-            templates: {
-              ...f.templates,
-              blocks: {
-                ...f.templates.blocks,
-                [block]: { ...f.templates.blocks[block], [field]: value },
-              },
-            },
-          }
-        : f,
-    );
-  }
+  return (
+    <SettingsCard title={t('config.ai.title')} className="max-w-[620px]">
+      {config.isLoading || !data ? (
+        <Skeleton className="h-32 w-full rounded-lg" />
+      ) : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="ai-model">{t('config.ai.modelLabel')}</Label>
+              <Select value={model} onValueChange={setModel}>
+                <SelectTrigger id="ai-model">
+                  <SelectValue placeholder={t('config.ai.modelPlaceholder')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={MODEL_UNSET}>
+                    {t('config.ai.modelDefault')}
+                  </SelectItem>
+                  {modelOptions.map((m) => (
+                    <SelectItem key={m} value={m}>
+                      {m}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="ai-gateway">{t('config.ai.gatewayLabel')}</Label>
+              <Input
+                id="ai-gateway"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={t('config.ai.gatewayPlaceholder')}
+                value={gateway}
+                onChange={(e) => setGateway(e.target.value)}
+              />
+            </div>
+          </div>
+          <Button
+            type="button"
+            className="self-start"
+            onClick={handleSave}
+            disabled={update.isPending}
+          >
+            {update.isPending ? t('config.ai.saving') : t('config.ai.save')}
+          </Button>
+        </>
+      )}
+    </SettingsCard>
+  );
+}
 
-  function setLead<K extends keyof FormState['leads']>(
-    key: K,
-    value: FormState['leads'][K],
-  ) {
-    setForm((f) => (f ? { ...f, leads: { ...f.leads, [key]: value } } : f));
-  }
-
-  // Build the partial PUT body: only changed fields, with empty strings coerced to
-  // null (clear the override → env). Offsets parse to int-or-null; sender '' → null.
-  function buildPatch(f: FormState, base: FormState): UpdateWorkflowConfigDto {
-    const patch: UpdateWorkflowConfigDto = {};
-
-    const webhooks: NonNullable<UpdateWorkflowConfigDto['webhooks']> = {};
-    for (const { key } of WEBHOOK_STAGES) {
-      if (f.webhooks[key] !== base.webhooks[key]) {
-        webhooks[key] = f.webhooks[key].trim() === '' ? null : f.webhooks[key].trim();
-      }
-    }
-    if (Object.keys(webhooks).length > 0) patch.webhooks = webhooks;
-
-    if (f.n8nApiUrl !== base.n8nApiUrl) {
-      patch.n8nApiUrl = f.n8nApiUrl.trim() === '' ? null : f.n8nApiUrl.trim();
-    }
-    if (f.defaultSender !== base.defaultSender) {
-      patch.defaultSender = f.defaultSender === '' ? null : f.defaultSender;
-    }
-    if (f.salesCalendarId !== base.salesCalendarId) {
-      patch.salesCalendarId =
-        f.salesCalendarId.trim() === '' ? null : f.salesCalendarId.trim();
-    }
-    if (f.followupOffsetDays !== base.followupOffsetDays) {
-      patch.followupOffsetDays =
-        f.followupOffsetDays.trim() === ''
-          ? null
-          : Number(f.followupOffsetDays);
-    }
-    if (f.finalPushOffsetDays !== base.finalPushOffsetDays) {
-      patch.finalPushOffsetDays =
-        f.finalPushOffsetDays.trim() === ''
-          ? null
-          : Number(f.finalPushOffsetDays);
-    }
-
-    // Templates — send only the changed sub-fields. `default` goes out as the full
-    // 3-block object, or null when every block is blank (clear the baseline).
-    const templates: NonNullable<UpdateWorkflowConfigDto['templates']> = {};
-    if (
-      JSON.stringify(f.templates.blocks) !== JSON.stringify(base.templates.blocks)
-    ) {
-      templates.default = allBlocksEmpty(f.templates.blocks)
-        ? null
-        : {
-            cold: f.templates.blocks.cold,
-            followup: f.templates.blocks.followup,
-            finalPush: f.templates.blocks.finalPush,
-          };
-    }
-    if (f.templates.signature !== base.templates.signature) {
-      templates.signature =
-        f.templates.signature.trim() === '' ? null : f.templates.signature;
-    }
-    if (f.templates.tone !== base.templates.tone) {
-      templates.tone = f.templates.tone === '' ? null : f.templates.tone;
-    }
-    if (f.templates.language !== base.templates.language) {
-      templates.language =
-        f.templates.language === '' ? null : f.templates.language;
-    }
-    if (Object.keys(templates).length > 0) patch.templates = templates;
-
-    // Leads — caps coerce '' → null (no cap); regions/booleans send wholesale.
-    const leads: NonNullable<UpdateWorkflowConfigDto['leads']> = {};
-    const capKeys = ['maxLeadsPerRun', 'maxPerNiche', 'dailySendCap', 'dedupDays'] as const;
-    for (const key of capKeys) {
-      if (f.leads[key] !== base.leads[key]) {
-        leads[key] = f.leads[key].trim() === '' ? null : Number(f.leads[key]);
-      }
-    }
-    if (
-      JSON.stringify(f.leads.defaultRegions) !==
-      JSON.stringify(base.leads.defaultRegions)
-    ) {
-      leads.defaultRegions = f.leads.defaultRegions;
-    }
-    if (f.leads.respectSuppressions !== base.leads.respectSuppressions) {
-      leads.respectSuppressions = f.leads.respectSuppressions;
-    }
-    if (f.leads.requireNicheAnalysis !== base.leads.requireNicheAnalysis) {
-      leads.requireNicheAnalysis = f.leads.requireNicheAnalysis;
-    }
-    if (Object.keys(leads).length > 0) patch.leads = leads;
-
-    return patch;
-  }
-
-  function save() {
-    if (!form || !baseline) return;
-    const patch = buildPatch(form, baseline);
-
-    // Client-side guards for friendly errors (the server/DTO enforce the same).
-    for (const { key, label } of WEBHOOK_STAGES) {
-      const v = patch.webhooks?.[key];
-      if (typeof v === 'string' && !isValidUrl(v)) {
-        toast.error(t('config.save.invalidWebhook', { label }));
-        return;
-      }
-    }
-    if (typeof patch.n8nApiUrl === 'string' && !isValidUrl(patch.n8nApiUrl)) {
-      toast.error(t('config.save.invalidApiUrl'));
-      return;
-    }
-    for (const days of [patch.followupOffsetDays, patch.finalPushOffsetDays]) {
-      if (typeof days === 'number' && (!Number.isInteger(days) || days < 0)) {
-        toast.error(t('config.save.invalidCadence'));
-        return;
-      }
-    }
-    for (const cap of [
-      patch.leads?.maxLeadsPerRun,
-      patch.leads?.maxPerNiche,
-      patch.leads?.dailySendCap,
-      patch.leads?.dedupDays,
-    ]) {
-      if (typeof cap === 'number' && (!Number.isInteger(cap) || cap < 0)) {
-        toast.error(t('config.save.invalidLeadCap'));
-        return;
-      }
-    }
-
-    update.mutate(patch, {
-      onSuccess: () => toast.success(t('config.save.toastOk')),
-      onError: (e) => toast.error(e.message || t('config.save.toastError')),
-    });
-  }
-
-  // Probe the live n8n connection; show the result inline + a matching toast.
-  function handleTestN8n() {
-    testN8n.mutate(undefined, {
-      onSuccess: (result) => {
-        setN8nResult(result);
-        if (result.ok) toast.success(t('config.n8n.toastOk'));
-        else if (result.configured)
-          toast.error(t('config.n8n.toastError', { detail: result.detail }));
-        else toast.error(t('config.n8n.toastNotConfigured'));
-      },
-      onError: (e) => {
-        setN8nResult(null);
-        toast.error(e.message || t('config.n8n.toastUnreachable'));
-      },
-    });
-  }
-
-  // Mint a new ingest token. The plaintext is returned ONCE — reveal it in the
-  // dialog; the config query is invalidated by the hook so the status refreshes.
-  function handleRotateToken() {
-    rotate.mutate(undefined, {
-      onSuccess: (result) => setRotatedToken(result.token),
-      onError: (e) => toast.error(e.message || t('config.ingest.rotateError')),
-    });
-  }
-
-  // Copy the one-time token to the clipboard.
-  async function copyToken() {
-    if (!rotatedToken) return;
-    try {
-      await navigator.clipboard.writeText(rotatedToken);
-      toast.success(t('config.ingest.copied'));
-    } catch {
-      toast.error(t('config.ingest.copyError'));
-    }
-  }
-
-  // Revert machine-route auth to the env token. Behind a confirm since it changes
-  // how n8n authenticates to the ERP.
-  function handleRevertToken() {
-    if (!window.confirm(t('config.ingest.revertConfirm'))) {
-      return;
-    }
-    clearToken.mutate(undefined, {
-      onSuccess: () => toast.success(t('config.ingest.revertToast')),
-      onError: (e) => toast.error(e.message || t('config.ingest.revertError')),
-    });
-  }
+// Configuration: integrations + AI engine, admin-only (the route gates on
+// admin:config). Exactly the three cards from the R.E.A.N. mockup — Google
+// Workspace, Other integrations, AI engine.
+export function ConfigurationSettings() {
+  const t = useTranslations('settings');
 
   return (
     <div className="flex flex-col gap-6">
@@ -1534,635 +490,9 @@ export function ConfigurationSettings() {
         title={t('config.header.title')}
         description={t('config.header.description')}
       />
-
-      {config.isLoading || !form || !data ? (
-        <div className="flex flex-col gap-6">
-          <Skeleton className="h-64 w-full rounded-xl" />
-          <Skeleton className="h-48 w-full rounded-xl" />
-          <Skeleton className="h-48 w-full rounded-xl" />
-        </div>
-      ) : (
-        <>
-          {/* 1. Workflow wiring — one editable row per webhook stage. */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('config.wiring.title')}</CardTitle>
-              <CardDescription>
-                {t('config.wiring.description')}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              {WEBHOOK_STAGES.map(({ key, label }) => {
-                const field = data.webhooks[key];
-                const inputId = `webhook-${key}`;
-                return (
-                  <div key={key} className="flex flex-col gap-1.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <Label htmlFor={inputId}>{label}</Label>
-                      <OverrideBadge overridden={field.overridden} />
-                    </div>
-                    <Input
-                      id={inputId}
-                      type="url"
-                      inputMode="url"
-                      autoComplete="off"
-                      spellCheck={false}
-                      className="font-mono text-xs"
-                      placeholder={
-                        !field.overridden && field.value
-                          ? field.value
-                          : 'https://n8n.example.com/webhook/…'
-                      }
-                      value={form.webhooks[key]}
-                      onChange={(e) => setWebhook(key, e.target.value)}
-                    />
-                  </div>
-                );
-              })}
-            </CardContent>
-          </Card>
-
-          {/* 2. n8n connection — editable base URL + read-only API-key status. */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('config.n8n.title')}</CardTitle>
-              <CardDescription>
-                {t('config.n8n.description')}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="n8n-api-url">{t('config.n8n.apiUrlLabel')}</Label>
-                  <OverrideBadge overridden={data.n8nApiUrl.overridden} />
-                </div>
-                <Input
-                  id="n8n-api-url"
-                  type="url"
-                  inputMode="url"
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="font-mono text-xs"
-                  placeholder={
-                    !data.n8nApiUrl.overridden && data.n8nApiUrl.value
-                      ? data.n8nApiUrl.value
-                      : 'https://n8n.example.com/api/v1'
-                  }
-                  value={form.n8nApiUrl}
-                  onChange={(e) => setField('n8nApiUrl', e.target.value)}
-                />
-              </div>
-              <div className="flex items-center justify-between gap-3 border-t pt-3">
-                <span className="text-sm font-medium">
-                  {t('config.n8n.apiKeyLabel')}
-                </span>
-                <StatusDot
-                  ok={data.n8nApiKeySet}
-                  label={
-                    data.n8nApiKeySet
-                      ? t('config.n8n.apiKeySet')
-                      : t('config.n8n.apiKeyNotSet')
-                  }
-                />
-              </div>
-              <div className="flex flex-col gap-2 border-t pt-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="self-start"
-                  onClick={handleTestN8n}
-                  disabled={testN8n.isPending}
-                >
-                  {testN8n.isPending
-                    ? t('config.n8n.testing')
-                    : t('config.n8n.testConnection')}
-                </Button>
-                {n8nResult ? <N8nTestResult result={n8nResult} /> : null}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 3. Ingest security — read-only status + rotate / revert actions. */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('config.ingest.title')}</CardTitle>
-              <CardDescription>
-                {t('config.ingest.description')}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-2">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm font-medium">
-                  {t('config.ingest.tokenLabel')}
-                </span>
-                <StatusDot
-                  ok={data.ingestTokenSet}
-                  label={ingestSourceLabel[data.ingestTokenSource]}
-                />
-              </div>
-              {data.ingestTokenSetAt ? (
-                <p className="text-xs text-muted-foreground">
-                  {t('config.ingest.lastSet', {
-                    ago: timeAgo(data.ingestTokenSetAt),
-                  })}
-                </p>
-              ) : null}
-              <div className="mt-1 flex flex-wrap items-center gap-3 border-t pt-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleRotateToken}
-                  disabled={rotate.isPending}
-                >
-                  {rotate.isPending
-                    ? t('config.ingest.rotating')
-                    : t('config.ingest.rotate')}
-                </Button>
-                {data.ingestTokenSource === 'rotated' ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="text-muted-foreground"
-                    onClick={handleRevertToken}
-                    disabled={clearToken.isPending}
-                  >
-                    {clearToken.isPending
-                      ? t('config.ingest.reverting')
-                      : t('config.ingest.revert')}
-                  </Button>
-                ) : null}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 4. Cadence & sender — default Gmail alias + follow-up offsets. */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('config.cadence.title')}</CardTitle>
-              <CardDescription>
-                {t('config.cadence.description')}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-6">
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="default-sender">
-                  {t('config.cadence.senderLabel')}
-                </Label>
-                <Select
-                  value={form.defaultSender === '' ? 'default' : form.defaultSender}
-                  onValueChange={(v) =>
-                    setField('defaultSender', v === 'default' ? '' : v)
-                  }
-                >
-                  <SelectTrigger id="default-sender" className="max-w-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="default">
-                      {t('config.cadence.senderDefault')}
-                    </SelectItem>
-                    {senderOptions.map((opt) => (
-                      <SelectItem key={opt.key} value={opt.key}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="sales-calendar-id">
-                  {t('config.cadence.salesCalendarLabel')}
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  {t('config.cadence.salesCalendarHelper')}
-                </p>
-                <Input
-                  id="sales-calendar-id"
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="max-w-md font-mono text-xs"
-                  placeholder={t('config.cadence.salesCalendarPlaceholder')}
-                  value={form.salesCalendarId}
-                  onChange={(e) => setField('salesCalendarId', e.target.value)}
-                />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="followup-offset">
-                    {t('config.cadence.followupLabel')}
-                  </Label>
-                  <Input
-                    id="followup-offset"
-                    type="number"
-                    min={0}
-                    step={1}
-                    inputMode="numeric"
-                    className="max-w-[10rem] tabular-nums"
-                    placeholder="2"
-                    value={form.followupOffsetDays}
-                    onChange={(e) =>
-                      setField('followupOffsetDays', e.target.value)
-                    }
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="finalpush-offset">
-                    {t('config.cadence.finalPushLabel')}
-                  </Label>
-                  <Input
-                    id="finalpush-offset"
-                    type="number"
-                    min={0}
-                    step={1}
-                    inputMode="numeric"
-                    className="max-w-[10rem] tabular-nums"
-                    placeholder="4"
-                    value={form.finalPushOffsetDays}
-                    onChange={(e) =>
-                      setField('finalPushOffsetDays', e.target.value)
-                    }
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Senders — the per-org outreach mailbox list (immediate-action CRUD,
-              not part of the save-bar diff). The route already gates on admin:config;
-              gate here too for parity with the rest of the editing surface. */}
-          <Can permission="admin:config">
-            <SendersControl />
-          </Can>
-
-          {/* Connected Google accounts — per-org Gmail/Calendar OAuth. NOT wrapped in
-              <Can>: the Connect button is open to any authenticated user; the list,
-              default selectors and disconnect gate themselves on admin:config inside. */}
-          <GoogleAccountsControl />
-
-          {/* Daily send — the existing ERP-side daily Bazooka control. */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('config.dailySend.title')}</CardTitle>
-              <CardDescription>
-                {t('config.dailySend.description')}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <BazookaSchedule />
-            </CardContent>
-          </Card>
-
-          {/* Templates — the baseline 3-block outreach sequence + signature/tone. */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('config.templates.title')}</CardTitle>
-              <CardDescription>
-                {t('config.templates.description')}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-6">
-              {TEMPLATE_BLOCKS.map((block) => (
-                <div key={block} className="flex flex-col gap-2">
-                  <Label className="text-sm font-medium">
-                    {t(`config.templates.block.${block}`)}
-                  </Label>
-                  <Input
-                    id={`tpl-${block}-subject`}
-                    value={form.templates.blocks[block].subject}
-                    onChange={(e) => setBlock(block, 'subject', e.target.value)}
-                    placeholder={t('config.templates.subjectPlaceholder')}
-                    aria-label={t('config.templates.subjectLabel')}
-                  />
-                  <Textarea
-                    id={`tpl-${block}-body`}
-                    rows={4}
-                    value={form.templates.blocks[block].body}
-                    onChange={(e) => setBlock(block, 'body', e.target.value)}
-                    placeholder={t('config.templates.bodyPlaceholder')}
-                    aria-label={t('config.templates.bodyLabel')}
-                  />
-                </div>
-              ))}
-
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs text-muted-foreground">
-                  {t('config.templates.tokensLabel')}
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {TEMPLATE_TOKENS.map((token) => (
-                    <code
-                      key={token}
-                      className="rounded-md border bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground"
-                    >
-                      {token}
-                    </code>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="tpl-signature">
-                  {t('config.templates.signatureLabel')}
-                </Label>
-                <Input
-                  id="tpl-signature"
-                  value={form.templates.signature}
-                  onChange={(e) => setTemplate('signature', e.target.value)}
-                  placeholder={t('config.templates.signaturePlaceholder')}
-                />
-              </div>
-
-              {/* Per-org signature image (immediate-action; not part of the save
-                  diff). admin:config is already enforced by the route, but gate it
-                  here too for parity with the rest of the editing surface. */}
-              <Can permission="admin:config">
-                <SignatureImageControl
-                  url={data.templates.signatureImageUrl ?? null}
-                />
-              </Can>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="tpl-tone">
-                    {t('config.templates.toneLabel')}
-                  </Label>
-                  <Select
-                    value={form.templates.tone === '' ? 'unset' : form.templates.tone}
-                    onValueChange={(v) =>
-                      setTemplate('tone', v === 'unset' ? '' : (v as OutreachTone))
-                    }
-                  >
-                    <SelectTrigger id="tpl-tone">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="unset">
-                        {t('config.templates.unset')}
-                      </SelectItem>
-                      <SelectItem value="friendly">
-                        {t('config.templates.toneFriendly')}
-                      </SelectItem>
-                      <SelectItem value="formal">
-                        {t('config.templates.toneFormal')}
-                      </SelectItem>
-                      <SelectItem value="direct">
-                        {t('config.templates.toneDirect')}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="tpl-language">
-                    {t('config.templates.languageLabel')}
-                  </Label>
-                  <Select
-                    value={
-                      form.templates.language === '' ? 'unset' : form.templates.language
-                    }
-                    onValueChange={(v) =>
-                      setTemplate(
-                        'language',
-                        v === 'unset' ? '' : (v as TemplateLanguage),
-                      )
-                    }
-                  >
-                    <SelectTrigger id="tpl-language">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="unset">
-                        {t('config.templates.unset')}
-                      </SelectItem>
-                      <SelectItem value="en">
-                        {t('config.templates.languageEn')}
-                      </SelectItem>
-                      <SelectItem value="de">
-                        {t('config.templates.languageDe')}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Leads — lead-gen governance (caps, regions, gates) + a live metric strip. */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('config.leads.title')}</CardTitle>
-              <CardDescription>{t('config.leads.description')}</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-6">
-              <div className="grid grid-cols-3 gap-3">
-                <StatTile
-                  label={t('config.leads.statLeads')}
-                  value={leadStats.data?.leads}
-                  loading={leadStats.isLoading}
-                />
-                <StatTile
-                  label={t('config.leads.statProspects')}
-                  value={leadStats.data?.prospects}
-                  loading={leadStats.isLoading}
-                />
-                <StatTile
-                  label={t('config.leads.statSuppressed')}
-                  value={leadStats.data?.suppressed}
-                  loading={leadStats.isLoading}
-                />
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="lead-max-run">
-                    {t('config.leads.maxLeadsPerRunLabel')}
-                  </Label>
-                  <Input
-                    id="lead-max-run"
-                    type="number"
-                    min={0}
-                    step={1}
-                    inputMode="numeric"
-                    className="tabular-nums"
-                    placeholder={LEAD_HINTS.maxLeadsPerRun}
-                    value={form.leads.maxLeadsPerRun}
-                    onChange={(e) => setLead('maxLeadsPerRun', e.target.value)}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="lead-max-niche">
-                    {t('config.leads.maxPerNicheLabel')}
-                  </Label>
-                  <Input
-                    id="lead-max-niche"
-                    type="number"
-                    min={0}
-                    step={1}
-                    inputMode="numeric"
-                    className="tabular-nums"
-                    placeholder={LEAD_HINTS.maxPerNiche}
-                    value={form.leads.maxPerNiche}
-                    onChange={(e) => setLead('maxPerNiche', e.target.value)}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="lead-daily-cap">
-                    {t('config.leads.dailySendCapLabel')}
-                  </Label>
-                  <Input
-                    id="lead-daily-cap"
-                    type="number"
-                    min={0}
-                    step={1}
-                    inputMode="numeric"
-                    className="tabular-nums"
-                    placeholder={LEAD_HINTS.dailySendCap}
-                    value={form.leads.dailySendCap}
-                    onChange={(e) => setLead('dailySendCap', e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label>{t('config.leads.regionsLabel')}</Label>
-                <p className="text-xs text-muted-foreground">
-                  {t('config.leads.regionsHelper')}
-                </p>
-                <RegionChips
-                  regions={form.leads.defaultRegions}
-                  onChange={(next) => setLead('defaultRegions', next)}
-                  addLabel={t('config.leads.regionsAdd')}
-                  placeholder={t('config.leads.regionsPlaceholder')}
-                  removeAria={(region) =>
-                    t('config.leads.regionsRemove', { region })
-                  }
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="lead-dedup">
-                  {t('config.leads.dedupLabel')}
-                </Label>
-                <Input
-                  id="lead-dedup"
-                  type="number"
-                  min={0}
-                  step={1}
-                  inputMode="numeric"
-                  className="max-w-[12rem] tabular-nums"
-                  placeholder={LEAD_HINTS.dedupDays}
-                  value={form.leads.dedupDays}
-                  onChange={(e) => setLead('dedupDays', e.target.value)}
-                />
-              </div>
-
-              <div className="flex flex-col gap-4 border-t pt-4">
-                <Toggle
-                  id="lead-respect-suppressions"
-                  checked={form.leads.respectSuppressions}
-                  onChange={(next) => setLead('respectSuppressions', next)}
-                  label={t('config.leads.respectSuppressionsLabel')}
-                  description={t('config.leads.respectSuppressionsHelper')}
-                />
-                <Toggle
-                  id="lead-require-niche"
-                  checked={form.leads.requireNicheAnalysis}
-                  onChange={(next) => setLead('requireNicheAnalysis', next)}
-                  label={t('config.leads.requireNicheAnalysisLabel')}
-                  description={t('config.leads.requireNicheAnalysisHelper')}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 5. Managed catalogs — shortcuts into the existing config surfaces. */}
-          <Card>
-            <CardHeader>
-              <CardTitle>{t('config.catalogs.title')}</CardTitle>
-              <CardDescription>
-                {t('config.catalogs.description')}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-2">
-              <CatalogLink
-                href="/marketing/niches"
-                icon={Target}
-                title={t('config.catalogs.nichesTitle')}
-                description={t('config.catalogs.nichesDescription')}
-              />
-              <CatalogLink
-                href="/marketing/suppressions"
-                icon={ShieldOff}
-                title={t('config.catalogs.suppressionsTitle')}
-                description={t('config.catalogs.suppressionsDescription')}
-              />
-              <Can permission="users:manage">
-                <CatalogLink
-                  href="/users"
-                  icon={Users}
-                  title={t('config.catalogs.usersTitle')}
-                  description={t('config.catalogs.usersDescription')}
-                />
-              </Can>
-            </CardContent>
-          </Card>
-
-          {/* Sticky save bar — only the changed editable fields are sent. */}
-          <div className="sticky bottom-0 -mx-4 flex items-center justify-end gap-3 border-t bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-            {dirty ? (
-              <span className="text-xs text-muted-foreground">
-                {t('config.save.unsaved')}
-              </span>
-            ) : null}
-            <Button
-              type="button"
-              onClick={save}
-              disabled={!dirty || update.isPending}
-            >
-              {update.isPending
-                ? t('config.save.saving')
-                : t('config.save.saveChanges')}
-            </Button>
-          </div>
-        </>
-      )}
-
-      {/* One-time reveal of a freshly-rotated ingest token. Closing drops the
-          plaintext from state; the status already refreshed via the config query. */}
-      <Dialog
-        open={rotatedToken !== null}
-        onOpenChange={(open) => {
-          if (!open) setRotatedToken(null);
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t('config.ingest.dialogTitle')}</DialogTitle>
-            <DialogDescription>
-              {t('config.ingest.dialogDescription')}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-start gap-2">
-            <code className="min-w-0 flex-1 overflow-x-auto rounded-md border bg-muted px-3 py-2 font-mono text-xs break-all select-all">
-              {rotatedToken}
-            </code>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              onClick={copyToken}
-              aria-label={t('config.ingest.copyAria')}
-            >
-              <Copy className="size-4" />
-            </Button>
-          </div>
-          <DialogFooter>
-            <Button type="button" onClick={() => setRotatedToken(null)}>
-              {t('config.ingest.done')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <GoogleWorkspaceCard />
+      <OtherIntegrationsCard />
+      <AiEngineCard />
     </div>
   );
 }

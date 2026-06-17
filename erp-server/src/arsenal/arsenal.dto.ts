@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   ArsenalCallbackDto as ArsenalCallbackSchema,
   RunArsenalDto as RunArsenalSchema,
+  UpdateAiEngineDto as UpdateAiEngineSchema,
   UpdateArsenalSettingsDto as UpdateArsenalSettingsSchema,
   UpdateWorkflowConfigDto as UpdateWorkflowConfigSchema,
 } from '@evertrust/shared';
@@ -17,6 +18,7 @@ export class ArsenalCallbackBodyDto extends createZodDto(ArsenalCallbackSchema) 
 export class UpdateWorkflowConfigBodyDto extends createZodDto(
   UpdateWorkflowConfigSchema,
 ) {}
+export class UpdateAiEngineBodyDto extends createZodDto(UpdateAiEngineSchema) {}
 
 // POST /arsenal/config/senders body — upsert a PER-ORG sender keyed by its stable
 // org-scoped `key`. `email` must be valid; `label` + `isDefault` are optional. Defined

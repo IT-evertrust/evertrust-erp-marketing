@@ -4,6 +4,7 @@ import { count, eq } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 import { DEFAULT_SENDERS } from '@evertrust/shared';
 import type {
+  AiEngineConfigDto,
   ArsenalStage,
   DefaultSender,
   DefaultTemplateDto,
@@ -12,6 +13,7 @@ import type {
   OutreachTone,
   TemplateLanguage,
   TestN8nResultDto,
+  UpdateAiEngineDto,
   UpdateWorkflowConfigDto,
   WorkflowConfigDto,
   WorkflowLeadsDto,
@@ -502,6 +504,33 @@ export class WorkflowConfigService {
   // read it back via getEffective() / getAutomation().
   async setSignatureImageUrl(orgId: string, url: string | null): Promise<void> {
     await this.persistOrg(orgId, { signatureImageUrl: url });
+  }
+
+  // The caller org's resolved AI engine config: the per-org model + gateway override
+  // (org_config.ai_model / ai_gateway), each null when unset. Null on model means the
+  // resolver falls back to env ANTHROPIC_MODEL at use-time (see PerformanceService).
+  async getAiEngine(orgId: string): Promise<AiEngineConfigDto> {
+    const orgRow = await this.orgRow(orgId);
+    return {
+      model: clean(orgRow.aiModel) ?? null,
+      gateway: clean(orgRow.aiGateway) ?? null,
+    };
+  }
+
+  // Apply a partial AI engine update for the caller's org: a value sets it, null/""
+  // clears it back to the product default, an omitted field is unchanged. Empty
+  // strings are cleaned to null. Returns the freshly resolved config.
+  async updateAiEngine(
+    orgId: string,
+    patch: UpdateAiEngineDto,
+  ): Promise<AiEngineConfigDto> {
+    const set: Partial<typeof schema.orgConfig.$inferInsert> = {};
+    if ('model' in patch) set.aiModel = clean(patch.model) ?? null;
+    if ('gateway' in patch) set.aiGateway = clean(patch.gateway) ?? null;
+    if (Object.keys(set).length > 0) {
+      await this.persistOrg(orgId, set);
+    }
+    return this.getAiEngine(orgId);
   }
 
   // Set (or clear, with hash=null) the ingest-token SHA-256 hash + its set-at

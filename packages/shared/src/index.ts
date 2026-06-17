@@ -733,8 +733,11 @@ export const GoogleAccountStatus = z.enum(['CONNECTED', 'REVOKED', 'ERROR']);
 export type GoogleAccountStatus = z.infer<typeof GoogleAccountStatus>;
 
 // A Google account a user in this org has connected. `role` is the connecting ERP user's
-// role (derived at read time, not stored). `isDefaultGmail`/`isDefaultCalendar` reflect the
-// org_config default pointers. No tokens are ever exposed in this DTO.
+// role (derived at read time, not stored). `isDefault` reflects the org's SINGLE default
+// mailbox (org_config.defaultMailboxAccountId) — the new single-mailbox model. The legacy
+// `isDefaultGmail`/`isDefaultCalendar` fields are kept for back-compat (the web reads them
+// until its rewrite); the API mirrors both onto the single default. No tokens are ever
+// exposed in this DTO.
 export const ConnectedGoogleAccountDto = z.object({
   id: z.string().uuid(),
   email: z.string().email(),
@@ -742,6 +745,9 @@ export const ConnectedGoogleAccountDto = z.object({
   role: UserRole,
   scopes: z.array(z.string()),
   status: GoogleAccountStatus,
+  // The org's single default mailbox (used for BOTH Gmail send and Calendar).
+  isDefault: z.boolean(),
+  // Legacy two-pointer flags — kept so the current web compiles; both mirror isDefault.
   isDefaultGmail: z.boolean(),
   isDefaultCalendar: z.boolean(),
   connectedAt: z.string(),
@@ -755,6 +761,39 @@ export const SetGoogleDefaultsDto = z.object({
   defaultCalendarAccountId: z.string().uuid().nullable().optional(),
 });
 export type SetGoogleDefaultsDto = z.infer<typeof SetGoogleDefaultsDto>;
+
+// Set the org's SINGLE default mailbox (used for both Gmail send and Calendar). `null`
+// clears it; a non-null id must reference a google_accounts row in this org. Replaces the
+// two-pointer SetGoogleDefaultsDto at the app layer.
+export const SetDefaultMailboxDto = z.object({
+  accountId: z.string().uuid().nullable(),
+});
+export type SetDefaultMailboxDto = z.infer<typeof SetDefaultMailboxDto>;
+
+// --- Per-org AI engine (Configuration page) ---------------------------------------
+// The selectable AI models for the per-org AI engine setting (matches the Configuration
+// mockup). Null on org_config.aiModel = fall back to env ANTHROPIC_MODEL.
+export const AI_ENGINE_MODELS: readonly string[] = [
+  'claude-opus-4-8',
+  'claude-sonnet-4-6',
+  'local·llama-3',
+];
+
+// The org's resolved AI engine config: model + gateway label (each null when unset →
+// product default). Returned by GET /arsenal/config/ai-engine.
+export const AiEngineConfigDto = z.object({
+  model: z.string().nullable(),
+  gateway: z.string().nullable(),
+});
+export type AiEngineConfigDto = z.infer<typeof AiEngineConfigDto>;
+
+// Partial update for the AI engine config: a value sets it, null clears it back to the
+// product default, an omitted field is unchanged.
+export const UpdateAiEngineDto = z.object({
+  model: z.string().max(120).nullable().optional(),
+  gateway: z.string().max(120).nullable().optional(),
+});
+export type UpdateAiEngineDto = z.infer<typeof UpdateAiEngineDto>;
 
 export const CreateCampaignDto = z.object({
   name: z.string().max(60).optional(),

@@ -87,10 +87,14 @@ export class ClaudeService {
     schema: z.ZodType<T>;
     jsonSchema: Record<string, unknown>;
     maxTokens?: number;
+    // Optional per-call model override (e.g. an org's org_config.aiModel). When unset
+    // or blank, falls back to the env-configured model. Callers resolve the per-org
+    // preference and pass it here so this boundary stays env-agnostic.
+    model?: string;
   }): Promise<ClaudeStructuredResult<T>> {
     const apiKey = this.config.get('ANTHROPIC_API_KEY').trim();
     if (!apiKey) throw new Error('Claude is not configured');
-    const model = this.model();
+    const model = args.model?.trim() || this.model();
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);

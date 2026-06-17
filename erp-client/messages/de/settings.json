@@ -47,7 +47,7 @@
   "config": {
     "header": {
       "title": "Konfiguration",
-      "description": "Automatisierung & Integrationen für Ihren Arbeitsbereich."
+      "description": "Integrationen und KI-Engine — nur Admin."
     },
     "badge": {
       "custom": "Angepasst",
@@ -133,9 +133,9 @@
       "toastError": "Absender konnten nicht aktualisiert werden."
     },
     "google": {
-      "title": "Verbundene Google-Konten",
-      "description": "Gmail- und Kalender-Konten, die Ihr Team verbunden hat. Legen Sie fest, aus welchem Konto Kampagnen senden und in welchem Kalender Termine landen.",
-      "connect": "Google-Konto verbinden",
+      "title": "Google Workspace",
+      "description": "Verbundene Postfächer treiben Engage (Gmail — Gesendet & Antworten) und Activate (Kalender — Slots). Ein Postfach ist der Org-Standard.",
+      "connect": "Konto verbinden",
       "connecting": "Weiterleitung…",
       "notConfigured": "Bitten Sie Ihren Administrator, Google-Connect einzurichten.",
       "empty": "Noch keine Google-Konten verbunden.",
@@ -152,6 +152,9 @@
       "statusConnected": "Verbunden",
       "statusRevoked": "Widerrufen",
       "statusError": "Fehler",
+      "defaultBadge": "Standard",
+      "setDefault": "Als Standard",
+      "toastDefaultSet": "Standard-Postfach aktualisiert.",
       "setDefaultGmail": "Standard für Gmail",
       "setDefaultCalendar": "Standard für Kalender",
       "defaultGmailBadge": "Standard · Gmail",
@@ -167,6 +170,29 @@
       "toastDisconnected": "Google-Konto getrennt.",
       "toastConnectError": "Google-Konto konnte nicht verbunden werden.",
       "toastError": "Google-Konten konnten nicht aktualisiert werden."
+    },
+    "other": {
+      "title": "Weitere Integrationen",
+      "emailLabel": "Transaktions-E-Mail",
+      "emailSublabel": "Sequenz-Sender (Org-Versand)",
+      "docusignLabel": "DocuSign",
+      "docusignSublabel": "Vertrags-Assistent",
+      "connected": "Verbunden",
+      "notConnected": "Nicht verbunden",
+      "connect": "Verbinden",
+      "comingSoon": "Demnächst verfügbar"
+    },
+    "ai": {
+      "title": "KI-Engine",
+      "modelLabel": "Modell",
+      "modelDefault": "Produktstandard",
+      "modelPlaceholder": "Modell auswählen",
+      "gatewayLabel": "Gateway",
+      "gatewayPlaceholder": "LiteLLM · Mac mini",
+      "save": "Speichern",
+      "saving": "Speichern…",
+      "toastSaved": "Konfiguration gespeichert.",
+      "toastError": "KI-Engine-Konfiguration konnte nicht gespeichert werden."
     },
     "templates": {
       "title": "Vorlagen",
