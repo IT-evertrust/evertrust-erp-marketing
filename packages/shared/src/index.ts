@@ -502,8 +502,15 @@ export const CalendarEventDto = z.object({
   start: z.string(),
   end: z.string(),
   attendees: z.array(z.string()),
-  location: z.string().nullable(),
+
+  location: z.string().nullable().optional(),
   meetingUrl: z.string().nullable(),
+
+  description: z.string().nullable().optional(),
+  htmlLink: z.string().nullable().optional(),
+  status: z.string().nullable().optional(),
+  organizerEmail: z.string().nullable().optional(),
+  creatorEmail: z.string().nullable().optional(),
 });
 export type CalendarEventDto = z.infer<typeof CalendarEventDto>;
 

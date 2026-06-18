@@ -55,11 +55,54 @@ interface EventsListResponse {
   items?: {
     id?: string;
     summary?: string;
+    description?: string;
     location?: string;
+    htmlLink?: string;
     hangoutLink?: string;
-    start?: { dateTime?: string; date?: string };
-    end?: { dateTime?: string; date?: string };
-    attendees?: { email?: string; self?: boolean; resource?: boolean }[];
+    status?: string;
+
+    creator?: {
+      email?: string;
+      displayName?: string;
+      self?: boolean;
+    };
+
+    organizer?: {
+      email?: string;
+      displayName?: string;
+      self?: boolean;
+    };
+
+    conferenceData?: {
+      entryPoints?: {
+        entryPointType?: string;
+        uri?: string;
+        label?: string;
+        meetingCode?: string;
+      }[];
+    };
+
+    start?: {
+      dateTime?: string;
+      date?: string;
+      timeZone?: string;
+    };
+
+    end?: {
+      dateTime?: string;
+      date?: string;
+      timeZone?: string;
+    };
+
+    attendees?: {
+      email?: string;
+      displayName?: string;
+      self?: boolean;
+      resource?: boolean;
+      responseStatus?: string;
+      optional?: boolean;
+      organizer?: boolean;
+    }[];
   }[];
 }
 
@@ -249,33 +292,57 @@ export class GoogleCalendarReadService {
       }
 
       const data = (await res.json()) as EventsListResponse;
-      const events: CalendarEventDto[] = (data.items ?? [])
-        .map((item) => {
-          const start = item.start?.dateTime ?? item.start?.date ?? null;
-          const end = item.end?.dateTime ?? item.end?.date ?? null;
-          if (!item.id || !start || !end) return null;
 
-          // External attendees only: drop the org's own self/account, anyone on the
-          // org's own email domain, and room/resource entries.
-          const attendees = (item.attendees ?? [])
-            .filter((a) => !a.self && !a.resource && !!a.email)
-            .map((a) => (a.email as string).toLowerCase())
-            .filter(
-              (email) =>
-                email !== selfEmail && (selfDomain ? !email.endsWith(`@${selfDomain}`) : true),
-            );
+      const events = (data.items ?? []).flatMap((item): CalendarEventDto[] => {
+        const id = item.id;
+        const start = item.start?.dateTime ?? item.start?.date ?? null;
+        const end = item.end?.dateTime ?? item.end?.date ?? null;
 
-          return {
-            id: item.id,
-            title: item.summary ?? '(no title)',
-            start,
-            end,
-            attendees,
-            location: item.location ?? null,
-            meetingUrl: item.hangoutLink ?? null,
-          };
-        })
-        .filter((e): e is CalendarEventDto => e !== null);
+        if (!id || !start || !end) {
+          return [];
+        }
+
+        // External attendees only: drop the org's own self/account, anyone on the
+        // org's own email domain, and room/resource entries.
+        const attendees = (item.attendees ?? [])
+          .filter((a) => !a.self && !a.resource && !!a.email)
+          .map((a) => (a.email as string).toLowerCase())
+          .filter(
+            (email) =>
+              email !== selfEmail && (selfDomain ? !email.endsWith(`@${selfDomain}`) : true),
+          );
+
+        const videoEntry = item.conferenceData?.entryPoints?.find(
+          (entryPoint) => entryPoint.entryPointType === 'video' && !!entryPoint.uri,
+        );
+
+        const firstConferenceEntry = item.conferenceData?.entryPoints?.find(
+          (entryPoint) => !!entryPoint.uri,
+        );
+
+        const meetingUrl = item.hangoutLink ?? videoEntry?.uri ?? firstConferenceEntry?.uri ?? null;
+
+        const event: CalendarEventDto = {
+          id,
+          title: item.summary ?? '(no title)',
+          start,
+          end,
+          attendees,
+
+          // Google Calendar details popup fields.
+          description: item.description ?? null,
+          location: item.location ?? null,
+          htmlLink: item.htmlLink ?? null,
+          status: item.status ?? null,
+          organizerEmail: item.organizer?.email ?? null,
+          creatorEmail: item.creator?.email ?? null,
+
+          // Google Meet / conference link.
+          meetingUrl,
+        };
+
+        return [event];
+      });
 
       return {
         configured: true,

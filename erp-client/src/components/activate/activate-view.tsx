@@ -1,6 +1,15 @@
 'use client';
 
-import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type CSSProperties,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import Link from 'next/link';
 import { useFormatter, useTranslations } from 'next-intl';
 import {
@@ -11,10 +20,15 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  ExternalLink,
+  FileText,
+  Mail,
+  MapPin,
   Mic,
   Search,
   Users,
   Video,
+  X,
 } from 'lucide-react';
 import type {
   CalendarEventDto,
@@ -33,7 +47,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 const BERLIN_TIME_ZONE = 'Europe/Berlin';
 const GMT7_TIME_ZONE = 'Asia/Bangkok';
 
-const HOUR_HEIGHT = 56;
+const HOUR_HEIGHT = 72;
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
 const WORK_WEEK_DAYS = 5;
 
@@ -167,6 +181,15 @@ type CalendarGridSlot = {
   end: Date;
 };
 
+type CalendarEventLayout = {
+  column: number;
+  columns: number;
+};
+
+type LaidOutCalendarEvent = CalendarGridEvent & {
+  layout: CalendarEventLayout;
+};
+
 function ConnectHint({ reason }: { reason?: string | null }) {
   const t = useTranslations('activate');
 
@@ -198,6 +221,8 @@ function BookTab({
   const t = useTranslations('activate');
   const format = useFormatter();
   const scrollRef = useRef<HTMLDivElement | null>(null);
+
+  const [selectedEvent, setSelectedEvent] = useState<CalendarGridEvent | null>(null);
 
   const configured = Boolean(upcoming.data?.configured || freeSlots.data?.configured);
 
@@ -266,7 +291,7 @@ function BookTab({
   useEffect(() => {
     const timer = window.setTimeout(() => {
       if (scrollRef.current) {
-        scrollRef.current.scrollTop = 7 * HOUR_HEIGHT - 10;
+        scrollRef.current.scrollTop = 6 * HOUR_HEIGHT - 10;
       }
     }, 80);
 
@@ -312,149 +337,157 @@ function BookTab({
   }
 
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="flex flex-row items-center justify-between gap-4 border-b">
-        <div className="min-w-0">
-          <CardTitle className="truncate text-sm font-semibold">
-            Calendar · Week {getIsoWeekNumber(weekStartKey)}
-          </CardTitle>
+    <>
+      <Card className="overflow-hidden">
+        <CardHeader className="flex flex-row items-center justify-between gap-4 border-b">
+          <div className="min-w-0">
+            <CardTitle className="truncate text-sm font-semibold">
+              Calendar · Week {getIsoWeekNumber(weekStartKey)}
+            </CardTitle>
 
-          <p className="mt-1 text-xs text-muted-foreground">
-            {gridEvents.length} meetings · {gridSlots.length} proposed free slots
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-end gap-3">
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              className="size-8"
-              aria-label="Previous week"
-              onClick={() => onWeekStartKeyChange((key) => addDaysToDateKey(key, -7))}
-            >
-              <ChevronLeft className="size-4" />
-            </Button>
-
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs"
-              onClick={() => onWeekStartKeyChange(startOfWorkWeekKey(new Date(), BERLIN_TIME_ZONE))}
-            >
-              Today
-            </Button>
-
-            <span className="min-w-28 text-center text-xs font-semibold text-muted-foreground">
-              {weekRange}
-            </span>
-
-            <Button
-              type="button"
-              size="icon"
-              variant="outline"
-              className="size-8"
-              aria-label="Next week"
-              onClick={() => onWeekStartKeyChange((key) => addDaysToDateKey(key, 7))}
-            >
-              <ChevronRight className="size-4" />
-            </Button>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {gridEvents.length} meetings · {gridSlots.length} proposed free slots
+            </p>
           </div>
 
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-            <span className="size-1.5 rounded-full bg-emerald-500" />
-            Google Calendar connected
-          </span>
-        </div>
-      </CardHeader>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                className="size-8"
+                aria-label="Previous week"
+                onClick={() => onWeekStartKeyChange((key) => addDaysToDateKey(key, -7))}
+              >
+                <ChevronLeft className="size-4" />
+              </Button>
 
-      <CardContent className="p-0">
-        <div className="overflow-x-auto">
-          <div className="flex h-[calc(100vh-300px)] min-h-[420px] min-w-[900px] flex-col">
-            <div className="flex border-b pr-2">
-              <TimeScaleHeader />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs"
+                onClick={() =>
+                  onWeekStartKeyChange(startOfWorkWeekKey(new Date(), BERLIN_TIME_ZONE))
+                }
+              >
+                Today
+              </Button>
 
-              {days.map((dayKey) => {
-                const dayEvents = gridEvents.filter((event) =>
-                  overlapsDateKey(event.startDate, event.endDate, dayKey, BERLIN_TIME_ZONE),
-                );
+              <span className="min-w-28 text-center text-xs font-semibold text-muted-foreground">
+                {weekRange}
+              </span>
 
-                const daySlots = gridSlots.filter((slot) =>
-                  overlapsDateKey(slot.start, slot.end, dayKey, BERLIN_TIME_ZONE),
-                );
-
-                return (
-                  <div
-                    key={dayKey}
-                    className="flex flex-1 flex-col items-center border-l py-2 text-center"
-                  >
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      {format.dateTime(dateKeyToUtcDate(dayKey), {
-                        timeZone: 'UTC',
-                        weekday: 'short',
-                      })}
-                    </span>
-
-                    <span className="text-[10px] font-medium text-muted-foreground">
-                      {format.dateTime(dateKeyToUtcDate(dayKey), {
-                        timeZone: 'UTC',
-                        day: 'numeric',
-                        month: 'short',
-                      })}
-                    </span>
-
-                    <span className="mt-1 text-[10px] text-muted-foreground">
-                      {dayEvents.length > 0
-                        ? `${dayEvents.length} ${dayEvents.length === 1 ? 'meeting' : 'meetings'}`
-                        : daySlots.length > 0
-                          ? `${daySlots.length} ${daySlots.length === 1 ? 'slot' : 'slots'}`
-                          : 'free'}
-                    </span>
-                  </div>
-                );
-              })}
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                className="size-8"
+                aria-label="Next week"
+                onClick={() => onWeekStartKeyChange((key) => addDaysToDateKey(key, 7))}
+              >
+                <ChevronRight className="size-4" />
+              </Button>
             </div>
 
-            <div
-              ref={scrollRef}
-              className="flex flex-1 items-start overflow-y-auto overflow-x-hidden"
-            >
-              <TimeScaleColumns sampleDayKey={weekStartKey} />
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+              <span className="size-1.5 rounded-full bg-emerald-500" />
+              Google Calendar connected
+            </span>
+          </div>
+        </CardHeader>
 
-              {days.map((dayKey) => (
-                <DayColumn
-                  key={dayKey}
-                  dayKey={dayKey}
-                  events={gridEvents.filter((event) =>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <div className="flex h-[calc(100vh-300px)] min-h-[480px] min-w-[980px] flex-col">
+              <div className="flex border-b pr-2">
+                <TimeScaleHeader />
+
+                {days.map((dayKey) => {
+                  const dayEvents = gridEvents.filter((event) =>
                     overlapsDateKey(event.startDate, event.endDate, dayKey, BERLIN_TIME_ZONE),
-                  )}
-                  slots={gridSlots.filter((slot) =>
+                  );
+
+                  const daySlots = gridSlots.filter((slot) =>
                     overlapsDateKey(slot.start, slot.end, dayKey, BERLIN_TIME_ZONE),
-                  )}
-                />
-              ))}
+                  );
+
+                  return (
+                    <div
+                      key={dayKey}
+                      className="flex flex-1 flex-col items-center border-l py-2 text-center"
+                    >
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        {format.dateTime(dateKeyToUtcDate(dayKey), {
+                          timeZone: 'UTC',
+                          weekday: 'short',
+                        })}
+                      </span>
+
+                      <span className="text-[10px] font-medium text-muted-foreground">
+                        {format.dateTime(dateKeyToUtcDate(dayKey), {
+                          timeZone: 'UTC',
+                          day: 'numeric',
+                          month: 'short',
+                        })}
+                      </span>
+
+                      <span className="mt-1 text-[10px] text-muted-foreground">
+                        {dayEvents.length > 0
+                          ? `${dayEvents.length} ${dayEvents.length === 1 ? 'meeting' : 'meetings'}`
+                          : daySlots.length > 0
+                            ? `${daySlots.length} ${daySlots.length === 1 ? 'slot' : 'slots'}`
+                            : 'free'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div
+                ref={scrollRef}
+                className="flex flex-1 items-start overflow-y-auto overflow-x-hidden"
+              >
+                <TimeScaleColumns sampleDayKey={weekStartKey} />
+
+                {days.map((dayKey) => (
+                  <DayColumn
+                    key={dayKey}
+                    dayKey={dayKey}
+                    events={gridEvents.filter((event) =>
+                      overlapsDateKey(event.startDate, event.endDate, dayKey, BERLIN_TIME_ZONE),
+                    )}
+                    slots={gridSlots.filter((slot) =>
+                      overlapsDateKey(slot.start, slot.end, dayKey, BERLIN_TIME_ZONE),
+                    )}
+                    selectedEventId={selectedEvent?.id ?? null}
+                    onSelectEvent={setSelectedEvent}
+                  />
+                ))}
+              </div>
             </div>
           </div>
-        </div>
 
-        {gridEvents.length === 0 && gridSlots.length === 0 ? (
-          <div className="flex items-center justify-center gap-2 border-t px-4 py-3 text-center text-xs text-muted-foreground">
-            <CalendarClock className="size-3.5" />
-            {t('book.upcoming.emptyBody')}
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3 text-xs text-muted-foreground">
-            <span>
-              Solid blocks are booked Google Calendar events. Dashed blocks are proposed free slots.
-            </span>
+          {gridEvents.length === 0 && gridSlots.length === 0 ? (
+            <div className="flex items-center justify-center gap-2 border-t px-4 py-3 text-center text-xs text-muted-foreground">
+              <CalendarClock className="size-3.5" />
+              {t('book.upcoming.emptyBody')}
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3 text-xs text-muted-foreground">
+              <span>
+                Click a solid meeting card to open details. Dashed blocks are proposed free slots.
+              </span>
 
-            <span>Positioned by Germany time. Left gutter also shows GMT+7.</span>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+              <span>Positioned by Germany time. Left gutter also shows GMT+7.</span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <CalendarEventDetailsDialog event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+    </>
   );
 }
 
@@ -518,11 +551,17 @@ function DayColumn({
   dayKey,
   events,
   slots,
+  selectedEventId,
+  onSelectEvent,
 }: {
   dayKey: string;
   events: CalendarGridEvent[];
   slots: CalendarGridSlot[];
+  selectedEventId: string | null;
+  onSelectEvent: (event: CalendarGridEvent) => void;
 }) {
+  const laidOutEvents = useMemo(() => layoutDayEvents(events, dayKey), [events, dayKey]);
+
   return (
     <div
       className="relative flex flex-1 flex-col overflow-hidden border-l border-b"
@@ -542,8 +581,14 @@ function DayColumn({
         />
       ))}
 
-      {events.map((event) => (
-        <CalendarEventBlock key={event.id} dayKey={dayKey} event={event} />
+      {laidOutEvents.map((event) => (
+        <CalendarEventBlock
+          key={`${event.id}-${event.start}`}
+          dayKey={dayKey}
+          event={event}
+          selected={selectedEventId === event.id}
+          onSelect={() => onSelectEvent(event)}
+        />
       ))}
     </div>
   );
@@ -590,13 +635,24 @@ function CalendarSlotBlock({ dayKey, start, end }: { dayKey: string; start: Date
   );
 }
 
-function CalendarEventBlock({ dayKey, event }: { dayKey: string; event: CalendarGridEvent }) {
+function CalendarEventBlock({
+  dayKey,
+  event,
+  selected,
+  onSelect,
+}: {
+  dayKey: string;
+  event: LaidOutCalendarEvent;
+  selected: boolean;
+  onSelect: () => void;
+}) {
   const t = useTranslations('activate');
 
   const visual = getVisualRangeForDateKey(event.startDate, event.endDate, dayKey, BERLIN_TIME_ZONE);
 
   const top = minuteToTop(visual.startMinute);
   const height = minuteRangeToHeight(visual.startMinute, visual.endMinute);
+  const style = getEventBlockStyle(event.layout, top, height);
 
   const berlinFrom = formatClockInTimeZone(event.startDate, BERLIN_TIME_ZONE);
   const berlinTo = formatClockInTimeZone(event.endDate, BERLIN_TIME_ZONE);
@@ -609,48 +665,401 @@ function CalendarEventBlock({ dayKey, event }: { dayKey: string; event: Calendar
   const attendeeLabel =
     attendees.length > 0 ? attendees.join(', ') : t('book.upcoming.noAttendees');
 
+  const compact = height < 54;
+  const roomy = height >= 78;
+
   return (
-    <div
-      className="absolute left-1.5 right-1.5 z-20 overflow-hidden rounded-md border border-border border-l-2 border-l-foreground bg-card px-2 py-1 shadow-sm"
-      style={{
-        top,
-        height,
-      }}
+    <button
+      type="button"
+      onClick={onSelect}
+      className={[
+        'absolute z-20 overflow-hidden rounded-lg border border-border border-l-4 border-l-blue-500 bg-popover px-2 py-1.5 text-left text-popover-foreground shadow-lg transition',
+        'hover:-translate-y-0.5 hover:bg-muted hover:shadow-xl',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        selected ? 'ring-2 ring-blue-400' : '',
+      ].join(' ')}
+      style={style}
       title={`${title} · DE ${berlinFrom}–${berlinTo} · GMT+7 ${gmt7From}–${gmt7To}`}
-      aria-label={`${title} Germany ${berlinFrom} to ${berlinTo}`}
+      aria-label={`${title}. Germany ${berlinFrom} to ${berlinTo}. Click for details.`}
     >
       <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground">
-        <Clock className="size-3" />
-
+        <Clock className="size-3 shrink-0" />
         <span className="truncate tabular-nums">
           DE {berlinFrom}–{berlinTo}
         </span>
       </div>
 
-      <div className="truncate text-[10px] font-medium text-muted-foreground">
-        GMT+7 {gmt7From}–{gmt7To}
-      </div>
+      <div className="truncate text-xs font-semibold leading-tight">{title}</div>
 
-      <div className="truncate text-xs font-semibold">{title}</div>
-
-      <div className="flex items-center gap-1 truncate text-[10px] text-muted-foreground">
-        <Users className="size-3" />
-        <span className="truncate">{attendeeLabel}</span>
-      </div>
-
-      {event.meetingUrl ? (
-        <a
-          href={event.meetingUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="mt-1 inline-flex items-center gap-1 text-[10px] font-semibold underline-offset-2 hover:underline"
-        >
-          <Video className="size-3" />
-          {t('book.upcoming.join')}
-        </a>
+      {!compact ? (
+        <div className="truncate text-[10px] font-medium text-muted-foreground">
+          GMT+7 {gmt7From}–{gmt7To}
+        </div>
       ) : null}
+
+      {roomy ? (
+        <div className="mt-0.5 flex items-center gap-1 truncate text-[10px] text-muted-foreground">
+          <Users className="size-3 shrink-0" />
+          <span className="truncate">{attendeeLabel}</span>
+        </div>
+      ) : null}
+
+      {roomy && event.meetingUrl ? (
+        <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-blue-500">
+          <Video className="size-3" />
+          Meet
+        </div>
+      ) : null}
+    </button>
+  );
+}
+
+function CalendarEventDetailsDialog({
+  event,
+  onClose,
+}: {
+  event: CalendarGridEvent | null;
+  onClose: () => void;
+}) {
+  const t = useTranslations('activate');
+  const format = useFormatter();
+
+  useEffect(() => {
+    if (!event) return;
+
+    const onKeyDown = (keyboardEvent: KeyboardEvent) => {
+      if (keyboardEvent.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [event, onClose]);
+
+  if (!event) {
+    return null;
+  }
+
+  const title = event.title || t('book.upcoming.untitled');
+  const attendees = event.attendees ?? [];
+
+  const berlinDate = format.dateTime(event.startDate, {
+    timeZone: BERLIN_TIME_ZONE,
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+
+  const berlinFrom = formatClockInTimeZone(event.startDate, BERLIN_TIME_ZONE);
+  const berlinTo = formatClockInTimeZone(event.endDate, BERLIN_TIME_ZONE);
+
+  const gmt7Date = format.dateTime(event.startDate, {
+    timeZone: GMT7_TIME_ZONE,
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+
+  const gmt7From = formatClockInTimeZone(event.startDate, GMT7_TIME_ZONE);
+  const gmt7To = formatClockInTimeZone(event.endDate, GMT7_TIME_ZONE);
+
+  const location = getEventString(event, 'location');
+  const rawDescription = getEventString(event, 'description');
+  const description = rawDescription ? stripHtml(rawDescription) : null;
+
+  const htmlLink =
+    getEventString(event, 'htmlLink') ??
+    getEventString(event, 'googleCalendarUrl') ??
+    getEventString(event, 'calendarUrl');
+
+  const organizer =
+    getEventString(event, 'organizerEmail') ?? getEventString(event, 'creatorEmail');
+
+  const status = getEventString(event, 'status');
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm"
+      role="presentation"
+      onMouseDown={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="w-full max-w-xl overflow-hidden rounded-xl border bg-card text-card-foreground shadow-2xl"
+        onMouseDown={(mouseEvent) => mouseEvent.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b px-5 py-4">
+          <div className="min-w-0">
+            <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-500">
+              <Calendar className="size-3" />
+              Google Calendar event
+            </div>
+
+            <h2 className="break-words text-lg font-semibold leading-snug">{title}</h2>
+          </div>
+
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="size-8 shrink-0"
+            aria-label="Close meeting details"
+            onClick={onClose}
+          >
+            <X className="size-4" />
+          </Button>
+        </div>
+
+        <div className="flex flex-col gap-4 px-5 py-5">
+          <EventDetailRow icon={<Clock className="size-4" />} label="Time">
+            <div className="flex flex-col gap-1">
+              <span className="font-medium">
+                {berlinDate}, {berlinFrom}–{berlinTo}
+              </span>
+              <span className="text-xs text-muted-foreground">Germany time · CET/CEST</span>
+              <span className="text-xs text-muted-foreground">
+                GMT+7: {gmt7Date}, {gmt7From}–{gmt7To}
+              </span>
+            </div>
+          </EventDetailRow>
+
+          {location ? (
+            <EventDetailRow icon={<MapPin className="size-4" />} label="Location">
+              <span className="break-words">{location}</span>
+            </EventDetailRow>
+          ) : null}
+
+          <EventDetailRow icon={<Users className="size-4" />} label="Guests">
+            {attendees.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {attendees.map((attendee) => (
+                  <span key={attendee} className="rounded-full border bg-muted px-2 py-1 text-xs">
+                    {attendee}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <span className="text-muted-foreground">{t('book.upcoming.noAttendees')}</span>
+            )}
+          </EventDetailRow>
+
+          {organizer ? (
+            <EventDetailRow icon={<Mail className="size-4" />} label="Organizer">
+              <span className="break-words">{organizer}</span>
+            </EventDetailRow>
+          ) : null}
+
+          {event.meetingUrl ? (
+            <EventDetailRow icon={<Video className="size-4" />} label="Meeting link">
+              <Button asChild size="sm" variant="outline">
+                <a href={event.meetingUrl} target="_blank" rel="noopener noreferrer">
+                  <Video className="size-3.5" />
+                  {t('book.upcoming.join')}
+                </a>
+              </Button>
+            </EventDetailRow>
+          ) : null}
+
+          {description ? (
+            <EventDetailRow icon={<FileText className="size-4" />} label="Description">
+              <p className="whitespace-pre-wrap break-words leading-relaxed">{description}</p>
+            </EventDetailRow>
+          ) : null}
+
+          <div className="grid grid-cols-1 gap-3 rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground sm:grid-cols-2">
+            <div>
+              <span className="block font-semibold text-foreground">Event ID</span>
+              <span className="break-all">{event.id}</span>
+            </div>
+
+            <div>
+              <span className="block font-semibold text-foreground">Status</span>
+              <span>{status ?? 'confirmed / unknown'}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t px-5 py-4">
+          {htmlLink ? (
+            <Button asChild size="sm" variant="outline">
+              <a href={htmlLink} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="size-3.5" />
+                Open in Google Calendar
+              </a>
+            </Button>
+          ) : null}
+
+          {event.meetingUrl ? (
+            <Button asChild size="sm">
+              <a href={event.meetingUrl} target="_blank" rel="noopener noreferrer">
+                <Video className="size-3.5" />
+                Join meeting
+              </a>
+            </Button>
+          ) : null}
+
+          <Button type="button" size="sm" variant="ghost" onClick={onClose}>
+            Close
+          </Button>
+        </div>
+      </div>
     </div>
   );
+}
+
+function EventDetailRow({
+  icon,
+  label,
+  children,
+}: {
+  icon: ReactNode;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="grid grid-cols-[20px_1fr] gap-3">
+      <div className="mt-0.5 text-muted-foreground">{icon}</div>
+
+      <div className="min-w-0">
+        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {label}
+        </div>
+
+        <div className="text-sm">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function layoutDayEvents(events: CalendarGridEvent[], dayKey: string): LaidOutCalendarEvent[] {
+  type LayoutItem = {
+    event: CalendarGridEvent;
+    startMinute: number;
+    endMinute: number;
+    column?: number;
+  };
+
+  const items: LayoutItem[] = events
+    .map((event) => {
+      const visual = getVisualRangeForDateKey(
+        event.startDate,
+        event.endDate,
+        dayKey,
+        BERLIN_TIME_ZONE,
+      );
+
+      return {
+        event,
+        startMinute: visual.startMinute,
+        endMinute: visual.endMinute,
+      };
+    })
+    .sort((a, b) => {
+      if (a.startMinute !== b.startMinute) {
+        return a.startMinute - b.startMinute;
+      }
+
+      return b.endMinute - a.endMinute;
+    });
+
+  const laidOut: LaidOutCalendarEvent[] = [];
+  let cluster: LayoutItem[] = [];
+  let clusterEndMinute = -1;
+
+  const flushCluster = () => {
+    if (cluster.length === 0) return;
+
+    const columnEndMinutes: number[] = [];
+
+    for (const item of cluster) {
+      let column = columnEndMinutes.findIndex((endMinute) => endMinute <= item.startMinute);
+
+      if (column === -1) {
+        column = columnEndMinutes.length;
+      }
+
+      columnEndMinutes[column] = item.endMinute;
+      item.column = column;
+    }
+
+    const columns = Math.max(1, columnEndMinutes.length);
+
+    for (const item of cluster) {
+      laidOut.push({
+        ...item.event,
+        layout: {
+          column: item.column ?? 0,
+          columns,
+        },
+      });
+    }
+
+    cluster = [];
+    clusterEndMinute = -1;
+  };
+
+  for (const item of items) {
+    if (cluster.length === 0) {
+      cluster = [item];
+      clusterEndMinute = item.endMinute;
+      continue;
+    }
+
+    if (item.startMinute < clusterEndMinute) {
+      cluster.push(item);
+      clusterEndMinute = Math.max(clusterEndMinute, item.endMinute);
+      continue;
+    }
+
+    flushCluster();
+
+    cluster = [item];
+    clusterEndMinute = item.endMinute;
+  }
+
+  flushCluster();
+
+  return laidOut;
+}
+
+function getEventBlockStyle(
+  layout: CalendarEventLayout,
+  top: number,
+  height: number,
+): CSSProperties {
+  const columns = Math.max(1, layout.columns);
+  const column = Math.min(layout.column, columns - 1);
+
+  const columnWidth = 100 / columns;
+  const horizontalGap = 6;
+
+  return {
+    top,
+    height,
+    left: `calc(${column * columnWidth}% + ${horizontalGap}px)`,
+    width: `calc(${columnWidth}% - ${horizontalGap * 2}px)`,
+  };
+}
+
+function getEventString(event: CalendarEventDto, key: string): string | null {
+  const value = (event as unknown as Record<string, unknown>)[key];
+
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
+function stripHtml(value: string): string {
+  return value
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 function pad2(value: number): string {
@@ -837,7 +1246,7 @@ function getVisualRangeForDateKey(
 
   return {
     startMinute,
-    endMinute: Math.min(24 * 60, Math.max(startMinute + 30, rawEndMinute)),
+    endMinute: Math.min(24 * 60, Math.max(startMinute + 20, rawEndMinute)),
   };
 }
 
@@ -849,15 +1258,15 @@ function zonedMinutesSinceMidnight(date: Date, timeZone: string): number {
 
 function minuteToTop(minute: number): number {
   const rawTop = (minute / 60) * HOUR_HEIGHT;
-  const maxTop = HOURS.length * HOUR_HEIGHT - 28;
+  const maxTop = HOURS.length * HOUR_HEIGHT - 30;
 
   return Math.max(0, Math.min(rawTop, maxTop));
 }
 
 function minuteRangeToHeight(startMinute: number, endMinute: number): number {
-  const minutes = Math.max(30, endMinute - startMinute);
+  const minutes = Math.max(20, endMinute - startMinute);
 
-  return Math.max(28, (minutes / 60) * HOUR_HEIGHT);
+  return Math.max(32, (minutes / 60) * HOUR_HEIGHT);
 }
 
 function getIsoWeekNumber(dateKey: string): number {
