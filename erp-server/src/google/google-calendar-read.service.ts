@@ -32,7 +32,14 @@ const SLOT_MINUTES = 30;
 const FREE_SLOT_HORIZON_DAYS = 7;
 const MAX_FREE_SLOTS = 6;
 const MAX_UPCOMING_EVENTS = 10;
+const DEFAULT_CALENDAR_TIME_ZONE = 'Europe/Berlin';
 
+type CalendarRangeInput = {
+  timeMin?: string;
+  timeMax?: string;
+  timeZone?: string;
+  durationMinutes?: number;
+};
 interface BusyInterval {
   start: number; // epoch ms
   end: number; // epoch ms
@@ -164,6 +171,34 @@ export function computeFreeSlots(
   return out;
 }
 
+function resolveCalendarRange(input: CalendarRangeInput = {}) {
+  const timeZone = input.timeZone || DEFAULT_CALENDAR_TIME_ZONE;
+
+  const fallbackMin = new Date();
+  const fallbackMax = new Date(fallbackMin.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  const timeMinDate = input.timeMin ? new Date(input.timeMin) : fallbackMin;
+  const timeMaxDate = input.timeMax ? new Date(input.timeMax) : fallbackMax;
+
+  if (Number.isNaN(timeMinDate.getTime())) {
+    throw new Error('Invalid timeMin query parameter.');
+  }
+
+  if (Number.isNaN(timeMaxDate.getTime())) {
+    throw new Error('Invalid timeMax query parameter.');
+  }
+
+  if (timeMaxDate <= timeMinDate) {
+    throw new Error('timeMax must be after timeMin.');
+  }
+
+  return {
+    timeMin: timeMinDate.toISOString(),
+    timeMax: timeMaxDate.toISOString(),
+    timeZone,
+  };
+}
+
 @Injectable()
 export class GoogleCalendarReadService {
   private readonly logger = new Logger(GoogleCalendarReadService.name);
@@ -173,26 +208,32 @@ export class GoogleCalendarReadService {
   // The next upcoming real events from the org's primary calendar. Never throws —
   // returns a `configured: false` shell when the org has no default calendar mailbox
   // or Google is unreachable.
-  async upcoming(orgId: string): Promise<CalendarUpcomingDto> {
+  async upcoming(orgId: string, rangeInput: CalendarRangeInput = {}): Promise<CalendarUpcomingDto> {
     const access = await this.googleAccounts.resolveMailbox(orgId, 'calendar');
     if (!access.ok) {
       return { configured: false, account: null, events: [], reason: access.reason };
     }
     const perOrg = access;
-
+    const range = resolveCalendarRange(rangeInput);
     const selfEmail = perOrg.account.email.toLowerCase();
     const selfDomain = selfEmail.split('@')[1] ?? '';
 
     try {
       const params = new URLSearchParams({
-        timeMin: new Date().toISOString(),
+        timeMin: range.timeMin,
+        timeMax: range.timeMax,
         singleEvents: 'true',
         orderBy: 'startTime',
-        maxResults: String(MAX_UPCOMING_EVENTS),
+        maxResults: '250',
+        timeZone: range.timeZone,
       });
       const res = await fetch(
         `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`,
-        { headers: { Authorization: `Bearer ${perOrg.accessToken}` } },
+        {
+          headers: {
+            Authorization: `Bearer ${access.accessToken}`,
+          },
+        },
       );
       if (!res.ok) {
         const body = await res.text();
@@ -256,16 +297,17 @@ export class GoogleCalendarReadService {
 
   // Proposed free slots over the next 7 days within Europe/Berlin business hours.
   // Never throws — returns a `configured: false` shell on any failure.
-  async freeSlots(orgId: string): Promise<CalendarFreeSlotsDto> {
+  async freeSlots(orgId: string, rangeInput: CalendarRangeInput = {}): Promise<CalendarFreeSlotsDto> {
     const access = await this.googleAccounts.resolveMailbox(orgId, 'calendar');
     if (!access.ok) {
       return { configured: false, slots: [], reason: access.reason };
     }
     const perOrg = access;
+    const range = resolveCalendarRange(rangeInput);
+    const durationMinutes = rangeInput.durationMinutes ?? 30;
 
     try {
       const now = new Date();
-      const timeMax = new Date(now.getTime() + FREE_SLOT_HORIZON_DAYS * 24 * 60 * 60_000);
       const res = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
         method: 'POST',
         headers: {
@@ -273,9 +315,9 @@ export class GoogleCalendarReadService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          timeMin: now.toISOString(),
-          timeMax: timeMax.toISOString(),
-          timeZone: SLOT_TZ,
+          timeMin: range.timeMin,
+          timeMax: range.timeMax,
+          timeZone: range.timeZone,
           items: [{ id: 'primary' }],
         }),
       });
