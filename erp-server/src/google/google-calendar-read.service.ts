@@ -1,8 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import type {
   CalendarEventDto,
   CalendarFreeSlotsDto,
   CalendarUpcomingDto,
+  CalendarMutationResultDto,
+  CreateCalendarEventDto,
+  UpdateCalendarEventDto,
 } from '@evertrust/shared';
 import { GoogleAccountsService } from './google-accounts.service';
 
@@ -72,9 +76,7 @@ function berlinParts(at: Date): {
     hour12: false,
     weekday: 'short',
   });
-  const parts = Object.fromEntries(
-    fmt.formatToParts(at).map((p) => [p.type, p.value]),
-  );
+  const parts = Object.fromEntries(fmt.formatToParts(at).map((p) => [p.type, p.value]));
   const weekdayMap: Record<string, number> = {
     Sun: 0,
     Mon: 1,
@@ -147,9 +149,7 @@ export function computeFreeSlots(
         if (startMs < nowMs) continue; // only future slots
         if (startMs >= horizonMs) continue; // within the 7-day horizon
 
-        const overlapsBusy = busy.some(
-          (b) => startMs < b.end && endMs > b.start,
-        );
+        const overlapsBusy = busy.some((b) => startMs < b.end && endMs > b.start);
         if (overlapsBusy) continue;
 
         out.push({
@@ -195,9 +195,10 @@ export class GoogleCalendarReadService {
         { headers: { Authorization: `Bearer ${perOrg.accessToken}` } },
       );
       if (!res.ok) {
-        this.logger.warn(
-          `Calendar events returned HTTP ${res.status} for org ${orgId} — upcoming disabled`,
-        );
+        const body = await res.text();
+
+        this.logger.warn(`Calendar events returned HTTP ${res.status} for org ${orgId}: ${body}`);
+
         return {
           configured: false,
           account: null,
@@ -220,8 +221,7 @@ export class GoogleCalendarReadService {
             .map((a) => (a.email as string).toLowerCase())
             .filter(
               (email) =>
-                email !== selfEmail &&
-                (selfDomain ? !email.endsWith(`@${selfDomain}`) : true),
+                email !== selfEmail && (selfDomain ? !email.endsWith(`@${selfDomain}`) : true),
             );
 
           return {
@@ -265,29 +265,25 @@ export class GoogleCalendarReadService {
 
     try {
       const now = new Date();
-      const timeMax = new Date(
-        now.getTime() + FREE_SLOT_HORIZON_DAYS * 24 * 60 * 60_000,
-      );
-      const res = await fetch(
-        'https://www.googleapis.com/calendar/v3/freeBusy',
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${perOrg.accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            timeMin: now.toISOString(),
-            timeMax: timeMax.toISOString(),
-            timeZone: SLOT_TZ,
-            items: [{ id: 'primary' }],
-          }),
+      const timeMax = new Date(now.getTime() + FREE_SLOT_HORIZON_DAYS * 24 * 60 * 60_000);
+      const res = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${perOrg.accessToken}`,
+          'Content-Type': 'application/json',
         },
-      );
+        body: JSON.stringify({
+          timeMin: now.toISOString(),
+          timeMax: timeMax.toISOString(),
+          timeZone: SLOT_TZ,
+          items: [{ id: 'primary' }],
+        }),
+      });
       if (!res.ok) {
-        this.logger.warn(
-          `Calendar freeBusy returned HTTP ${res.status} for org ${orgId} — slots disabled`,
-        );
+        const body = await res.text();
+
+        this.logger.warn(`Calendar freeBusy returned HTTP ${res.status} for org ${orgId}: ${body}`);
+
         return {
           configured: false,
           slots: [],
@@ -319,5 +315,220 @@ export class GoogleCalendarReadService {
         reason: 'Could not reach Google Calendar. Try again, or reconnect the account.',
       };
     }
+  }
+  async createEvent(
+    orgId: string,
+    dto: CreateCalendarEventDto,
+  ): Promise<CalendarMutationResultDto> {
+    const access = await this.googleAccounts.resolveMailbox(orgId, 'calendar');
+
+    if (!access.ok) {
+      return {
+        ok: false,
+        eventId: null,
+        htmlLink: null,
+        meetingUrl: null,
+        reason: access.reason,
+      };
+    }
+
+    const body: Record<string, unknown> = {
+      summary: dto.title,
+      description: dto.description,
+      location: dto.location,
+      start: {
+        dateTime: dto.start,
+        timeZone: dto.timeZone,
+      },
+      end: {
+        dateTime: dto.end,
+        timeZone: dto.timeZone,
+      },
+      attendees: dto.attendees.map((a) => ({ email: a.email })),
+    };
+
+    const params = new URLSearchParams({
+      sendUpdates: 'all',
+    });
+
+    if (dto.addGoogleMeet) {
+      body.conferenceData = {
+        createRequest: {
+          requestId: randomUUID(),
+        },
+      };
+      params.set('conferenceDataVersion', '1');
+    }
+
+    const res = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${access.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      },
+    );
+
+    if (!res.ok) {
+      const err = await res.text();
+      this.logger.warn(`Calendar create returned HTTP ${res.status} for org ${orgId}: ${err}`);
+
+      return {
+        ok: false,
+        eventId: null,
+        htmlLink: null,
+        meetingUrl: null,
+        reason: `Google Calendar create failed (HTTP ${res.status}).`,
+      };
+    }
+
+    const data = (await res.json()) as {
+      id?: string;
+      htmlLink?: string;
+      hangoutLink?: string;
+      conferenceData?: {
+        entryPoints?: { uri?: string }[];
+      };
+    };
+
+    const meetingUrl =
+      data.hangoutLink ?? data.conferenceData?.entryPoints?.find((p) => p.uri)?.uri ?? null;
+
+    return {
+      ok: true,
+      eventId: data.id ?? null,
+      htmlLink: data.htmlLink ?? null,
+      meetingUrl,
+      reason: null,
+    };
+  }
+  async updateEvent(
+    orgId: string,
+    eventId: string,
+    dto: UpdateCalendarEventDto,
+  ): Promise<CalendarMutationResultDto> {
+    const access = await this.googleAccounts.resolveMailbox(orgId, 'calendar');
+
+    if (!access.ok) {
+      return {
+        ok: false,
+        eventId: null,
+        htmlLink: null,
+        meetingUrl: null,
+        reason: access.reason,
+      };
+    }
+
+    const body: Record<string, unknown> = {};
+
+    if (dto.title !== undefined) body.summary = dto.title;
+    if (dto.description !== undefined) body.description = dto.description;
+    if (dto.location !== undefined) body.location = dto.location;
+
+    if (dto.start !== undefined) {
+      body.start = {
+        dateTime: dto.start,
+        timeZone: dto.timeZone ?? 'Europe/Berlin',
+      };
+    }
+
+    if (dto.end !== undefined) {
+      body.end = {
+        dateTime: dto.end,
+        timeZone: dto.timeZone ?? 'Europe/Berlin',
+      };
+    }
+
+    if (dto.attendees !== undefined) {
+      body.attendees = dto.attendees.map((a) => ({ email: a.email }));
+    }
+
+    const params = new URLSearchParams({
+      sendUpdates: 'all',
+    });
+
+    const res = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}?${params.toString()}`,
+      {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${access.accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      },
+    );
+
+    if (!res.ok) {
+      const err = await res.text();
+      this.logger.warn(`Calendar update returned HTTP ${res.status} for org ${orgId}: ${err}`);
+
+      return {
+        ok: false,
+        eventId: null,
+        htmlLink: null,
+        meetingUrl: null,
+        reason: `Google Calendar update failed (HTTP ${res.status}).`,
+      };
+    }
+
+    const data = (await res.json()) as {
+      id?: string;
+      htmlLink?: string;
+      hangoutLink?: string;
+    };
+
+    return {
+      ok: true,
+      eventId: data.id ?? null,
+      htmlLink: data.htmlLink ?? null,
+      meetingUrl: data.hangoutLink ?? null,
+      reason: null,
+    };
+  }
+  async deleteEvent(
+    orgId: string,
+    eventId: string,
+  ): Promise<{ ok: boolean; reason: string | null }> {
+    const access = await this.googleAccounts.resolveMailbox(orgId, 'calendar');
+
+    if (!access.ok) {
+      return {
+        ok: false,
+        reason: access.reason,
+      };
+    }
+
+    const params = new URLSearchParams({
+      sendUpdates: 'all',
+    });
+
+    const res = await fetch(
+      `https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(eventId)}?${params.toString()}`,
+      {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${access.accessToken}`,
+        },
+      },
+    );
+
+    if (!res.ok) {
+      const err = await res.text();
+      this.logger.warn(`Calendar delete returned HTTP ${res.status} for org ${orgId}: ${err}`);
+
+      return {
+        ok: false,
+        reason: `Google Calendar delete failed (HTTP ${res.status}).`,
+      };
+    }
+
+    return {
+      ok: true,
+      reason: null,
+    };
   }
 }

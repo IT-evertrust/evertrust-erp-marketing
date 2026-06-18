@@ -1,11 +1,15 @@
-import { Controller, Get } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
 import type {
   CalendarFreeSlotsDto,
   CalendarUpcomingDto,
+  CalendarMutationResultDto,
+  CreateCalendarEventDto,
+  UpdateCalendarEventDto,
 } from '@evertrust/shared';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { OrgId } from '../common/tenant';
 import { GoogleCalendarReadService } from './google-calendar-read.service';
+import { CreateCalendarEventBodyDto, UpdateCalendarEventBodyDto } from './google.dto';
 
 // Activate · live Google Calendar (read). Real upcoming meetings + proposed free
 // slots from the CALLING org's connected default calendar mailbox. JWT-auth +
@@ -25,5 +29,29 @@ export class GoogleCalendarReadController {
   @Get('free-slots')
   freeSlots(@OrgId() orgId: string): Promise<CalendarFreeSlotsDto> {
     return this.calendar.freeSlots(orgId);
+  }
+  @Post('events')
+  createEvent(
+    @OrgId() orgId: string,
+    @Body() body: CreateCalendarEventBodyDto,
+  ): Promise<CalendarMutationResultDto> {
+    return this.calendar.createEvent(orgId, body as CreateCalendarEventDto);
+  }
+
+  @Patch('events/:eventId')
+  updateEvent(
+    @OrgId() orgId: string,
+    @Param('eventId') eventId: string,
+    @Body() body: UpdateCalendarEventBodyDto,
+  ): Promise<CalendarMutationResultDto> {
+    return this.calendar.updateEvent(orgId, eventId, body as UpdateCalendarEventDto);
+  }
+
+  @Delete('events/:eventId')
+  deleteEvent(
+    @OrgId() orgId: string,
+    @Param('eventId') eventId: string,
+  ): Promise<{ ok: boolean; reason: string | null }> {
+    return this.calendar.deleteEvent(orgId, eventId);
   }
 }

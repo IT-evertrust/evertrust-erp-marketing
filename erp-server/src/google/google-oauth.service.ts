@@ -15,6 +15,7 @@ export interface ExchangedTokens {
   sub: string;
   email: string;
   name: string | null;
+  scopes: string[];
 }
 
 // Wraps a google-auth-library OAuth2Client for the per-org connect flow (distinct
@@ -104,6 +105,7 @@ export class GoogleOAuthService {
       sub: payload.sub,
       email: payload.email,
       name: payload.name ?? null,
+      scopes: typeof tokens.scope === 'string' ? tokens.scope.split(' ').filter(Boolean) : [],
     };
   }
 
