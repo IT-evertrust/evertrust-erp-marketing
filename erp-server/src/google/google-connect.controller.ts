@@ -61,10 +61,7 @@ export class GoogleConnectController {
   // admin cannot click through Google for an employee); managing the org defaults +
   // listing/disconnecting stays admin:config below.
   @Get('connect/start')
-  async start(
-    @OrgId() orgId: string,
-    @CurrentUser() user: AuthUser,
-  ): Promise<{ url: string }> {
+  async start(@OrgId() orgId: string, @CurrentUser() user: AuthUser): Promise<{ url: string }> {
     if (!this.oauth.isConfigured()) {
       throw new ServiceUnavailableException('Google connect is not configured');
     }
@@ -112,7 +109,7 @@ export class GoogleConnectController {
         expiryDate: tokens.expiryDate,
         // Record the requested connect scopes (incremental authorization keeps the
         // actual grant a superset of these).
-        scopes: [...GOOGLE_CONNECT_SCOPES],
+        scopes: tokens.scopes,
       });
 
       return this.redirect(res, true);
@@ -149,10 +146,7 @@ export class GoogleConnectController {
     @OrgId() orgId: string,
     @Body() body: SetDefaultMailboxBodyDto,
   ): Promise<ConnectedGoogleAccountDto[]> {
-    return this.accounts.setDefaultMailbox(
-      orgId,
-      (body as SetDefaultMailboxDto).accountId,
-    );
+    return this.accounts.setDefaultMailbox(orgId, (body as SetDefaultMailboxDto).accountId);
   }
 
   // Disconnect (delete + best-effort revoke) one of the org's accounts. Returns the

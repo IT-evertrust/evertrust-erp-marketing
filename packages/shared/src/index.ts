@@ -528,6 +528,44 @@ export const CalendarFreeSlotsDto = z.object({
   reason: z.string().nullable().default(null),
 });
 export type CalendarFreeSlotsDto = z.infer<typeof CalendarFreeSlotsDto>;
+export const CalendarAttendeeDto = z.object({
+  email: z.string().email(),
+});
+
+export const CreateCalendarEventDto = z.object({
+  title: z.string().min(1).max(300),
+  description: z.string().max(5000).optional(),
+  location: z.string().max(500).optional(),
+  start: z.string().datetime(),
+  end: z.string().datetime(),
+  timeZone: z.string().default('Europe/Berlin'),
+  attendees: z.array(CalendarAttendeeDto).default([]),
+  addGoogleMeet: z.boolean().default(false),
+});
+
+export type CreateCalendarEventDto = z.infer<typeof CreateCalendarEventDto>;
+
+export const UpdateCalendarEventDto = z.object({
+  title: z.string().min(1).max(300).optional(),
+  description: z.string().max(5000).optional(),
+  location: z.string().max(500).optional(),
+  start: z.string().datetime().optional(),
+  end: z.string().datetime().optional(),
+  timeZone: z.string().default('Europe/Berlin').optional(),
+  attendees: z.array(CalendarAttendeeDto).optional(),
+});
+
+export type UpdateCalendarEventDto = z.infer<typeof UpdateCalendarEventDto>;
+
+export const CalendarMutationResultDto = z.object({
+  ok: z.boolean(),
+  eventId: z.string().nullable(),
+  htmlLink: z.string().nullable(),
+  meetingUrl: z.string().nullable(),
+  reason: z.string().nullable().default(null),
+});
+
+export type CalendarMutationResultDto = z.infer<typeof CalendarMutationResultDto>;
 
 // PATCH /sales/meetings/:id — manual campaign link (null clears it).
 export const LinkMeetingDto = z.object({
