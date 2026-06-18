@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import type {
   CalendarFreeSlotsDto,
   CalendarUpcomingDto,
@@ -21,14 +21,34 @@ export class GoogleCalendarReadController {
 
   @RequirePermissions('campaigns:read')
   @Get('upcoming')
-  upcoming(@OrgId() orgId: string): Promise<CalendarUpcomingDto> {
-    return this.calendar.upcoming(orgId);
+  upcoming(
+    @OrgId() orgId: string,
+    @Query('timeMin') timeMin?: string,
+    @Query('timeMax') timeMax?: string,
+    @Query('timeZone') timeZone?: string,
+  ) {
+    return this.calendar.upcoming(orgId, {
+      timeMin,
+      timeMax,
+      timeZone,
+    });
   }
 
   @RequirePermissions('campaigns:read')
   @Get('free-slots')
-  freeSlots(@OrgId() orgId: string): Promise<CalendarFreeSlotsDto> {
-    return this.calendar.freeSlots(orgId);
+  freeSlots(
+    @OrgId() orgId: string,
+    @Query('timeMin') timeMin?: string,
+    @Query('timeMax') timeMax?: string,
+    @Query('timeZone') timeZone?: string,
+    @Query('durationMinutes') durationMinutes?: string,
+  ) {
+    return this.calendar.freeSlots(orgId, {
+      timeMin,
+      timeMax,
+      timeZone,
+      durationMinutes: durationMinutes ? Number(durationMinutes) : undefined,
+    });
   }
   @Post('events')
   createEvent(
