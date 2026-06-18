@@ -1,10 +1,4 @@
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { and, eq } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 import type {
@@ -49,6 +43,23 @@ const CALENDAR_SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/calendar.readonly',
 ] as const;
+
+// Gmail sending and Gmail fetching are intentionally separate capabilities. The
+// existing `gmail` kind is kept for send-side callers. Gmail API fetching uses the
+// narrower `gmail-read` kind so a mailbox that only granted gmail.send does not get
+// treated as readable.
+const GMAIL_SEND_SCOPES = [
+  'https://www.googleapis.com/auth/gmail.send',
+  'https://mail.google.com/',
+] as const;
+
+const GMAIL_READ_SCOPES = [
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.modify',
+  'https://mail.google.com/',
+] as const;
+
+export type GoogleMailboxKind = 'gmail' | 'gmail-read' | 'calendar';
 
 // PER-ORG connected Google accounts: list/upsert/set-defaults/disconnect, plus the
 // token resolver other services use to get a live access token for the org's chosen
@@ -116,17 +127,10 @@ export class GoogleAccountsService {
   // access token when present) and upserts on (organization_id, google_sub) so a
   // re-connect of the same Google account updates its tokens in place. AFTER the
   // upsert, if the org has no default mailbox yet, this freshly connected account
-  // becomes the SINGLE default mailbox (mirrors the senders "first one becomes
-  // default" behaviour).
-  async upsertFromCallback(
-    orgId: string,
-    userId: string,
-    p: GoogleCallbackTokens,
-  ): Promise<void> {
+  // becomes the SINGLE default mailbox.
+  async upsertFromCallback(orgId: string, userId: string, p: GoogleCallbackTokens): Promise<void> {
     const refreshTokenEnc = this.crypto.encrypt(p.refreshToken);
-    const accessTokenEnc = p.accessToken
-      ? this.crypto.encrypt(p.accessToken)
-      : null;
+    const accessTokenEnc = p.accessToken ? this.crypto.encrypt(p.accessToken) : null;
     const accessTokenExpiresAt = p.expiryDate ? new Date(p.expiryDate) : null;
 
     await this.db
@@ -145,10 +149,7 @@ export class GoogleAccountsService {
         lastError: null,
       })
       .onConflictDoUpdate({
-        target: [
-          schema.googleAccounts.organizationId,
-          schema.googleAccounts.googleSub,
-        ],
+        target: [schema.googleAccounts.organizationId, schema.googleAccounts.googleSub],
         set: {
           userId,
           email: p.email,
@@ -174,6 +175,7 @@ export class GoogleAccountsService {
         ),
       )
       .limit(1);
+
     const savedId = saved[0]?.id;
     if (!savedId) return;
 
@@ -198,6 +200,7 @@ export class GoogleAccountsService {
       if (id !== null) await this.assertOwned(orgId, id);
       set.defaultGmailAccountId = id;
     }
+
     if ('defaultCalendarAccountId' in dto) {
       const id = dto.defaultCalendarAccountId ?? null;
       if (id !== null) await this.assertOwned(orgId, id);
@@ -207,6 +210,7 @@ export class GoogleAccountsService {
     if (Object.keys(set).length > 0) {
       await this.persistOrg(orgId, set);
     }
+
     return this.listForOrg(orgId);
   }
 
@@ -218,7 +222,9 @@ export class GoogleAccountsService {
     accountId: string | null,
   ): Promise<ConnectedGoogleAccountDto[]> {
     if (accountId !== null) await this.assertOwned(orgId, accountId);
+
     await this.persistOrg(orgId, { defaultMailboxAccountId: accountId });
+
     return this.listForOrg(orgId);
   }
 
@@ -227,10 +233,7 @@ export class GoogleAccountsService {
   // pointer still references it would throw. Then best-effort revoke the token at
   // Google (a revoke failure must not block the delete) and remove the row. Returns
   // the refreshed list. 404 when the row is not in this org.
-  async disconnect(
-    orgId: string,
-    id: string,
-  ): Promise<ConnectedGoogleAccountDto[]> {
+  async disconnect(orgId: string, id: string): Promise<ConnectedGoogleAccountDto[]> {
     const row = await this.ownedRow(orgId, id);
     if (!row) {
       throw new NotFoundException('Google account not found');
@@ -241,11 +244,13 @@ export class GoogleAccountsService {
     // at the row being removed.
     const orgRow = await this.orgRow(orgId);
     const set: Partial<typeof schema.orgConfig.$inferInsert> = {};
+
     if (orgRow.defaultMailboxAccountId === id) set.defaultMailboxAccountId = null;
     if (orgRow.defaultGmailAccountId === id) set.defaultGmailAccountId = null;
     if (orgRow.defaultCalendarAccountId === id) {
       set.defaultCalendarAccountId = null;
     }
+
     if (Object.keys(set).length > 0) {
       await this.persistOrg(orgId, set);
     }
@@ -256,10 +261,7 @@ export class GoogleAccountsService {
     await this.db
       .delete(schema.googleAccounts)
       .where(
-        and(
-          eq(schema.googleAccounts.organizationId, orgId),
-          eq(schema.googleAccounts.id, id),
-        ),
+        and(eq(schema.googleAccounts.organizationId, orgId), eq(schema.googleAccounts.id, id)),
       );
 
     return this.listForOrg(orgId);
@@ -267,28 +269,23 @@ export class GoogleAccountsService {
 
   // Resolve a LIVE access token for the org's SINGLE default mailbox:
   // org_config.defaultMailboxAccountId -> the google_accounts row (same org) ->
-  // decrypt refresh -> refresh at Google. For kind==='gmail' the default mailbox is
-  // always eligible (it has gmail.send). For kind==='calendar' the SAME mailbox is
-  // used ONLY when its grant includes a calendar scope; if it has none, return null so
-  // the caller falls back (e.g. to the deployment-wide token). Returns null on ANY
-  // failure (no default set, missing row, no calendar scope, decrypt/refresh error) and
-  // logs a warn — callers degrade gracefully.
+  // decrypt refresh -> refresh at Google. The requested kind must match the scopes
+  // the mailbox granted: `gmail` for send-side callers, `gmail-read` for Gmail API
+  // fetching, and `calendar` for Calendar operations. Returns null on ANY failure
+  // and logs a warn — callers degrade gracefully.
   async getAccessTokenForOrg(
     orgId: string,
-    kind: 'gmail' | 'calendar',
+    kind: GoogleMailboxKind,
   ): Promise<{ accessToken: string; account: { id: string; email: string } } | null> {
     const r = await this.resolveMailbox(orgId, kind);
     return r.ok ? { accessToken: r.accessToken, account: r.account } : null;
   }
 
   // Same resolution as getAccessTokenForOrg, but returns a DISCRIMINATED result that
-  // carries a human-readable `reason` on failure — so callers (Engage scan, Calendar
-  // read) can surface WHY in the UI instead of a generic "not connected" shell. The
-  // reason strings are end-user-facing.
-  async resolveMailbox(
-    orgId: string,
-    kind: 'gmail' | 'calendar',
-  ): Promise<MailboxAccess> {
+  // carries a human-readable `reason` on failure — so callers (Gmail read, Engage
+  // scan, Calendar read) can surface WHY in the UI instead of a generic "not
+  // connected" shell. The reason strings are end-user-facing.
+  async resolveMailbox(orgId: string, kind: GoogleMailboxKind): Promise<MailboxAccess> {
     try {
       const orgRow = await this.orgRow(orgId);
 
@@ -296,48 +293,47 @@ export class GoogleAccountsService {
       let row = orgRow.defaultMailboxAccountId
         ? await this.ownedRow(orgId, orgRow.defaultMailboxAccountId)
         : undefined;
+
       if (orgRow.defaultMailboxAccountId && !row) {
         this.logger.warn(
           `resolveMailbox(${orgId}): default mailbox ${orgRow.defaultMailboxAccountId} no longer exists — falling back to a connected account`,
         );
       }
 
-      // 2) Fallback: when there is no (valid) default pointer — or the default can't
-      //    serve this kind (calendar without a calendar scope) — resolve the org's own
-      //    CONNECTED account(s). So a single connected mailbox works even before anyone
-      //    explicitly "sets default", and a stale pointer self-heals.
+      // 2) Fallback: when there is no valid default pointer — or the default can't
+      //    serve this kind — resolve the org's own CONNECTED account(s). So a single
+      //    connected mailbox works even before anyone explicitly "sets default", and a
+      //    stale pointer self-heals.
       const connected = await this.connectedRows(orgId);
-      if (!row || (kind === 'calendar' && !this.hasCalendarScope(row))) {
-        const pick =
-          kind === 'calendar'
-            ? connected.find((r) => this.hasCalendarScope(r))
-            : connected[0];
+
+      if (!row || !this.canServeKind(row, kind)) {
+        const pick = connected.find((r) => this.canServeKind(r, kind));
         if (pick) row = pick;
       }
 
       if (!row) {
-        // No usable account. Distinguish "none connected at all" (likely the wrong org
-        // / nothing connected) from "connected but none has the needed scope".
+        // No usable account. Distinguish "none connected at all" from "connected but
+        // none has the needed scope".
         const reason =
           connected.length === 0
             ? 'No Google account is connected for this organization. Connect one in Configuration.'
-            : kind === 'calendar'
-              ? 'A Google account is connected, but none has Calendar access. Reconnect and allow Calendar.'
-              : 'A Google account is connected, but it is not usable for Gmail. Reconnect it in Configuration.';
+            : this.missingScopeReason(kind);
+
         this.logger.warn(
           `resolveMailbox(${orgId}, ${kind}): no usable account (${connected.length} connected) — ${reason}`,
         );
+
         return { ok: false, reason };
       }
-      if (kind === 'calendar' && !this.hasCalendarScope(row)) {
-        const reason = `The connected account ${row.email} has not granted Calendar access. Reconnect and allow Calendar.`;
-        this.logger.warn(`resolveMailbox(${orgId}, calendar): ${reason}`);
+
+      if (!this.canServeKind(row, kind)) {
+        const reason = this.missingScopeReason(kind, row.email);
+        this.logger.warn(`resolveMailbox(${orgId}, ${kind}): ${reason}`);
         return { ok: false, reason };
       }
 
       const refreshToken = this.crypto.decrypt(row.refreshTokenEnc);
-      const { accessToken, expiryDate } =
-        await this.oauth.refreshAccessToken(refreshToken);
+      const { accessToken, expiryDate } = await this.oauth.refreshAccessToken(refreshToken);
 
       // Best-effort cache the fresh access token back; the failure contract is
       // unaffected if this write fails.
@@ -346,20 +342,57 @@ export class GoogleAccountsService {
       return { ok: true, accessToken, account: { id: row.id, email: row.email } };
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown error';
+
       // Most often a decrypt failure (GOOGLE_TOKEN_ENC_KEY changed since the token was
       // stored) or a refused refresh (token revoked) — both fixed by reconnecting.
       const reason =
         'The connected Google token could not be refreshed. Reconnect the account (the server encryption key may have changed).';
-      this.logger.warn(
-        `resolveMailbox(${orgId}, ${kind}) token error: ${msg} — ${reason}`,
-      );
+
+      this.logger.warn(`resolveMailbox(${orgId}, ${kind}) token error: ${msg} — ${reason}`);
+
       return { ok: false, reason };
     }
   }
 
+  private canServeKind(row: GoogleAccountRow, kind: GoogleMailboxKind): boolean {
+    if (kind === 'calendar') return this.hasCalendarScope(row);
+    if (kind === 'gmail-read') return this.hasGmailReadScope(row);
+    return this.hasGmailSendScope(row);
+  }
+
+  private missingScopeReason(kind: GoogleMailboxKind, email?: string): string {
+    if (kind === 'calendar') {
+      return email
+        ? `The connected account ${email} has not granted Calendar access. Reconnect and allow Calendar.`
+        : 'A Google account is connected, but none has Calendar access. Reconnect and allow Calendar.';
+    }
+
+    if (kind === 'gmail-read') {
+      return email
+        ? `The connected account ${email} has not granted Gmail read access. Reconnect and allow Gmail read access.`
+        : 'A Google account is connected, but none has Gmail read access. Reconnect and allow Gmail read access.';
+    }
+
+    return email
+      ? `The connected account ${email} has not granted Gmail send access. Reconnect and allow Gmail.`
+      : 'A Google account is connected, but none has Gmail send access. Reconnect and allow Gmail.';
+  }
+
   // True when an account's grant carries a Calendar scope.
   private hasCalendarScope(row: GoogleAccountRow): boolean {
-    return row.scopes.some((s) => CALENDAR_SCOPES.includes(s as never));
+    return this.hasAnyScope(row, CALENDAR_SCOPES);
+  }
+
+  private hasGmailSendScope(row: GoogleAccountRow): boolean {
+    return this.hasAnyScope(row, GMAIL_SEND_SCOPES);
+  }
+
+  private hasGmailReadScope(row: GoogleAccountRow): boolean {
+    return this.hasAnyScope(row, GMAIL_READ_SCOPES);
+  }
+
+  private hasAnyScope(row: GoogleAccountRow, scopes: readonly string[]): boolean {
+    return row.scopes.some((s) => scopes.includes(s));
   }
 
   // The org's CONNECTED Google accounts, newest-connected first. The token-resolve
@@ -374,9 +407,8 @@ export class GoogleAccountsService {
           eq(schema.googleAccounts.status, 'CONNECTED'),
         ),
       );
-    return rows
-      .slice()
-      .sort((a, b) => b.connectedAt.getTime() - a.connectedAt.getTime());
+
+    return rows.slice().sort((a, b) => b.connectedAt.getTime() - a.connectedAt.getTime());
   }
 
   // ----- helpers -----------------------------------------------------------
@@ -390,20 +422,13 @@ export class GoogleAccountsService {
   }
 
   // The full row for (orgId, id), or undefined when it is not this org's.
-  private async ownedRow(
-    orgId: string,
-    id: string,
-  ): Promise<GoogleAccountRow | undefined> {
+  private async ownedRow(orgId: string, id: string): Promise<GoogleAccountRow | undefined> {
     const rows = await this.db
       .select()
       .from(schema.googleAccounts)
-      .where(
-        and(
-          eq(schema.googleAccounts.organizationId, orgId),
-          eq(schema.googleAccounts.id, id),
-        ),
-      )
+      .where(and(eq(schema.googleAccounts.organizationId, orgId), eq(schema.googleAccounts.id, id)))
       .limit(1);
+
     return rows[0];
   }
 
@@ -413,11 +438,13 @@ export class GoogleAccountsService {
   private async revokeBestEffort(refreshTokenEnc: string): Promise<void> {
     try {
       const refreshToken = this.crypto.decrypt(refreshTokenEnc);
+
       const res = await fetch(GOOGLE_REVOKE_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ token: refreshToken }).toString(),
       });
+
       if (!res.ok) {
         this.logger.warn(`Google token revoke returned HTTP ${res.status}`);
       }
@@ -443,14 +470,15 @@ export class GoogleAccountsService {
       .where(eq(schema.googleAccounts.id, id));
   }
 
-  // Find-or-create the PER-ORG org_config row (race-safe), mirroring
-  // WorkflowConfigService.orgRow so a resolver never has to handle a missing row.
+  // Find-or-create the PER-ORG org_config row so a resolver never has to handle a
+  // missing row.
   private async orgRow(orgId: string): Promise<OrgConfigRow> {
     const existing = await this.db
       .select()
       .from(schema.orgConfig)
       .where(eq(schema.orgConfig.organizationId, orgId))
       .limit(1);
+
     if (existing[0]) return existing[0];
 
     const inserted = await this.db
@@ -458,6 +486,7 @@ export class GoogleAccountsService {
       .values({ organizationId: orgId })
       .onConflictDoNothing({ target: schema.orgConfig.organizationId })
       .returning();
+
     if (inserted[0]) return inserted[0];
 
     const reread = await this.db
@@ -465,11 +494,11 @@ export class GoogleAccountsService {
       .from(schema.orgConfig)
       .where(eq(schema.orgConfig.organizationId, orgId))
       .limit(1);
+
     return reread[0]!;
   }
 
-  // Find-or-create the org_config row and apply a partial set (bumping updatedAt),
-  // mirroring WorkflowConfigService.persistOrg.
+  // Find-or-create the org_config row and apply a partial set.
   private async persistOrg(
     orgId: string,
     set: Partial<typeof schema.orgConfig.$inferInsert>,
@@ -479,16 +508,16 @@ export class GoogleAccountsService {
       .from(schema.orgConfig)
       .where(eq(schema.orgConfig.organizationId, orgId))
       .limit(1);
+
     const existing = rows[0];
+
     if (existing) {
       await this.db
         .update(schema.orgConfig)
         .set({ ...set, updatedAt: new Date() })
         .where(eq(schema.orgConfig.id, existing.id));
     } else {
-      await this.db
-        .insert(schema.orgConfig)
-        .values({ organizationId: orgId, ...set });
+      await this.db.insert(schema.orgConfig).values({ organizationId: orgId, ...set });
     }
   }
 }
