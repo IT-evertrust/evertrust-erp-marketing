@@ -12,7 +12,7 @@ import type {
   TokenVerifier,
   VerifiedGoogleUser,
 } from '../src/auth/token-verifier';
-import { FakeTable, makeFakeDb } from './fake-db';
+import { getDb, rowsOf, seed } from './real-db';
 
 // google-auth-library is mocked so the authorization-CODE path never hits the
 // network: OAuth2Client.getToken is a jest mock the tests pin per-case. The
@@ -61,23 +61,23 @@ function fakeVerifier(
   };
 }
 
-// Builds the service over a fresh fake db. Seeds the EverTrust org (domain
+// Builds the service over the shared real db. Seeds the EverTrust org (domain
 // 'evertrust-germany.de') + Alice (an existing SUPER_ADMIN) so the "existing
-// user" and "join existing domain" branches have backing rows.
-function make(
+// user" and "join existing domain" branches have backing rows. Async — every
+// call site awaits it.
+async function make(
   verifier: TokenVerifier,
   config: AppConfigService = fakeConfig(),
 ) {
-  const organizations = new FakeTable([
+  await seed(schema.organizations, [
     {
       id: EVERTRUST_ORG,
       name: 'Evertrust Germany',
       slug: 'evertrust',
       domain: 'evertrust-germany.de',
-      __seq: 1,
     },
   ]);
-  const users = new FakeTable([
+  await seed(schema.users, [
     {
       id: ALICE,
       organizationId: EVERTRUST_ORG,
@@ -88,20 +88,12 @@ function make(
       department: 'OPERATIONS',
       permissions: null,
       active: true,
-      __seq: 1,
     },
   ]);
-  const authCredentials = new FakeTable([]);
-  const { db } = makeFakeDb(
-    new Map<unknown, FakeTable>([
-      [schema.organizations, organizations],
-      [schema.users, users],
-      [schema.authCredentials, authCredentials],
-    ]),
-  );
+  const db = getDb();
   const jwt = new JwtService({ secret: 'test-secret' });
   const service = new GoogleAuthService(db, jwt, config, verifier);
-  return { service, jwt, organizations, users, authCredentials };
+  return { service, jwt };
 }
 
 function verified(over: Partial<VerifiedGoogleUser> = {}): VerifiedGoogleUser {
@@ -115,7 +107,7 @@ function verified(over: Partial<VerifiedGoogleUser> = {}): VerifiedGoogleUser {
 
 describe('GoogleAuthService — loginWithGoogle', () => {
   it('(a) logs in an existing user matched by email; role + org preserved, no credential row created', async () => {
-    const { service, jwt, authCredentials, users } = make(
+    const { service, jwt } = await make(
       fakeVerifier(verified({ email: 'alice@evertrust-germany.de' })),
     );
 
@@ -126,8 +118,8 @@ describe('GoogleAuthService — loginWithGoogle', () => {
     expect(res.user.organizationId).toBe(EVERTRUST_ORG);
     expect(res.user.organizationName).toBe('Evertrust Germany');
     // No new user, no password credential.
-    expect(users.rows).toHaveLength(1);
-    expect(authCredentials.rows).toHaveLength(0);
+    expect(await rowsOf(schema.users)).toHaveLength(1);
+    expect(await rowsOf(schema.authCredentials)).toHaveLength(0);
     // The JWT is the same payload AuthService.login signs.
     const payload = jwt.verify<{ sub: string; role: string; org: string }>(
       res.accessToken,
@@ -140,7 +132,7 @@ describe('GoogleAuthService — loginWithGoogle', () => {
   });
 
   it('matches an existing user case-insensitively (uppercase Google email)', async () => {
-    const { service } = make(
+    const { service } = await make(
       fakeVerifier(verified({ email: 'ALICE@EverTrust-Germany.DE' })),
     );
     const res = await service.loginWithGoogle('tok');
@@ -148,7 +140,7 @@ describe('GoogleAuthService — loginWithGoogle', () => {
   });
 
   it('(b) a NEW user on the existing evertrust domain joins that org as EMPLOYEE', async () => {
-    const { service, users, authCredentials, organizations } = make(
+    const { service } = await make(
       fakeVerifier(
         verified({ email: 'newhire@evertrust-germany.de', name: 'New Hire' }),
       ),
@@ -160,15 +152,15 @@ describe('GoogleAuthService — loginWithGoogle', () => {
     expect(res.user.role).toBe('EMPLOYEE');
     expect(res.user.organizationId).toBe(EVERTRUST_ORG);
     // Joined the EXISTING org — no new org created.
-    expect(organizations.rows).toHaveLength(1);
-    expect(users.rows).toHaveLength(2);
-    expect(authCredentials.rows).toHaveLength(0);
+    expect(await rowsOf(schema.organizations)).toHaveLength(1);
+    expect(await rowsOf(schema.users)).toHaveLength(2);
+    expect(await rowsOf(schema.authCredentials)).toHaveLength(0);
   });
 
   it('(c-guard) a 2nd login to an org that already has a SUPER_ADMIN yields EMPLOYEE, never a 2nd SA', async () => {
     // The seeded EverTrust org already has ALICE (SUPER_ADMIN). A second person
     // on that domain must join as EMPLOYEE — the org's single SA is preserved.
-    const { service, users } = make(
+    const { service } = await make(
       fakeVerifier(
         verified({ email: 'colleague@evertrust-germany.de', name: 'Colleague' }),
       ),
@@ -180,13 +172,15 @@ describe('GoogleAuthService — loginWithGoogle', () => {
     expect(res.user.role).not.toBe('SUPER_ADMIN');
     expect(res.user.organizationId).toBe(EVERTRUST_ORG);
     // Exactly one SUPER_ADMIN in the org after the join (still ALICE).
-    const superAdmins = users.rows.filter((u) => u.role === 'SUPER_ADMIN');
+    const superAdmins = (await rowsOf(schema.users)).filter(
+      (u) => u.role === 'SUPER_ADMIN',
+    );
     expect(superAdmins).toHaveLength(1);
     expect(superAdmins[0]?.id).toBe(ALICE);
   });
 
   it('(c) a brand-new company domain creates the org + first user as SUPER_ADMIN', async () => {
-    const { service, users, organizations } = make(
+    const { service } = await make(
       fakeVerifier(verified({ email: 'founder@acme-widgets.com', name: 'F' })),
     );
 
@@ -194,54 +188,54 @@ describe('GoogleAuthService — loginWithGoogle', () => {
 
     expect(res.user.role).toBe('SUPER_ADMIN');
     // A new org row exists, derived from the domain, with the source domain stored.
-    expect(organizations.rows).toHaveLength(2);
-    const created = organizations.rows.find(
-      (o) => o.domain === 'acme-widgets.com',
-    );
+    const orgs = await rowsOf(schema.organizations);
+    expect(orgs).toHaveLength(2);
+    const created = orgs.find((o) => o.domain === 'acme-widgets.com');
     expect(created).toBeDefined();
     expect(created?.name).toBe('Acme Widgets');
     expect(created?.slug).toBe('acme-widgets-com');
     expect(res.user.organizationId).toBe(created?.id);
     // First user owns the org (SUPER_ADMIN), never the reserved OWNER role.
     expect(res.user.role).not.toBe('OWNER');
-    expect(users.rows).toHaveLength(2);
+    expect(await rowsOf(schema.users)).toHaveLength(2);
   });
 
   it('suffixes the slug when a derived slug already belongs to an unrelated org', async () => {
-    const { service, organizations } = make(
+    const { service } = await make(
       fakeVerifier(verified({ email: 'x@acme-widgets.com' })),
     );
     // Pre-seed an unrelated org that already owns the slug 'acme-widgets-com'.
-    organizations.rows.push({
-      id: 'ffffffff-ffff-ffff-ffff-ffffffffffff',
-      name: 'Other',
-      slug: 'acme-widgets-com',
-      domain: 'other.test',
-      __seq: 2,
-    });
+    await seed(schema.organizations, [
+      {
+        id: 'ffffffff-ffff-ffff-ffff-ffffffffffff',
+        name: 'Other',
+        slug: 'acme-widgets-com',
+        domain: 'other.test',
+      },
+    ]);
 
     await service.loginWithGoogle('tok');
 
-    const created = organizations.rows.find(
+    const created = (await rowsOf(schema.organizations)).find(
       (o) => o.domain === 'acme-widgets.com',
     );
     expect(created?.slug).toBe('acme-widgets-com-2');
   });
 
   it('(d) a public/free email domain is rejected with 403', async () => {
-    const { service, users, organizations } = make(
+    const { service } = await make(
       fakeVerifier(verified({ email: 'someone@gmail.com' })),
     );
     await expect(service.loginWithGoogle('tok')).rejects.toBeInstanceOf(
       ForbiddenException,
     );
     // Nothing provisioned.
-    expect(users.rows).toHaveLength(1);
-    expect(organizations.rows).toHaveLength(1);
+    expect(await rowsOf(schema.users)).toHaveLength(1);
+    expect(await rowsOf(schema.organizations)).toHaveLength(1);
   });
 
   it('(e) an unverified Google email is rejected with 401', async () => {
-    const { service } = make(
+    const { service } = await make(
       fakeVerifier(verified({ emailVerified: false })),
     );
     await expect(service.loginWithGoogle('tok')).rejects.toBeInstanceOf(
@@ -250,14 +244,14 @@ describe('GoogleAuthService — loginWithGoogle', () => {
   });
 
   it('an invalid token (verifier throws) is rejected with 401', async () => {
-    const { service } = make(fakeVerifier(new Error('bad signature')));
+    const { service } = await make(fakeVerifier(new Error('bad signature')));
     await expect(service.loginWithGoogle('tok')).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
   });
 
   it('returns 503 when GOOGLE_CLIENT_ID is not configured', async () => {
-    const { service } = make(
+    const { service } = await make(
       fakeVerifier(verified()),
       fakeConfig({ GOOGLE_CLIENT_ID: '' }),
     );
@@ -275,7 +269,7 @@ describe('GoogleAuthService — loginWithGoogleCode (authorization-code path)', 
   it('exchanges the code, verifies the id_token, and provisions via the SHARED path (existing user)', async () => {
     // The exchange returns an id_token; the FAKE verifier maps it to Alice.
     getToken.mockResolvedValue({ tokens: { id_token: 'exchanged-id-token' } });
-    const { service, jwt, authCredentials, users } = make(
+    const { service, jwt } = await make(
       fakeVerifier(verified({ email: 'alice@evertrust-germany.de' })),
     );
 
@@ -285,8 +279,8 @@ describe('GoogleAuthService — loginWithGoogleCode (authorization-code path)', 
     expect(res.user.id).toBe(ALICE);
     expect(res.user.role).toBe('SUPER_ADMIN');
     expect(res.user.organizationId).toBe(EVERTRUST_ORG);
-    expect(users.rows).toHaveLength(1);
-    expect(authCredentials.rows).toHaveLength(0);
+    expect(await rowsOf(schema.users)).toHaveLength(1);
+    expect(await rowsOf(schema.authCredentials)).toHaveLength(0);
     // The code was exchanged with the literal 'postmessage' redirect_uri.
     expect(getToken).toHaveBeenCalledWith({
       code: 'auth-code',
@@ -304,7 +298,7 @@ describe('GoogleAuthService — loginWithGoogleCode (authorization-code path)', 
 
   it('shares the public-domain 403 gate with the idToken path', async () => {
     getToken.mockResolvedValue({ tokens: { id_token: 'exchanged-id-token' } });
-    const { service } = make(
+    const { service } = await make(
       fakeVerifier(verified({ email: 'someone@gmail.com' })),
     );
     await expect(service.loginWithGoogleCode('auth-code')).rejects.toBeInstanceOf(
@@ -314,7 +308,7 @@ describe('GoogleAuthService — loginWithGoogleCode (authorization-code path)', 
 
   it('maps an exchange failure to 401', async () => {
     getToken.mockRejectedValue(new Error('invalid_grant'));
-    const { service } = make(fakeVerifier(verified()));
+    const { service } = await make(fakeVerifier(verified()));
     await expect(service.loginWithGoogleCode('bad-code')).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
@@ -322,7 +316,7 @@ describe('GoogleAuthService — loginWithGoogleCode (authorization-code path)', 
 
   it('maps a missing id_token in the token response to 401', async () => {
     getToken.mockResolvedValue({ tokens: { access_token: 'only-access' } });
-    const { service } = make(fakeVerifier(verified()));
+    const { service } = await make(fakeVerifier(verified()));
     await expect(service.loginWithGoogleCode('auth-code')).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
@@ -330,14 +324,14 @@ describe('GoogleAuthService — loginWithGoogleCode (authorization-code path)', 
 
   it('maps an invalid exchanged id_token (verifier throws) to 401', async () => {
     getToken.mockResolvedValue({ tokens: { id_token: 'exchanged-id-token' } });
-    const { service } = make(fakeVerifier(new Error('bad signature')));
+    const { service } = await make(fakeVerifier(new Error('bad signature')));
     await expect(service.loginWithGoogleCode('auth-code')).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
   });
 
   it('returns 503 when GOOGLE_CLIENT_SECRET is not configured (code flow needs the secret)', async () => {
-    const { service } = make(
+    const { service } = await make(
       fakeVerifier(verified()),
       fakeConfig({ GOOGLE_CLIENT_SECRET: '' }),
     );
@@ -349,7 +343,7 @@ describe('GoogleAuthService — loginWithGoogleCode (authorization-code path)', 
   });
 
   it('returns 503 when GOOGLE_CLIENT_ID is not configured', async () => {
-    const { service } = make(
+    const { service } = await make(
       fakeVerifier(verified()),
       fakeConfig({ GOOGLE_CLIENT_ID: '' }),
     );

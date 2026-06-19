@@ -87,7 +87,7 @@ export class CampaignsService {
   ) {}
 
   // The niche's display name, or null if the id is unknown (CampaignDto.nicheName).
-  // Equality lookup (not inArray) keeps parity with getConfig and the test fake-db.
+  // Equality lookup (not inArray) keeps parity with getConfig.
   private async nicheNameFor(nicheId: string): Promise<string | null> {
     const rows = await this.db
       .select()
@@ -194,12 +194,17 @@ export class CampaignsService {
       niche.name,
       userId,
     );
-    const updated = await this.db
-      .update(schema.campaigns)
-      .set(patch)
-      .where(eq(schema.campaigns.id, row.id))
-      .returning();
-    row = updated[0] ?? row;
+    // A failed deploy returns an EMPTY patch: the campaign stays DRAFT and the error is
+    // surfaced. Skip the write in that case — there is nothing to persist, and an empty
+    // `.set()` is itself a SQL error ("No values to set").
+    if (Object.keys(patch).length > 0) {
+      const updated = await this.db
+        .update(schema.campaigns)
+        .set(patch)
+        .where(eq(schema.campaigns.id, row.id))
+        .returning();
+      row = updated[0] ?? row;
+    }
     return { campaign: { ...row, nicheName: niche.name }, deployError };
   }
 

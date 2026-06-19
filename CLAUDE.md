@@ -109,7 +109,13 @@ Slash commands in `.claude/commands/`:
 - Tender roadmap state: Phases 4–6 + most of 7 DONE; Phase 2 (Argus/Scribe intake), Phase 3
   (Sieve shortlist), Phase 7 R32–R33 (TYPE 2 completeness) and Phase 8 are NOT built — see
   `docs/evertrust/08-workflow-canonical.md`.
-- The client has no tests; API tests live in `erp-server/test/` (jest).
+- The client has no tests; API tests live in `erp-server/test/` (jest). The API suite runs
+  against a REAL Postgres: jest `globalSetup` (`erp-server/test/global-setup.ts`) spins up a
+  throwaway `pgvector/pgvector:pg18` Testcontainer, applies the Drizzle migrations, and
+  `test/setup-after-env.ts` truncates every table before each test — so **Docker must be
+  running** for `pnpm --filter @evertrust/api test`. The harness (`test/real-db.ts`) disables
+  FK triggers (`session_replication_role=replica`) so specs seed child rows without parent
+  graphs; UNIQUE/PK/NOT NULL/type checks are still enforced. `maxWorkers:1` (shared DB).
 
 ---
 
