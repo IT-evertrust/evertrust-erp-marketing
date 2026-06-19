@@ -116,7 +116,7 @@ export function CalendarEventDetailsDialog({
           <div className="min-w-0">
             <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-500">
               <Calendar className="size-3" />
-              Google Calendar event
+              {t('calendar.details.badge')}
             </div>
 
             <h2 className="break-words text-lg font-semibold leading-snug">{title}</h2>
@@ -127,7 +127,7 @@ export function CalendarEventDetailsDialog({
             size="icon"
             variant="ghost"
             className="size-8 shrink-0"
-            aria-label="Close meeting details"
+            aria-label={t('calendar.details.closeAria')}
             onClick={onClose}
           >
             <X className="size-4" />
@@ -135,7 +135,7 @@ export function CalendarEventDetailsDialog({
         </div>
 
         <div className="flex flex-col gap-4 px-5 py-5">
-          <EventDetailRow icon={<Clock className="size-4" />} label="Time">
+          <EventDetailRow icon={<Clock className="size-4" />} label={t('calendar.details.time')}>
             <div className="flex flex-col gap-1">
               <span className="font-medium">
                 {primaryDate}, {primaryFrom}–{primaryTo}
@@ -150,12 +150,12 @@ export function CalendarEventDetailsDialog({
           </EventDetailRow>
 
           {location ? (
-            <EventDetailRow icon={<MapPin className="size-4" />} label="Location">
+            <EventDetailRow icon={<MapPin className="size-4" />} label={t('calendar.details.location')}>
               <span className="break-words">{location}</span>
             </EventDetailRow>
           ) : null}
 
-          <EventDetailRow icon={<Users className="size-4" />} label="Guests">
+          <EventDetailRow icon={<Users className="size-4" />} label={t('calendar.details.guests')}>
             {attendees.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {attendees.map((attendee) => (
@@ -170,13 +170,13 @@ export function CalendarEventDetailsDialog({
           </EventDetailRow>
 
           {organizer ? (
-            <EventDetailRow icon={<Mail className="size-4" />} label="Organizer">
+            <EventDetailRow icon={<Mail className="size-4" />} label={t('calendar.details.organizer')}>
               <span className="break-words">{organizer}</span>
             </EventDetailRow>
           ) : null}
 
           {event.meetingUrl ? (
-            <EventDetailRow icon={<Video className="size-4" />} label="Meeting link">
+            <EventDetailRow icon={<Video className="size-4" />} label={t('calendar.details.meetingLink')}>
               <Button asChild size="sm" variant="outline">
                 <a href={event.meetingUrl} target="_blank" rel="noopener noreferrer">
                   <Video className="size-3.5" />
@@ -187,20 +187,20 @@ export function CalendarEventDetailsDialog({
           ) : null}
 
           {description ? (
-            <EventDetailRow icon={<FileText className="size-4" />} label="Description">
+            <EventDetailRow icon={<FileText className="size-4" />} label={t('calendar.details.description')}>
               <p className="whitespace-pre-wrap break-words leading-relaxed">{description}</p>
             </EventDetailRow>
           ) : null}
 
           <div className="grid grid-cols-1 gap-3 rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground sm:grid-cols-2">
             <div>
-              <span className="block font-semibold text-foreground">Event ID</span>
+              <span className="block font-semibold text-foreground">{t('calendar.details.eventId')}</span>
               <span className="break-all">{event.id}</span>
             </div>
 
             <div>
-              <span className="block font-semibold text-foreground">Status</span>
-              <span>{status ?? 'confirmed / unknown'}</span>
+              <span className="block font-semibold text-foreground">{t('calendar.details.status')}</span>
+              <span>{status ?? t('calendar.details.statusUnknown')}</span>
             </div>
           </div>
         </div>
@@ -210,7 +210,7 @@ export function CalendarEventDetailsDialog({
             <Button asChild size="sm" variant="outline">
               <a href={htmlLink} target="_blank" rel="noopener noreferrer">
                 <ExternalLink className="size-3.5" />
-                Open in Google Calendar
+                {t('calendar.details.openInGoogle')}
               </a>
             </Button>
           ) : null}
@@ -219,13 +219,13 @@ export function CalendarEventDetailsDialog({
             <Button asChild size="sm">
               <a href={event.meetingUrl} target="_blank" rel="noopener noreferrer">
                 <Video className="size-3.5" />
-                Join meeting
+                {t('calendar.details.joinMeeting')}
               </a>
             </Button>
           ) : null}
 
           <Button type="button" size="sm" variant="ghost" onClick={onClose}>
-            Close
+            {t('calendar.details.close')}
           </Button>
         </div>
       </div>

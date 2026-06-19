@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef } from 'react';
-import { useFormatter } from 'next-intl';
+import { useFormatter, useTranslations } from 'next-intl';
 import {
   HOUR_HEIGHT,
   dateKeyToUtcDate,
@@ -44,6 +44,7 @@ export function DayView({
   secondaryTz: string | null;
   freeOnly?: boolean;
 }) {
+  const t = useTranslations('activate');
   const format = useFormatter();
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -84,12 +85,12 @@ export function DayView({
   const hasAllDay = allDayEvents.length > 0;
 
   const countLabel = freeOnly
-    ? `${daySlots.length} ${daySlots.length === 1 ? 'free slot' : 'free slots'}`
+    ? t('calendar.day.freeSlots', { count: daySlots.length })
     : timedEvents.length > 0
-      ? `${timedEvents.length} ${timedEvents.length === 1 ? 'meeting' : 'meetings'}`
+      ? t('calendar.day.meetings', { count: timedEvents.length })
       : daySlots.length > 0
-        ? `${daySlots.length} ${daySlots.length === 1 ? 'open slot' : 'open slots'}`
-        : 'Nothing scheduled';
+        ? t('calendar.day.openSlots', { count: daySlots.length })
+        : t('calendar.day.nothing');
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -128,7 +129,7 @@ export function DayView({
         {hasAllDay ? (
           <div className="flex border-b bg-muted/30 pr-2">
             <div className="flex w-16 shrink-0 items-center justify-end border-r px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              All-day
+              {t('calendar.allDay')}
             </div>
 
             <div

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef } from 'react';
-import { useFormatter } from 'next-intl';
+import { useFormatter, useTranslations } from 'next-intl';
 import {
   HOUR_HEIGHT,
   dateKeyToUtcDate,
@@ -41,6 +41,7 @@ export function WeekView({
   secondaryTz: string | null;
   freeOnly?: boolean;
 }) {
+  const t = useTranslations('activate');
   const format = useFormatter();
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -109,10 +110,10 @@ export function WeekView({
 
                 <span className="mt-1 text-[10px] text-muted-foreground">
                   {dayEvents.length > 0
-                    ? `${dayEvents.length} ${dayEvents.length === 1 ? 'meeting' : 'meetings'}`
+                    ? t('calendar.week.meetings', { count: dayEvents.length })
                     : daySlots.length > 0
-                      ? `${daySlots.length} ${daySlots.length === 1 ? 'slot' : 'slots'}`
-                      : 'free'}
+                      ? t('calendar.week.slots', { count: daySlots.length })
+                      : t('calendar.week.free')}
                 </span>
               </div>
             );
@@ -122,7 +123,7 @@ export function WeekView({
         {hasAllDay ? (
           <div className="flex border-b bg-muted/30 pr-2">
             <div className="flex w-16 shrink-0 items-center justify-end border-r px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              All-day
+              {t('calendar.allDay')}
             </div>
 
             {days.map((dayKey, index) => {

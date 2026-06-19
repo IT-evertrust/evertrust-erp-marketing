@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { CalendarDays, CalendarRange, ChevronLeft, ChevronRight, Search, SquareDot } from 'lucide-react';
 import type { CampaignDto } from '@evertrust/shared';
 import { Button } from '@/components/ui/button';
@@ -41,6 +42,8 @@ export function ControlBar({
   freeOnly: boolean;
   onToggleFreeOnly: () => void;
 }) {
+  const t = useTranslations('activate');
+
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex flex-wrap items-center gap-3">
@@ -48,9 +51,9 @@ export function ControlBar({
           value={view}
           onValueChange={(v) => onViewChange(v as CalendarView)}
           tabs={[
-            { value: 'day', label: 'Day', icon: <SquareDot className="size-4" /> },
-            { value: 'week', label: 'Week', icon: <CalendarRange className="size-4" /> },
-            { value: 'month', label: 'Month', icon: <CalendarDays className="size-4" /> },
+            { value: 'day', label: t('calendar.views.day'), icon: <SquareDot className="size-4" /> },
+            { value: 'week', label: t('calendar.views.week'), icon: <CalendarRange className="size-4" /> },
+            { value: 'month', label: t('calendar.views.month'), icon: <CalendarDays className="size-4" /> },
           ]}
         />
 
@@ -61,14 +64,14 @@ export function ControlBar({
           }
         >
           <SelectTrigger size="sm" className="h-8 w-44 text-xs">
-            <SelectValue placeholder="All campaigns" />
+            <SelectValue placeholder={t('calendar.filter.all')} />
           </SelectTrigger>
 
           <SelectContent>
-            <SelectItem value={ALL_CAMPAIGNS}>All campaigns</SelectItem>
+            <SelectItem value={ALL_CAMPAIGNS}>{t('calendar.filter.all')}</SelectItem>
             {campaigns.map((campaign) => (
               <SelectItem key={campaign.id} value={campaign.id}>
-                {campaign.name ?? 'Untitled campaign'}
+                {campaign.name ?? t('calendar.filter.untitledCampaign')}
               </SelectItem>
             ))}
           </SelectContent>
@@ -82,7 +85,7 @@ export function ControlBar({
             size="icon"
             variant="outline"
             className="size-8"
-            aria-label="Previous"
+            aria-label={t('calendar.nav.prev')}
             onClick={onPrev}
           >
             <ChevronLeft className="size-4" />
@@ -95,7 +98,7 @@ export function ControlBar({
             className="h-8 text-xs"
             onClick={onToday}
           >
-            Today
+            {t('calendar.nav.today')}
           </Button>
 
           <span className="min-w-28 text-center text-xs font-semibold text-muted-foreground">
@@ -107,7 +110,7 @@ export function ControlBar({
             size="icon"
             variant="outline"
             className="size-8"
-            aria-label="Next"
+            aria-label={t('calendar.nav.next')}
             onClick={onNext}
           >
             <ChevronRight className="size-4" />
@@ -128,7 +131,7 @@ export function ControlBar({
           onClick={onToggleFreeOnly}
         >
           <Search className="size-3.5" />
-          {freeOnly ? 'Exit free-slot view' : 'Check for free slot'}
+          {freeOnly ? t('calendar.freeSlot.exit') : t('calendar.freeSlot.check')}
         </Button>
       </div>
     </div>

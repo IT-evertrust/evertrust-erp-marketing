@@ -38,6 +38,78 @@
       "join": "Beitreten"
     }
   },
+  "calendar": {
+    "views": {
+      "day": "Tag",
+      "week": "Woche",
+      "month": "Monat"
+    },
+    "nav": {
+      "today": "Heute",
+      "prev": "Zurück",
+      "next": "Weiter"
+    },
+    "filter": {
+      "all": "Alle Kampagnen",
+      "untitledCampaign": "Kampagne ohne Titel"
+    },
+    "freeSlot": {
+      "check": "Freien Slot suchen",
+      "exit": "Freie-Slots-Ansicht verlassen",
+      "banner": "Freie-Slots-Ansicht: Es werden nur vorgeschlagene freie Slots gezeigt. Meetings sind ausgeblendet."
+    },
+    "footer": {
+      "hint": "Klicke auf eine ausgefüllte Meeting-Karte, um Details zu öffnen. Gestrichelte Blöcke sind vorgeschlagene freie Slots.",
+      "positionedSingle": "Positioniert nach {primary}.",
+      "positionedDual": "Positioniert nach {primary}. Die linke Spalte zeigt zusätzlich {secondary}."
+    },
+    "legend": {
+      "client": "Kundentermin",
+      "team": "Intern / Team",
+      "personal": "Persönlich",
+      "reminder": "Erinnerung",
+      "ooo": "Abwesend",
+      "freeSlot": "Freier Slot"
+    },
+    "event": {
+      "untitled": "Ohne Titel",
+      "meet": "Meet",
+      "aria": "{title}. {zone} {from} bis {to}. Für Details klicken."
+    },
+    "allDay": "Ganztägig",
+    "day": {
+      "freeSlots": "{count, plural, one {# freier Slot} other {# freie Slots}}",
+      "meetings": "{count, plural, one {# Meeting} other {# Meetings}}",
+      "openSlots": "{count, plural, one {# freier Slot} other {# freie Slots}}",
+      "nothing": "Nichts geplant",
+      "aria": "{date}, {events} Termine, {free} freie Slots. Tagesansicht öffnen."
+    },
+    "week": {
+      "meetings": "{count, plural, one {# Meeting} other {# Meetings}}",
+      "slots": "{count, plural, one {# Slot} other {# Slots}}",
+      "free": "frei"
+    },
+    "month": {
+      "free": "{count} frei",
+      "more": "+{count} weitere"
+    },
+    "details": {
+      "badge": "Google Kalender-Termin",
+      "close": "Schließen",
+      "closeAria": "Meeting-Details schließen",
+      "time": "Zeit",
+      "location": "Ort",
+      "guests": "Teilnehmer",
+      "organizer": "Organisator",
+      "meetingLink": "Meeting-Link",
+      "description": "Beschreibung",
+      "eventId": "Termin-ID",
+      "status": "Status",
+      "statusUnknown": "bestätigt / unbekannt",
+      "openInGoogle": "In Google Kalender öffnen",
+      "joinMeeting": "Meeting beitreten"
+    }
+  },
   "research": {
     "comingSoon": "Vorab-Recherche kommt bald",
     "comingSoonBody": "Das Erstellen eines KI-Vorab-Briefings aus einem Firmennamen ist noch nicht an ein Backend angebunden. Es wird vor dem Gespräch den Interessenten, aktuelle Neuigkeiten und Gesprächspunkte zusammenfassen."

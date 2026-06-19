@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { useFormatter } from 'next-intl';
+import { useFormatter, useTranslations } from 'next-intl';
 import {
   dateKeyToUtcDate,
   getZonedParts,
@@ -113,6 +113,7 @@ function MonthCell({
   onDayClick: (dateKey: string) => void;
   freeOnly: boolean;
 }) {
+  const t = useTranslations('activate');
   const dayNumber = parseDateKey(dateKey).day;
   const weekend = isWeekendDateKey(dateKey);
 
@@ -140,7 +141,11 @@ function MonthCell({
     <button
       type="button"
       onClick={() => onDayClick(dateKey)}
-      aria-label={`${dateKey}, ${dayEvents.length} events, ${freeCount} free slots. Open day view.`}
+      aria-label={t('calendar.day.aria', {
+        date: dateKey,
+        events: dayEvents.length,
+        free: freeCount,
+      })}
       className={[
         'flex min-h-24 flex-col gap-1 border-b border-l p-1.5 text-left transition-colors',
         'hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset',
@@ -163,7 +168,7 @@ function MonthCell({
       <div className="flex flex-1 flex-col gap-0.5 overflow-hidden">
         {chips.map((event) => {
           const style = CATEGORY_STYLE[event.category];
-          const title = event.title || 'Untitled';
+          const title = event.title || t('calendar.event.untitled');
 
           return (
             <span
@@ -178,14 +183,14 @@ function MonthCell({
 
         {overflow > 0 ? (
           <span className="px-1 text-[10px] font-medium text-muted-foreground">
-            +{overflow} more
+            {t('calendar.month.more', { count: overflow })}
           </span>
         ) : null}
       </div>
 
       {freeCount > 0 ? (
         <span className="self-start rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
-          {freeCount} free
+          {t('calendar.month.free', { count: freeCount })}
         </span>
       ) : null}
     </button>

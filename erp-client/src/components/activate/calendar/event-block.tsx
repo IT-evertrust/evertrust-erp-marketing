@@ -76,7 +76,12 @@ export function CalendarEventBlock({
           ? `${title} · ${primaryLabel} ${primaryFrom}–${primaryTo} · ${secondaryLabel} ${secondaryFrom}–${secondaryTo}`
           : `${title} · ${primaryLabel} ${primaryFrom}–${primaryTo}`
       }
-      aria-label={`${title}. ${primaryLabel} ${primaryFrom} to ${primaryTo}. Click for details.`}
+      aria-label={t('calendar.event.aria', {
+        title,
+        zone: primaryLabel,
+        from: primaryFrom,
+        to: primaryTo,
+      })}
     >
       <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground">
         <Clock className="size-3 shrink-0" />
@@ -105,7 +110,7 @@ export function CalendarEventBlock({
       {roomy && event.meetingUrl ? (
         <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-blue-500">
           <Video className="size-3" />
-          Meet
+          {t('calendar.event.meet')}
         </div>
       ) : null}
     </button>

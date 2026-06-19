@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   HOUR_HEIGHT,
   HOURS,
@@ -37,8 +38,9 @@ export function isWeekendDateKey(dateKey: string): boolean {
 
 // All-day chip for the strip above the time grid (Week/Day). Colored by category.
 export function AllDayChip({ event }: { event: CalendarGridEvent }) {
+  const t = useTranslations('activate');
   const style = CATEGORY_STYLE[event.category];
-  const title = event.title || 'Untitled';
+  const title = event.title || t('calendar.event.untitled');
 
   return (
     <span

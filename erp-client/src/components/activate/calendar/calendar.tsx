@@ -295,7 +295,7 @@ export function Calendar() {
 
           {freeOnly ? (
             <p className="text-xs text-emerald-600 dark:text-emerald-400">
-              Free-slot view: showing only proposed openings. Meetings are hidden.
+              {t('calendar.freeSlot.banner')}
             </p>
           ) : null}
         </CardHeader>
@@ -345,14 +345,17 @@ export function Calendar() {
             </div>
           ) : (
             <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-3 text-xs text-muted-foreground">
-              <span>
-                Click a solid meeting card to open details. Dashed blocks are proposed free slots.
-              </span>
+              <span>{t('calendar.footer.hint')}</span>
 
               <span>
                 {secondaryTz
-                  ? `Positioned by ${zoneShortLabel(primaryTz)}. Left gutter also shows ${zoneShortLabel(secondaryTz)}.`
-                  : `Positioned by ${zoneShortLabel(primaryTz)}.`}
+                  ? t('calendar.footer.positionedDual', {
+                      primary: zoneShortLabel(primaryTz),
+                      secondary: zoneShortLabel(secondaryTz),
+                    })
+                  : t('calendar.footer.positionedSingle', {
+                      primary: zoneShortLabel(primaryTz),
+                    })}
               </span>
             </div>
           )}
