@@ -1,6 +1,6 @@
 'use client';
 
-import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
+import { type Dispatch, type SetStateAction, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useFormatter, useTranslations } from 'next-intl';
 import { CalendarClock, CalendarX, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -9,21 +9,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  HOUR_HEIGHT,
-  HOURS,
   addDaysToDateKey,
   dateKeyToUtcDate,
-  formatClockInTimeZone,
   getIsoWeekNumber,
-  overlapsDateKey,
   overlapsDateKeyRange,
   isValidDate,
   startOfWorkWeekKey,
   zoneShortLabel,
-  zonedTimeToUtcDate,
 } from '@/components/activate/calendar/time-grid';
-import { CalendarEventBlock, layoutDayEvents } from '@/components/activate/calendar/event-block';
-import { CalendarSlotBlock } from '@/components/activate/calendar/slot-block';
+import { WeekView } from '@/components/activate/calendar/week-view';
 import { CalendarEventDetailsDialog } from '@/components/activate/calendar/event-details-dialog';
 import type {
   CalendarGridEvent,
@@ -32,7 +26,7 @@ import type {
   UpcomingQuery,
 } from '@/components/activate/calendar/types';
 
-const WORK_WEEK_DAYS = 5;
+const WORK_WEEK_DAYS = 7;
 
 function ConnectHint({ reason }: { reason?: string | null }) {
   const t = useTranslations('activate');
@@ -68,7 +62,6 @@ export function Calendar({
 }) {
   const t = useTranslations('activate');
   const format = useFormatter();
-  const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const [selectedEvent, setSelectedEvent] = useState<CalendarGridEvent | null>(null);
 
@@ -132,16 +125,6 @@ export function Calendar({
       })
       .sort((a, b) => a.start.getTime() - b.start.getTime());
   }, [freeSlots.data?.slots, weekStartKey, weekEndKey, primaryTz]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      if (scrollRef.current) {
-        scrollRef.current.scrollTop = 6 * HOUR_HEIGHT - 10;
-      }
-    }, 80);
-
-    return () => window.clearTimeout(timer);
-  }, [weekStartKey]);
 
   const weekRange = `${format.dateTime(dateKeyToUtcDate(weekStartKey), {
     timeZone: 'UTC',
@@ -244,81 +227,16 @@ export function Calendar({
         </CardHeader>
 
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <div className="flex h-[calc(100vh-300px)] min-h-[480px] min-w-[980px] flex-col">
-              <div className="flex border-b pr-2">
-                <TimeScaleHeader primaryTz={primaryTz} secondaryTz={secondaryTz} />
-
-                {days.map((dayKey) => {
-                  const dayEvents = gridEvents.filter((event) =>
-                    overlapsDateKey(event.startDate, event.endDate, dayKey, primaryTz),
-                  );
-
-                  const daySlots = gridSlots.filter((slot) =>
-                    overlapsDateKey(slot.start, slot.end, dayKey, primaryTz),
-                  );
-
-                  return (
-                    <div
-                      key={dayKey}
-                      className="flex flex-1 flex-col items-center border-l py-2 text-center"
-                    >
-                      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        {format.dateTime(dateKeyToUtcDate(dayKey), {
-                          timeZone: 'UTC',
-                          weekday: 'short',
-                        })}
-                      </span>
-
-                      <span className="text-[10px] font-medium text-muted-foreground">
-                        {format.dateTime(dateKeyToUtcDate(dayKey), {
-                          timeZone: 'UTC',
-                          day: 'numeric',
-                          month: 'short',
-                        })}
-                      </span>
-
-                      <span className="mt-1 text-[10px] text-muted-foreground">
-                        {dayEvents.length > 0
-                          ? `${dayEvents.length} ${dayEvents.length === 1 ? 'meeting' : 'meetings'}`
-                          : daySlots.length > 0
-                            ? `${daySlots.length} ${daySlots.length === 1 ? 'slot' : 'slots'}`
-                            : 'free'}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div
-                ref={scrollRef}
-                className="flex flex-1 items-start overflow-y-auto overflow-x-hidden"
-              >
-                <TimeScaleColumns
-                  sampleDayKey={weekStartKey}
-                  primaryTz={primaryTz}
-                  secondaryTz={secondaryTz}
-                />
-
-                {days.map((dayKey) => (
-                  <DayColumn
-                    key={dayKey}
-                    dayKey={dayKey}
-                    events={gridEvents.filter((event) =>
-                      overlapsDateKey(event.startDate, event.endDate, dayKey, primaryTz),
-                    )}
-                    slots={gridSlots.filter((slot) =>
-                      overlapsDateKey(slot.start, slot.end, dayKey, primaryTz),
-                    )}
-                    selectedEventId={selectedEvent?.id ?? null}
-                    onSelectEvent={setSelectedEvent}
-                    primaryTz={primaryTz}
-                    secondaryTz={secondaryTz}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
+          <WeekView
+            days={days}
+            weekStartKey={weekStartKey}
+            events={gridEvents}
+            slots={gridSlots}
+            selectedEventId={selectedEvent?.id ?? null}
+            onSelectEvent={setSelectedEvent}
+            primaryTz={primaryTz}
+            secondaryTz={secondaryTz}
+          />
 
           {gridEvents.length === 0 && gridSlots.length === 0 ? (
             <div className="flex items-center justify-center gap-2 border-t px-4 py-3 text-center text-xs text-muted-foreground">
@@ -348,151 +266,5 @@ export function Calendar({
         secondaryTz={secondaryTz}
       />
     </>
-  );
-}
-
-// Gutter header. Dual-scale (org has a secondary zone): secondary on the left, primary
-// on the right. Single-scale (secondary null): one primary column. Labels are derived
-// from each IANA zone (e.g. "GMT+2"), never hardcoded.
-function TimeScaleHeader({
-  primaryTz,
-  secondaryTz,
-}: {
-  primaryTz: string;
-  secondaryTz: string | null;
-}) {
-  const cell =
-    'flex items-end justify-end px-2 pb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground';
-
-  if (!secondaryTz) {
-    return (
-      <div className="w-16 shrink-0 border-r">
-        <div className={`h-full ${cell}`}>{zoneShortLabel(primaryTz)}</div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid w-32 shrink-0 grid-cols-2 border-r">
-      <div className={`border-r ${cell}`}>{zoneShortLabel(secondaryTz)}</div>
-      <div className={cell}>{zoneShortLabel(primaryTz)}</div>
-    </div>
-  );
-}
-
-function TimeScaleColumns({
-  sampleDayKey,
-  primaryTz,
-  secondaryTz,
-}: {
-  sampleDayKey: string;
-  primaryTz: string;
-  secondaryTz: string | null;
-}) {
-  const labels = useMemo(() => {
-    return HOURS.map((hour) => {
-      const instant = zonedTimeToUtcDate(sampleDayKey, hour, 0, primaryTz);
-
-      return {
-        hour,
-        secondary: secondaryTz ? formatClockInTimeZone(instant, secondaryTz) : null,
-        primary: formatClockInTimeZone(instant, primaryTz),
-      };
-    });
-  }, [sampleDayKey, primaryTz, secondaryTz]);
-
-  const labelCell =
-    'absolute right-2 -translate-y-1/2 whitespace-nowrap text-[10px] font-medium text-muted-foreground';
-
-  if (!secondaryTz) {
-    return (
-      <div className="w-16 shrink-0" style={{ height: HOURS.length * HOUR_HEIGHT }}>
-        <div className="relative border-r">
-          {labels.map((label) => (
-            <div key={`primary-${label.hour}`} className={labelCell} style={{ top: label.hour * HOUR_HEIGHT }}>
-              {label.primary}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid w-32 shrink-0 grid-cols-2" style={{ height: HOURS.length * HOUR_HEIGHT }}>
-      <div className="relative border-r">
-        {labels.map((label) => (
-          <div key={`secondary-${label.hour}`} className={labelCell} style={{ top: label.hour * HOUR_HEIGHT }}>
-            {label.secondary}
-          </div>
-        ))}
-      </div>
-
-      <div className="relative">
-        {labels.map((label) => (
-          <div key={`primary-${label.hour}`} className={labelCell} style={{ top: label.hour * HOUR_HEIGHT }}>
-            {label.primary}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function DayColumn({
-  dayKey,
-  events,
-  slots,
-  selectedEventId,
-  onSelectEvent,
-  primaryTz,
-  secondaryTz,
-}: {
-  dayKey: string;
-  events: CalendarGridEvent[];
-  slots: CalendarGridSlot[];
-  selectedEventId: string | null;
-  onSelectEvent: (event: CalendarGridEvent) => void;
-  primaryTz: string;
-  secondaryTz: string | null;
-}) {
-  const laidOutEvents = useMemo(
-    () => layoutDayEvents(events, dayKey, primaryTz),
-    [events, dayKey, primaryTz],
-  );
-
-  return (
-    <div
-      className="relative flex flex-1 flex-col overflow-hidden border-l border-b"
-      style={{ height: HOURS.length * HOUR_HEIGHT }}
-      aria-label={dayKey}
-    >
-      {HOURS.map((hour) => (
-        <div key={hour} className="h-14 shrink-0 border-t" style={{ height: HOUR_HEIGHT }} />
-      ))}
-
-      {slots.map((slot) => (
-        <CalendarSlotBlock
-          key={`${slot.start.toISOString()}-${slot.end.toISOString()}`}
-          dayKey={dayKey}
-          start={slot.start}
-          end={slot.end}
-          primaryTz={primaryTz}
-          secondaryTz={secondaryTz}
-        />
-      ))}
-
-      {laidOutEvents.map((event) => (
-        <CalendarEventBlock
-          key={`${event.id}-${event.start}`}
-          dayKey={dayKey}
-          event={event}
-          selected={selectedEventId === event.id}
-          onSelect={() => onSelectEvent(event)}
-          primaryTz={primaryTz}
-          secondaryTz={secondaryTz}
-        />
-      ))}
-    </div>
   );
 }

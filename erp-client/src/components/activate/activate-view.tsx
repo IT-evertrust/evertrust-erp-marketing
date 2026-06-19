@@ -16,7 +16,7 @@ import {
   zonedTimeToUtcDate,
 } from '@/components/activate/calendar/time-grid';
 
-const WORK_WEEK_DAYS = 5;
+const WORK_WEEK_DAYS = 7;
 
 type ActivateTab = 'book' | 'research' | 'after';
 
