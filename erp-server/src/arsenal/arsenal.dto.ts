@@ -5,6 +5,7 @@ import {
   RunArsenalDto as RunArsenalSchema,
   UpdateAiEngineDto as UpdateAiEngineSchema,
   UpdateArsenalSettingsDto as UpdateArsenalSettingsSchema,
+  UpdateLeadScraperDto as UpdateLeadScraperSchema,
   UpdateWorkflowConfigDto as UpdateWorkflowConfigSchema,
 } from '@evertrust/shared';
 
@@ -19,6 +20,9 @@ export class UpdateWorkflowConfigBodyDto extends createZodDto(
   UpdateWorkflowConfigSchema,
 ) {}
 export class UpdateAiEngineBodyDto extends createZodDto(UpdateAiEngineSchema) {}
+export class UpdateLeadScraperBodyDto extends createZodDto(
+  UpdateLeadScraperSchema,
+) {}
 
 // POST /arsenal/config/senders body — upsert a PER-ORG sender keyed by its stable
 // org-scoped `key`. `email` must be valid; `label` + `isDefault` are optional. Defined

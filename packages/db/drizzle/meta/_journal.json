@@ -253,6 +253,13 @@
       "when": 1780583000000,
       "tag": "0035_org_agent_llm",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1780584000000,
+      "tag": "0036_org_scrape_config",
+      "breakpoints": true
     }
   ]
 }

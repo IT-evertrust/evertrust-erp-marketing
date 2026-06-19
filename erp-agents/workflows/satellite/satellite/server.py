@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from .clients.erp import ErpClient, ErpGateway
 from .clients.search import HttpFetcher, SearchGateway, UrlFetcher, WebSearch
 from .pipeline import RunOptions, run
-from .settings import Settings, load_settings, with_llm_override
+from .settings import Settings, load_settings, with_llm_override, with_scraper_override
 
 app = FastAPI(title="EVERTRUST Lead Satellite")
 
@@ -61,6 +61,11 @@ class RunRequest(BaseModel):
     llmBaseUrl: str | None = None
     model: str | None = None
     apiKey: str | None = None
+    # Per-org Lead Scraper tuning from the ERP dispatch (Configuration page). Each omitted
+    # field falls back to the agent's own env default (request value ?? env).
+    leadTarget: int | None = None
+    maxQueries: int | None = None
+    minScore: int | None = None
     # False (default = the ERP fire-and-forget): dispatch in the background, return 2xx immediately,
     # post the run callback when done. True: run synchronously and return the full result (CLI/tests).
     wait: bool = False
@@ -103,6 +108,7 @@ def satellite_run(
 ) -> dict:
     persist = req.persist if req.persist is not None else req.live
     settings = with_llm_override(settings, req.llmBaseUrl, req.model, req.apiKey)
+    settings = with_scraper_override(settings, req.leadTarget, req.maxQueries, req.minScore)
     opts = RunOptions(
         campaign_id=req.campaignId, live=req.live, persist=persist,
         use_llm=req.useLlm, max_segments=req.maxSegments,

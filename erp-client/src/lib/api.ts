@@ -49,6 +49,8 @@ import {
   SetDefaultMailboxDto,
   AiEngineConfigDto,
   UpdateAiEngineDto,
+  LeadScraperConfigDto,
+  UpdateLeadScraperDto,
   LeadStatsDto,
   TestN8nResultDto,
   RotateIngestTokenResultDto,
@@ -764,6 +766,19 @@ export const api = {
         method: 'PUT',
         body: UpdateAiEngineDto.parse(input),
         schema: AiEngineConfigDto,
+      }),
+
+    getLeadScraper: (signal?: AbortSignal) =>
+      request<z.infer<typeof LeadScraperConfigDto>>('/arsenal/config/lead-scraper', {
+        schema: LeadScraperConfigDto,
+        signal,
+      }),
+
+    updateLeadScraper: (input: z.infer<typeof UpdateLeadScraperDto>) =>
+      request<z.infer<typeof LeadScraperConfigDto>>('/arsenal/config/lead-scraper', {
+        method: 'PUT',
+        body: UpdateLeadScraperDto.parse(input),
+        schema: LeadScraperConfigDto,
       }),
   },
 

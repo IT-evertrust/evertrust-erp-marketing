@@ -138,3 +138,23 @@ def with_llm_override(
     if model:
         changes.update(lead_model=model, email_model=model, buzzword_model=model)
     return replace(s, **changes) if changes else s
+
+
+def with_scraper_override(
+    s: Settings,
+    lead_target: int | None = None,
+    max_queries: int | None = None,
+    min_score: int | None = None,
+) -> Settings:
+    """Apply a per-request Lead Scraper override (from the ERP dispatch / Configuration
+    page) over the agent's env-resolved tuning. Each field falls back to the env default
+    when the request omits it (request value ?? env). lead_target = how many leads to
+    hunt; max_queries = search budget; min_score = the tier-floor."""
+    changes: dict = {}
+    if lead_target is not None:
+        changes["lead_target"] = lead_target
+    if max_queries is not None:
+        changes["max_queries"] = max_queries
+    if min_score is not None:
+        changes["min_keep_score"] = min_score
+    return replace(s, **changes) if changes else s
