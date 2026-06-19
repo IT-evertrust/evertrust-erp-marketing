@@ -50,37 +50,37 @@ function buildKpis(
       label: 'NEW LEADS',
       value: numberFormat(campaigns.length),
       delta: 'live',
-      spark: FALLBACK_KPIS[0].spark,
+      spark: FALLBACK_KPIS[0]?.spark ?? '',
     },
     {
       label: 'CONTACTED',
       value: numberFormat(activeCampaigns),
       delta: 'active',
-      spark: FALLBACK_KPIS[1].spark,
+      spark: FALLBACK_KPIS[1]?.spark ?? '',
     },
     {
       label: 'REPLY RATE',
       value: `${replyRate}%`,
       delta: 'from meetings',
-      spark: FALLBACK_KPIS[2].spark,
+      spark: FALLBACK_KPIS[2]?.spark ?? '',
     },
     {
       label: 'INTERESTED',
       value: numberFormat(meetings.length),
       delta: 'meeting intent',
-      spark: FALLBACK_KPIS[3].spark,
+      spark: FALLBACK_KPIS[3]?.spark ?? '',
     },
     {
       label: 'MEETINGS',
       value: numberFormat(meetings.length),
       delta: `${analyzedMeetings} analyzed`,
-      spark: FALLBACK_KPIS[4].spark,
+      spark: FALLBACK_KPIS[4]?.spark ?? '',
     },
     {
       label: 'PIPELINE VALUE',
       value: '—',
       delta: 'needs deals API',
-      spark: FALLBACK_KPIS[5].spark,
+      spark: FALLBACK_KPIS[5]?.spark ?? '',
     },
   ];
 }

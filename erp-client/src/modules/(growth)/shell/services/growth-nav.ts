@@ -68,7 +68,7 @@ export function getActiveGrowthNavItem(pathname: string) {
       }
 
       return pathname.startsWith(item.href);
-    }) ?? GROWTH_NAV_ITEMS[0]
+    }) ?? GROWTH_NAV_ITEMS[0]!
   );
 }
 

@@ -15,7 +15,7 @@ export function getCampaignLeads(campaignId: string) {
 }
 
 export function getCampaignEmails(campaignId: string) {
-  return REACH_EMAILS[campaignId] ?? REACH_EMAILS.wohnbau;
+  return REACH_EMAILS[campaignId] ?? REACH_EMAILS.wohnbau ?? [];
 }
 
 export function getSenderSchedule() {

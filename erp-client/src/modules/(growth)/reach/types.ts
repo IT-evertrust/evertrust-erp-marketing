@@ -51,10 +51,10 @@ export type SenderSchedule = {
   status: string;
 };
 
-export type newCampaignFormValues = {
+export type NewCampaignFormValues = {
     name: string;
     niche: string;
     region: string;
     segment: string;
-    souce: string;
+    source: string;
 }

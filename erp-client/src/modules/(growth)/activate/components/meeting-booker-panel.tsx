@@ -83,7 +83,7 @@ export function MeetingBookerPanel({ meetings }: MeetingBookerPanelProps) {
 }
 
 function CalendarEvent({ meeting }: { meeting: CalendarMeeting }) {
-  const [hour, minute] = meeting.time.split(':').map(Number);
+  const [hour = 0, minute = 0] = meeting.time.split(':').map(Number);
   const top = ((hour - 8) * 56) + (minute / 60) * 56;
 
   return (
