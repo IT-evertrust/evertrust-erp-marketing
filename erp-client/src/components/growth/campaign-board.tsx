@@ -23,7 +23,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Can } from '@/components/auth/can';
 import { NicheTargets } from './niche-targets';
-import { RunStageButton } from './run-stage-button';
+import { LeadScraperRun } from './lead-scraper-run';
 
 // Reach → "Lead Scraper" tab (R.E.A.N. mockup). Pick a campaign; its niche / geo /
 // sender fill the read-only criteria (the scraper inherits them from the campaign,
@@ -115,18 +115,9 @@ export function CampaignBoard() {
             <ReadOnlyField label={t('senderLabel')} value={selected?.sender ?? '—'} />
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <Can permission="campaigns:write">
-              <RunStageButton
-                stage="LEAD_SATELLITE"
-                campaignId={selectedId ?? undefined}
-                label={t('run')}
-                variant="default"
-                size="default"
-              />
-            </Can>
-            <p className="text-xs text-muted-foreground">{t('targetsHint')}</p>
-          </div>
+          <Can permission="campaigns:write">
+            <LeadScraperRun campaignId={selectedId ?? undefined} />
+          </Can>
         </CardContent>
       </Card>
 
