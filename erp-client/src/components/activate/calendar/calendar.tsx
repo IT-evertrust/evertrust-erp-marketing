@@ -23,6 +23,7 @@ import {
   zonedTimeToUtcDate,
 } from '@/components/activate/calendar/time-grid';
 import { WeekView } from '@/components/activate/calendar/week-view';
+import { DayView } from '@/components/activate/calendar/day-view';
 import { ControlBar } from '@/components/activate/calendar/control-bar';
 import { CalendarLegend } from '@/components/activate/calendar/calendar-legend';
 import { CalendarEventDetailsDialog } from '@/components/activate/calendar/event-details-dialog';
@@ -311,9 +312,20 @@ export function Calendar() {
               secondaryTz={secondaryTz}
               freeOnly={freeOnly}
             />
+          ) : view === 'day' ? (
+            <DayView
+              dayKey={anchorKey}
+              events={gridEvents}
+              slots={gridSlots}
+              selectedEventId={selectedEvent?.id ?? null}
+              onSelectEvent={setSelectedEvent}
+              primaryTz={primaryTz}
+              secondaryTz={secondaryTz}
+              freeOnly={freeOnly}
+            />
           ) : (
             <div className="flex items-center justify-center px-4 py-16 text-center text-sm text-muted-foreground">
-              {view === 'day' ? 'Day view' : 'Month view'} — coming up
+              Month view — coming up
             </div>
           )}
 
