@@ -36,6 +36,7 @@ export function WeekView({
   onSelectEvent,
   primaryTz,
   secondaryTz,
+  freeOnly = false,
 }: {
   days: string[];
   weekStartKey: string;
@@ -45,14 +46,22 @@ export function WeekView({
   onSelectEvent: (event: CalendarGridEvent) => void;
   primaryTz: string;
   secondaryTz: string | null;
+  freeOnly?: boolean;
 }) {
   const format = useFormatter();
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   // All-day events render in the strip above the timed grid (not as positioned
-  // blocks); everything else flows into the time grid.
-  const allDayEvents = useMemo(() => events.filter((event) => event.allDay), [events]);
-  const timedEvents = useMemo(() => events.filter((event) => !event.allDay), [events]);
+  // blocks); everything else flows into the time grid. In free-slot mode both
+  // are hidden so only the green openings remain.
+  const allDayEvents = useMemo(
+    () => (freeOnly ? [] : events.filter((event) => event.allDay)),
+    [events, freeOnly],
+  );
+  const timedEvents = useMemo(
+    () => (freeOnly ? [] : events.filter((event) => !event.allDay)),
+    [events, freeOnly],
+  );
 
   const hasAllDay = allDayEvents.length > 0;
 

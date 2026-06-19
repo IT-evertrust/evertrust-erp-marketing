@@ -1,32 +1,68 @@
 'use client';
 
-import { type Dispatch, type SetStateAction, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useFormatter, useTranslations } from 'next-intl';
-import { CalendarClock, CalendarX, ChevronLeft, ChevronRight } from 'lucide-react';
+import { CalendarClock, CalendarX } from 'lucide-react';
+import { useCalendarFreeSlots, useCalendarUpcoming } from '@/hooks/use-meetings';
+import { useCampaigns } from '@/hooks/use-campaigns';
 import { EmptyState } from '@/components/common/empty-state';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
+  DEFAULT_TIME_ZONE,
   addDaysToDateKey,
   dateKeyToUtcDate,
-  getIsoWeekNumber,
   overlapsDateKeyRange,
   isValidDate,
+  parseDateKey,
   startOfWorkWeekKey,
+  toDateKey,
   zoneShortLabel,
+  zonedTimeToUtcDate,
 } from '@/components/activate/calendar/time-grid';
 import { WeekView } from '@/components/activate/calendar/week-view';
+import { ControlBar } from '@/components/activate/calendar/control-bar';
+import { CalendarLegend } from '@/components/activate/calendar/calendar-legend';
 import { CalendarEventDetailsDialog } from '@/components/activate/calendar/event-details-dialog';
 import type {
   CalendarGridEvent,
   CalendarGridSlot,
-  FreeSlotsQuery,
-  UpcomingQuery,
+  CalendarView,
 } from '@/components/activate/calendar/types';
 
-const WORK_WEEK_DAYS = 7;
+const WEEK_DAYS = 7;
+const MONTH_GRID_DAYS = 42;
+const FREE_SLOT_DURATION_MINUTES = 30;
+
+// First day of the month for a given anchor key.
+function startOfMonthKey(dateKey: string): string {
+  const { year, month } = parseDateKey(dateKey);
+  return toDateKey(year, month, 1);
+}
+
+// The Monday-aligned start of the visible month grid (the work week containing
+// the 1st), in the org's render zone.
+function monthGridStartKey(dateKey: string, timeZone: string): string {
+  return startOfWorkWeekKey(dateKeyToUtcDate(startOfMonthKey(dateKey)), timeZone);
+}
+
+// Step the anchor by the active view's unit.
+function stepAnchor(dateKey: string, view: CalendarView, direction: 1 | -1): string {
+  if (view === 'day') {
+    return addDaysToDateKey(dateKey, direction);
+  }
+
+  if (view === 'week') {
+    return addDaysToDateKey(dateKey, direction * WEEK_DAYS);
+  }
+
+  // month: jump to the same day-of-month one month away (clamped by Date math).
+  const { year, month, day } = parseDateKey(dateKey);
+  const shifted = new Date(Date.UTC(year, month - 1 + direction, day, 12, 0, 0, 0));
+  return toDateKey(shifted.getUTCFullYear(), shifted.getUTCMonth() + 1, shifted.getUTCDate());
+}
 
 function ConnectHint({ reason }: { reason?: string | null }) {
   const t = useTranslations('activate');
@@ -45,64 +81,118 @@ function ConnectHint({ reason }: { reason?: string | null }) {
   );
 }
 
-export function Calendar({
-  upcoming,
-  freeSlots,
-  weekStartKey,
-  onWeekStartKeyChange,
-  primaryTz,
-  secondaryTz,
-}: {
-  upcoming: UpcomingQuery;
-  freeSlots: FreeSlotsQuery;
-  weekStartKey: string;
-  onWeekStartKeyChange: Dispatch<SetStateAction<string>>;
-  primaryTz: string;
-  secondaryTz: string | null;
-}) {
+export function Calendar() {
   const t = useTranslations('activate');
   const format = useFormatter();
 
+  const [view, setView] = useState<CalendarView>('week');
+  const [campaignId, setCampaignId] = useState<string | null>(null);
+  const [freeOnly, setFreeOnly] = useState(false);
+  const [anchorKey, setAnchorKey] = useState(() =>
+    startOfWorkWeekKey(new Date(), DEFAULT_TIME_ZONE),
+  );
+
   const [selectedEvent, setSelectedEvent] = useState<CalendarGridEvent | null>(null);
 
-  const configured = Boolean(upcoming.data?.configured || freeSlots.data?.configured);
+  const campaignsQuery = useCampaigns();
+  const campaigns = useMemo(() => campaignsQuery.data ?? [], [campaignsQuery.data]);
 
+  // The visible grid's first day, derived from view + anchor (week starts Monday;
+  // month grid aligns to the Monday of the week containing the 1st).
+  const gridStartKey = useMemo(() => {
+    if (view === 'week') {
+      return startOfWorkWeekKey(dateKeyToUtcDate(anchorKey), DEFAULT_TIME_ZONE);
+    }
+
+    if (view === 'month') {
+      return monthGridStartKey(anchorKey, DEFAULT_TIME_ZONE);
+    }
+
+    return anchorKey;
+  }, [view, anchorKey]);
+
+  const gridDayCount = view === 'month' ? MONTH_GRID_DAYS : view === 'week' ? WEEK_DAYS : 1;
+
+  // Fetch window: the visible grid buffered ±1 day so no event/slot is clipped at
+  // the edge when the render zone differs from the fetch zone. The fetch window is
+  // zone-agnostic; DEFAULT_TIME_ZONE here only tags the request.
+  const calendarRange = useMemo(() => {
+    const timeMin = zonedTimeToUtcDate(
+      addDaysToDateKey(gridStartKey, -1),
+      0,
+      0,
+      DEFAULT_TIME_ZONE,
+    );
+
+    const timeMax = zonedTimeToUtcDate(
+      addDaysToDateKey(gridStartKey, gridDayCount + 1),
+      0,
+      0,
+      DEFAULT_TIME_ZONE,
+    );
+
+    return {
+      timeMin: timeMin.toISOString(),
+      timeMax: timeMax.toISOString(),
+      timeZone: DEFAULT_TIME_ZONE,
+    };
+  }, [gridStartKey, gridDayCount]);
+
+  const upcoming = useCalendarUpcoming(calendarRange);
+  const freeSlots = useCalendarFreeSlots({
+    ...calendarRange,
+    durationMinutes: FREE_SLOT_DURATION_MINUTES,
+  });
+
+  // The org's RESOLVED calendar zones (org_config ?? product default), carried on
+  // the payload. `primaryTz` always present; `secondaryTz` null = single scale.
+  const primaryTz = upcoming.data?.timeZone ?? freeSlots.data?.timeZone ?? DEFAULT_TIME_ZONE;
+  const secondaryTz =
+    upcoming.data?.secondaryTimeZone ?? freeSlots.data?.secondaryTimeZone ?? null;
+
+  const configured = Boolean(upcoming.data?.configured || freeSlots.data?.configured);
   const reason = upcoming.data?.reason ?? freeSlots.data?.reason ?? null;
 
   const days = useMemo(
-    () => Array.from({ length: WORK_WEEK_DAYS }, (_, i) => addDaysToDateKey(weekStartKey, i)),
-    [weekStartKey],
+    () => Array.from({ length: gridDayCount }, (_, i) => addDaysToDateKey(gridStartKey, i)),
+    [gridStartKey, gridDayCount],
   );
 
-  const weekEndKey = useMemo(() => addDaysToDateKey(weekStartKey, WORK_WEEK_DAYS), [weekStartKey]);
+  const gridEndKey = useMemo(
+    () => addDaysToDateKey(gridStartKey, gridDayCount),
+    [gridStartKey, gridDayCount],
+  );
 
   const gridEvents = useMemo<CalendarGridEvent[]>(() => {
     return (upcoming.data?.events ?? [])
-      .map((event) => {
-        const startDate = new Date(event.start);
-        const endDate = new Date(event.end);
-
-        return {
-          ...event,
-          startDate,
-          endDate,
-        };
-      })
+      .map((event) => ({
+        ...event,
+        startDate: new Date(event.start),
+        endDate: new Date(event.end),
+      }))
       .filter((event) => {
         if (!isValidDate(event.startDate) || !isValidDate(event.endDate)) {
           return false;
         }
 
-        return overlapsDateKeyRange(
-          event.startDate,
-          event.endDate,
-          weekStartKey,
-          weekEndKey,
-          primaryTz,
-        );
+        if (
+          !overlapsDateKeyRange(
+            event.startDate,
+            event.endDate,
+            gridStartKey,
+            gridEndKey,
+            primaryTz,
+          )
+        ) {
+          return false;
+        }
+
+        // Campaign filter (client-side): when a campaign is selected, keep only
+        // events tagged with it. "All" (null) keeps everything.
+        return campaignId === null || event.campaignIds.includes(campaignId);
       })
       .sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
-  }, [upcoming.data?.events, weekStartKey, weekEndKey, primaryTz]);
+  }, [upcoming.data?.events, gridStartKey, gridEndKey, primaryTz, campaignId]);
 
   const gridSlots = useMemo<CalendarGridSlot[]>(() => {
     return (freeSlots.data?.slots ?? [])
@@ -115,26 +205,43 @@ export function Calendar({
           return false;
         }
 
-        return overlapsDateKeyRange(
-          slot.start,
-          slot.end,
-          weekStartKey,
-          weekEndKey,
-          primaryTz,
-        );
+        return overlapsDateKeyRange(slot.start, slot.end, gridStartKey, gridEndKey, primaryTz);
       })
       .sort((a, b) => a.start.getTime() - b.start.getTime());
-  }, [freeSlots.data?.slots, weekStartKey, weekEndKey, primaryTz]);
+  }, [freeSlots.data?.slots, gridStartKey, gridEndKey, primaryTz]);
 
-  const weekRange = `${format.dateTime(dateKeyToUtcDate(weekStartKey), {
-    timeZone: 'UTC',
-    day: 'numeric',
-    month: 'short',
-  })} – ${format.dateTime(dateKeyToUtcDate(addDaysToDateKey(weekStartKey, WORK_WEEK_DAYS - 1)), {
-    timeZone: 'UTC',
-    day: 'numeric',
-    month: 'short',
-  })}`;
+  const rangeLabel = useMemo(() => {
+    if (view === 'month') {
+      return format.dateTime(dateKeyToUtcDate(startOfMonthKey(anchorKey)), {
+        timeZone: 'UTC',
+        month: 'long',
+        year: 'numeric',
+      });
+    }
+
+    if (view === 'day') {
+      return format.dateTime(dateKeyToUtcDate(anchorKey), {
+        timeZone: 'UTC',
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+      });
+    }
+
+    const start = format.dateTime(dateKeyToUtcDate(gridStartKey), {
+      timeZone: 'UTC',
+      day: 'numeric',
+      month: 'short',
+    });
+
+    const end = format.dateTime(dateKeyToUtcDate(addDaysToDateKey(gridStartKey, WEEK_DAYS - 1)), {
+      timeZone: 'UTC',
+      day: 'numeric',
+      month: 'short',
+    });
+
+    return `${start} – ${end}`;
+  }, [view, anchorKey, gridStartKey, format]);
 
   if (upcoming.isLoading || freeSlots.isLoading) {
     return (
@@ -167,76 +274,48 @@ export function Calendar({
   return (
     <>
       <Card className="overflow-hidden">
-        <CardHeader className="flex flex-row items-center justify-between gap-4 border-b">
-          <div className="min-w-0">
-            <CardTitle className="truncate text-sm font-semibold">
-              Calendar · Week {getIsoWeekNumber(weekStartKey)}
-            </CardTitle>
+        <CardHeader className="flex flex-col gap-3 border-b">
+          <ControlBar
+            view={view}
+            onViewChange={setView}
+            campaignId={campaignId}
+            onCampaignChange={setCampaignId}
+            campaigns={campaigns}
+            rangeLabel={rangeLabel}
+            onPrev={() => setAnchorKey((key) => stepAnchor(key, view, -1))}
+            onNext={() => setAnchorKey((key) => stepAnchor(key, view, 1))}
+            onToday={() => setAnchorKey(startOfWorkWeekKey(new Date(), primaryTz))}
+            freeOnly={freeOnly}
+            onToggleFreeOnly={() => setFreeOnly((value) => !value)}
+          />
 
-            <p className="mt-1 text-xs text-muted-foreground">
-              {gridEvents.length} meetings · {gridSlots.length} proposed free slots
+          <CalendarLegend />
+
+          {freeOnly ? (
+            <p className="text-xs text-emerald-600 dark:text-emerald-400">
+              Free-slot view: showing only proposed openings. Meetings are hidden.
             </p>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-end gap-3">
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                size="icon"
-                variant="outline"
-                className="size-8"
-                aria-label="Previous week"
-                onClick={() => onWeekStartKeyChange((key) => addDaysToDateKey(key, -7))}
-              >
-                <ChevronLeft className="size-4" />
-              </Button>
-
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs"
-                onClick={() =>
-                  onWeekStartKeyChange(startOfWorkWeekKey(new Date(), primaryTz))
-                }
-              >
-                Today
-              </Button>
-
-              <span className="min-w-28 text-center text-xs font-semibold text-muted-foreground">
-                {weekRange}
-              </span>
-
-              <Button
-                type="button"
-                size="icon"
-                variant="outline"
-                className="size-8"
-                aria-label="Next week"
-                onClick={() => onWeekStartKeyChange((key) => addDaysToDateKey(key, 7))}
-              >
-                <ChevronRight className="size-4" />
-              </Button>
-            </div>
-
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-              <span className="size-1.5 rounded-full bg-emerald-500" />
-              Google Calendar connected
-            </span>
-          </div>
+          ) : null}
         </CardHeader>
 
         <CardContent className="p-0">
-          <WeekView
-            days={days}
-            weekStartKey={weekStartKey}
-            events={gridEvents}
-            slots={gridSlots}
-            selectedEventId={selectedEvent?.id ?? null}
-            onSelectEvent={setSelectedEvent}
-            primaryTz={primaryTz}
-            secondaryTz={secondaryTz}
-          />
+          {view === 'week' ? (
+            <WeekView
+              days={days}
+              weekStartKey={gridStartKey}
+              events={gridEvents}
+              slots={gridSlots}
+              selectedEventId={selectedEvent?.id ?? null}
+              onSelectEvent={setSelectedEvent}
+              primaryTz={primaryTz}
+              secondaryTz={secondaryTz}
+              freeOnly={freeOnly}
+            />
+          ) : (
+            <div className="flex items-center justify-center px-4 py-16 text-center text-sm text-muted-foreground">
+              {view === 'day' ? 'Day view' : 'Month view'} — coming up
+            </div>
+          )}
 
           {gridEvents.length === 0 && gridSlots.length === 0 ? (
             <div className="flex items-center justify-center gap-2 border-t px-4 py-3 text-center text-xs text-muted-foreground">

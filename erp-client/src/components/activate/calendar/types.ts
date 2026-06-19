@@ -4,6 +4,8 @@ import type {
   CalendarUpcomingDto,
 } from '@evertrust/shared';
 
+export type CalendarView = 'day' | 'week' | 'month';
+
 export type UpcomingQuery = {
   data?: CalendarUpcomingDto;
   isLoading: boolean;

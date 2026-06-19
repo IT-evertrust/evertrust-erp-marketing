@@ -25,15 +25,16 @@ export function ActivateView() {
 
   const [tab, setTab] = useState<ActivateTab>('book');
 
-  const [calendarWeekStartKey, setCalendarWeekStartKey] = useState(() =>
-    startOfWorkWeekKey(new Date(), DEFAULT_TIME_ZONE),
+  const calendarWeekStartKey = useMemo(
+    () => startOfWorkWeekKey(new Date(), DEFAULT_TIME_ZONE),
+    [],
   );
 
-  const calendarRange = useMemo(() => {
-    // Fetch a buffered window (±1 day) around the visible work week so no event is
-    // clipped at the week edge regardless of the org's render zone (the grid re-buckets
-    // events into days using the resolved org zone). The fetch window is zone-agnostic;
-    // timeZone here only tags the request.
+  // The AccountBar shows the calendar connection + a snapshot count. It fetches a
+  // fixed buffered week window for that summary; the <Calendar/> grid owns its own
+  // view-aware fetch independently (React Query dedupes by key). The fetch window is
+  // zone-agnostic; timeZone here only tags the request.
+  const accountRange = useMemo(() => {
     const timeMin = zonedTimeToUtcDate(
       addDaysToDateKey(calendarWeekStartKey, -1),
       0,
@@ -55,19 +56,12 @@ export function ActivateView() {
     };
   }, [calendarWeekStartKey]);
 
-  const upcoming = useCalendarUpcoming(calendarRange);
+  const upcoming = useCalendarUpcoming(accountRange);
 
   const freeSlots = useCalendarFreeSlots({
-    ...calendarRange,
+    ...accountRange,
     durationMinutes: 30,
   });
-
-  // The org's RESOLVED calendar zones (org_config ?? product default), carried on the
-  // calendar payload. `primaryTz` always present; `secondaryTz` null = single time scale.
-  const primaryTz =
-    upcoming.data?.timeZone ?? freeSlots.data?.timeZone ?? DEFAULT_TIME_ZONE;
-  const secondaryTz =
-    upcoming.data?.secondaryTimeZone ?? freeSlots.data?.secondaryTimeZone ?? null;
 
   const configured = Boolean(upcoming.data?.configured || freeSlots.data?.configured);
 
@@ -119,14 +113,7 @@ export function ActivateView() {
       />
 
       {tab === 'book' ? (
-        <CalendarView
-          upcoming={upcoming}
-          freeSlots={freeSlots}
-          weekStartKey={calendarWeekStartKey}
-          onWeekStartKeyChange={setCalendarWeekStartKey}
-          primaryTz={primaryTz}
-          secondaryTz={secondaryTz}
-        />
+        <CalendarView />
       ) : tab === 'research' ? (
         <EmptyState
           icon={<Search />}
