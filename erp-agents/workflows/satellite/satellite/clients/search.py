@@ -120,12 +120,16 @@ class DuckDuckGoSearch:
 
 
 class WebSearch:
-    """Composite discovery gateway: SearXNG when SEARXNG_URL is set (and it returns hits),
-    else DuckDuckGo. Either way the caller gets [{title,url,content}]."""
+    """Composite discovery gateway, SearXNG-FIRST: SearXNG when SEARXNG_URL is set (and it returns
+    hits). DuckDuckGo is an OPTIONAL fallback — used only when `enable_ddg` is set, OR when no
+    SearXNG is configured at all (so the gateway always has a keyless engine). This stops a weak DDG
+    page from quietly displacing SearXNG results. Either way the caller gets [{title,url,content}]."""
 
-    def __init__(self, searxng_url: str = "", searxng_api_key: str = "", pages: int = 1) -> None:
+    def __init__(self, searxng_url: str = "", searxng_api_key: str = "", pages: int = 1,
+                 enable_ddg: bool = False) -> None:
         self._searx = SearxngClient(searxng_url, searxng_api_key) if searxng_url else None
-        self._ddg = DuckDuckGoSearch(pages=pages)
+        # Build DDG only when explicitly enabled, or when there's no SearXNG to fall back from.
+        self._ddg = DuckDuckGoSearch(pages=pages) if (enable_ddg or self._searx is None) else None
 
     def query(self, q: str) -> list[dict]:
         if self._searx is not None:
@@ -135,7 +139,7 @@ class WebSearch:
                     return hits
             except Exception:
                 pass
-        return self._ddg.query(q)
+        return self._ddg.query(q) if self._ddg is not None else []
 
     def query_paged(self, q: str, pages: int = 1, language: str = "") -> list[dict]:
         """Aggregate up to `pages` result pages for a query (SearXNG pageno; DDG falls back to
@@ -157,6 +161,8 @@ class WebSearch:
             except Exception:
                 pass
         # DuckDuckGo fallback (its own multi-page handling lives in DuckDuckGoSearch.pages).
+        if self._ddg is None:
+            return out
         for h in self._ddg.query(q):
             u = h.get("url", "")
             if u and u not in seen:

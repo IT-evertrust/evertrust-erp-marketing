@@ -13,15 +13,16 @@ Dry-run (default): research + build prospects, NO ERP writes. --live: bulk-post 
 """
 from __future__ import annotations
 
+import time
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from .clients import llm
 from .clients.erp import ErpGateway
 from .clients.search import SearchGateway, UrlFetcher
-from .domain import tender
+from .domain import filters, geo, tender
 from .domain.models import Segment, build_segments, dedup_leads, leads_to_prospects
 from .domain.scrape import hit_to_lead, queries_for_segment, registrable_domain, scrape_emails
 
@@ -68,47 +69,39 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
         except Exception:
             result["nicheAnalyticsTriggered"] = False
 
-    segments = build_segments(cfg)
-    if opts.max_segments is not None:
-        segments = segments[: opts.max_segments]
-    result["segmentsPlanned"] = len(segments)
-    if not segments:
-        return {**result, "status": "no_segments", "error": "missing niche or cities"}
+    # COUNTRY PROFILE (LLM) — the SINGLE source of geography for ANY country (driven by the AIM
+    # country): its real regions + cities (local spelling), iso2/langCode, and BILINGUAL niche
+    # keywords (local script + English). There are NO hardcoded country tables — discovery + the
+    # niche gate work in the country's own language and find native-named firms. Needs a capable
+    # model; with no LLM the run degrades to the country name as a single geo term.
+    profile = llm.profile_country(settings, cfg.country, cfg.niche, cfg.industry) if (opts.use_llm and settings.llm_base_url) else {}
+    iso2 = (profile.get("iso2") or "").lower()
+    market_tld = ("." + iso2) if iso2 else ""
+    if profile:
+        result["profileCities"] = len(profile.get("cities") or [])
+        result["profileRegions"] = len(profile.get("regions") or [])
+        result["profileLang"] = profile.get("langCode") or ""
 
-    country = cfg.country or (segments[0].country if segments else "Germany")
-    cities = list(dict.fromkeys([s.city for s in segments if s.city])) or [country]
-    nt_id = segments[0].niche_target_id if segments else cfg.niche_id
-    nt_name = segments[0].niche_target_name if segments else cfg.niche
+    country = cfg.country or ""
     base_seg = Segment(
         niche=(cfg.niche or "").upper(), city="", country=country, focus="tender",
-        niche_target_id=nt_id, niche_target_name=nt_name or cfg.niche,
+        niche_target_id=cfg.niche_id, niche_target_name=cfg.niche or "",
         niche_target_phrase=cfg.niche, system_content="", user_content="",
     )
 
-    # 1) BUZZWORDS — expand the niche into many tender-relevant search terms (LLM-enhanced,
-    #    deterministic fallback) so discovery hunts the whole niche, not just the bare phrase.
-    buzz = llm.generate_buzzwords(settings, cfg.niche, country) if (opts.use_llm and settings.llm_base_url) else []
+    # 1) BUZZWORDS — bilingual via the profiler (local + English) so the query set AND the niche gate
+    #    speak the country's language; else a plain buzzword call, else the deterministic set.
+    buzz = (profile.get("keywordsLocal", []) + profile.get("keywordsEnglish", [])) if profile else []
+    if not buzz and opts.use_llm and settings.llm_base_url:
+        buzz = llm.generate_buzzwords(settings, cfg.niche, country, cfg.industry)
     if not buzz:
         buzz = tender.fallback_buzzwords(cfg.niche)
+    buzz = list(dict.fromkeys([b for b in buzz if b]))
     result["buzzwords"] = len(buzz)
 
-    # 2) BUILD QUERY SET — buzzwords x tender/contact modifiers x geography, plus the per-segment
-    #    seed queries, deduped and capped. This is the lead-count multiplier.
-    seed = [q for seg in segments for q in queries_for_segment(seg)]
-    tender_q = tender.build_tender_queries(buzz, cities, country, cap=settings.max_queries)
-    allq, seen = [], set()
-    for q in tender_q + seed:
-        k = (q or "").lower().strip()
-        if k and k not in seen:
-            seen.add(k)
-            allq.append(q)
-    allq = allq[: settings.max_queries]
-    result["queriesRun"] = len(allq)
-
-    # 3) DISCOVER — run every query (paginated) concurrently; each real company URL becomes a
-    #    candidate, deduped by domain as we go so we exhaust the search space toward the target.
-    lang = tender.LANG_BY_COUNTRY.get(country, "")
+    lang = (profile.get("langCode") if profile else "") or ""
     result["searchLanguage"] = lang or "any"
+    ntoks = filters.niche_tokens(cfg.niche, buzz)
 
     def _search(q):
         try:
@@ -117,30 +110,118 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
         except Exception:
             return []
 
-    leads_map: dict = {}
-    hits_total = 0
-    with ThreadPoolExecutor(max_workers=max(1, settings.search_workers)) as ex:
-        for hits in ex.map(_search, allq):
-            hits_total += len(hits)
-            for h in hits:
-                ld = hit_to_lead(h, base_seg)
-                if not ld:
-                    continue
-                key = registrable_domain(ld.website) or (ld.name or "").lower()
-                if key and key not in leads_map:
-                    leads_map[key] = ld
-    leads = list(leads_map.values())
+    # 2) REGION BATCHES — "Anywhere" loops EVERY region of the AIM country (count = whatever the
+    #    country has: 16 / 28 / 63…), one batch at a time with a cooldown, so each region gets its own
+    #    query budget and the search backend isn't overloaded. A specific region/city list = 1 batch.
+    region_batches = []
+    if geo.is_nationwide(cfg.region):
+        if profile.get("regions"):     # model gave real regions -> use them
+            region_batches = [(str(r.get("name") or f"region {i + 1}"), list(r.get("cities") or []))
+                              for i, r in enumerate(profile["regions"]) if r.get("cities")]
+        elif profile.get("cities"):    # flat city list -> chunk into batches (reliable + still looped)
+            cs, n = profile["cities"], max(1, settings.region_chunk)
+            region_batches = [(f"batch {i // n + 1}", cs[i:i + n]) for i in range(0, len(cs), n)]
+    if not region_batches:
+        cities0 = geo.cities_for(cfg.country, cfg.region, cfg.default_regions) or ([country] if country else [])
+        region_batches = [("all", cities0)]
+    # max_regions caps how many region batches one run sweeps (bounds time + SearXNG load). 0 = no
+    # cap = cover EVERY region the country has (paired with the per-region cooldown so it stays kind
+    # to SearXNG). >0 truncates to that many regions, largest/first first.
+    if settings.max_regions > 0:
+        region_batches = region_batches[: settings.max_regions]
+
+    # 3) DISCOVER one region's cities — queries (each carrying its city) -> search -> two gates
+    #    (NICHE_BLOCK commercial-only + bilingual niche-relevance) -> domain-deduped candidates.
+    def _discover(cities):
+        segs = build_segments(replace(cfg, region=", ".join(cities))) if cities else []
+        if opts.max_segments is not None:
+            segs = segs[: opts.max_segments]
+        plan = []
+        for q, qcity in tender.build_tender_queries(buzz, cities, country, cap=settings.queries_per_region):
+            plan.append({"q": q, "city": qcity, "ntId": base_seg.niche_target_id,
+                         "ntName": base_seg.niche_target_name, "phrase": cfg.niche})
+        for seg in segs:
+            for q in queries_for_segment(seg):
+                plan.append({"q": q, "city": seg.city, "ntId": seg.niche_target_id,
+                             "ntName": seg.niche_target_name, "phrase": seg.niche_target_phrase})
+        planq, qseen = [], set()
+        for it in plan:
+            k = (it["q"] or "").lower().strip()
+            if k and k not in qseen:
+                qseen.add(k)
+                planq.append(it)
+        planq = planq[: settings.queries_per_region]
+        lm, ht, blk, off = {}, 0, 0, 0
+        with ThreadPoolExecutor(max_workers=max(1, settings.search_workers)) as ex:
+            for it, hits in zip(planq, ex.map(lambda x: _search(x["q"]), planq)):
+                ht += len(hits)
+                seg_for = Segment(
+                    niche=(it["phrase"] or cfg.niche or "").upper(), city=it["city"], country=country,
+                    focus="", niche_target_id=it["ntId"], niche_target_name=it["ntName"],
+                    niche_target_phrase=it["phrase"] or cfg.niche, system_content="", user_content="",
+                )
+                for h in hits:
+                    ld = hit_to_lead(h, seg_for)
+                    if not ld:
+                        continue
+                    ld.source = "web"
+                    ld.source_query = it["q"]
+                    ld.segment = f"{seg_for.niche_target_name or seg_for.niche} @ {seg_for.city}".strip()
+                    hay = f"{ld.name} {ld.snippet} {ld.website}"
+                    if filters.is_blocked(hay):
+                        blk += 1
+                        continue
+                    if not filters.mentions_niche(hay, ntoks):
+                        off += 1
+                        continue
+                    key = registrable_domain(ld.website) or (ld.name or "").lower()
+                    if key and key not in lm:
+                        lm[key] = ld
+        return segs, lm, ht, blk, off, len(planq)
+
+    # 4) SWEEP regions until the target is met (or all regions done), cooling down between batches.
+    pool, all_segments = {}, []
+    hits_total = dropped_blocked = dropped_offniche = queries_run = regions_scanned = 0
+    # Anywhere/nationwide + exhaust flag: keep sweeping ALL regions for full coverage instead of
+    # stopping once lead_target is hit (a specific region/city list is one batch, unaffected).
+    exhaust = geo.is_nationwide(cfg.region) and settings.exhaust_anywhere_regions
+    for _rname, rcities in region_batches:
+        segs, lm, ht, blk, off, nq = _discover(rcities)
+        all_segments.extend(segs)
+        for k, v in lm.items():
+            pool.setdefault(k, v)
+        hits_total += ht
+        dropped_blocked += blk
+        dropped_offniche += off
+        queries_run += nq
+        regions_scanned += 1
+        if len(pool) >= settings.lead_target and not exhaust:
+            break
+        if len(region_batches) > 1 and regions_scanned < len(region_batches) and settings.region_cooldown > 0:
+            time.sleep(settings.region_cooldown)
+
+    result["regionsPlanned"] = len(region_batches)
+    result["regionsScanned"] = regions_scanned
+    result["queriesRun"] = queries_run
+    result["segmentsPlanned"] = len(all_segments)
+    if not all_segments:
+        return {**result, "status": "no_segments", "error": "missing niche or cities"}
+    cities = list(dict.fromkeys([s.city for s in all_segments if s.city])) or [country]
+
+    leads = list(pool.values())
     result["rawCandidates"] = len(leads)
+    result["droppedBlocked"] = dropped_blocked
+    result["droppedOffNiche"] = dropped_offniche
 
     # FALLBACK when discovery found nothing (offline tests, or a dead backend).
     if hits_total == 0:
         if opts.use_llm and settings.llm_base_url:
             leads = []
-            for seg in segments:
+            for seg in all_segments:
                 leads.extend(llm.research_leads(settings, seg, search))
         elif getattr(search, "offline", False):
             leads = []
-            for seg in segments:
+            for seg in all_segments:
                 leads.extend(llm.offline_research(seg))
         else:
             return {**result, "status": "search_unavailable", "leadsFound": 0,
@@ -155,7 +236,7 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
     # 4) GEO FILTER — drop global off-market noise (Asia/US marketplaces etc.); keep the
     #    EU/DACH-relevant companies. Fall back to the full set only if filtering leaves too few.
     geo_leads = [ld for ld in leads
-                 if tender.geo_relevant(ld.website, ld.name, ld.snippet, country, cities)]
+                 if tender.geo_relevant(ld.website, ld.name, ld.snippet, country, cities, market_tld)]
     if geo_leads:                 # prefer on-market leads; keep the raw set only if geo found none
         leads = geo_leads
     result["leadsFound"] = len(leads)
@@ -164,10 +245,14 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
     for ld in leads:
         ld.company_type = tender.classify_company_type(ld.name, ld.snippet, ld.source_url, ld.type)
 
-    # 6) ENRICH — scrape candidate sites for a real email (concurrent), then optional LLM recovery.
-    result["emailsRecovered"] = scrape_emails(leads, fetcher, settings.scrape_workers, settings.max_scrape)
-    if opts.use_llm and settings.llm_base_url:
-        # LLM email recovery is the slow, optional last mile — site-scraping above is primary.
+    # 6) ENRICH — scrape candidate sites for a real, EVIDENCE-BASED email (concurrent). The address
+    #    has to be present on a page we fetched; provenance (emailSourceUrl/Type/confidence) is set.
+    result["emailsRecovered"] = (
+        scrape_emails(leads, fetcher, settings.scrape_workers, settings.max_scrape)
+        if settings.enable_web_email_recovery else 0)
+    # LLM email recovery can output an address that was never on the page (a guess), so it is OFF by
+    # default (allow_llm_email_recovery). When explicitly enabled it's the last mile after scraping.
+    if opts.use_llm and settings.llm_base_url and settings.allow_llm_email_recovery:
         # Cap hard: sending hundreds of companies in one prompt stalls the model. Prioritize
         # the highest-ranked email-less leads (they sort first after scoring below... but we
         # haven't scored yet, so take the first N which are already domain-deduped).
@@ -178,7 +263,10 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
                 got = llm.recover_emails(settings, missing, search)
                 for i, em in got.items():
                     if 0 <= i < len(leads) and not leads[i].email:
-                        leads[i].email, leads[i].status = em, ""
+                        leads[i].email = em
+                        leads[i].status = ""
+                        leads[i].email_source_type = "llm"   # flagged: lower-trust, no page evidence
+                        leads[i].email_confidence = 0.5
             except Exception:
                 pass
 
@@ -188,13 +276,19 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
         verified = bool(ld.email and ld.status == "")
         ld.score = tender.score_lead(
             name=ld.name, snippet=ld.snippet, url=ld.website, country=ld.country or country,
-            niche=cfg.niche, has_email=bool(ld.email), verified=verified, cities=cities)
+            niche=cfg.niche, has_email=bool(ld.email), verified=verified, cities=cities,
+            market_tld=market_tld)
     leads.sort(key=lambda l: l.score, reverse=True)
 
-    prospects = leads_to_prospects(leads)
+    prospects = leads_to_prospects(leads, settings.min_keep_score)
+    # QUALITY FLOOR — drop tier C (score below settings.min_keep_score = noise). Keep B and above
+    # only; the dropped count is reported so a sweep that yields all-C is visible.
+    dropped_c = sum(1 for p in prospects if p.get("tier") == "C")
+    prospects = [p for p in prospects if p.get("tier") != "C"]
     for i, p in enumerate(prospects):
         p["ranking"] = i + 1
     verified = sum(1 for p in prospects if p["emailVerified"])
+    result["droppedTierC"] = dropped_c
     result["prospects"] = len(prospects)
     result["verified"] = verified
     result["targetMet"] = len(prospects) >= settings.lead_target
@@ -214,7 +308,7 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
             created = int(data.get("created") or data.get("inserted") or 0)
             updated = int(data.get("updated") or data.get("upserted") or 0)
             upserted = (created + updated) if (created or updated) else len(postable)
-            metrics = {"prospectsUpserted": upserted, "segmentsPlanned": len(segments)}
+            metrics = {"prospectsUpserted": upserted, "segmentsPlanned": len(all_segments)}
             result["metrics"] = metrics
             result["posted"] = True
             if opts.live:   # the run-completion callback is a live-only signal

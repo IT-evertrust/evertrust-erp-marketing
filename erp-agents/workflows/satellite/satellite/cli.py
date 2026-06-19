@@ -13,7 +13,7 @@ import json
 import sys
 
 from .clients.erp import ErpClient
-from .clients.search import HttpFetcher, OfflineFetcher, OfflineSearch, SearxngClient
+from .clients.search import HttpFetcher, OfflineFetcher, OfflineSearch, WebSearch
 from .pipeline import RunOptions, run
 from .settings import load_settings
 
@@ -26,16 +26,25 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--max-segments", type=int, default=None)
     args = p.parse_args(argv)
 
+    # --live writes real leads, so it must use the judged (LLM) extraction path. Persisting the
+    # offline accept-everything stub would push unjudged placeholder rows to the ERP (README rule).
+    if args.live and args.no_llm:
+        p.error("--live cannot be combined with --no-llm (offline leads are unjudged)")
+
     settings = load_settings()
     opts = RunOptions(
-        campaign_id=args.campaign_id, live=args.live, use_llm=not args.no_llm,
-        max_segments=args.max_segments,
+        # BUGFIX: --live must actually persist. Was building RunOptions without persist, so
+        # `--live` flipped the callback on but never POSTed prospects to the ERP. persist←live.
+        campaign_id=args.campaign_id, live=args.live, persist=args.live,
+        use_llm=not args.no_llm, max_segments=args.max_segments,
     )
     erp = ErpClient(settings.erp_base_url, settings.arsenal_token)
     if args.no_llm:
         search, fetcher = OfflineSearch(), OfflineFetcher()
     else:
-        search, fetcher = SearxngClient(settings.searxng_url, settings.arsenal_token), HttpFetcher()
+        search = WebSearch(settings.searxng_url, settings.searxng_api_key,
+                           pages=settings.ddg_pages, enable_ddg=settings.enable_ddg_fallback)
+        fetcher = HttpFetcher()
     try:
         result = run(settings, opts, erp, search, fetcher)
         print(json.dumps(result, indent=2))

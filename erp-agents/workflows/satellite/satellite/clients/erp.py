@@ -17,9 +17,13 @@ def to_config(campaign_id: str, raw: dict) -> CampaignConfig:
     niche = body.get("niche") if isinstance(body.get("niche"), dict) else {}
     targets = [t for t in (niche.get("targets") or []) if isinstance(t, dict)]
     leads_cfg = ((body.get("automation") or {}).get("leads") or {}) if isinstance(body.get("automation"), dict) else {}
+    # Parent industry of the niche ("IT" for "IT > AI Platform"), if the ERP sends it (dict or str).
+    industry_raw = niche.get("industry") or niche.get("industryName") or body.get("industry") or ""
+    industry = industry_raw.get("name") if isinstance(industry_raw, dict) else str(industry_raw or "")
     return CampaignConfig(
         campaign_id=str(body.get("campaignId") or body.get("id") or campaign_id),
         niche=str(niche.get("name") or body.get("nicheName") or ""),
+        industry=str(industry or ""),
         niche_id=niche.get("id"),
         niche_slug=str(niche.get("slug") or ""),
         targets=targets,
