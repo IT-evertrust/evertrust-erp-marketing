@@ -72,3 +72,41 @@ def test_dedup_and_prospects():
     prospects = leads_to_prospects(deduped)
     assert prospects[0]["emailVerified"] is True
     assert prospects[1]["emailVerified"] is False and prospects[1]["email"] == ""
+
+
+def test_build_segments_uses_explicit_cities():
+    # build_segments works off the cities it's given (the pipeline passes an explicit list).
+    cfg = CampaignConfig(
+        campaign_id="c1", niche="LED", region="Berlin, München, Köln", country="Germany",
+        targets=[{"id": "t1", "name": "LED Rental", "slug": "led"}],
+    )
+    segs = build_segments(cfg)
+    cities = {s.city for s in segs}
+    assert len(segs) > 0 and cities == {"Berlin", "München", "Köln"}
+
+
+def test_build_segments_nationwide_defers_to_profiler():
+    # "Anywhere" -> geo.cities_for returns [] (no hardcoded table) -> no segments here; the pipeline
+    # supplies the real cities from the LLM profiler instead.
+    cfg = CampaignConfig(
+        campaign_id="c1", niche="LED", region="Anywhere", country="Germany",
+        targets=[{"id": "t1", "name": "LED Rental", "slug": "led"}],
+    )
+    assert build_segments(cfg) == []
+
+
+def test_is_bad_email_placeholders():
+    from satellite.domain.models import is_bad_email
+
+    assert is_bad_email("adres@email.com")
+    assert is_bad_email("your@domain.com")
+    assert not is_bad_email("kontakt@firma.de")
+    assert not is_bad_email("info@nflo.pl")
+
+
+def test_prospect_carries_tier():
+    # Tiers AAA / A / B / C. C = below the keep floor (default 40 = noise, dropped by the pipeline).
+    assert leads_to_prospects([Lead(name="X", website="https://x.de", email="i@x.de", score=80)])[0]["tier"] == "AAA"
+    assert leads_to_prospects([Lead(name="Y", website="https://y.de", email="i@y.de", score=60)])[0]["tier"] == "A"
+    assert leads_to_prospects([Lead(name="W", website="https://w.de", score=45)])[0]["tier"] == "B"
+    assert leads_to_prospects([Lead(name="Z", website="https://z.de", score=30)])[0]["tier"] == "C"

@@ -11,12 +11,16 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from . import geo
+from .tender import rank_label
+
 # --- config ----------------------------------------------------------------
 
 @dataclass(frozen=True)
 class CampaignConfig:
     campaign_id: str
     niche: str = ""
+    industry: str = ""   # parent industry of the niche (e.g. "IT" for "IT > AI Platform")
     niche_id: str | None = None
     niche_slug: str = ""
     targets: list = field(default_factory=list)  # [{id,name,slug,searchHint}]
@@ -54,6 +58,14 @@ class Lead:
     company_type: str = ""  # heuristic classification (Manufacturer/Distributor/...)
     score: int = 0          # relevance 0..100 (tender-hunter ranking)
     snippet: str = ""       # search-result content, used for typing/scoring
+    # provenance / debug — where did this lead and its email come from (UI-only; the ERP-bound
+    # subset in pipeline._PROSPECT_FIELDS does NOT include these, so they never go to the ERP).
+    source: str = ""             # 'web' | 'offline'
+    source_query: str = ""       # the discovery query that surfaced this company
+    segment: str = ""            # "<niche target> @ <city>"
+    email_source_url: str = ""   # the exact page the email was scraped from (evidence)
+    email_source_type: str = ""  # 'website' | 'search-page' | 'contact-page' | 'llm' | ''
+    email_confidence: float = 0.0  # 0..1 — on-domain match scores higher
 
 
 # --- city normalization (port of the FOLD map) -----------------------------
@@ -61,6 +73,8 @@ class Lead:
 _FOLD = {
     "ł": "l", "ą": "a", "ć": "c", "ę": "e", "ń": "n", "ó": "o", "ś": "s",
     "ź": "z", "ż": "z", "ä": "a", "ö": "o", "ü": "u", "ß": "ss",
+    # Hungarian long vowels (keeps geo._FOLD and this map in sync — see geo.py docstring).
+    "á": "a", "é": "e", "í": "i", "ő": "o", "ú": "u", "ű": "u",
 }
 
 
@@ -74,7 +88,10 @@ def norm_city(s: str) -> str:
 
 _EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
 _BAD_FRAGMENTS = ("example.", "sentry", "wixpress", "no-reply", "noreply", ".png", ".jpg",
-                  "@2x", "domain.com", "protected", "cloudflare", "[email")
+                  "@2x", "domain.com", "protected", "cloudflare", "[email",
+                  # placeholder / dummy addresses seen in scraped pages
+                  "email.com", "adres@", "your@", "yourname", "twoj@", "@example",
+                  "name@domain", "test@test", "abc@", "user@example")
 
 
 def is_bad_email(email: str) -> bool:
@@ -154,29 +171,17 @@ _FOCI = ["dir_consumer", "dir_b2b", "maps_assoc", "broad"]
 _MAX_PAIRS = 500
 
 
-def _cities_from(cfg: CampaignConfig) -> list[str]:
-    raw = cfg.region or ""
-    entries = [c.strip() for c in re.split(r"[,;\n]+", raw) if c.strip()]
-    if not entries:
-        entries = [str(c).strip() for c in (cfg.default_regions or []) if str(c).strip()]
-    seen, out = set(), []
-    for c in entries:
-        k = norm_city(c)
-        if k and k not in seen:
-            seen.add(k)
-            out.append(c)
-    return out
-
-
 def build_segments(cfg: CampaignConfig) -> list[Segment]:
-    cities = _cities_from(cfg)
+    # Cities from the campaign's region: "Anywhere"->nationwide, a voivodeship/Bundesland/zone
+    # name expands to its cities, an explicit "City, City" list is used verbatim. (geo module)
+    cities = geo.cities_for(cfg.country, cfg.region, cfg.default_regions)
     targets = [t for t in (cfg.targets or []) if t and (t.get("id") is not None or t.get("name") or t.get("slug"))]
     if not targets:
         targets = [{"id": cfg.niche_id, "name": cfg.niche, "slug": cfg.niche_slug, "searchHint": ""}]
     if not cfg.niche or not cities:
         return []
 
-    country = cfg.country or "Germany"
+    country = cfg.country or ""
     max_segments = cfg.max_leads_per_run if cfg.max_leads_per_run and cfg.max_leads_per_run > 0 else 500
     cities_per_target = max(1, _MAX_PAIRS // max(1, len(targets)))
     cities = cities[:cities_per_target]
@@ -224,7 +229,7 @@ def dedup_leads(leads: list[Lead]) -> list[Lead]:
     return out
 
 
-def leads_to_prospects(leads: list[Lead]) -> list[dict]:
+def leads_to_prospects(leads: list[Lead], min_b_score: int = 40) -> list[dict]:
     prospects = []
     for ld in leads:
         name = (ld.name or "").strip()
@@ -245,11 +250,19 @@ def leads_to_prospects(leads: list[Lead]) -> list[dict]:
             "companyType": (ld.company_type or ld.type or "").strip(),
             "status": status,
             "score": int(ld.score or 0),
+            "tier": rank_label(int(ld.score or 0), min_b_score),
             "website": (ld.website or "").strip(),
             "city": (ld.city or "").strip(),
             "country": (ld.country or "").strip(),
             "sourceUrl": (ld.source_url or "").strip(),
             "nicheTargetId": ld.niche_target_id,
             "emailVerified": verified,
+            # provenance / debug (UI-only; stripped before the ERP bulk-post)
+            "source": (ld.source or "").strip(),
+            "sourceQuery": (ld.source_query or "").strip(),
+            "segment": (ld.segment or "").strip(),
+            "emailSourceUrl": (ld.email_source_url or "").strip(),
+            "emailSourceType": (ld.email_source_type or "").strip(),
+            "emailConfidence": round(float(ld.email_confidence or 0.0), 2),
         })
     return prospects
