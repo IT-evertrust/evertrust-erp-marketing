@@ -8,6 +8,7 @@ import { and, eq } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 import { DEFAULT_SENDERS, type OrgSenderDto } from '@evertrust/shared';
 import { DB, type DbClient } from '../db/db.tokens';
+import { GoogleAccountsService } from '../google/google-accounts.service';
 
 type OrgSenderRow = typeof schema.orgSenders.$inferSelect;
 
@@ -36,7 +37,10 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // WorkflowConfigService, which composes this resolver with org_config.
 @Injectable()
 export class SendersService {
-  constructor(@Inject(DB) private readonly db: DbClient) {}
+  constructor(
+    @Inject(DB) private readonly db: DbClient,
+    private readonly googleAccounts: GoogleAccountsService,
+  ) {}
 
   // The org's own sender rows (raw), newest-or-insertion-agnostic — callers that need
   // the resolved list (org rows OR the product defaults) use resolve() below.
@@ -77,9 +81,21 @@ export class SendersService {
     return { senders: rows.map((r) => this.toDto(r)), fromOrg: true };
   }
 
-  // GET /arsenal/config/senders — the resolved list (alias of resolve()).
-  list(orgId: string): Promise<OrgSenderDto[]> {
-    return this.resolve(orgId);
+  // GET /arsenal/config/senders — the senders the AIM "Gmail" picker offers: the
+  // resolved list (the org's own org_senders, or the product DEFAULT_SENDERS) FILTERED
+  // to those whose Gmail account the org has actually CONNECTED (a google_accounts row
+  // with status CONNECTED for the same address). This keeps a disconnected legacy
+  // identity (e.g. 'hanna') out of the picker. resolve() is intentionally NOT filtered —
+  // create-time sender validation + the machine config still accept every resolved key,
+  // so an existing campaign referencing a now-disconnected sender stays valid.
+  async list(orgId: string): Promise<OrgSenderDto[]> {
+    const resolved = await this.resolve(orgId);
+    const connected = new Set(
+      (await this.googleAccounts.listForOrg(orgId))
+        .filter((a) => a.status === 'CONNECTED')
+        .map((a) => a.email.toLowerCase()),
+    );
+    return resolved.filter((s) => connected.has(s.email.toLowerCase()));
   }
 
   // POST /arsenal/config/senders — upsert a sender on (organizationId, sender_key).

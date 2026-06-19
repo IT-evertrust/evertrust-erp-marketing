@@ -9,6 +9,11 @@ allowBuilds:
   '@parcel/watcher': true
   '@swc/core': true
   argon2: true
+  # testcontainers' optional native transports — not needed (we talk to the local
+  # Docker socket, not SSH), so their build scripts are intentionally skipped.
+  cpu-features: false
   esbuild: true
+  protobufjs: false
   sharp: true
+  ssh2: false
   unrs-resolver: true

@@ -1,6 +1,6 @@
 import { N8nExecutionsService } from '../src/arsenal/n8n-executions.service';
 import type { AppConfigService } from '../src/config/app-config.service';
-import { FakeTable, makeFakeDb, makeWorkflowConfig } from './fake-db';
+import { getDb, makeWorkflowConfig } from './real-db';
 
 // The poller reads n8n's public executions API and maps the latest execution to
 // RUNNING / SUCCESS / ERROR / IDLE for the Growth Engine strip. These tests pin the
@@ -19,7 +19,7 @@ function makeConfig(url: string, key: string): AppConfigService {
 // mapping tests behave exactly as before. The API key stays env-only.
 function makeExecSvc(url: string, key: string): N8nExecutionsService {
   const config = makeConfig(url, key);
-  const { db } = makeFakeDb(new Map<unknown, FakeTable>());
+  const db = getDb();
   return new N8nExecutionsService(config, makeWorkflowConfig(db, config));
 }
 

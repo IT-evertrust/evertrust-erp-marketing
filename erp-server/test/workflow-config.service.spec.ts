@@ -4,7 +4,7 @@ import { DEFAULT_SENDERS } from '@evertrust/shared';
 import { WorkflowConfigService } from '../src/arsenal/workflow-config.service';
 import { SendersService } from '../src/arsenal/senders.service';
 import type { AppConfigService } from '../src/config/app-config.service';
-import { FakeTable, makeFakeDb } from './fake-db';
+import { fakeGoogleAccounts, getDb, rowsOf, seed } from './real-db';
 
 // WorkflowConfigService resolves the GLOBAL Growth-Engine INFRA (webhooks, n8n base,
 // ingest token, offsets) as stored-override ?? env from the workflow_config singleton,
@@ -44,7 +44,7 @@ const PREF_KEYS = new Set([
   'requireNicheAnalysis',
 ]);
 
-function make(
+async function make(
   env: Record<string, string> = {},
   row?: Record<string, unknown>,
   senderRows: Record<string, unknown>[] = [],
@@ -54,28 +54,23 @@ function make(
   for (const [k, v] of Object.entries(row ?? {})) {
     (PREF_KEYS.has(k) ? prefVals : infraVals)[k] = v;
   }
-  const hasInfra = Object.keys(infraVals).length > 0;
-  const hasPref = Object.keys(prefVals).length > 0;
+  // The row carries infra OR pref values; infra keys land on the workflow_config
+  // singleton, pref keys on org_config(ORG). The DB fills id/createdAt/updatedAt.
+  if (Object.keys(infraVals).length > 0) {
+    await seed(schema.workflowConfig, { singleton: true, ...infraVals });
+  }
+  if (Object.keys(prefVals).length > 0) {
+    await seed(schema.orgConfig, { organizationId: ORG, ...prefVals });
+  }
+  if (senderRows.length > 0) await seed(schema.orgSenders, senderRows);
 
-  const workflowConfig = new FakeTable(
-    hasInfra ? [{ id: 'wc1', singleton: true, ...infraVals }] : [],
-  );
-  const orgConfig = new FakeTable(
-    hasPref ? [{ id: 'oc1', organizationId: ORG, ...prefVals }] : [],
-  );
-  const orgSenders = new FakeTable(senderRows);
-  const { db } = makeFakeDb(
-    new Map<unknown, FakeTable>([
-      [schema.workflowConfig, workflowConfig],
-      [schema.orgConfig, orgConfig],
-      [schema.orgSenders, orgSenders],
-    ]),
-  );
+  const db = getDb();
   return {
-    service: new WorkflowConfigService(db, makeConfig(env), new SendersService(db)),
-    workflowConfig,
-    orgConfig,
-    orgSenders,
+    service: new WorkflowConfigService(
+      db,
+      makeConfig(env),
+      new SendersService(db, fakeGoogleAccounts()),
+    ),
   };
 }
 
@@ -90,31 +85,31 @@ const ENV = {
 
 describe('WorkflowConfigService — env fallback (no stored row)', () => {
   it('getStageWebhook falls back to the env var', async () => {
-    const { service } = make(ENV);
+    const { service } = await make(ENV);
     expect(await service.getStageWebhook('LEAD_SATELLITE')).toBe('https://env/lead');
     expect(await service.getStageWebhook('REACH_BAZOOKA')).toBe('https://env/bazooka');
   });
 
   it('getAimWebhook / getN8nApiUrl fall back to env', async () => {
-    const { service } = make(ENV);
+    const { service } = await make(ENV);
     expect(await service.getAimWebhook()).toBe('https://env/aim');
     expect(await service.getN8nApiUrl()).toBe('https://env-n8n.test');
   });
 
   it('returns undefined when neither a row nor the env var is set', async () => {
-    const { service } = make({});
+    const { service } = await make({});
     expect(await service.getStageWebhook('REPLY_GLOCK')).toBeUndefined();
     expect(await service.getAimWebhook()).toBeUndefined();
     expect(await service.getN8nApiUrl()).toBeUndefined();
   });
 
   it('getIngestTokenHash is null with no row (guard uses the env fallback)', async () => {
-    const { service } = make(ENV);
+    const { service } = await make(ENV);
     expect(await service.getIngestTokenHash()).toBeNull();
   });
 
   it('getEffective reports env values as not-overridden + status flags', async () => {
-    const { service } = make(ENV);
+    const { service } = await make(ENV);
     const eff = await service.getEffective(ORG);
     expect(eff.webhooks.aim).toEqual({ value: 'https://env/aim', overridden: false });
     expect(eff.n8nApiUrl).toEqual({ value: 'https://env-n8n.test', overridden: false });
@@ -127,7 +122,7 @@ describe('WorkflowConfigService — env fallback (no stored row)', () => {
 
 describe('WorkflowConfigService — stored override wins', () => {
   it('a stored webhook URL overrides the env var', async () => {
-    const { service } = make(ENV, {
+    const { service } = await make(ENV, {
       leadSatelliteWebhookUrl: 'https://stored/lead',
       n8nApiUrl: 'https://stored-n8n.test',
     });
@@ -138,7 +133,7 @@ describe('WorkflowConfigService — stored override wins', () => {
   });
 
   it('getEffective marks an overridden field and keeps others on env', async () => {
-    const { service } = make(ENV, { aimWebhookUrl: 'https://stored/aim' });
+    const { service } = await make(ENV, { aimWebhookUrl: 'https://stored/aim' });
     const eff = await service.getEffective(ORG);
     expect(eff.webhooks.aim).toEqual({ value: 'https://stored/aim', overridden: true });
     expect(eff.webhooks.leadSatellite).toEqual({
@@ -148,7 +143,7 @@ describe('WorkflowConfigService — stored override wins', () => {
   });
 
   it('a stored ingest-token hash flips ingestTokenSource to rotated', async () => {
-    const { service } = make(ENV, {
+    const { service } = await make(ENV, {
       ingestTokenHash: 'a'.repeat(64),
       ingestTokenSetAt: new Date('2026-06-13T00:00:00Z'),
     });
@@ -161,7 +156,7 @@ describe('WorkflowConfigService — stored override wins', () => {
 
 describe('WorkflowConfigService — templates + leads groups', () => {
   it('getEffective: unset row → booleans default to true, caps null, regions []', async () => {
-    const { service } = make(ENV); // no stored row
+    const { service } = await make(ENV); // no stored row
     const eff = await service.getEffective(ORG);
 
     expect(eff.templates).toEqual({
@@ -189,7 +184,7 @@ describe('WorkflowConfigService — templates + leads groups', () => {
       followup: { subject: 'Re: Hi', body: 'Followup body' },
       finalPush: { subject: 'Last call', body: 'Final body' },
     };
-    const { service } = make(ENV, {
+    const { service } = await make(ENV, {
       defaultTemplate: template,
       signature: 'Best, EverTrust',
       tone: 'formal',
@@ -223,7 +218,7 @@ describe('WorkflowConfigService — templates + leads groups', () => {
   });
 
   it('update: round-trips a defaultTemplate + caps + a boolean set to false', async () => {
-    const { service, orgConfig } = make(ENV);
+    const { service } = await make(ENV);
     const template = {
       cold: { subject: 'Subject A', body: 'Body A' },
       followup: { subject: 'Subject B', body: 'Body B' },
@@ -243,7 +238,7 @@ describe('WorkflowConfigService — templates + leads groups', () => {
     );
 
     // The prefs land on the PER-ORG org_config row (not the global singleton).
-    expect(orgConfig.rows).toHaveLength(1);
+    expect(await rowsOf(schema.orgConfig)).toHaveLength(1);
     expect(eff.templates.default).toEqual(template);
     expect(eff.templates.tone).toBe('direct');
     expect(eff.templates.language).toBe('en');
@@ -257,7 +252,7 @@ describe('WorkflowConfigService — templates + leads groups', () => {
   });
 
   it('update: null clears the defaultTemplate back to unset', async () => {
-    const { service } = make(ENV, {
+    const { service } = await make(ENV, {
       defaultTemplate: {
         cold: { subject: 's', body: 'b' },
         followup: { subject: 's', body: 'b' },
@@ -271,7 +266,7 @@ describe('WorkflowConfigService — templates + leads groups', () => {
 
 describe('WorkflowConfigService — senders resolution', () => {
   it('getEffective falls back to DEFAULT_SENDERS when the org has none', async () => {
-    const { service } = make(ENV); // no org_senders rows
+    const { service } = await make(ENV); // no org_senders rows
     const eff = await service.getEffective(ORG);
     expect(eff.senders).toEqual(DEFAULT_SENDERS);
     // The product default's flagged sender isn't authoritative for a fallback list,
@@ -280,24 +275,20 @@ describe('WorkflowConfigService — senders resolution', () => {
   });
 
   it('getEffective surfaces the org rows + the flagged isDefault as the default key', async () => {
-    const { service } = make(ENV, undefined, [
+    const { service } = await make(ENV, undefined, [
       {
-        id: 's1',
         organizationId: ORG,
         senderKey: 'sales',
         email: 'sales@acme.test',
         label: 'Sales',
         isDefault: false,
-        __seq: 1,
       },
       {
-        id: 's2',
         organizationId: ORG,
         senderKey: 'ceo',
         email: 'ceo@acme.test',
         label: null,
         isDefault: true,
-        __seq: 2,
       },
     ]);
     const eff = await service.getEffective(ORG);
@@ -310,22 +301,20 @@ describe('WorkflowConfigService — senders resolution', () => {
   });
 
   it('an explicit org_config.defaultSender wins over a DEFAULT_SENDERS flag (no org rows)', async () => {
-    const { service } = make(ENV, { defaultSender: 'hanna' }); // no org_senders
+    const { service } = await make(ENV, { defaultSender: 'hanna' }); // no org_senders
     const eff = await service.getEffective(ORG);
     expect(eff.senders).toEqual(DEFAULT_SENDERS);
     expect(eff.defaultSender).toBe('hanna');
   });
 
   it('getAutomation carries the resolved senders, the default sender EMAIL, and the calendar', async () => {
-    const { service } = make(ENV, { salesCalendarId: 'cal-org-1' }, [
+    const { service } = await make(ENV, { salesCalendarId: 'cal-org-1' }, [
       {
-        id: 's1',
         organizationId: ORG,
         senderKey: 'ceo',
         email: 'ceo@acme.test',
         label: null,
         isDefault: true,
-        __seq: 1,
       },
     ]);
     const auto = await service.getAutomation(ORG);
@@ -346,7 +335,7 @@ describe('WorkflowConfigService — senders resolution', () => {
   });
 
   it('getAutomation default email falls back to DEFAULT_SENDERS when the org has none', async () => {
-    const { service } = make(ENV); // no org_senders, no org_config
+    const { service } = await make(ENV); // no org_senders, no org_config
     const auto = await service.getAutomation(ORG);
     expect(auto.senders).toEqual(DEFAULT_SENDERS);
     // info is the first DEFAULT_SENDERS entry → its email is the resolved From.
@@ -356,7 +345,7 @@ describe('WorkflowConfigService — senders resolution', () => {
 
 describe('WorkflowConfigService — salesCalendarId resolution', () => {
   it('getEffective: org_config value wins over the env product default', async () => {
-    const { service } = make(
+    const { service } = await make(
       { ...ENV, SALES_CALENDAR_ID: 'env-cal' },
       { salesCalendarId: 'org-cal' },
     );
@@ -364,21 +353,21 @@ describe('WorkflowConfigService — salesCalendarId resolution', () => {
   });
 
   it('getEffective: falls back to the env SALES_CALENDAR_ID when org_config is unset', async () => {
-    const { service } = make({ ...ENV, SALES_CALENDAR_ID: 'env-cal' });
+    const { service } = await make({ ...ENV, SALES_CALENDAR_ID: 'env-cal' });
     expect((await service.getEffective(ORG)).salesCalendarId).toBe('env-cal');
   });
 
   it('getEffective: null when neither org_config nor env is set', async () => {
-    const { service } = make(ENV); // no SALES_CALENDAR_ID env
+    const { service } = await make(ENV); // no SALES_CALENDAR_ID env
     expect((await service.getEffective(ORG)).salesCalendarId).toBeNull();
   });
 
   it('update: sets the per-org salesCalendarId, then null clears it back to env', async () => {
-    const { service, orgConfig } = make({ ...ENV, SALES_CALENDAR_ID: 'env-cal' });
+    const { service } = await make({ ...ENV, SALES_CALENDAR_ID: 'env-cal' });
     let eff = await service.update({ salesCalendarId: 'org-cal' }, ORG);
     expect(eff.salesCalendarId).toBe('org-cal');
     // It is a PER-ORG pref — lands on org_config, not the global singleton.
-    expect(orgConfig.rows).toHaveLength(1);
+    expect(await rowsOf(schema.orgConfig)).toHaveLength(1);
 
     eff = await service.update({ salesCalendarId: null }, ORG);
     // Cleared → falls back to the env product default.
@@ -388,7 +377,7 @@ describe('WorkflowConfigService — salesCalendarId resolution', () => {
 
 describe('WorkflowConfigService — sales timezones (raw per-org overrides)', () => {
   it('getEffective: surfaces stored zones verbatim; null when unset', async () => {
-    const set = make(ENV, {
+    const set = await make(ENV, {
       salesTimeZone: 'America/New_York',
       salesSecondaryTimeZone: 'Asia/Bangkok',
     });
@@ -396,14 +385,15 @@ describe('WorkflowConfigService — sales timezones (raw per-org overrides)', ()
     expect(eff.salesTimeZone).toBe('America/New_York');
     expect(eff.salesSecondaryTimeZone).toBe('Asia/Bangkok');
 
-    const unset = make(ENV);
-    const effUnset = await unset.service.getEffective(ORG);
+    // A different org with no stored prefs resolves both zones to null.
+    const FRESH = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
+    const effUnset = await set.service.getEffective(FRESH);
     expect(effUnset.salesTimeZone).toBeNull();
     expect(effUnset.salesSecondaryTimeZone).toBeNull();
   });
 
   it('update: sets both per-org zones, then null clears them back to the default', async () => {
-    const { service, orgConfig } = make(ENV);
+    const { service } = await make(ENV);
     let eff = await service.update(
       { salesTimeZone: 'America/New_York', salesSecondaryTimeZone: 'Asia/Bangkok' },
       ORG,
@@ -411,7 +401,7 @@ describe('WorkflowConfigService — sales timezones (raw per-org overrides)', ()
     expect(eff.salesTimeZone).toBe('America/New_York');
     expect(eff.salesSecondaryTimeZone).toBe('Asia/Bangkok');
     // Per-org prefs — land on org_config, not the global singleton.
-    expect(orgConfig.rows).toHaveLength(1);
+    expect(await rowsOf(schema.orgConfig)).toHaveLength(1);
 
     eff = await service.update(
       { salesTimeZone: null, salesSecondaryTimeZone: null },
@@ -426,43 +416,43 @@ describe('WorkflowConfigService.getLeadStats', () => {
   const ORG = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
   const OTHER = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
+  // Prospects require a NOT NULL campaign_id; FK enforcement is off in tests, so any
+  // uuid satisfies the column without seeding a campaigns row.
+  const CAMPAIGN = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
+
   // Seed leads/prospects/suppressions across two orgs; the count must be confined to
   // ORG (mirrors how the list endpoints scope via tenantScope/organizationId).
-  function makeStats() {
-    const leads = new FakeTable([
-      { id: 'l1', organizationId: ORG, email: 'a@x.com' },
-      { id: 'l2', organizationId: ORG, email: 'b@x.com' },
-      { id: 'l3', organizationId: OTHER, email: 'c@x.com' }, // other org — excluded
+  async function makeStats() {
+    await seed(schema.leads, [
+      { organizationId: ORG, email: 'a@x.com' },
+      { organizationId: ORG, email: 'b@x.com' },
+      { organizationId: OTHER, email: 'c@x.com' }, // other org — excluded
     ]);
-    const prospects = new FakeTable([
-      { id: 'p1', organizationId: ORG, email: 'd@x.com' },
-      { id: 'p2', organizationId: ORG, email: 'e@x.com' },
-      { id: 'p3', organizationId: ORG, email: 'f@x.com' },
+    await seed(schema.prospects, [
+      { organizationId: ORG, campaignId: CAMPAIGN, email: 'd@x.com' },
+      { organizationId: ORG, campaignId: CAMPAIGN, email: 'e@x.com' },
+      { organizationId: ORG, campaignId: CAMPAIGN, email: 'f@x.com' },
     ]);
-    const suppressions = new FakeTable([
-      { id: 's1', organizationId: ORG, email: 'g@x.com' },
-      { id: 's2', organizationId: OTHER, email: 'h@x.com' }, // other org — excluded
+    await seed(schema.suppressions, [
+      { organizationId: ORG, email: 'g@x.com' },
+      { organizationId: OTHER, email: 'h@x.com' }, // other org — excluded
     ]);
-    const workflowConfig = new FakeTable([]);
-    const { db } = makeFakeDb(
-      new Map<unknown, FakeTable>([
-        [schema.leads, leads],
-        [schema.prospects, prospects],
-        [schema.suppressions, suppressions],
-        [schema.workflowConfig, workflowConfig],
-      ]),
+    const db = getDb();
+    return new WorkflowConfigService(
+      db,
+      makeConfig(ENV),
+      new SendersService(db, fakeGoogleAccounts()),
     );
-    return new WorkflowConfigService(db, makeConfig(ENV), new SendersService(db));
   }
 
   it('counts leads/prospects/suppressions scoped to the org', async () => {
-    const service = makeStats();
+    const service = await makeStats();
     const stats = await service.getLeadStats(ORG);
     expect(stats).toEqual({ leads: 2, prospects: 3, suppressed: 1 });
   });
 
   it('returns zeros for an org with no rows', async () => {
-    const service = makeStats();
+    const service = await makeStats();
     const stats = await service.getLeadStats(
       'cccccccc-cccc-cccc-cccc-cccccccccccc',
     );
@@ -472,20 +462,20 @@ describe('WorkflowConfigService.getLeadStats', () => {
 
 describe('WorkflowConfigService — update (singleton upsert)', () => {
   it('creates the singleton when none exists and applies the override', async () => {
-    const { service, workflowConfig } = make(ENV);
+    const { service } = await make(ENV);
     const eff = await service.update({ webhooks: { aim: 'https://put/aim' } }, ORG);
-    expect(workflowConfig.rows).toHaveLength(1);
+    expect(await rowsOf(schema.workflowConfig)).toHaveLength(1);
     expect(eff.webhooks.aim).toEqual({ value: 'https://put/aim', overridden: true });
   });
 
   it('clears an override back to env when null is sent', async () => {
-    const { service } = make(ENV, { aimWebhookUrl: 'https://stored/aim' });
+    const { service } = await make(ENV, { aimWebhookUrl: 'https://stored/aim' });
     const eff = await service.update({ webhooks: { aim: null } }, ORG);
     expect(eff.webhooks.aim).toEqual({ value: 'https://env/aim', overridden: false });
   });
 
   it('leaves omitted fields unchanged', async () => {
-    const { service } = make(ENV, {
+    const { service } = await make(ENV, {
       aimWebhookUrl: 'https://stored/aim',
       n8nApiUrl: 'https://stored-n8n.test',
     });
@@ -497,10 +487,10 @@ describe('WorkflowConfigService — update (singleton upsert)', () => {
   });
 
   it('does not create a second row on a subsequent update', async () => {
-    const { service, workflowConfig } = make(ENV);
+    const { service } = await make(ENV);
     await service.update({ followupOffsetDays: 2 }, ORG);
     await service.update({ finalPushOffsetDays: 4 }, ORG);
-    expect(workflowConfig.rows).toHaveLength(1);
+    expect(await rowsOf(schema.workflowConfig)).toHaveLength(1);
     const eff = await service.getEffective(ORG);
     expect(eff.followupOffsetDays).toBe(2);
     expect(eff.finalPushOffsetDays).toBe(4);
@@ -509,7 +499,7 @@ describe('WorkflowConfigService — update (singleton upsert)', () => {
 
 describe('WorkflowConfigService.rotateIngestToken', () => {
   it('returns a non-empty token and stores its SHA-256 hash (the guard would accept it)', async () => {
-    const { service } = make(ENV);
+    const { service } = await make(ENV);
     const { token, setAt } = await service.rotateIngestToken();
 
     expect(typeof token).toBe('string');
@@ -530,7 +520,7 @@ describe('WorkflowConfigService.rotateIngestToken', () => {
   });
 
   it('mints a different token each rotation (latest hash wins)', async () => {
-    const { service } = make(ENV);
+    const { service } = await make(ENV);
     const a = await service.rotateIngestToken();
     const b = await service.rotateIngestToken();
     expect(a.token).not.toBe(b.token);
@@ -542,7 +532,7 @@ describe('WorkflowConfigService.rotateIngestToken', () => {
 
 describe('WorkflowConfigService.clearIngestToken', () => {
   it('nulls the stored hash, reverting to the env-token fallback', async () => {
-    const { service } = make(ENV);
+    const { service } = await make(ENV);
     await service.rotateIngestToken();
     expect(await service.getIngestTokenHash()).not.toBeNull();
 
@@ -568,7 +558,7 @@ describe('WorkflowConfigService.testN8nConnection', () => {
       throw new Error('fetch should not be called when unconfigured');
     }) as unknown as typeof fetch;
 
-    const { service } = make({}); // no N8N_API_URL / N8N_API_KEY
+    const { service } = await make({}); // no N8N_API_URL / N8N_API_KEY
     const res = await service.testN8nConnection();
     expect(res).toEqual({
       ok: false,
@@ -586,7 +576,7 @@ describe('WorkflowConfigService.testN8nConnection', () => {
       json: async () => ({ data: [{ id: 'wf1' }] }),
     }) as unknown as typeof fetch;
 
-    const { service } = make({ N8N_API_URL: 'https://n8n.test', N8N_API_KEY: 'k' });
+    const { service } = await make({ N8N_API_URL: 'https://n8n.test', N8N_API_KEY: 'k' });
     const res = await service.testN8nConnection();
     expect(res).toEqual({
       ok: true,
@@ -610,7 +600,7 @@ describe('WorkflowConfigService.testN8nConnection', () => {
       json: async () => ({}),
     }) as unknown as typeof fetch;
 
-    const { service } = make({ N8N_API_URL: 'https://n8n.test', N8N_API_KEY: 'k' });
+    const { service } = await make({ N8N_API_URL: 'https://n8n.test', N8N_API_KEY: 'k' });
     const res = await service.testN8nConnection();
     expect(res.ok).toBe(false);
     expect(res.configured).toBe(true);
@@ -623,7 +613,7 @@ describe('WorkflowConfigService.testN8nConnection', () => {
       .fn()
       .mockRejectedValue(new Error('ECONNREFUSED')) as unknown as typeof fetch;
 
-    const { service } = make({ N8N_API_URL: 'https://n8n.test', N8N_API_KEY: 'k' });
+    const { service } = await make({ N8N_API_URL: 'https://n8n.test', N8N_API_KEY: 'k' });
     const res = await service.testN8nConnection();
     expect(res.ok).toBe(false);
     expect(res.configured).toBe(true);

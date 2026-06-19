@@ -145,8 +145,10 @@ export class WorkflowConfigController {
     return after;
   }
 
-  // The caller org's RESOLVED sender list (its own org_senders rows, or the product
-  // DEFAULT_SENDERS when it has none). Read-only → not audited.
+  // The caller org's sender list for the AIM "Gmail" picker: the resolved senders (its
+  // own org_senders rows, or the product DEFAULT_SENDERS) filtered to those whose Gmail
+  // account is actually CONNECTED, so a disconnected identity never appears as a choice.
+  // Read-only → not audited.
   @RequirePermissions('admin:config')
   @Get('arsenal/config/senders')
   listSenders(@OrgId() orgId: string): Promise<OrgSenderDto[]> {

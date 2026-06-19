@@ -2,14 +2,24 @@ import type { ConfigService } from '@nestjs/config';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { schema } from '@evertrust/db';
 import { MeetingsService } from '../src/meetings/meetings.service';
-import { FakeTable, makeFakeDb } from './fake-db';
+import { getDb, rowsOf, seed } from './real-db';
 
 const ORG = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+// Real UUIDs (the real `uuid` PK rejects 'm1'/'c1'); reused where a test asserts
+// on the id or passes it as a campaign reference.
+const M1 = 'a1111111-1111-1111-1111-111111111111';
+const M2 = 'a2222222-2222-2222-2222-222222222222';
+const C1 = 'c1111111-1111-1111-1111-111111111111';
+const NICHE_C = 'cccccccc-1111-1111-1111-cccccccccccc';
+// An absent-but-valid uuid for "unknown meeting" lookups.
+const ABSENT = 'f9999999-9999-9999-9999-999999999999';
 
-function svc() {
-  const meetings = new FakeTable([
+async function svc() {
+  // m1 newer (2026-06-03) than m2 (2026-05-28); list() ORDER BY created_at DESC
+  // → [m1, m2]. Explicit createdAt keeps that order deterministic.
+  await seed(schema.meetings, [
     {
-      id: 'm1',
+      id: M1,
       organizationId: ORG,
       sessionId: 's1',
       clientCompany: 'Kodeca',
@@ -18,17 +28,16 @@ function svc() {
       clientEmail: 'vic@kodeca.de',
       persona: 'Alex Hormozi',
       score: 65,
-      campaignId: 'c1',
+      campaignId: C1,
       matchMethod: 'email',
       analysis: { overall_summary: 'x' },
       transcript: '[00:00] Hanna: hello\n[00:05] Vic: hi',
       docUrl: 'https://docs.google.com/document/d/DOC1/edit',
       meetingDate: '2026-06-03',
       createdAt: new Date('2026-06-03T00:00:00Z'),
-      __seq: 2,
     },
     {
-      id: 'm2',
+      id: M2,
       organizationId: ORG,
       sessionId: 's2',
       clientCompany: 'Rhein-Main Logistik',
@@ -42,70 +51,72 @@ function svc() {
       analysis: {},
       meetingDate: '2026-05-28',
       createdAt: new Date('2026-05-28T00:00:00Z'),
-      __seq: 1,
     },
   ]);
-  const campaigns = new FakeTable([
-    { id: 'c1', organizationId: ORG, name: 'LED Retrofit Berlin 2026' },
-  ]);
-  const personas = new FakeTable([
+  // campaigns has NOT-NULL columns with no default (nicheId/country/region/
+  // project/gmailLabel/whatsappNumber); FK is off so nicheId need not resolve.
+  await seed(schema.campaigns, [
     {
-      id: 'p1',
+      id: C1,
+      organizationId: ORG,
+      name: 'LED Retrofit Berlin 2026',
+      nicheId: NICHE_C,
+      country: 'DE',
+      region: 'Berlin',
+      project: 'LED',
+      gmailLabel: 'LED',
+      whatsappNumber: '+490000000',
+    },
+  ]);
+  await seed(schema.personas, [
+    {
       organizationId: ORG,
       name: 'Alex Hormozi',
       systemPrompt: 'Coach.',
       createdAt: new Date('2026-01-01T00:00:00Z'),
-      __seq: 1,
     },
   ]);
-  const { db } = makeFakeDb(
-    new Map<unknown, FakeTable>([
-      [schema.meetings, meetings],
-      [schema.campaigns, campaigns],
-      [schema.personas, personas],
-    ]),
-  );
   const config = {
     get: (k: string) => (k === 'N8N_API_URL' ? 'https://n8n.test' : ''),
   } as unknown as ConfigService;
-  return { service: new MeetingsService(db, config), meetings };
+  return { service: new MeetingsService(getDb(), config) };
 }
 
 describe('MeetingsService.list', () => {
   it('returns all meetings (newest first) with the campaign name joined', async () => {
-    const { service } = svc();
+    const { service } = await svc();
     const r = await service.list(ORG);
-    expect(r.map((x) => x.id)).toEqual(['m1', 'm2']);
+    expect(r.map((x) => x.id)).toEqual([M1, M2]);
     expect(r[0]!.campaignName).toBe('LED Retrofit Berlin 2026');
     expect(r[1]!.campaignName).toBeNull();
   });
 
   it('filters to Unattributed', async () => {
-    const { service } = svc();
+    const { service } = await svc();
     const r = await service.list(ORG, { campaignId: 'none' });
-    expect(r.map((x) => x.id)).toEqual(['m2']);
+    expect(r.map((x) => x.id)).toEqual([M2]);
   });
 
   it('filters by campaign and by search', async () => {
-    const { service } = svc();
-    expect((await service.list(ORG, { campaignId: 'c1' })).map((x) => x.id)).toEqual(['m1']);
-    expect((await service.list(ORG, { search: 'rhein' })).map((x) => x.id)).toEqual(['m2']);
-    expect((await service.list(ORG, { ae: 'Hanna' })).map((x) => x.id)).toEqual(['m1']);
+    const { service } = await svc();
+    expect((await service.list(ORG, { campaignId: C1 })).map((x) => x.id)).toEqual([M1]);
+    expect((await service.list(ORG, { search: 'rhein' })).map((x) => x.id)).toEqual([M2]);
+    expect((await service.list(ORG, { ae: 'Hanna' })).map((x) => x.id)).toEqual([M1]);
   });
 });
 
 describe('MeetingsService.link', () => {
   it('links a meeting to a campaign (manual) and returns the name', async () => {
-    const { service } = svc();
-    const m = await service.link(ORG, 'm2', 'c1');
-    expect(m.campaignId).toBe('c1');
+    const { service } = await svc();
+    const m = await service.link(ORG, M2, C1);
+    expect(m.campaignId).toBe(C1);
     expect(m.matchMethod).toBe('manual');
     expect(m.campaignName).toBe('LED Retrofit Berlin 2026');
   });
 
   it('404s for an unknown meeting', async () => {
-    const { service } = svc();
-    await expect(service.link(ORG, 'nope', 'c1')).rejects.toBeInstanceOf(
+    const { service } = await svc();
+    await expect(service.link(ORG, ABSENT, C1)).rejects.toBeInstanceOf(
       NotFoundException,
     );
   });
@@ -118,7 +129,7 @@ describe('MeetingsService.analyze', () => {
   });
 
   it('runs the persona analysis (via the n8n workflow) and stores it', async () => {
-    const { service } = svc();
+    const { service } = await svc();
     let postedTo = '';
     let body: unknown = null;
     global.fetch = (async (url: string, init: { body: string }) => {
@@ -134,7 +145,7 @@ describe('MeetingsService.analyze', () => {
       };
     }) as unknown as typeof fetch;
 
-    const m = await service.analyze(ORG, 'm1', 'Kanye West');
+    const m = await service.analyze(ORG, M1, 'Kanye West');
     expect(postedTo).toBe('https://n8n.test/webhook/erp-sales-analyze');
     expect(body).toMatchObject({ persona: 'Kanye West' });
     expect(m.persona).toBe('Kanye West');
@@ -143,16 +154,16 @@ describe('MeetingsService.analyze', () => {
   });
 
   it('rejects when the meeting has no stored transcript', async () => {
-    const { service } = svc();
-    await expect(service.analyze(ORG, 'm2', 'Alex Hormozi')).rejects.toBeInstanceOf(
+    const { service } = await svc();
+    await expect(service.analyze(ORG, M2, 'Alex Hormozi')).rejects.toBeInstanceOf(
       BadRequestException,
     );
   });
 
   it('404s for an unknown meeting', async () => {
-    const { service } = svc();
+    const { service } = await svc();
     await expect(
-      service.analyze(ORG, 'nope', 'Alex Hormozi'),
+      service.analyze(ORG, ABSENT, 'Alex Hormozi'),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 });
@@ -164,7 +175,7 @@ describe('MeetingsService.sync (from Drive folder)', () => {
   });
 
   it('mirrors the folder: updates matched docs, prunes meetings whose doc is gone', async () => {
-    const { service, meetings } = svc();
+    const { service } = await svc();
     let calledUrl = '';
     global.fetch = (async (url: string) => {
       calledUrl = url;
@@ -195,27 +206,26 @@ describe('MeetingsService.sync (from Drive folder)', () => {
     expect(r).toMatchObject({ configured: true, scanned: 1, imported: 0, updated: 1, pruned: 1 });
 
     // m1 (docUrl → DOC1) updated to the folder doc; m2 (no docUrl) pruned.
-    const m1 = meetings.rows.find((m) => m.id === 'm1')!;
+    const rows = await rowsOf(schema.meetings);
+    const m1 = rows.find((m) => m.id === M1)!;
     expect(m1.score).toBe(68);
     expect(m1.clientCompany).toBe('The Codest');
-    expect(meetings.rows.find((m) => m.id === 'm2')).toBeUndefined();
+    expect(rows.find((m) => m.id === M2)).toBeUndefined();
   });
 
   it('reports not-configured when N8N_API_URL is unset', async () => {
-    const meetings = new FakeTable([]);
-    const { db } = makeFakeDb(new Map<unknown, FakeTable>([[schema.meetings, meetings]]));
     const config = { get: () => '' } as unknown as ConfigService;
-    const r = await new MeetingsService(db, config).sync(ORG);
+    const r = await new MeetingsService(getDb(), config).sync(ORG);
     expect(r.configured).toBe(false);
   });
 });
 
 describe('MeetingsService.remove', () => {
   it('deletes a meeting and 404s on an unknown one', async () => {
-    const { service } = svc();
-    const r = await service.remove(ORG, 'm1');
-    expect(r.id).toBe('m1');
-    await expect(service.remove(ORG, 'nope')).rejects.toBeInstanceOf(
+    const { service } = await svc();
+    const r = await service.remove(ORG, M1);
+    expect(r.id).toBe(M1);
+    await expect(service.remove(ORG, ABSENT)).rejects.toBeInstanceOf(
       NotFoundException,
     );
   });

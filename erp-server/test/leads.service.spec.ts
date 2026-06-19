@@ -7,36 +7,39 @@ import {
 } from '../src/leads/leads.service';
 import { NichesService } from '../src/niches/niches.service';
 import type { AppConfigService } from '../src/config/app-config.service';
-import { FakeTable, makeFakeDb } from './fake-db';
+import { getDb, rowsOf, seed as seedRows } from './real-db';
 
 const ORG_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const C_A = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
 const USER = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
+const NICHE_C = 'cccccccc-1111-1111-1111-cccccccccccc';
 
 // n8n env blank → backfill/provision/run-pipeline report not-configured.
 const config = { get: () => '' } as unknown as AppConfigService;
 
-function seed() {
-  const leads = new FakeTable([]);
-  const campaigns = new FakeTable([
-    { id: C_A, organizationId: ORG_A, project: 'P1', driveFolderId: 'F1', __seq: 1 },
+async function seed() {
+  // One campaign for the org. The fake only set project/driveFolderId; the real
+  // campaigns table has NOT-NULL columns with no default (nicheId/country/region/
+  // gmailLabel/whatsappNumber) that must be satisfied. FK is off, so nicheId need
+  // not point at a real niche.
+  await seedRows(schema.campaigns, [
+    {
+      id: C_A,
+      organizationId: ORG_A,
+      project: 'P1',
+      driveFolderId: 'F1',
+      nicheId: NICHE_C,
+      country: 'DE',
+      region: 'Berlin',
+      gmailLabel: 'P1',
+      whatsappNumber: '+490000000',
+    },
   ]);
-  const customers = new FakeTable([]);
-  const niches = new FakeTable([]);
-  const { db } = makeFakeDb(
-    new Map<unknown, FakeTable>([
-      [schema.leads, leads],
-      [schema.campaigns, campaigns],
-      [schema.customers, customers],
-      [schema.niches, niches],
-    ]),
-  );
+  const db = getDb();
   // LeadsService resolves free-text niche → nicheId via NichesService (find-or-create).
   const nichesService = new NichesService(db);
   return {
     service: new LeadsService(db, config, nichesService),
-    leads,
-    customers,
   };
 }
 
@@ -105,7 +108,7 @@ describe('extractLeadRows / stageForRow (n8n hot_leads mapping)', () => {
 
 describe('LeadsService — manual CRUD + convert', () => {
   it('creates a manual lead (INTERESTED, source MANUAL) and rejects a dup email', async () => {
-    const { service } = seed();
+    const { service } = await seed();
     const lead = await service.create(ORG_A, USER, {
       email: 'New@Lead.com',
       companyName: 'NewCo',
@@ -121,7 +124,7 @@ describe('LeadsService — manual CRUD + convert', () => {
   });
 
   it('filters list by stage', async () => {
-    const { service } = seed();
+    const { service } = await seed();
     await service.create(ORG_A, USER, { email: 'a@x.com' });
     await service.create(ORG_A, USER, {
       email: 'b@x.com',
@@ -132,7 +135,7 @@ describe('LeadsService — manual CRUD + convert', () => {
   });
 
   it('converts a lead → creates + links an ERP customer, then 409 on re-convert', async () => {
-    const { service, customers } = seed();
+    const { service } = await seed();
     const lead = await service.create(ORG_A, USER, {
       email: 'win@deal.com',
       companyName: 'DealCo',
@@ -141,8 +144,9 @@ describe('LeadsService — manual CRUD + convert', () => {
     const converted = await service.convert(ORG_A, lead.id);
     expect(converted.stage).toBe('CUSTOMER');
     expect(converted.customerId).toBeTruthy();
-    expect(customers.rows).toHaveLength(1);
-    expect(customers.rows[0]).toMatchObject({
+    const customerRows = await rowsOf(schema.customers);
+    expect(customerRows).toHaveLength(1);
+    expect(customerRows[0]).toMatchObject({
       name: 'DealCo',
       contact: 'win@deal.com',
       niches: ['Solar'],
@@ -156,7 +160,7 @@ describe('LeadsService — manual CRUD + convert', () => {
 
 describe('LeadsService — clearLeads (test-data reset)', () => {
   it('deletes all org leads and returns the count', async () => {
-    const { service } = seed();
+    const { service } = await seed();
     await service.create(ORG_A, USER, { email: 'a@x.com' });
     await service.create(ORG_A, USER, { email: 'b@x.com' });
     expect(await service.clearLeads(ORG_A)).toBe(2);
@@ -166,7 +170,7 @@ describe('LeadsService — clearLeads (test-data reset)', () => {
 
 describe('LeadsService — backfill/provision gating', () => {
   it('reports not-configured when the n8n API is blank', async () => {
-    const { service } = seed();
+    const { service } = await seed();
     expect(await service.backfill(ORG_A)).toEqual({
       configured: false,
       scanned: 0,

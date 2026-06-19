@@ -439,3 +439,47 @@ event data was already correct UTC.
   Full in-browser grid render not reproducible here (needs live Google OAuth calendar data).
 - KNOWN/OUT-OF-SCOPE: createEvent still takes dto.timeZone straight through (shared DTO default
   'Europe/Berlin'); pre-existing, booking UI not wired yet — left as-is per spec.
+
+---
+
+## Migrate erp-server tests off fake-db onto a real Postgres (Testcontainers)
+
+Goal: delete `erp-server/test/fake-db.ts`; run all 22 affected suites (390 tests) against a
+real `pgvector/pgvector:pg18` Postgres spun up per `jest` run via Testcontainers/Docker.
+
+Design:
+- One container per jest invocation (`globalSetup`), migrations via drizzle `migrate()`,
+  torn down in `globalTeardown`. `maxWorkers: 1` (shared DB → serialize). URL passed
+  setup→workers via temp file. Harness owns its OWN connection (not the prod `db` singleton).
+- FK enforcement OFF on the test connection (`session_replication_role = replica`) so specs
+  keep seeding child rows without parent graphs — parity with the fake. Unique/PK/NOT NULL/
+  type checks stay ON. `resetDb()` TRUNCATEs all public tables in a global `beforeEach`.
+- New `test/real-db.ts`: getDb/resetDb/seed + re-homed makeWorkflowConfig/fakeGoogleAccounts.
+
+Tasks:
+- [x] devDeps: testcontainers + @testcontainers/postgresql + postgres
+- [x] test/global-setup.ts, global-teardown.ts, real-db.ts, setup-after-env.ts
+- [x] jest.config.js: globalSetup/Teardown/setupFilesAfterEnv/maxWorkers:1/testTimeout
+- [x] Prove on senders + workflow-config suites
+- [x] Migrate remaining 20 suites (batched subagents), each to green
+- [x] Delete fake-db.ts; grep clean; full @evertrust/api suite + typecheck green
+
+### Review (done)
+- Infra: one `pgvector/pgvector:pg18` Testcontainer per `jest` run; migrations applied via
+  drizzle `migrate()`; URL passed setup→workers via `process.env.TEST_DATABASE_URL`
+  (per-process-tree → concurrent runs don't collide); `maxWorkers:1`; global `beforeEach`
+  truncates every table. Test connection sets `session_replication_role = replica` (FK
+  triggers off) so specs seed child rows without parent graphs; UNIQUE/PK/NOT NULL/type
+  checks stay real. Harness: `test/real-db.ts` (getDb/resetDb/seed/rowsOf + makeWorkflowConfig/
+  fakeGoogleAccounts).
+- All 22 suites migrated; `test/fake-db.ts` deleted. **Full suite: 39 suites / 392 tests green;
+  `tsc --noEmit` clean.**
+- Per-spec gotchas the real engine surfaced: drop fake `id:'s1'`/`__seq`; satisfy NOT NULL
+  (e.g. prospects.campaignId — any uuid, FK off); a test that called a seed-helper twice for
+  isolated state now uses distinct org ids; `ne(id)`/count/order now run natively (dropped two
+  hand-built DbClient stubs).
+- **SRC BUG fixed** (masked by the fake): `campaigns.service.create()` ran `db.update().set({})`
+  on a failed AIM deploy → real Postgres "No values to set" (would 500 in prod). Guarded the
+  empty patch; the campaign now stays DRAFT + surfaces deployError. 2 tests restored to intent.
+- NOTE: `pnpm test` now REQUIRES Docker (Testcontainers). pnpm-workspace.yaml allowBuilds:
+  ssh2/cpu-features/protobufjs set false (testcontainers optional native transports, unused).

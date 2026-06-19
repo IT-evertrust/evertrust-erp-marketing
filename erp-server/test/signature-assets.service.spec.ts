@@ -9,12 +9,12 @@ import {
 } from '../src/arsenal/signature-assets.service';
 import { SignatureImageController } from '../src/arsenal/signature-image.controller';
 import type { AppConfigService } from '../src/config/app-config.service';
-import { FakeTable, makeFakeDb, makeWorkflowConfig } from './fake-db';
+import { getDb, makeWorkflowConfig, rowsOf, seed } from './real-db';
 
 // SignatureAssetsService stores a per-org signature image two ways — an uploaded file
 // persisted as a signature_assets row (bytes base64 in TEXT) with org_config.
 // signatureImageUrl pointed at the public serve URL, or a normalized link stored
-// directly — and clears the pref. These tests drive the REAL service over the fake db
+// directly — and clears the pref. These tests drive the REAL service over the real db
 // + a REAL WorkflowConfigService so the signatureImageUrl write genuinely lands on
 // org_config and round-trips through getEffective(). The public serve route is
 // exercised through SignatureImageController against a fake Response.
@@ -26,24 +26,15 @@ function makeConfig(values: Record<string, string> = {}): AppConfigService {
   return { get: (k: string) => values[k] ?? '' } as unknown as AppConfigService;
 }
 
-// Build the service + a real WorkflowConfigService over a shared fake db, plus the
-// public serve controller (same SignatureAssetsService instance). Returns the backing
-// tables so specs can assert on stored rows.
+// Build the service + a real WorkflowConfigService over the shared real db, plus the
+// public serve controller (same SignatureAssetsService instance). Tables start empty
+// (truncated per-test); specs read stored rows back via rowsOf(schema.signatureAssets).
 function make() {
-  const signatureAssets = new FakeTable([]);
-  const orgConfig = new FakeTable([]);
-  const workflowConfig = new FakeTable([]);
-  const { db } = makeFakeDb(
-    new Map<unknown, FakeTable>([
-      [schema.signatureAssets, signatureAssets],
-      [schema.orgConfig, orgConfig],
-      [schema.workflowConfig, workflowConfig],
-    ]),
-  );
+  const db = getDb();
   const wc: WorkflowConfigService = makeWorkflowConfig(db, makeConfig());
   const service = new SignatureAssetsService(db, wc);
   const controller = new SignatureImageController(service);
-  return { service, wc, controller, signatureAssets, orgConfig };
+  return { service, wc, controller };
 }
 
 // A 1x1 transparent PNG (real bytes) so MIME + base64 round-trips are meaningful.
@@ -81,12 +72,13 @@ function fakeRes() {
 
 describe('SignatureAssetsService.storeUpload', () => {
   it('persists a signature_assets row and sets org_config.signatureImageUrl to the absolute serve URL', async () => {
-    const { service, wc, signatureAssets } = make();
+    const { service, wc } = make();
     const { signatureImageUrl } = await service.storeUpload(ORG, upload(), BASE_URL);
 
     // One asset row, bytes stored as base64 of the original buffer, org-scoped.
-    expect(signatureAssets.rows).toHaveLength(1);
-    const row = signatureAssets.rows[0]!;
+    const assetRows = await rowsOf(schema.signatureAssets);
+    expect(assetRows).toHaveLength(1);
+    const row = assetRows[0]!;
     expect(row.organizationId).toBe(ORG);
     expect(row.mimeType).toBe('image/png');
     expect(row.dataBase64).toBe(PNG_BYTES.toString('base64'));
@@ -104,20 +96,20 @@ describe('SignatureAssetsService.storeUpload', () => {
   });
 
   it('rejects an oversize image (> MAX_SIGNATURE_BYTES) without writing a row', async () => {
-    const { service, signatureAssets } = make();
+    const { service } = make();
     const big = Buffer.alloc(MAX_SIGNATURE_BYTES + 1, 1);
     await expect(
       service.storeUpload(ORG, upload({ buffer: big, size: big.length }), BASE_URL),
     ).rejects.toThrow(/too large/i);
-    expect(signatureAssets.rows).toHaveLength(0);
+    expect(await rowsOf(schema.signatureAssets)).toHaveLength(0);
   });
 
   it('rejects a disallowed MIME type without writing a row', async () => {
-    const { service, signatureAssets } = make();
+    const { service } = make();
     await expect(
       service.storeUpload(ORG, upload({ mimetype: 'application/pdf' }), BASE_URL),
     ).rejects.toThrow(/Unsupported image type/i);
-    expect(signatureAssets.rows).toHaveLength(0);
+    expect(await rowsOf(schema.signatureAssets)).toHaveLength(0);
   });
 
   it('rejects an empty upload', async () => {
@@ -130,7 +122,7 @@ describe('SignatureAssetsService.storeUpload', () => {
 
 describe('SignatureAssetsService.setLink', () => {
   it('normalizes a Google Drive share link to its hotlinkable lh3 form and stores it (no asset row)', async () => {
-    const { service, wc, signatureAssets } = make();
+    const { service, wc } = make();
     const driveLink =
       'https://drive.google.com/file/d/1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUv/view?usp=sharing';
     const { signatureImageUrl } = await service.setLink(ORG, driveLink);
@@ -139,7 +131,7 @@ describe('SignatureAssetsService.setLink', () => {
       'https://lh3.googleusercontent.com/d/1A2b3C4d5E6f7G8h9I0jKlMnOpQrStUv',
     );
     // No asset row for a link.
-    expect(signatureAssets.rows).toHaveLength(0);
+    expect(await rowsOf(schema.signatureAssets)).toHaveLength(0);
     // Stored on the per-org config.
     const eff = await wc.getEffective(ORG);
     expect(eff.templates.signatureImageUrl).toBe(signatureImageUrl);
