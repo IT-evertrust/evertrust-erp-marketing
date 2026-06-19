@@ -11,8 +11,10 @@ import {
   useAiEngineConfig,
   useDisconnectGoogleAccount,
   useGoogleAccounts,
+  useLeadScraperConfig,
   useSetDefaultMailbox,
   useUpdateAiEngineConfig,
+  useUpdateLeadScraperConfig,
   useUpdateWorkflowConfig,
   useWorkflowConfig,
 } from '@/hooks/use-arsenal';
@@ -529,6 +531,135 @@ function AiEngineCard() {
 }
 
 // ============================================================================
+// Card — Lead scraper tuning
+// ============================================================================
+// Three numeric overrides for the lead-hunting agent (leadTarget, maxQueries,
+// minScore), resolved per org (org value ?? agent env default). A blank input
+// clears the override → null → the server default. Writes ride the dedicated
+// /arsenal/config/lead-scraper PUT (admin:config).
+function LeadScraperCard() {
+  const t = useTranslations('settings');
+  const config = useLeadScraperConfig();
+  const update = useUpdateLeadScraperConfig();
+  const data = config.data;
+
+  // Local form state, seeded from the GET. '' clears the override (→ env default).
+  const [leadTarget, setLeadTarget] = useState<string>('');
+  const [maxQueries, setMaxQueries] = useState<string>('');
+  const [minScore, setMinScore] = useState<string>('');
+
+  useEffect(() => {
+    if (!data) return;
+    setLeadTarget(data.leadTarget == null ? '' : String(data.leadTarget));
+    setMaxQueries(data.maxQueries == null ? '' : String(data.maxQueries));
+    setMinScore(data.minScore == null ? '' : String(data.minScore));
+  }, [data]);
+
+  // '' (or unparseable) → null clears the override; otherwise the integer value.
+  function toNullableInt(raw: string): number | null {
+    const trimmed = raw.trim();
+    if (trimmed === '') return null;
+    const n = Number.parseInt(trimmed, 10);
+    return Number.isNaN(n) ? null : n;
+  }
+
+  function handleSave() {
+    update.mutate(
+      {
+        leadTarget: toNullableInt(leadTarget),
+        maxQueries: toNullableInt(maxQueries),
+        minScore: toNullableInt(minScore),
+      },
+      {
+        onSuccess: () => toast.success(t('config.leadScraper.toastSaved')),
+        onError: (err) =>
+          toast.error(err.message || t('config.leadScraper.toastError')),
+      },
+    );
+  }
+
+  return (
+    <SettingsCard title={t('config.leadScraper.title')} className="max-w-[620px]">
+      {config.isLoading || !data ? (
+        <Skeleton className="h-32 w-full rounded-lg" />
+      ) : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="lead-target">
+                {t('config.leadScraper.leadTargetLabel')}
+              </Label>
+              <Input
+                id="lead-target"
+                type="number"
+                min={1}
+                max={1000}
+                inputMode="numeric"
+                autoComplete="off"
+                spellCheck={false}
+                value={leadTarget}
+                onChange={(e) => setLeadTarget(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t('config.leadScraper.leadTargetHint')}
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="max-queries">
+                {t('config.leadScraper.maxQueriesLabel')}
+              </Label>
+              <Input
+                id="max-queries"
+                type="number"
+                min={1}
+                max={1000}
+                inputMode="numeric"
+                autoComplete="off"
+                spellCheck={false}
+                value={maxQueries}
+                onChange={(e) => setMaxQueries(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t('config.leadScraper.maxQueriesHint')}
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="min-score">
+                {t('config.leadScraper.minScoreLabel')}
+              </Label>
+              <Input
+                id="min-score"
+                type="number"
+                min={0}
+                max={100}
+                inputMode="numeric"
+                autoComplete="off"
+                spellCheck={false}
+                value={minScore}
+                onChange={(e) => setMinScore(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t('config.leadScraper.minScoreHint')}
+              </p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            className="self-start"
+            onClick={handleSave}
+            disabled={update.isPending}
+          >
+            {update.isPending
+              ? t('config.leadScraper.saving')
+              : t('config.leadScraper.save')}
+          </Button>
+        </>
+      )}
+    </SettingsCard>
+  );
+}
+
+// ============================================================================
 // Card — Sales calendar timezone
 // ============================================================================
 // Per-org timezones for the Activate calendar (org_config.salesTimeZone /
@@ -628,6 +759,7 @@ export function ConfigurationSettings() {
       <GoogleWorkspaceCard />
       <OtherIntegrationsCard />
       <AiEngineCard />
+      <LeadScraperCard />
       <SalesCalendarCard />
     </div>
   );

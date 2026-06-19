@@ -18,6 +18,7 @@ import type { Request } from 'express';
 import type {
   AiEngineConfigDto,
   CalendarListResultDto,
+  LeadScraperConfigDto,
   LeadStatsDto,
   OrgSenderDto,
   RotateIngestTokenResultDto,
@@ -36,6 +37,7 @@ import {
 } from './signature-assets.service';
 import {
   UpdateAiEngineBodyDto,
+  UpdateLeadScraperBodyDto,
   UpdateWorkflowConfigBodyDto,
   UpsertOrgSenderBodyDto,
 } from './arsenal.dto';
@@ -142,6 +144,28 @@ export class WorkflowConfigController {
       action: 'UPDATE',
       after,
     });
+    return after;
+  }
+
+  // The caller org's Lead Scraper tuning (each null → the agent's env default).
+  // Read-only → not audited.
+  @RequirePermissions('admin:config')
+  @Get('arsenal/config/lead-scraper')
+  getLeadScraper(@OrgId() orgId: string): Promise<LeadScraperConfigDto> {
+    return this.workflowConfig.getLeadScraper(orgId);
+  }
+
+  // Apply a partial Lead Scraper update (a value sets it, null clears it to the agent
+  // default, an omitted field is unchanged) on the caller org's org_config row. Audited.
+  @RequirePermissions('admin:config')
+  @Put('arsenal/config/lead-scraper')
+  async updateLeadScraper(
+    @Body() body: UpdateLeadScraperBodyDto,
+    @OrgId() orgId: string,
+    @Req() req: Request,
+  ): Promise<LeadScraperConfigDto> {
+    const after = await this.workflowConfig.updateLeadScraper(orgId, body);
+    setAuditContext(req, { entity: 'org_config', action: 'UPDATE', after });
     return after;
   }
 

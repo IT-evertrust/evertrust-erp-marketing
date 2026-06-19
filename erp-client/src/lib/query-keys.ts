@@ -133,6 +133,8 @@ export const queryKeys = {
     leadStats: () => ['arsenal', 'lead-stats'] as const,
     // The org's resolved AI engine config (Configuration > AI engine card).
     aiEngine: () => ['arsenal', 'ai-engine'] as const,
+    // The org's resolved Lead Scraper tuning (Configuration > Lead scraper card).
+    leadScraper: () => ['arsenal', 'lead-scraper'] as const,
     // Phase 7+: live per-stage n8n execution status.
     executions: () => ['arsenal', 'executions'] as const,
     // Marketing report, scoped by period (day/week/month) + optional campaign.

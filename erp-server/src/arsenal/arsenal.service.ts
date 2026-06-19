@@ -208,10 +208,14 @@ export class ArsenalService {
       // agent in the dispatch body, so the AI Engine page drives which gateway/model
       // the Python agent uses, per tenant. The API key travels server-to-server only.
       const llm = await this.workflowConfig.resolveAgentLlm(orgId);
+      // Per-org Lead Scraper tuning (Configuration page → agent). Null fields are
+      // omitted so the agent keeps its own env default (request value ?? agent env).
+      const scraper = await this.workflowConfig.getLeadScraper(orgId);
       outcome = await this.fireAgent(agentUrl, stage, {
         campaignId,
         campaign: campaignName,
         llm,
+        scraper,
       });
     } else {
       const webhookUrl = await this.workflowConfig.getStageWebhook(stage);
@@ -516,6 +520,11 @@ export class ArsenalService {
       campaignId: string | null;
       campaign: string | null;
       llm: { baseUrl: string; model: string; apiKey: string };
+      scraper: {
+        leadTarget: number | null;
+        maxQueries: number | null;
+        minScore: number | null;
+      };
     },
   ): Promise<{ status: 'DISPATCHED' | 'FAILED'; detail: string }> {
     const url = baseUrl.replace(/\/+$/, '') + STAGE_AGENT_PATH[stage];
@@ -535,6 +544,11 @@ export class ArsenalService {
           llmBaseUrl: body.llm.baseUrl || undefined,
           model: body.llm.model || undefined,
           apiKey: body.llm.apiKey || undefined,
+          // Per-org Lead Scraper tuning (org_config). Null → omitted so the agent keeps
+          // its own env default (request value ?? agent env).
+          leadTarget: body.scraper.leadTarget ?? undefined,
+          maxQueries: body.scraper.maxQueries ?? undefined,
+          minScore: body.scraper.minScore ?? undefined,
         }),
         signal: controller.signal,
       });

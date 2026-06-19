@@ -200,6 +200,19 @@
       "toastSaved": "Configuration saved.",
       "toastError": "Could not save the AI engine config."
     },
+    "leadScraper": {
+      "title": "Lead scraper",
+      "leadTargetLabel": "Leads per run",
+      "leadTargetHint": "How many qualified leads one run aims to collect. Blank = server default.",
+      "maxQueriesLabel": "Search budget",
+      "maxQueriesHint": "Max searches per run — higher = wider coverage but slower. Blank = server default.",
+      "minScoreLabel": "Min quality score (0–100)",
+      "minScoreHint": "Drops leads scoring below this — higher = stricter. Blank = server default.",
+      "save": "Save",
+      "saving": "Saving…",
+      "toastSaved": "Configuration saved.",
+      "toastError": "Could not save the lead scraper config."
+    },
     "calendar": {
       "title": "Sales calendar timezone",
       "description": "The timezone the Activate calendar and free-slot business hours use. Leave blank for the product default.",

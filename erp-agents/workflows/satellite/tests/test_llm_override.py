@@ -3,7 +3,21 @@ different gateway/model per request, falling back to the agent's env default whe
 field is omitted (request value ?? env)."""
 from __future__ import annotations
 
-from satellite.settings import Settings, with_llm_override
+from satellite.settings import Settings, with_llm_override, with_scraper_override
+
+
+def test_scraper_override_applies_and_falls_back():
+    s = Settings()  # env defaults: lead_target=100, max_queries=240, min_keep_score=40
+    out = with_scraper_override(s, lead_target=20, max_queries=40, min_score=55)
+    assert out.lead_target == 20 and out.max_queries == 40 and out.min_keep_score == 55
+    # omitted fields keep the agent's env default (request value ?? env)
+    out2 = with_scraper_override(s, lead_target=15)
+    assert out2.lead_target == 15
+    assert out2.max_queries == s.max_queries and out2.min_keep_score == s.min_keep_score
+    # no overrides → same object
+    assert with_scraper_override(s) is s
+    # 0 is a real value (min_score=0), not treated as "unset"
+    assert with_scraper_override(s, min_score=0).min_keep_score == 0
 
 
 def test_override_applies_all_fields():

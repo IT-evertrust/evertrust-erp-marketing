@@ -11,9 +11,11 @@ import type {
   LeadStatsDto,
   OrgSenderDto,
   OutreachTone,
+  LeadScraperConfigDto,
   TemplateLanguage,
   TestN8nResultDto,
   UpdateAiEngineDto,
+  UpdateLeadScraperDto,
   UpdateWorkflowConfigDto,
   WorkflowConfigDto,
   WorkflowLeadsDto,
@@ -567,6 +569,34 @@ export class WorkflowConfigService {
       await this.persistOrg(orgId, set);
     }
     return this.getAiEngine(orgId);
+  }
+
+  // The caller org's Lead Scraper tuning (org_config.scrape_*), each null when unset.
+  // Null means the satellite agent uses its OWN env default at run time — the ERP never
+  // invents a value, it only forwards an explicit per-org override (or omits it).
+  async getLeadScraper(orgId: string | null): Promise<LeadScraperConfigDto> {
+    const orgRow = orgId ? await this.orgRow(orgId) : null;
+    return {
+      leadTarget: orgRow?.scrapeLeadTarget ?? null,
+      maxQueries: orgRow?.scrapeMaxQueries ?? null,
+      minScore: orgRow?.scrapeMinScore ?? null,
+    };
+  }
+
+  // Apply a partial Lead Scraper update for the caller's org: a value sets it, null
+  // clears it back to the agent default, an omitted field is unchanged.
+  async updateLeadScraper(
+    orgId: string,
+    patch: UpdateLeadScraperDto,
+  ): Promise<LeadScraperConfigDto> {
+    const set: Partial<typeof schema.orgConfig.$inferInsert> = {};
+    if ('leadTarget' in patch) set.scrapeLeadTarget = patch.leadTarget ?? null;
+    if ('maxQueries' in patch) set.scrapeMaxQueries = patch.maxQueries ?? null;
+    if ('minScore' in patch) set.scrapeMinScore = patch.minScore ?? null;
+    if (Object.keys(set).length > 0) {
+      await this.persistOrg(orgId, set);
+    }
+    return this.getLeadScraper(orgId);
   }
 
   // Set (or clear, with hash=null) the ingest-token SHA-256 hash + its set-at

@@ -23,6 +23,8 @@ import type {
   SetDefaultMailboxDto,
   AiEngineConfigDto,
   UpdateAiEngineDto,
+  LeadScraperConfigDto,
+  UpdateLeadScraperDto,
 } from '@evertrust/shared';
 import { ApiError, api, type UpsertOrgSenderBody } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
@@ -286,6 +288,29 @@ export function useUpdateAiEngineConfig() {
     mutationFn: (input) => api.arsenal.updateAiEngine(input),
     onSuccess: (saved) => {
       queryClient.setQueryData(queryKeys.arsenal.aiEngine(), saved);
+    },
+  });
+}
+
+// The org's resolved Lead Scraper tuning (leads per run, search budget, min score).
+// Backs the Configuration > Lead scraper card. Each field is null when unset → the
+// agent's env default.
+export function useLeadScraperConfig() {
+  return useQuery<LeadScraperConfigDto, ApiError>({
+    queryKey: queryKeys.arsenal.leadScraper(),
+    queryFn: ({ signal }) => api.arsenal.getLeadScraper(signal),
+    refetchOnWindowFocus: true,
+  });
+}
+
+// Partial-update the Lead Scraper config. Seeds the cache with the freshly-resolved
+// value so the form reflects the saved tuning immediately.
+export function useUpdateLeadScraperConfig() {
+  const queryClient = useQueryClient();
+  return useMutation<LeadScraperConfigDto, ApiError, UpdateLeadScraperDto>({
+    mutationFn: (input) => api.arsenal.updateLeadScraper(input),
+    onSuccess: (saved) => {
+      queryClient.setQueryData(queryKeys.arsenal.leadScraper(), saved);
     },
   });
 }

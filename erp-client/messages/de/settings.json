@@ -200,6 +200,19 @@
       "toastSaved": "Konfiguration gespeichert.",
       "toastError": "KI-Engine-Konfiguration konnte nicht gespeichert werden."
     },
+    "leadScraper": {
+      "title": "Lead-Scraper",
+      "leadTargetLabel": "Leads pro Lauf",
+      "leadTargetHint": "Wie viele qualifizierte Leads ein Lauf sammeln soll. Leer = Serverstandard.",
+      "maxQueriesLabel": "Suchbudget",
+      "maxQueriesHint": "Max. Suchanfragen pro Lauf — höher = mehr Abdeckung, aber langsamer. Leer = Serverstandard.",
+      "minScoreLabel": "Mindest-Qualitätswert (0–100)",
+      "minScoreHint": "Verwirft Leads unter diesem Wert — höher = strenger. Leer = Serverstandard.",
+      "save": "Speichern",
+      "saving": "Speichern…",
+      "toastSaved": "Konfiguration gespeichert.",
+      "toastError": "Lead-Scraper-Konfiguration konnte nicht gespeichert werden."
+    },
     "calendar": {
       "title": "Zeitzone des Vertriebskalenders",
       "description": "Die Zeitzone, die der Activate-Kalender und die Geschäftszeiten für freie Termine verwenden. Für den Produktstandard leer lassen.",

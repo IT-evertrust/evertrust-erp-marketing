@@ -926,6 +926,26 @@ export const UpdateAiEngineDto = z.object({
 });
 export type UpdateAiEngineDto = z.infer<typeof UpdateAiEngineDto>;
 
+// Per-org Lead Scraper tuning, resolved org value ?? agent env default (each null when
+// unset). Returned by GET /arsenal/config/lead-scraper. leadTarget = how many leads to
+// hunt; maxQueries = search budget (speed vs coverage); minScore = the tier-floor that
+// drops low-relevance leads (0..100). Bounds keep a single run sane.
+export const LeadScraperConfigDto = z.object({
+  leadTarget: z.number().int().nullable(),
+  maxQueries: z.number().int().nullable(),
+  minScore: z.number().int().nullable(),
+});
+export type LeadScraperConfigDto = z.infer<typeof LeadScraperConfigDto>;
+
+// Partial update: a value sets it, null clears back to the agent's env default, an
+// omitted field is unchanged.
+export const UpdateLeadScraperDto = z.object({
+  leadTarget: z.number().int().min(1).max(1000).nullable().optional(),
+  maxQueries: z.number().int().min(1).max(1000).nullable().optional(),
+  minScore: z.number().int().min(0).max(100).nullable().optional(),
+});
+export type UpdateLeadScraperDto = z.infer<typeof UpdateLeadScraperDto>;
+
 export const CreateCampaignDto = z.object({
   name: z.string().max(60).optional(),
   // The campaign's niche by DISPLAY name; the API find-or-creates the niche row

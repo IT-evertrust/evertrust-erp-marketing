@@ -81,6 +81,14 @@ export const orgConfig = pgTable(
     // Per-org Python-agent model (e.g. 'hermes'). Null = env EXTRACT_MODEL default.
     // The agent API KEY is never stored per-org — it resolves from env LLM_API_KEY.
     agentLlmModel: text('agent_llm_model'),
+    // Per-org Lead Scraper tuning — admin-set from the Configuration page, passed to
+    // the satellite agent per run (request value ?? agent env default). Null = the
+    // agent's own env default (LEAD_TARGET / LEAD_MAX_QUERIES / LEAD_MIN_KEEP_SCORE).
+    // scrapeLeadTarget: how many leads to hunt for; scrapeMaxQueries: search budget
+    // (speed vs coverage); scrapeMinScore: the tier-floor (drops leads scoring below it).
+    scrapeLeadTarget: integer('scrape_lead_target'),
+    scrapeMaxQueries: integer('scrape_max_queries'),
+    scrapeMinScore: integer('scrape_min_score'),
     // --- Lead governance (per-org) ---
     maxLeadsPerRun: integer('max_leads_per_run'),
     maxPerNiche: integer('max_per_niche'),

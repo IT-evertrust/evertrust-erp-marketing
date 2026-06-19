@@ -37,6 +37,9 @@ const PREF_KEYS = new Set([
   'salesSecondaryTimeZone',
   'agentLlmBaseUrl',
   'agentLlmModel',
+  'scrapeLeadTarget',
+  'scrapeMaxQueries',
+  'scrapeMinScore',
   'maxLeadsPerRun',
   'maxPerNiche',
   'dailySendCap',
@@ -487,6 +490,58 @@ describe('WorkflowConfigService — agent LLM resolution (org ?? env)', () => {
     });
     expect(cfg.agentGateway).toBeNull();
     expect(cfg.agentModel).toBeNull();
+  });
+});
+
+describe('WorkflowConfigService — Lead Scraper config (org override ?? agent default)', () => {
+  it('getLeadScraper returns null fields when unset (agent uses its env)', async () => {
+    const { service } = await make({});
+    expect(await service.getLeadScraper(ORG)).toEqual({
+      leadTarget: null,
+      maxQueries: null,
+      minScore: null,
+    });
+  });
+
+  it('getLeadScraper(null) — global run — returns all nulls', async () => {
+    const { service } = await make({}, { scrapeLeadTarget: 20 });
+    expect(await service.getLeadScraper(null)).toEqual({
+      leadTarget: null,
+      maxQueries: null,
+      minScore: null,
+    });
+  });
+
+  it('surfaces the per-org tuning when set', async () => {
+    const { service } = await make({}, {
+      scrapeLeadTarget: 20,
+      scrapeMaxQueries: 40,
+      scrapeMinScore: 55,
+    });
+    expect(await service.getLeadScraper(ORG)).toEqual({
+      leadTarget: 20,
+      maxQueries: 40,
+      minScore: 55,
+    });
+  });
+
+  it('updateLeadScraper sets the per-org tuning, then null clears it', async () => {
+    const { service } = await make({});
+    let cfg = await service.updateLeadScraper(ORG, {
+      leadTarget: 25,
+      maxQueries: 50,
+      minScore: 60,
+    });
+    expect(cfg).toEqual({ leadTarget: 25, maxQueries: 50, minScore: 60 });
+    // Re-read confirms persistence on org_config(ORG).
+    expect((await service.getLeadScraper(ORG)).leadTarget).toBe(25);
+
+    cfg = await service.updateLeadScraper(ORG, {
+      leadTarget: null,
+      maxQueries: null,
+      minScore: null,
+    });
+    expect(cfg).toEqual({ leadTarget: null, maxQueries: null, minScore: null });
   });
 });
 
