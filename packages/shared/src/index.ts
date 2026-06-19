@@ -492,6 +492,18 @@ export const MeetingListDto = z.array(MeetingDto);
 // default calendar mailbox or the Google API is unreachable — the UI shows an
 // empty/connect state instead of failing.
 
+// Activate calendar event category (derived server-side, hybrid structural rules):
+// 'ooo' = out-of-office, 'reminder' = all-day, else client/team/personal by attendees.
+export const CALENDAR_EVENT_CATEGORIES = [
+  'client',
+  'team',
+  'personal',
+  'reminder',
+  'ooo',
+] as const;
+export const CalendarEventCategory = z.enum(CALENDAR_EVENT_CATEGORIES);
+export type CalendarEventCategory = z.infer<typeof CalendarEventCategory>;
+
 // One upcoming event from the org's primary calendar. `attendees` are the
 // EXTERNAL attendee emails only (the org's own self/account email is filtered
 // out). `start`/`end` are ISO strings; `location`/`meetingUrl` are null when the
@@ -511,6 +523,15 @@ export const CalendarEventDto = z.object({
   status: z.string().nullable().optional(),
   organizerEmail: z.string().nullable().optional(),
   creatorEmail: z.string().nullable().optional(),
+
+  // Derived category for the color code; always present.
+  category: CalendarEventCategory.default('personal'),
+  // True for all-day events (Google `start.date`, no `dateTime`).
+  allDay: z.boolean().default(false),
+  // Google's raw colorId (reserved for an optional per-org override; UI may tint).
+  colorId: z.string().nullable().default(null),
+  // Campaigns this event maps to via attendee→prospect match (empty when none).
+  campaignIds: z.array(z.string()).default([]),
 });
 export type CalendarEventDto = z.infer<typeof CalendarEventDto>;
 
