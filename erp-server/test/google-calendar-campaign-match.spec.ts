@@ -1,7 +1,7 @@
 import { schema } from '@evertrust/db';
 import { GoogleCalendarReadService } from '../src/google/google-calendar-read.service';
 import type { AppConfigService } from '../src/config/app-config.service';
-import { FakeTable, makeFakeDb } from './fake-db';
+import { getDb, seed } from './real-db';
 
 // resolveEventCampaigns maps external attendee emails → the campaign ids they belong
 // to, for the CALLING org only. A prospect email can sit in several campaigns; a
@@ -15,17 +15,16 @@ const CAMP_B1 = 'cccccccc-bbbb-bbbb-bbbb-000000000001';
 
 const config = { get: () => '' } as unknown as AppConfigService;
 
-function makeService() {
-  const prospects = new FakeTable([
-    { id: 'p1', organizationId: ORG_A, campaignId: CAMP_A1, email: 'buyer@acme.io', __seq: 1 },
-    { id: 'p2', organizationId: ORG_A, campaignId: CAMP_A2, email: 'buyer@acme.io', __seq: 2 },
-    { id: 'p3', organizationId: ORG_A, campaignId: CAMP_A1, email: 'other@acme.io', __seq: 3 },
+async function makeService() {
+  await seed(schema.prospects, [
+    { organizationId: ORG_A, campaignId: CAMP_A1, email: 'buyer@acme.io' },
+    { organizationId: ORG_A, campaignId: CAMP_A2, email: 'buyer@acme.io' },
+    { organizationId: ORG_A, campaignId: CAMP_A1, email: 'other@acme.io' },
     // Same email, DIFFERENT org — must be excluded from ORG_A results.
-    { id: 'p4', organizationId: ORG_B, campaignId: CAMP_B1, email: 'buyer@acme.io', __seq: 4 },
+    { organizationId: ORG_B, campaignId: CAMP_B1, email: 'buyer@acme.io' },
   ]);
-  const { db } = makeFakeDb(new Map<unknown, FakeTable>([[schema.prospects, prospects]]));
   // googleAccounts is unused by resolveEventCampaigns.
-  return new GoogleCalendarReadService({} as never, db, config);
+  return new GoogleCalendarReadService({} as never, getDb(), config);
 }
 
 // resolveEventCampaigns is private; exercise it directly.
@@ -37,7 +36,7 @@ function resolve(svc: GoogleCalendarReadService, org: string, emails: string[]) 
 
 describe('GoogleCalendarReadService.resolveEventCampaigns', () => {
   it('groups a multi-campaign email and excludes other-org rows', async () => {
-    const map = await resolve(makeService(), ORG_A, ['buyer@acme.io', 'nobody@x.com']);
+    const map = await resolve(await makeService(), ORG_A, ['buyer@acme.io', 'nobody@x.com']);
     expect([...(map.get('buyer@acme.io') ?? [])].sort()).toEqual([CAMP_A1, CAMP_A2].sort());
     // ORG_B's CAMP_B1 for the same email never appears.
     expect(map.get('buyer@acme.io')).not.toContain(CAMP_B1);
@@ -46,12 +45,12 @@ describe('GoogleCalendarReadService.resolveEventCampaigns', () => {
   });
 
   it('is case-insensitive on the attendee email', async () => {
-    const map = await resolve(makeService(), ORG_A, ['BUYER@ACME.IO']);
+    const map = await resolve(await makeService(), ORG_A, ['BUYER@ACME.IO']);
     expect((map.get('buyer@acme.io') ?? []).length).toBe(2);
   });
 
   it('returns an empty map for no emails', async () => {
-    const map = await resolve(makeService(), ORG_A, []);
+    const map = await resolve(await makeService(), ORG_A, []);
     expect(map.size).toBe(0);
   });
 });
