@@ -236,16 +236,22 @@ def leads_to_prospects(leads: list[Lead], min_b_score: int = 40) -> list[dict]:
         if not name:
             continue
         email = (ld.email or "").strip()
-        verified = bool(email and not is_bad_email(email) and ld.status == "")
+        has_email = bool(email and not is_bad_email(email) and ld.status == "")
+        # An LLM-guessed address has NO page evidence — it is surfaced for human review but
+        # never auto-verified: an unreviewed guess must not enter the outreach queue as
+        # contactable. Outreach (Reach Bazooka) must only send to emailVerified prospects.
+        verified = has_email and ld.email_source_type != "llm"
         # Human contactability status (distinct from CRM outreach status).
         if verified:
             status = "verified"
+        elif has_email:
+            status = "unverified"  # real-format email, but LLM-guessed — needs review
         elif ld.status == "PROTECTED":
             status = "protected"
         else:
             status = "no-email"
         prospects.append({
-            "email": email if verified else "",
+            "email": email if has_email else "",
             "companyName": name,
             "companyType": (ld.company_type or ld.type or "").strip(),
             "status": status,
