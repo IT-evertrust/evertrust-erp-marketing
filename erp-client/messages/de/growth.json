@@ -47,6 +47,27 @@
       "selectToView": "Oben eine Kampagne wählen, um ihre gescrapten Leads anzuzeigen.",
       "leadStatus": { "NEW": "Neu", "EMAILED": "Gesendet", "REPLIED": "Geantwortet", "INTERESTED": "Interessiert", "MEETING_SCHEDULED": "Meeting", "NOT_INTERESTED": "Kein Interesse", "RE_ENGAGED": "Reaktiviert", "DO_NOT_CONTACT": "Nicht kontaktieren" },
       "run": "Lead-Scraper ausführen",
+      "progress": {
+        "running": "Wird gescrapt…",
+        "runAgain": "Erneut ausführen",
+        "scraping": "Leads werden gescrapt",
+        "hint": "Das kann einige Minuten dauern — Leads werden der Kampagne zugeordnet, sobald sie gefunden werden. Sie können diese Seite verlassen.",
+        "steps": {
+          "discover": "Unternehmen werden gesucht",
+          "enrich": "E-Mails werden ermittelt",
+          "save": "Prospects werden gespeichert"
+        },
+        "done": "Scrape abgeschlossen",
+        "foundNew": "{count, plural, one {# neuer Lead gefunden} other {# neue Leads gefunden}}",
+        "totalLeads": "{count, plural, =0 {Noch keine Leads} one {# Lead für diese Kampagne} other {# Leads für diese Kampagne}}",
+        "failed": "Scrape fehlgeschlagen",
+        "failedUnknown": "Der Lauf konnte nicht abgeschlossen werden. Der Lead-Satellite-Agent ist möglicherweise noch nicht verbunden.",
+        "leadsTitle": "Gescrapte Leads",
+        "leadsCount": "{shown} von {total} angezeigt",
+        "verified": "Verifiziert",
+        "unverified": "Nicht verifiziert",
+        "moreInCampaigns": "Weitere Leads für diese Kampagne im Tab „Kampagnen“."
+      },
       "criteriaTitle": "Suchkriterien",
       "criteriaMeta": "leads.campaignId",
       "selectLabel": "Kampagne zum Lead-Scraping auswählen",

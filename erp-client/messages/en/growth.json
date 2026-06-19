@@ -47,6 +47,27 @@
       "selectToView": "Select a campaign above to view its scraped leads.",
       "leadStatus": { "NEW": "New", "EMAILED": "Emailed", "REPLIED": "Replied", "INTERESTED": "Interested", "MEETING_SCHEDULED": "Meeting", "NOT_INTERESTED": "Not interested", "RE_ENGAGED": "Re-engaged", "DO_NOT_CONTACT": "Do not contact" },
       "run": "Run Lead Scraper",
+      "progress": {
+        "running": "Scraping…",
+        "runAgain": "Run again",
+        "scraping": "Scraping leads",
+        "hint": "This can take a few minutes — leads attach to the campaign as they're found. You can leave this page.",
+        "steps": {
+          "discover": "Discovering companies",
+          "enrich": "Recovering emails",
+          "save": "Saving prospects"
+        },
+        "done": "Scrape complete",
+        "foundNew": "{count, plural, one {# new lead found} other {# new leads found}}",
+        "totalLeads": "{count, plural, =0 {No leads yet} one {# lead for this campaign} other {# leads for this campaign}}",
+        "failed": "Scrape failed",
+        "failedUnknown": "The run could not be completed. The Lead Satellite agent may not be connected yet.",
+        "leadsTitle": "Scraped leads",
+        "leadsCount": "Showing {shown} of {total}",
+        "verified": "Verified",
+        "unverified": "Unverified",
+        "moreInCampaigns": "More leads for this campaign in the Campaigns tab."
+      },
       "criteriaTitle": "Search criteria",
       "criteriaMeta": "leads.campaignId",
       "selectLabel": "Select a campaign to scrape leads for",

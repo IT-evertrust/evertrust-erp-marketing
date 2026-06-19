@@ -193,3 +193,14 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Lead Scraper indeterminate progress sweep (honest "in progress" — the agent
+   reports once at the end, so there is no real percentage to show). */
+@keyframes scraper-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
