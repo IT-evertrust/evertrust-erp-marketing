@@ -188,7 +188,7 @@ function MonthCell({
         ) : null}
       </div>
 
-      {freeCount > 0 ? (
+      {freeOnly && freeCount > 0 ? (
         <span className="self-start rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
           {t('calendar.month.free', { count: freeCount })}
         </span>
