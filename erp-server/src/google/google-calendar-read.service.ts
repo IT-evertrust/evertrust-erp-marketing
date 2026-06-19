@@ -1,9 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 import {
   isValidTimeZone,
+  type CalendarEventCategory,
   type CalendarEventDto,
   type CalendarFreeSlotsDto,
   type CalendarUpcomingDto,
@@ -67,6 +68,10 @@ interface EventsListResponse {
     htmlLink?: string;
     hangoutLink?: string;
     status?: string;
+    // Google event classification ('default' | 'outOfOffice' | 'focusTime' | ...).
+    eventType?: string;
+    // The user's chosen Google Calendar color for this event (1–11), or undefined.
+    colorId?: string;
 
     creator?: {
       email?: string;
@@ -111,6 +116,33 @@ interface EventsListResponse {
       organizer?: boolean;
     }[];
   }[];
+}
+
+// PURE category classifier for the Activate color code (exported for unit testing).
+// Hybrid structural rules, FIRST MATCH WINS — no keyword guessing:
+//   1. eventType 'outOfOffice'        → 'ooo'
+//   2. all-day (Google start.date)     → 'reminder'
+//   3. has an EXTERNAL attendee        → 'client'
+//   4. has attendees, internal-only    → 'team'
+//   5. otherwise (timed, no attendees) → 'personal'
+// `selfDomain` is the org's own email domain (internal vs external test). Room/resource
+// and self attendees never count as a "meeting".
+export function classifyEvent(
+  e: {
+    eventType?: string;
+    allDay: boolean;
+    attendees: { email?: string; self?: boolean; resource?: boolean }[];
+  },
+  selfDomain: string,
+): CalendarEventCategory {
+  if (e.eventType === 'outOfOffice') return 'ooo';
+  if (e.allDay) return 'reminder';
+  const real = e.attendees.filter((a) => !a.self && !a.resource && !!a.email);
+  if (real.length === 0) return 'personal';
+  const hasExternal = real.some(
+    (a) => !(selfDomain && (a.email as string).toLowerCase().endsWith(`@${selfDomain}`)),
+  );
+  return hasExternal ? 'client' : 'team';
 }
 
 // The local Y/M/D/H/M parts of an instant in an arbitrary IANA zone, DST-correct
@@ -326,6 +358,42 @@ export class GoogleCalendarReadService {
     return { primary, secondary };
   }
 
+  // Map external attendee emails → the campaign ids they belong to, for the calling
+  // org ONLY (one batched prospects query). A prospect email can belong to several
+  // campaigns (unique key is (campaign_id, email)). Never throws — a failed lookup
+  // degrades to an empty map so the calendar still renders.
+  private async resolveEventCampaigns(
+    orgId: string,
+    emails: string[],
+  ): Promise<Map<string, string[]>> {
+    const out = new Map<string, string[]>();
+    const uniq = [...new Set(emails.map((e) => e.toLowerCase()).filter((e) => e.length > 0))];
+    if (uniq.length === 0) return out;
+
+    try {
+      const rows = await this.db
+        .select({ email: schema.prospects.email, campaignId: schema.prospects.campaignId })
+        .from(schema.prospects)
+        .where(
+          and(
+            eq(schema.prospects.organizationId, orgId),
+            inArray(schema.prospects.email, uniq),
+          ),
+        );
+      for (const r of rows) {
+        const key = r.email.toLowerCase();
+        const list = out.get(key) ?? [];
+        if (!list.includes(r.campaignId)) list.push(r.campaignId);
+        out.set(key, list);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown error';
+      this.logger.warn(`resolveEventCampaigns failed for org ${orgId}: ${msg}`);
+    }
+
+    return out;
+  }
+
   // The next upcoming real events from the org's primary calendar. Never throws —
   // returns a `configured: false` shell when the org has no default calendar mailbox
   // or Google is unreachable.
@@ -411,6 +479,9 @@ export class GoogleCalendarReadService {
 
         const meetingUrl = item.hangoutLink ?? videoEntry?.uri ?? firstConferenceEntry?.uri ?? null;
 
+        // All-day events carry `start.date` and no `start.dateTime`.
+        const allDay = !item.start?.dateTime && !!item.start?.date;
+
         const event: CalendarEventDto = {
           id,
           title: item.summary ?? '(no title)',
@@ -428,10 +499,34 @@ export class GoogleCalendarReadService {
 
           // Google Meet / conference link.
           meetingUrl,
+
+          // Color-code + filter fields. category is derived from the RAW attendees
+          // (with self/resource flags); campaignIds filled in one batch query below.
+          category: classifyEvent(
+            { eventType: item.eventType, allDay, attendees: item.attendees ?? [] },
+            selfDomain,
+          ),
+          allDay,
+          colorId: item.colorId ?? null,
+          campaignIds: [],
         };
 
         return [event];
       });
+
+      // Attendee→campaign match (per-org): one prospects lookup over all external
+      // attendee emails, then tag each event with the campaigns it belongs to.
+      const campaignMap = await this.resolveEventCampaigns(
+        orgId,
+        events.flatMap((e) => e.attendees),
+      );
+      for (const e of events) {
+        const ids = new Set<string>();
+        for (const email of e.attendees) {
+          for (const c of campaignMap.get(email.toLowerCase()) ?? []) ids.add(c);
+        }
+        e.campaignIds = [...ids];
+      }
 
       return {
         configured: true,
