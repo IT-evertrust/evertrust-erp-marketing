@@ -132,6 +132,31 @@ export function isValidDate(date: Date): boolean {
   return !Number.isNaN(date.getTime());
 }
 
+// The Monday-start 6×7 (42) grid of calendar days covering the anchor's month,
+// including the leading/trailing days from the adjacent months needed to fill
+// whole weeks. Each entry is { dateKey, inMonth } where `inMonth` is true only
+// for days that belong to the anchor's own month. Pure — derived entirely from
+// the existing date-key helpers (no Date mutation leaks out).
+export function monthGridDays(
+  anchorKey: string,
+  timeZone: string,
+): { dateKey: string; inMonth: boolean }[] {
+  const { year, month } = parseDateKey(anchorKey);
+  const firstOfMonthKey = toDateKey(year, month, 1);
+
+  const gridStartKey = startOfWorkWeekKey(dateKeyToUtcDate(firstOfMonthKey), timeZone);
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const dateKey = addDaysToDateKey(gridStartKey, index);
+    const parts = parseDateKey(dateKey);
+
+    return {
+      dateKey,
+      inMonth: parts.year === year && parts.month === month,
+    };
+  });
+}
+
 export function overlapsDateKey(start: Date, end: Date, dateKey: string, timeZone: string): boolean {
   if (!isValidDate(start) || !isValidDate(end) || end <= start) {
     return false;

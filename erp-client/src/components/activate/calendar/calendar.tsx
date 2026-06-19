@@ -24,6 +24,7 @@ import {
 } from '@/components/activate/calendar/time-grid';
 import { WeekView } from '@/components/activate/calendar/week-view';
 import { DayView } from '@/components/activate/calendar/day-view';
+import { MonthView } from '@/components/activate/calendar/month-view';
 import { ControlBar } from '@/components/activate/calendar/control-bar';
 import { CalendarLegend } from '@/components/activate/calendar/calendar-legend';
 import { CalendarEventDetailsDialog } from '@/components/activate/calendar/event-details-dialog';
@@ -324,9 +325,17 @@ export function Calendar() {
               freeOnly={freeOnly}
             />
           ) : (
-            <div className="flex items-center justify-center px-4 py-16 text-center text-sm text-muted-foreground">
-              Month view — coming up
-            </div>
+            <MonthView
+              anchorKey={anchorKey}
+              events={gridEvents}
+              slots={gridSlots}
+              primaryTz={primaryTz}
+              freeOnly={freeOnly}
+              onDayClick={(dateKey) => {
+                setAnchorKey(dateKey);
+                setView('day');
+              }}
+            />
           )}
 
           {gridEvents.length === 0 && gridSlots.length === 0 ? (
