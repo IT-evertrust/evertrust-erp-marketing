@@ -163,3 +163,10 @@ venv/
 
 # Superpowers brainstorming companion scratch
 .superpowers/
+
+# Obsidian vault config (personal editor settings)
+.obsidian/
+
+# Claude Code worktrees + local agent scratch (never commit)
+.claude/worktrees/
+**/.claude/worktrees/

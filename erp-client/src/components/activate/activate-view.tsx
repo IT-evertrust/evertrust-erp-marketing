@@ -252,9 +252,6 @@ function BookTab({
 
   const reason = upcoming.data?.reason ?? freeSlots.data?.reason ?? null;
 
-  const rawEvents = upcoming.data?.events ?? [];
-  const rawSlots = freeSlots.data?.slots ?? [];
-
   const days = useMemo(
     () => Array.from({ length: WORK_WEEK_DAYS }, (_, i) => addDaysToDateKey(weekStartKey, i)),
     [weekStartKey],
@@ -263,7 +260,7 @@ function BookTab({
   const weekEndKey = useMemo(() => addDaysToDateKey(weekStartKey, WORK_WEEK_DAYS), [weekStartKey]);
 
   const gridEvents = useMemo<CalendarGridEvent[]>(() => {
-    return rawEvents
+    return (upcoming.data?.events ?? [])
       .map((event) => {
         const startDate = new Date(event.start);
         const endDate = new Date(event.end);
@@ -288,10 +285,10 @@ function BookTab({
         );
       })
       .sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
-  }, [rawEvents, weekStartKey, weekEndKey, primaryTz]);
+  }, [upcoming.data?.events, weekStartKey, weekEndKey, primaryTz]);
 
   const gridSlots = useMemo<CalendarGridSlot[]>(() => {
-    return rawSlots
+    return (freeSlots.data?.slots ?? [])
       .map((slot) => ({
         start: new Date(slot.start),
         end: new Date(slot.end),
@@ -310,7 +307,7 @@ function BookTab({
         );
       })
       .sort((a, b) => a.start.getTime() - b.start.getTime());
-  }, [rawSlots, weekStartKey, weekEndKey, primaryTz]);
+  }, [freeSlots.data?.slots, weekStartKey, weekEndKey, primaryTz]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {

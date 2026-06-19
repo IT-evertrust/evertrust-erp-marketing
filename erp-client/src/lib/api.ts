@@ -191,31 +191,6 @@ function calendarQuery(params?: CalendarRangeParams): string {
   return qs ? `?${qs}` : '';
 }
 
-function isAbortSignal(value: unknown): value is AbortSignal {
-  return (
-    typeof value === 'object' && value !== null && 'aborted' in value && 'addEventListener' in value
-  );
-}
-
-function splitCalendarArgs<T extends object>(
-  paramsOrSignal?: T | AbortSignal,
-  signal?: AbortSignal,
-): {
-  params?: T;
-  signal?: AbortSignal;
-} {
-  if (isAbortSignal(paramsOrSignal)) {
-    return {
-      params: undefined,
-      signal: paramsOrSignal,
-    };
-  }
-
-  return {
-    params: paramsOrSignal,
-    signal,
-  };
-}
 
 async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const { method = 'GET', schema, body, signal } = opts;
@@ -879,45 +854,19 @@ export const api = {
         schema: z.object({ id: z.string() }),
       }),
 
-    // New shape:
     //   calendarUpcoming({ timeMin, timeMax, timeZone }, signal)
-    //
-    // Backward-compatible old shape still works:
-    //   calendarUpcoming(signal)
-    calendarUpcoming: (
-      paramsOrSignal: CalendarUpcomingParams | AbortSignal = {},
-      signal?: AbortSignal,
-    ) => {
-      const args = splitCalendarArgs<CalendarUpcomingParams>(paramsOrSignal, signal);
+    calendarUpcoming: (params: CalendarUpcomingParams = {}, signal?: AbortSignal) =>
+      request<CalendarUpcomingDto>(`/meetings/calendar/upcoming${calendarQuery(params)}`, {
+        schema: CalendarUpcomingDto,
+        signal,
+      }),
 
-      return request<CalendarUpcomingDto>(
-        `/meetings/calendar/upcoming${calendarQuery(args.params)}`,
-        {
-          schema: CalendarUpcomingDto,
-          signal: args.signal,
-        },
-      );
-    },
-
-    // New shape:
     //   calendarFreeSlots({ timeMin, timeMax, timeZone, durationMinutes }, signal)
-    //
-    // Backward-compatible old shape still works:
-    //   calendarFreeSlots(signal)
-    calendarFreeSlots: (
-      paramsOrSignal: CalendarFreeSlotsParams | AbortSignal = {},
-      signal?: AbortSignal,
-    ) => {
-      const args = splitCalendarArgs<CalendarFreeSlotsParams>(paramsOrSignal, signal);
-
-      return request<CalendarFreeSlotsDto>(
-        `/meetings/calendar/free-slots${calendarQuery(args.params)}`,
-        {
-          schema: CalendarFreeSlotsDto,
-          signal: args.signal,
-        },
-      );
-    },
+    calendarFreeSlots: (params: CalendarFreeSlotsParams = {}, signal?: AbortSignal) =>
+      request<CalendarFreeSlotsDto>(`/meetings/calendar/free-slots${calendarQuery(params)}`, {
+        schema: CalendarFreeSlotsDto,
+        signal,
+      }),
   },
 
   engage: {

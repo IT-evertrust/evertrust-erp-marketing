@@ -53,7 +53,14 @@ const GMAIL_SEND_SCOPES = [
   'https://mail.google.com/',
 ] as const;
 
+// gmail.metadata is the scope the connect flow actually requests (see
+// GOOGLE_CONNECT_SCOPES) — it grants headers + snippet but NO message body, and
+// sidesteps the RESTRICTED-scope CASA audit that gmail.readonly would force. It must
+// qualify a mailbox for `gmail-read`, else every account connected after the
+// metadata-only decision is wrongly treated as having no Gmail read access. The
+// broader gmail.readonly/modify/mail.google.com scopes still qualify (legacy grants).
 const GMAIL_READ_SCOPES = [
+  'https://www.googleapis.com/auth/gmail.metadata',
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/gmail.modify',
   'https://mail.google.com/',
