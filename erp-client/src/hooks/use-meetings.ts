@@ -27,16 +27,6 @@ export type CalendarRangeParams = {
 
 type CalendarUpcomingParams = Pick<CalendarRangeParams, 'timeMin' | 'timeMax' | 'timeZone'>;
 
-type CalendarUpcomingApi = (
-  params?: CalendarUpcomingParams,
-  signal?: AbortSignal,
-) => Promise<CalendarUpcomingDto>;
-
-type CalendarFreeSlotsApi = (
-  params?: CalendarRangeParams,
-  signal?: AbortSignal,
-) => Promise<CalendarFreeSlotsDto>;
-
 function normalizeCalendarUpcomingParams(params: CalendarRangeParams = {}): CalendarUpcomingParams {
   return {
     timeMin: params.timeMin,
@@ -124,11 +114,7 @@ export function useCalendarUpcoming(params: CalendarRangeParams = {}) {
 
   return useQuery<CalendarUpcomingDto, ApiError>({
     queryKey: calendarUpcomingQueryKey(params),
-    queryFn: ({ signal }) => {
-      const calendarUpcoming = api.meetings.calendarUpcoming as unknown as CalendarUpcomingApi;
-
-      return calendarUpcoming(normalizedParams, signal);
-    },
+    queryFn: ({ signal }) => api.meetings.calendarUpcoming(normalizedParams, signal),
     refetchOnWindowFocus: true,
     staleTime: 60_000,
   });
@@ -142,11 +128,7 @@ export function useCalendarFreeSlots(params: CalendarRangeParams = {}) {
 
   return useQuery<CalendarFreeSlotsDto, ApiError>({
     queryKey: calendarFreeSlotsQueryKey(params),
-    queryFn: ({ signal }) => {
-      const calendarFreeSlots = api.meetings.calendarFreeSlots as unknown as CalendarFreeSlotsApi;
-
-      return calendarFreeSlots(normalizedParams, signal);
-    },
+    queryFn: ({ signal }) => api.meetings.calendarFreeSlots(normalizedParams, signal),
     refetchOnWindowFocus: true,
     staleTime: 60_000,
   });

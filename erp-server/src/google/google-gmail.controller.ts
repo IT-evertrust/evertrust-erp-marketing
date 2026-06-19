@@ -22,8 +22,7 @@ export class GoogleGmailController {
     return this.gmail.profile(orgId);
   }
 
-  // Query examples:
-  //   /google/gmail/messages?q=from:alice@example.com newer_than:30d
+  // Query examples (no free-text `q` — gmail.metadata scope forbids it):
   //   /google/gmail/messages?labelIds=INBOX,UNREAD&maxResults=10
   //   /google/gmail/messages?includeSpamTrash=true
   @RequirePermissions('campaigns:read')

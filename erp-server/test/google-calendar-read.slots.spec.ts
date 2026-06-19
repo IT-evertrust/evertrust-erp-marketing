@@ -230,4 +230,48 @@ describe('computeFreeSlots', () => {
       expect(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']).toContain(weekday);
     }
   });
+
+  it('honors durationMinutes for slot LENGTH while keeping 30-min start grid', () => {
+    // Wednesday 2026-06-17, 08:00 Berlin — before business hours, no busy events.
+    const now = berlin(2026, 6, 17, 8, 0);
+    const slots = computeFreeSlots([], now, undefined, 60);
+
+    expect(slots.length).toBe(6);
+    for (const s of slots) {
+      // Each slot is exactly 60 minutes long.
+      expect(new Date(s.end).getTime() - new Date(s.start).getTime()).toBe(60 * 60_000);
+      // Starts stay on the 30-minute grid.
+      expect(berlinHM(s.start).minute % 30).toBe(0);
+    }
+    // First 60-min slot still opens at 09:00.
+    expect(berlinHM(firstSlot(slots).start).hour).toBe(9);
+    expect(berlinHM(firstSlot(slots).start).minute).toBe(0);
+  });
+
+  it('never proposes a slot that runs past 17:00 business close', () => {
+    // Friday 2026-06-19, 16:00 Berlin: a 60-min slot would have to start <=16:00 to
+    // finish by 17:00, so 16:30 is excluded and the next opening rolls to Monday.
+    const now = berlin(2026, 6, 19, 16, 5);
+    const slots = computeFreeSlots([], now, undefined, 60);
+
+    for (const s of slots) {
+      const end = berlinHM(s.end);
+      // End hour is at most 17:00 (17:00 exact is allowed, never beyond).
+      expect(end.hour < 17 || (end.hour === 17 && end.minute === 0)).toBe(true);
+    }
+    // The next 60-min opening is Monday 09:00 (Friday 16:30 can't fit a 60-min slot).
+    expect(berlinHM(firstSlot(slots).start).weekday).toBe('Mon');
+    expect(berlinHM(firstSlot(slots).start).hour).toBe(9);
+  });
+
+  it('falls back to 30-minute slots for a non-positive or NaN duration', () => {
+    const now = berlin(2026, 6, 17, 8, 0);
+    for (const bad of [0, -15, Number.NaN]) {
+      const slots = computeFreeSlots([], now, undefined, bad);
+      expect(slots.length).toBe(6);
+      expect(new Date(firstSlot(slots).end).getTime() - new Date(firstSlot(slots).start).getTime()).toBe(
+        30 * 60_000,
+      );
+    }
+  });
 });

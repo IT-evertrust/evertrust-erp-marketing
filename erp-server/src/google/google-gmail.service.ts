@@ -83,7 +83,8 @@ export interface GmailMessageDetailDto {
 }
 
 export interface GmailListQueryDto {
-  q?: string;
+  // No `q`: free-text search needs the RESTRICTED gmail.readonly scope; the connect
+  // flow grants gmail.metadata only, under which messages.list rejects `q` (HTTP 400).
   maxResults?: string | number;
   pageToken?: string;
   labelIds?: string | string[];
@@ -212,7 +213,10 @@ export class GoogleGmailService {
         maxResults: String(this.maxResults(query.maxResults)),
       });
 
-      if (query.q?.trim()) params.set('q', query.q.trim());
+      // NOTE: the `q` search parameter is intentionally NOT forwarded. The granted
+      // gmail.metadata scope rejects messages.list with `q` (HTTP 400). Narrowing is
+      // done via labelIds (allowed under metadata) instead; free-text search would
+      // require the RESTRICTED gmail.readonly scope and its CASA audit.
       if (query.pageToken?.trim()) params.set('pageToken', query.pageToken.trim());
 
       if (this.booleanQuery(query.includeSpamTrash)) {
@@ -271,7 +275,15 @@ export class GoogleGmailService {
     }
 
     try {
-      const params = new URLSearchParams({ format: 'full' });
+      // The connect flow grants gmail.metadata only (no message body) to avoid the
+      // RESTRICTED-scope CASA audit. format=full / format=raw are rejected (HTTP 403)
+      // under that scope, so we request format=metadata: headers + snippet + attachment
+      // metadata, never the body. bodyText/bodyHtml therefore resolve to null.
+      const params = new URLSearchParams({ format: 'metadata' });
+
+      for (const h of ['Subject', 'From', 'To', 'Cc', 'Bcc', 'Date']) {
+        params.append('metadataHeaders', h);
+      }
 
       const res = await this.googleGetJson<GmailApiMessageResponse>(
         `${GMAIL_API_BASE}/messages/${encodeURIComponent(messageId)}?${params.toString()}`,

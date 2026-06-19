@@ -178,17 +178,28 @@ function zoneWallClockToUtc(
 }
 
 // PURE slot computation (exported for unit testing). Given busy intervals and a
-// reference `now`, returns up to `MAX_FREE_SLOTS` 30-minute openings within weekday
-// 09:00–17:00 business hours (in `tz`) over the next `FREE_SLOT_HORIZON_DAYS` days. A
-// slot is free when it lies entirely in the future and overlaps no busy interval.
-// Deterministic and timezone-correct (DST-aware via Intl). `tz` defaults to the
-// product default so existing Berlin-pinned callers/tests need no change.
+// reference `now`, returns up to `MAX_FREE_SLOTS` openings of `durationMinutes`
+// (default 30) within weekday 09:00–17:00 business hours (in `tz`, default the product
+// default) over the next `FREE_SLOT_HORIZON_DAYS` days. Slot START times stay on the
+// 30-minute grid; a slot is free when it lies entirely in the future, finishes within
+// business hours, and overlaps no busy interval. Deterministic and timezone-correct
+// (DST-aware via Intl). `tz` defaults to the product default so existing Berlin-pinned
+// callers/tests need no change.
 export function computeFreeSlots(
   busy: BusyInterval[],
   now: Date = new Date(),
   tz: string = DEFAULT_TIME_ZONE,
+  durationMinutes: number = SLOT_MINUTES,
 ): { start: string; end: string }[] {
-  const slotMs = SLOT_MINUTES * 60_000;
+  // The slot LENGTH honors the requested meeting duration; the start grid stays on
+  // SLOT_MINUTES boundaries. Clamp to a sane positive value no longer than the
+  // business window so a malformed/oversized request can't produce zero or nonsense.
+  const businessWindowMinutes = (BUSINESS_END_HOUR - BUSINESS_START_HOUR) * 60;
+  const duration =
+    Number.isFinite(durationMinutes) && durationMinutes > 0
+      ? Math.min(Math.round(durationMinutes), businessWindowMinutes)
+      : SLOT_MINUTES;
+  const slotMs = duration * 60_000;
   const nowMs = now.getTime();
   const horizonMs = nowMs + FREE_SLOT_HORIZON_DAYS * 24 * 60 * 60_000;
   const out: { start: string; end: string }[] = [];
@@ -203,6 +214,10 @@ export function computeFreeSlots(
     // Weekdays only (Mon–Fri).
     if (weekday === 0 || weekday === 6) continue;
 
+    // The day's close as a UTC instant — a longer slot may start within business
+    // hours yet must not run past it (e.g. a 60-min slot can't start at 16:30).
+    const businessEndMs = zoneWallClockToUtc(year, month, day, BUSINESS_END_HOUR, 0, tz).getTime();
+
     for (let h = BUSINESS_START_HOUR; h < BUSINESS_END_HOUR; h++) {
       for (let m = 0; m < 60; m += SLOT_MINUTES) {
         const startDate = zoneWallClockToUtc(year, month, day, h, m, tz);
@@ -211,6 +226,7 @@ export function computeFreeSlots(
 
         if (startMs < nowMs) continue; // only future slots
         if (startMs >= horizonMs) continue; // within the 7-day horizon
+        if (endMs > businessEndMs) continue; // must finish within business hours
 
         const overlapsBusy = busy.some((b) => startMs < b.end && endMs > b.start);
         if (overlapsBusy) continue;
@@ -497,7 +513,7 @@ export class GoogleCalendarReadService {
 
       return {
         configured: true,
-        slots: computeFreeSlots(busy, now, timeZone),
+        slots: computeFreeSlots(busy, now, timeZone, durationMinutes),
         reason: null,
         timeZone,
         secondaryTimeZone,

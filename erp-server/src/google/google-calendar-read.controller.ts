@@ -50,6 +50,11 @@ export class GoogleCalendarReadController {
       durationMinutes: durationMinutes ? Number(durationMinutes) : undefined,
     });
   }
+
+  // Mutations write to the org's real Google Calendar and email attendees
+  // (sendUpdates:all), so they require campaigns:write — EMPLOYEE (read-only) cannot
+  // create/modify/cancel meetings, while the reads above stay campaigns:read.
+  @RequirePermissions('campaigns:write')
   @Post('events')
   createEvent(
     @OrgId() orgId: string,
@@ -58,6 +63,7 @@ export class GoogleCalendarReadController {
     return this.calendar.createEvent(orgId, body as CreateCalendarEventDto);
   }
 
+  @RequirePermissions('campaigns:write')
   @Patch('events/:eventId')
   updateEvent(
     @OrgId() orgId: string,
@@ -67,6 +73,7 @@ export class GoogleCalendarReadController {
     return this.calendar.updateEvent(orgId, eventId, body as UpdateCalendarEventDto);
   }
 
+  @RequirePermissions('campaigns:write')
   @Delete('events/:eventId')
   deleteEvent(
     @OrgId() orgId: string,
