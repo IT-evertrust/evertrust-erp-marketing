@@ -4,12 +4,6 @@ import { useTranslations } from 'next-intl';
 import { CALENDAR_EVENT_CATEGORIES } from '@evertrust/shared';
 import { CATEGORY_STYLE } from '@/components/activate/calendar/event-category';
 
-// Maps a `border-l-{color}-500` bar class to the matching dot fill so the legend
-// swatch reads as the same color as the event block's accent rail.
-function dotClass(barClass: string): string {
-  return barClass.replace('border-l-', 'bg-');
-}
-
 // Color-code legend: one swatch per event category plus the emerald free-slot
 // marker. Sits on the row directly below the control bar.
 export function CalendarLegend() {
@@ -22,7 +16,7 @@ export function CalendarLegend() {
 
         return (
           <span key={category} className="inline-flex items-center gap-1.5">
-            <span className={`size-2 rounded-sm ${dotClass(style.bar)}`} />
+            <span className={`size-2 rounded-sm ${style.dot}`} />
             {t(style.labelKey)}
           </span>
         );
