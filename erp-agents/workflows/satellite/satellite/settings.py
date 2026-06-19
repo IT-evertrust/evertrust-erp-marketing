@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
@@ -63,3 +63,23 @@ def load_settings() -> Settings:
         search_pages=int(os.environ.get("LEAD_SEARCH_PAGES", "2") or 2),
         max_queries=int(os.environ.get("LEAD_MAX_QUERIES", "240") or 240),
     )
+
+
+def with_llm_override(
+    s: Settings,
+    base_url: str | None = None,
+    model: str | None = None,
+    api_key: str | None = None,
+) -> Settings:
+    """Apply a per-request LLM override (from the ERP dispatch / AI Engine page) over
+    the agent's env-resolved settings. Each field falls back to the env default when
+    the request omits it (request value ?? env). Model maps to every per-step model
+    field so the org's choice drives the whole run."""
+    changes: dict = {}
+    if base_url:
+        changes["llm_base_url"] = base_url
+    if api_key:
+        changes["llm_api_key"] = api_key
+    if model:
+        changes.update(lead_model=model, email_model=model, buzzword_model=model)
+    return replace(s, **changes) if changes else s

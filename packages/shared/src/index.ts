@@ -903,11 +903,16 @@ export const AI_ENGINE_MODELS: readonly string[] = [
   'local·llama-3',
 ];
 
-// The org's resolved AI engine config: model + gateway label (each null when unset →
-// product default). Returned by GET /arsenal/config/ai-engine.
+// The org's resolved AI engine config (each null when unset → product default).
+// Returned by GET /arsenal/config/ai-engine.
+//   - model/gateway: the ERP's own Anthropic/Claude path (gateway is a label).
+//   - agentGateway/agentModel: the Python agents' LLM (base URL + model). The agent
+//     API key is never returned — it resolves server-side from env LLM_API_KEY.
 export const AiEngineConfigDto = z.object({
   model: z.string().nullable(),
   gateway: z.string().nullable(),
+  agentGateway: z.string().nullable(),
+  agentModel: z.string().nullable(),
 });
 export type AiEngineConfigDto = z.infer<typeof AiEngineConfigDto>;
 
@@ -916,6 +921,8 @@ export type AiEngineConfigDto = z.infer<typeof AiEngineConfigDto>;
 export const UpdateAiEngineDto = z.object({
   model: z.string().max(120).nullable().optional(),
   gateway: z.string().max(120).nullable().optional(),
+  agentGateway: z.string().url().max(300).nullable().optional(),
+  agentModel: z.string().max(120).nullable().optional(),
 });
 export type UpdateAiEngineDto = z.infer<typeof UpdateAiEngineDto>;
 

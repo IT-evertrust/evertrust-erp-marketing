@@ -35,6 +35,8 @@ const PREF_KEYS = new Set([
   'salesCalendarId',
   'salesTimeZone',
   'salesSecondaryTimeZone',
+  'agentLlmBaseUrl',
+  'agentLlmModel',
   'maxLeadsPerRun',
   'maxPerNiche',
   'dailySendCap',
@@ -409,6 +411,82 @@ describe('WorkflowConfigService — sales timezones (raw per-org overrides)', ()
     );
     expect(eff.salesTimeZone).toBeNull();
     expect(eff.salesSecondaryTimeZone).toBeNull();
+  });
+});
+
+describe('WorkflowConfigService — agent LLM resolution (org ?? env)', () => {
+  const AGENT_ENV = {
+    LLM_BASE_URL: 'https://env-gw/v1',
+    EXTRACT_MODEL: 'hermes',
+    LLM_API_KEY: 'env-secret',
+  };
+
+  it('resolveAgentLlm falls back to env when the org has no override', async () => {
+    const { service } = await make(AGENT_ENV);
+    expect(await service.resolveAgentLlm(ORG)).toEqual({
+      baseUrl: 'https://env-gw/v1',
+      model: 'hermes',
+      apiKey: 'env-secret',
+    });
+  });
+
+  it('a per-org gateway/model overrides env; key always comes from env', async () => {
+    const { service } = await make(AGENT_ENV, {
+      agentLlmBaseUrl: 'https://org-gw/v1',
+      agentLlmModel: 'llama-3',
+    });
+    expect(await service.resolveAgentLlm(ORG)).toEqual({
+      baseUrl: 'https://org-gw/v1',
+      model: 'llama-3',
+      apiKey: 'env-secret', // never per-org
+    });
+  });
+
+  it('resolveAgentLlm(null) — global run — uses env defaults only', async () => {
+    const { service } = await make(AGENT_ENV, {
+      agentLlmBaseUrl: 'https://org-gw/v1',
+    });
+    expect(await service.resolveAgentLlm(null)).toEqual({
+      baseUrl: 'https://env-gw/v1',
+      model: 'hermes',
+      apiKey: 'env-secret',
+    });
+  });
+
+  it('getAiEngine surfaces the per-org agent fields', async () => {
+    const { service } = await make(AGENT_ENV, {
+      agentLlmBaseUrl: 'https://org-gw/v1',
+      agentLlmModel: 'llama-3',
+    });
+    const cfg = await service.getAiEngine(ORG);
+    expect(cfg.agentGateway).toBe('https://org-gw/v1');
+    expect(cfg.agentModel).toBe('llama-3');
+  });
+
+  it('getAiEngine returns null agent fields when unset', async () => {
+    const { service } = await make(AGENT_ENV);
+    const cfg = await service.getAiEngine(ORG);
+    expect(cfg.agentGateway).toBeNull();
+    expect(cfg.agentModel).toBeNull();
+  });
+
+  it('updateAiEngine sets the per-org agent fields, then null clears them', async () => {
+    const { service } = await make(AGENT_ENV);
+    let cfg = await service.updateAiEngine(ORG, {
+      agentGateway: 'https://org-gw/v1',
+      agentModel: 'llama-3',
+    });
+    expect(cfg.agentGateway).toBe('https://org-gw/v1');
+    expect(cfg.agentModel).toBe('llama-3');
+    // Re-read confirms the write persisted on org_config(ORG).
+    expect((await service.getAiEngine(ORG)).agentGateway).toBe('https://org-gw/v1');
+
+    cfg = await service.updateAiEngine(ORG, {
+      agentGateway: null,
+      agentModel: null,
+    });
+    expect(cfg.agentGateway).toBeNull();
+    expect(cfg.agentModel).toBeNull();
   });
 });
 

@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from .clients.erp import ErpClient, ErpGateway
 from .pipeline import RunOptions, run
-from .settings import Settings, load_settings
+from .settings import Settings, load_settings, with_llm_override
 
 app = FastAPI(title="EVERTRUST Reach (Bazooka)")
 
@@ -42,6 +42,11 @@ class RunRequest(BaseModel):
     campaign: str | None = None
     limit: int | None = None
     useLlm: bool = True
+    # Per-org LLM override from the ERP dispatch (AI Engine page). Each omitted field
+    # falls back to the agent's own env default (request value ?? env).
+    llmBaseUrl: str | None = None
+    model: str | None = None
+    apiKey: str | None = None
 
 
 @app.get("/health")
@@ -55,6 +60,7 @@ def reach_run(
     settings: Settings = Depends(get_settings),
     erp: ErpGateway = Depends(get_erp),
 ) -> dict:
+    settings = with_llm_override(settings, req.llmBaseUrl, req.model, req.apiKey)
     opts = RunOptions(
         live=req.live, campaign=req.campaign, limit=req.limit, use_llm=req.useLlm
     )

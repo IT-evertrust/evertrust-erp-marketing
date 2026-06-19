@@ -401,6 +401,9 @@ function AiEngineCard() {
   // Local form state, seeded from the GET. '' gateway clears the override.
   const [model, setModel] = useState<string>(MODEL_UNSET);
   const [gateway, setGateway] = useState<string>('');
+  // Agent gateway (drives the Python agents' local LLM, per org). Blank → env default.
+  const [agentGateway, setAgentGateway] = useState<string>('');
+  const [agentModel, setAgentModel] = useState<string>('');
 
   // The select options: always the product list, plus the current value if it has
   // drifted off the list (so a legacy model still renders).
@@ -414,6 +417,8 @@ function AiEngineCard() {
     if (!data) return;
     setModel(data.model ?? MODEL_UNSET);
     setGateway(data.gateway ?? '');
+    setAgentGateway(data.agentGateway ?? '');
+    setAgentModel(data.agentModel ?? '');
   }, [data]);
 
   function handleSave() {
@@ -421,6 +426,8 @@ function AiEngineCard() {
       {
         model: model === MODEL_UNSET ? null : model,
         gateway: gateway.trim() === '' ? null : gateway.trim(),
+        agentGateway: agentGateway.trim() === '' ? null : agentGateway.trim(),
+        agentModel: agentModel.trim() === '' ? null : agentModel.trim(),
       },
       {
         onSuccess: () => toast.success(t('config.ai.toastSaved')),
@@ -464,6 +471,47 @@ function AiEngineCard() {
                 value={gateway}
                 onChange={(e) => setGateway(e.target.value)}
               />
+            </div>
+          </div>
+
+          {/* Agent gateway — drives the Python agents' local LLM, resolved per org
+              (org value ?? env default). Separate from the Claude model above, which
+              powers the ERP's own AI features. The API key is never edited here; it
+              stays in the agents' env. */}
+          <div className="border-t pt-4">
+            <p className="text-sm font-medium">
+              {t('config.ai.agentSectionTitle')}
+            </p>
+            <p className="mb-3 text-xs text-muted-foreground">
+              {t('config.ai.agentSectionHint')}
+            </p>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="agent-gateway">
+                  {t('config.ai.agentGatewayLabel')}
+                </Label>
+                <Input
+                  id="agent-gateway"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder={t('config.ai.agentGatewayPlaceholder')}
+                  value={agentGateway}
+                  onChange={(e) => setAgentGateway(e.target.value)}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="agent-model">
+                  {t('config.ai.agentModelLabel')}
+                </Label>
+                <Input
+                  id="agent-model"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder={t('config.ai.agentModelPlaceholder')}
+                  value={agentModel}
+                  onChange={(e) => setAgentModel(e.target.value)}
+                />
+              </div>
             </div>
           </div>
           <Button

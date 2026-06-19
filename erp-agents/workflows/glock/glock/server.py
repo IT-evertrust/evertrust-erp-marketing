@@ -20,7 +20,7 @@ from .clients import llm as llm_mod
 from .clients import whatsapp as whatsapp_mod
 from .clients.erp import ErpClient, ErpGateway
 from .pipeline import RunOptions, run
-from .settings import Settings, load_settings
+from .settings import Settings, load_settings, with_llm_override
 
 # Where bare fixture names (e.g. "demo_replies.json") resolve to — the glock package dir.
 FIXTURE_DIR = Path(__file__).resolve().parent.parent
@@ -68,6 +68,11 @@ class RunRequest(BaseModel):
     # Optional: feed canned replies from a JSON file instead of Gmail (demo/sim, no
     # OAuth needed). Bare name resolves under the glock package dir, e.g. "demo_replies.json".
     fixture: str | None = None
+    # Per-org LLM override from the ERP dispatch (AI Engine page). Each omitted field
+    # falls back to the agent's own env default (request value ?? env).
+    llmBaseUrl: str | None = None
+    model: str | None = None
+    apiKey: str | None = None
 
 
 @app.get("/health")
@@ -91,6 +96,7 @@ def glock_run(
     if req.fixture:
         p = Path(req.fixture)
         gmail = FixtureGmail(str(p if p.is_absolute() else FIXTURE_DIR / p))
+    settings = with_llm_override(settings, req.llmBaseUrl, req.model, req.apiKey)
     opts = RunOptions(live=req.live, use_llm=req.useLlm, accounts=accounts)
     try:
         return run(settings, opts, erp, gmail, calendar, llm, whatsapp)

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
@@ -53,3 +53,23 @@ def load_settings() -> Settings:
         llm_api_key=os.environ.get("LLM_API_KEY", os.environ.get("LITELLM_API_KEY", "sk-anything")),
         llm_model=os.environ.get("LLM_MODEL", "gpt-4o"),
     )
+
+
+def with_llm_override(
+    s: Settings,
+    base_url: str | None = None,
+    model: str | None = None,
+    api_key: str | None = None,
+) -> Settings:
+    """Apply a per-request LLM override (from the ERP dispatch / AI Engine page) over
+    the agent's env-resolved settings. Each field falls back to the env default when
+    the request omits it (request value ?? env). Model maps to every per-step model
+    field so the org's choice drives the whole run."""
+    changes: dict = {}
+    if base_url:
+        changes["llm_base_url"] = base_url
+    if api_key:
+        changes["llm_api_key"] = api_key
+    if model:
+        changes.update(llm_model=model)
+    return replace(s, **changes) if changes else s

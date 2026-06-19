@@ -75,6 +75,12 @@ export const orgConfig = pgTable(
     aiModel: text('ai_model'),
     // Per-org AI gateway label (e.g. 'LiteLLM · Mac mini'). Null = default.
     aiGateway: text('ai_gateway'),
+    // Per-org Python-agent LLM gateway base URL (e.g. 'https://…/v1'). Drives the
+    // erp-agents (lead satellite, etc.) per org. Null = env LLM_BASE_URL default.
+    agentLlmBaseUrl: text('agent_llm_base_url'),
+    // Per-org Python-agent model (e.g. 'hermes'). Null = env EXTRACT_MODEL default.
+    // The agent API KEY is never stored per-org — it resolves from env LLM_API_KEY.
+    agentLlmModel: text('agent_llm_model'),
     // --- Lead governance (per-org) ---
     maxLeadsPerRun: integer('max_leads_per_run'),
     maxPerNiche: integer('max_per_niche'),

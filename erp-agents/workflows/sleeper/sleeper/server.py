@@ -16,7 +16,7 @@ from .clients import llm as llm_mod
 from .clients import whatsapp as whatsapp_mod
 from .clients.erp import ErpClient, ErpGateway
 from .pipeline import RunOptions, run
-from .settings import Settings, load_settings
+from .settings import Settings, load_settings, with_llm_override
 
 app = FastAPI(title="EVERTRUST Sleeper Grenade")
 
@@ -53,6 +53,11 @@ class RunRequest(BaseModel):
     live: bool = False
     useLlm: bool = True
     limit: int = 100
+    # Per-org LLM override from the ERP dispatch (AI Engine page). Each omitted field
+    # falls back to the agent's own env default (request value ?? env).
+    llmBaseUrl: str | None = None
+    model: str | None = None
+    apiKey: str | None = None
 
 
 @app.get("/health")
@@ -69,6 +74,7 @@ def sleeper_run(
     gmail=Depends(get_gmail),
     whatsapp=Depends(get_whatsapp),
 ) -> dict:
+    settings = with_llm_override(settings, req.llmBaseUrl, req.model, req.apiKey)
     opts = RunOptions(live=req.live, use_llm=req.useLlm, limit=req.limit)
     try:
         return run(settings, opts, erp, llm, gmail, whatsapp)
