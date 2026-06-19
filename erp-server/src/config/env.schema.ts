@@ -104,6 +104,18 @@ export const EnvSchema = z.object({
   ANTHROPIC_API_KEY: z.string().default(''),
   ANTHROPIC_MODEL: z.string().default('claude-3-5-sonnet-latest'),
 
+  // Python-agent LLM gateway defaults (the erp-agents OpenAI-compatible gateway, e.g.
+  // the Mac-mini LiteLLM). Used as the env fallback when an org has not set its own
+  // agent gateway/model (org_config.agentLlmBaseUrl/agentLlmModel ?? these). The key
+  // is global (never stored per-org) and travels ERP→agent only. Blank = no default
+  // (the field is then omitted from the dispatch and each agent keeps its own env).
+  // EXTRACT_MODEL is the canonical agent-model env key the ERP resolves; each agent
+  // also reads its own per-agent model env (FORGE_MODEL/LLM_MODEL) for CLI/direct use,
+  // so set EXTRACT_MODEL here only to force a single default across all agents.
+  LLM_BASE_URL: z.string().default(''),
+  LLM_API_KEY: z.string().default(''),
+  EXTRACT_MODEL: z.string().default(''),
+
   // Phase 5c — Hermes supplier RFQ. The n8n webhook the ERP fires to email an RFQ
   // to suppliers. Blank = the RFQ trigger is disabled (the API rejects "send" with
   // a clear message), so the feature is safe to deploy before the webhook exists.

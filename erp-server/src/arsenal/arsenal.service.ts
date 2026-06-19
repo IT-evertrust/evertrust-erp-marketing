@@ -204,9 +204,14 @@ export class ArsenalService {
     const agentUrl = this.workflowConfig.getStageAgentUrl(stage);
     let outcome: { status: 'DISPATCHED' | 'FAILED'; detail: string };
     if (agentUrl) {
+      // Resolve the org's agent-LLM config (org_config ?? env) and hand it to the
+      // agent in the dispatch body, so the AI Engine page drives which gateway/model
+      // the Python agent uses, per tenant. The API key travels server-to-server only.
+      const llm = await this.workflowConfig.resolveAgentLlm(orgId);
       outcome = await this.fireAgent(agentUrl, stage, {
         campaignId,
         campaign: campaignName,
+        llm,
       });
     } else {
       const webhookUrl = await this.workflowConfig.getStageWebhook(stage);
@@ -507,7 +512,11 @@ export class ArsenalService {
   private async fireAgent(
     baseUrl: string,
     stage: ArsenalStage,
-    body: { campaignId: string | null; campaign: string | null },
+    body: {
+      campaignId: string | null;
+      campaign: string | null;
+      llm: { baseUrl: string; model: string; apiKey: string };
+    },
   ): Promise<{ status: 'DISPATCHED' | 'FAILED'; detail: string }> {
     const url = baseUrl.replace(/\/+$/, '') + STAGE_AGENT_PATH[stage];
     const controller = new AbortController();
@@ -521,6 +530,11 @@ export class ArsenalService {
           source: 'erp',
           campaignId: body.campaignId ?? undefined,
           campaign: body.campaign ?? undefined,
+          // Per-org agent LLM override (org_config ?? env). Blank fields are sent as
+          // undefined so the agent keeps its own env default (request value ?? env).
+          llmBaseUrl: body.llm.baseUrl || undefined,
+          model: body.llm.model || undefined,
+          apiKey: body.llm.apiKey || undefined,
         }),
         signal: controller.signal,
       });

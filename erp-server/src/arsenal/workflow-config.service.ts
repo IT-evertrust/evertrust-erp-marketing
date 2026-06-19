@@ -528,6 +528,25 @@ export class WorkflowConfigService {
     return {
       model: clean(orgRow.aiModel) ?? null,
       gateway: clean(orgRow.aiGateway) ?? null,
+      agentGateway: clean(orgRow.agentLlmBaseUrl) ?? null,
+      agentModel: clean(orgRow.agentLlmModel) ?? null,
+    };
+  }
+
+  // Resolve the org's effective Python-agent LLM config: per-org override ?? env
+  // default. The API key is never stored per-org — it comes from env LLM_API_KEY and
+  // is only ever handed to the agent over the server-to-server dispatch (never the
+  // browser). Returns blank strings when neither org nor env is set; the agent then
+  // keeps its own env default (request value ?? agent env).
+  async resolveAgentLlm(
+    orgId: string | null,
+  ): Promise<{ baseUrl: string; model: string; apiKey: string }> {
+    // Global runs (orgId null, e.g. the scheduler) have no org row → env defaults.
+    const orgRow = orgId ? await this.orgRow(orgId) : null;
+    return {
+      baseUrl: clean(orgRow?.agentLlmBaseUrl) ?? this.config.get('LLM_BASE_URL'),
+      model: clean(orgRow?.agentLlmModel) ?? this.config.get('EXTRACT_MODEL'),
+      apiKey: this.config.get('LLM_API_KEY'),
     };
   }
 
@@ -541,6 +560,9 @@ export class WorkflowConfigService {
     const set: Partial<typeof schema.orgConfig.$inferInsert> = {};
     if ('model' in patch) set.aiModel = clean(patch.model) ?? null;
     if ('gateway' in patch) set.aiGateway = clean(patch.gateway) ?? null;
+    if ('agentGateway' in patch)
+      set.agentLlmBaseUrl = clean(patch.agentGateway) ?? null;
+    if ('agentModel' in patch) set.agentLlmModel = clean(patch.agentModel) ?? null;
     if (Object.keys(set).length > 0) {
       await this.persistOrg(orgId, set);
     }

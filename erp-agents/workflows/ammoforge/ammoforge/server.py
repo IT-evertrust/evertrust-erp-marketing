@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from .clients.erp import ErpClient, ErpGateway
 from .pipeline import RunOptions, run
-from .settings import Settings, load_settings
+from .settings import Settings, load_settings, with_llm_override
 
 app = FastAPI(title="EVERTRUST AmmoForge")
 
@@ -40,6 +40,11 @@ class RunRequest(BaseModel):
     live: bool = False
     persist: bool | None = None   # write templates to ERP; defaults to `live` when unset
     useLlm: bool = True
+    # Per-org LLM override from the ERP dispatch (AI Engine page). Each omitted field
+    # falls back to the agent's own env default (request value ?? env).
+    llmBaseUrl: str | None = None
+    model: str | None = None
+    apiKey: str | None = None
 
 
 @app.get("/health")
@@ -54,6 +59,7 @@ def ammoforge_run(
     erp: ErpGateway = Depends(get_erp),
 ) -> dict:
     persist = req.persist if req.persist is not None else req.live
+    settings = with_llm_override(settings, req.llmBaseUrl, req.model, req.apiKey)
     opts = RunOptions(campaign_id=req.campaignId, live=req.live, persist=persist, use_llm=req.useLlm)
     try:
         return run(settings, opts, erp)
