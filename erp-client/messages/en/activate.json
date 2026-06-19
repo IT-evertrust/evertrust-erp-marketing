@@ -38,6 +38,78 @@
       "join": "Join"
     }
   },
+  "calendar": {
+    "views": {
+      "day": "Day",
+      "week": "Week",
+      "month": "Month"
+    },
+    "nav": {
+      "today": "Today",
+      "prev": "Previous",
+      "next": "Next"
+    },
+    "filter": {
+      "all": "All campaigns",
+      "untitledCampaign": "Untitled campaign"
+    },
+    "freeSlot": {
+      "check": "Check for free slot",
+      "exit": "Exit free-slot view",
+      "banner": "Free-slot view: showing only proposed openings. Meetings are hidden."
+    },
+    "footer": {
+      "hint": "Click a solid meeting card to open details. Dashed blocks are proposed free slots.",
+      "positionedSingle": "Positioned by {primary}.",
+      "positionedDual": "Positioned by {primary}. Left gutter also shows {secondary}."
+    },
+    "legend": {
+      "client": "Client meeting",
+      "team": "Internal / team",
+      "personal": "Personal",
+      "reminder": "Reminder",
+      "ooo": "Out of office",
+      "freeSlot": "Free slot"
+    },
+    "event": {
+      "untitled": "Untitled",
+      "meet": "Meet",
+      "aria": "{title}. {zone} {from} to {to}. Click for details."
+    },
+    "allDay": "All-day",
+    "day": {
+      "freeSlots": "{count, plural, one {# free slot} other {# free slots}}",
+      "meetings": "{count, plural, one {# meeting} other {# meetings}}",
+      "openSlots": "{count, plural, one {# open slot} other {# open slots}}",
+      "nothing": "Nothing scheduled",
+      "aria": "{date}, {events} events, {free} free slots. Open day view."
+    },
+    "week": {
+      "meetings": "{count, plural, one {# meeting} other {# meetings}}",
+      "slots": "{count, plural, one {# slot} other {# slots}}",
+      "free": "free"
+    },
+    "month": {
+      "free": "{count} free",
+      "more": "+{count} more"
+    },
+    "details": {
+      "badge": "Google Calendar event",
+      "close": "Close",
+      "closeAria": "Close meeting details",
+      "time": "Time",
+      "location": "Location",
+      "guests": "Guests",
+      "organizer": "Organizer",
+      "meetingLink": "Meeting link",
+      "description": "Description",
+      "eventId": "Event ID",
+      "status": "Status",
+      "statusUnknown": "confirmed / unknown",
+      "openInGoogle": "Open in Google Calendar",
+      "joinMeeting": "Join meeting"
+    }
+  },
   "research": {
     "comingSoon": "Pre-meeting research is coming soon",
     "comingSoonBody": "Generating an AI pre-meeting brief from a company name isn't wired to a backend yet. It will summarize the prospect, recent news, and talking points before your call."
