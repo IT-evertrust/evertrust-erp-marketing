@@ -13,29 +13,13 @@ from __future__ import annotations
 
 import re
 
-# Tender / procurement intent modifiers (English + German — German public sector is the
-# primary market). Appended to buzzwords to bias results toward tender-relevant companies.
-TENDER_MODIFIERS = [
-    "tender", "public tender", "procurement", "public procurement", "supplier", "vendor",
-    "framework agreement", "bid", "contractor",
-    "Ausschreibung", "öffentliche Ausschreibung", "Vergabe", "Lieferant", "Anbieter",
-    "öffentlicher Auftraggeber", "Bieter", "Rahmenvertrag", "Zulieferer",
-]
-
-# Generic discovery modifiers that surface a company's own site + contact details.
-CONTACT_MODIFIERS = ["company", "kontakt impressum", "contact email", "GmbH", "Sp. z o.o."]
-
-# Local-language tender / procurement terms by campaign country (used in a small, focused set
-# of tender-signal queries — NOT cross-multiplied onto every buzzword, which pulls in job boards).
-LOCAL_TENDER = {
-    "Poland": ["przetarg", "zamówienia publiczne", "dostawca"],
-    "Germany": ["Ausschreibung", "öffentliche Vergabe", "Lieferant"],
-    "Austria": ["Ausschreibung", "Lieferant"],
-    "Hungary": ["közbeszerzés", "beszállító"],
-}
-# Local contact term to surface a company's own site (one per country).
-LOCAL_CONTACT = {"Poland": "kontakt", "Germany": "kontakt impressum",
-                 "Austria": "kontakt", "Hungary": "kapcsolat"}
+# Generic, multilingual term sets (NOT per-country tables). The campaign's LOCAL-language niche +
+# contact words come from the LLM profiler/buzzwords, so there is NO hardcoded country list here.
+# CONTACT_TERMS = a generic "find the company's own site" set; TENDER_TERMS = weak tender-intent
+# words used only as a scoring signal + one optional query pass (never crossed onto every buzzword).
+CONTACT_TERMS = ("kontakt", "contact", "impressum")
+TENDER_TERMS = ("tender", "procurement", "supplier", "vendor", "ausschreibung", "vergabe",
+                "auftraggeber", "lieferant", "przetarg", "zamówienia", "közbeszerzés")
 
 # Company-type classification keyword map (longest/most-specific first wins).
 _TYPE_RULES = [
@@ -48,23 +32,17 @@ _TYPE_RULES = [
     ("Reseller", ("shop", "store", "handel", "reseller", "sklep")),
 ]
 
-# Country-code TLDs we treat as on-market (boost in scoring). The EU/DACH neighbours are
-# acceptable for German-public-sector tender work regardless of the campaign country.
-_MARKET_TLDS = {"Germany": ".de", "Poland": ".pl", "Hungary": ".hu", "Austria": ".at"}
-_EU_TLDS = (".de", ".pl", ".at", ".eu", ".cz", ".sk", ".nl", ".be", ".fr", ".hu", ".ch")
-# Off-market TLDs that flag global noise (Asia/US/etc.) for a EU tender campaign.
-_OFFMARKET_TLDS = (".vn", ".cn", ".in", ".id", ".th", ".ph", ".my", ".pk", ".bd", ".ng",
-                   ".com.vn", ".com.cn", ".co.id", ".fj", ".sb", ".au", ".hk", ".tw", ".kr",
-                   ".jp", ".us", ".ca", ".br", ".mx", ".ru", ".ae", ".sa", ".za", ".nz", ".sg")
-# Country names (EN/native) we accept as an in-market geo signal in result text.
-_MARKET_NAMES = {
-    "Germany": ("germany", "deutschland", "german"),
-    "Poland": ("poland", "polska", "polish", "polsce"),
-    "Austria": ("austria", "österreich", "osterreich"),
-    "Hungary": ("hungary", "magyarország", "magyarorszag"),
-}
-# SearXNG language hint per campaign country (biases results to the local market).
-LANG_BY_COUNTRY = {"Germany": "de", "Austria": "de", "Poland": "pl", "Hungary": "hu"}
+# Generic ccTLD geo logic (NO hardcoded country list). The campaign country's own ccTLD comes from
+# the profiler's iso2 (passed as market_tld). Two-letter labels commonly used as generic gTLDs
+# (startups on .io/.ai/.co etc.) are NOT treated as a foreign country.
+_GTLD_LIKE = {"io", "ai", "co", "me", "tv", "fm", "ly", "gg", "sh", "to", "cc", "app", "dev"}
+
+
+def _cctld(host: str) -> str:
+    """The host's last DNS label if it's a 2-letter country code, else '' (gTLD like com/org/net)."""
+    host = (host or "").lower().split(":")[0].rstrip(".")
+    last = host.rsplit(".", 1)[-1] if "." in host else ""
+    return last if (len(last) == 2 and last.isalpha()) else ""
 
 
 def fallback_buzzwords(niche: str) -> list[str]:
@@ -93,28 +71,30 @@ def fallback_buzzwords(niche: str) -> list[str]:
 
 
 def build_tender_queries(buzzwords: list[str], cities: list[str], country: str,
-                         cap: int = 240) -> list[str]:
-    """Build the discovery query set. The SearXNG `language` hint already biases results to the
-    local market, so we keep queries CLEAN (native buzzwords + geo) instead of cross-multiplying
-    English/German tender words onto everything (which pulls in job boards). Tender intent is a
-    small, local-language query pass plus a scoring signal — not a hard query filter."""
+                         cap: int = 240) -> list[tuple[str, str]]:
+    """Build the discovery query set as (query, city) pairs. The city is carried so discovery can
+    attribute each scraped lead to the right city. The SearXNG `language` hint already biases
+    results to the local market, so we keep queries CLEAN (native buzzwords + geo) instead of
+    cross-multiplying English/German tender words onto everything (which pulls in job boards).
+    Tender intent is a small, local-language query pass plus a scoring signal — not a hard filter."""
     geos: list[str] = []
     for c in (cities or []):
         cc = (c or "").strip()
         if cc and cc.lower() not in ("anywhere", "any", ""):
             geos.append(cc)
     geo_words = geos if geos else [country or ""]
-    contact = LOCAL_CONTACT.get(country or "", "kontakt")
-    tenders = LOCAL_TENDER.get(country or "", ["tender", "procurement", "supplier"])
+    contact = "kontakt"                 # generic; the local contact word is also in the buzzword set
+    tenders = list(TENDER_TERMS[:3])    # generic tender-signal pass (no per-country table)
 
-    out, seen = [], set()
+    out: list[tuple[str, str]] = []
+    seen: set = set()
 
-    def add(q: str) -> bool:
+    def add(q: str, city: str) -> bool:
         q = " ".join((q or "").split()).strip()
         k = q.lower()
         if q and k not in seen:
             seen.add(k)
-            out.append(q)
+            out.append((q, city))
         return len(out) < cap
 
     # 1) The bulk: each native buzzword, clean + geo-qualified + a contact variant.
@@ -123,14 +103,14 @@ def build_tender_queries(buzzwords: list[str], cities: list[str], country: str,
         if not bw:
             continue
         for geo in geo_words:
-            if not add(f"{bw} {geo}"):
+            if not add(f"{bw} {geo}", geo):
                 return out
-            if not add(f"{bw} {contact} {geo}"):
+            if not add(f"{bw} {contact} {geo}", geo):
                 return out
-    # 2) A focused tender-signal pass: top buzzwords x local-language tender terms.
+    # 2) A focused tender-signal pass: top buzzwords x local-language tender terms (no single city).
     for bw in buzzwords[:15]:
         for tt in tenders:
-            if not add(f"{bw} {tt}"):
+            if not add(f"{bw} {tt}", ""):
                 return out
     return out
 
@@ -145,12 +125,18 @@ def classify_company_type(name: str, snippet: str, url: str, niche_target: str =
     return "Company"
 
 
-def geo_relevant(url: str, name: str, snippet: str, country: str, cities: list[str]) -> bool:
-    """Drop only clearly OFF-market results — global Asian/US/etc. ccTLDs. EU ccTLDs and neutral
-    domains (.com/.org) are kept: the SearXNG `language` hint already biases the result set to the
-    local market, so a Polish company on a .com is legitimate. Scoring then ranks EU domains higher."""
-    host = (url or "").lower().split("//")[-1].split("/")[0]
-    return not any(host.endswith(t) for t in _OFFMARKET_TLDS)
+def geo_relevant(url: str, name: str, snippet: str, country: str, cities: list[str],
+                 market_tld: str = "") -> bool:
+    """Keep results on the campaign country's own ccTLD or on a neutral gTLD (.com/.org/.io); drop a
+    DIFFERENT country's ccTLD (a foreign market). Fully dynamic — `market_tld` is the campaign
+    country's ccTLD from the profiler's iso2; no hardcoded country list."""
+    host = (url or "").lower().split("//")[-1].split("/")[0].split(":")[0]
+    if not market_tld:
+        return True                     # unknown campaign ccTLD -> can't judge foreignness, keep
+    if host.endswith(market_tld):
+        return True
+    cc, market_cc = _cctld(host), market_tld.lstrip(".")
+    return not (cc and cc != market_cc and cc not in _GTLD_LIKE)
 
 
 def _niche_terms(niche: str) -> list[str]:
@@ -158,7 +144,8 @@ def _niche_terms(niche: str) -> list[str]:
 
 
 def score_lead(*, name: str, snippet: str, url: str, country: str, niche: str,
-               has_email: bool, verified: bool, cities: list[str] | None = None) -> int:
+               has_email: bool, verified: bool, cities: list[str] | None = None,
+               market_tld: str = "") -> int:
     """Relevance score 0..100 — drives ranking. Rewards on-niche text, tender intent, a
     reachable contact, and an on-market (EU/DACH) domain; penalizes global off-market noise."""
     hay = " ".join((name or "", snippet or "")).lower()
@@ -174,25 +161,28 @@ def score_lead(*, name: str, snippet: str, url: str, country: str, niche: str,
     if any(t in hay for t in ("tender", "procurement", "ausschreibung", "vergabe",
                               "auftraggeber", "lieferant", "supplier", "öffentlich")):
         score += 12
-    # Geography: campaign-country ccTLD best, EU/DACH good, off-market heavily penalized.
-    market = _MARKET_TLDS.get(country or "", "")
-    if market and host.endswith(market):
+    # Geography (fully dynamic, no country table): the campaign country's own ccTLD (market_tld from
+    # the profiler's iso2) is best; a DIFFERENT country's ccTLD is penalized; neutral gTLDs
+    # (.com/.org/.io) score 0 there and a country-name mention is a mild signal.
+    market_cc = (market_tld or "").lstrip(".")
+    cc = _cctld(host)
+    if market_tld and host.endswith(market_tld):
         score += 22
-    elif any(host.endswith(t) for t in _EU_TLDS):
-        score += 14
-    elif any(host.endswith(t) for t in _OFFMARKET_TLDS):
-        score -= 30
+    elif market_tld and cc and cc != market_cc and cc not in _GTLD_LIKE:
+        score -= 25
     if country and country.lower() in hay:
         score += 6
     return max(0, min(100, score))
 
 
-def rank_label(score: int) -> str:
-    """Coarse tier label from a score (A best ... D weakest) — handy for the sheet."""
+def rank_label(score: int, min_b: int = 40) -> str:
+    """Tier label from the relevance score — AAA / A / B / C. AAA = strong (contactable + on-niche +
+    on-market), A = solid, B = weak but usable (keep-for-manual), C = below the keep floor `min_b`
+    (noise — the pipeline DROPS tier C, keeping only B and above)."""
     if score >= 75:
+        return "AAA"
+    if score >= 50:
         return "A"
-    if score >= 55:
+    if score >= min_b:
         return "B"
-    if score >= 40:
-        return "C"
-    return "D"
+    return "C"

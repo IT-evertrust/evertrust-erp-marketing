@@ -54,7 +54,7 @@ def test_route_satellite_dry():
     fake = FakeErp()
     _wire(fake)
     client = TestClient(server.app)
-    data = client.post("/satellite/run", json={"campaignId": "c1", "live": False, "useLlm": False}).json()
+    data = client.post("/satellite/run", json={"campaignId": "c1", "live": False, "useLlm": False, "wait": True}).json()
 
     assert data["status"] == "ok" and data["mode"] == "dry"
     assert data["segmentsPlanned"] == 8          # 1 target x 2 cities x 4 foci
@@ -68,7 +68,7 @@ def test_route_satellite_live_writes():
     fake = FakeErp()
     _wire(fake)
     client = TestClient(server.app)
-    data = client.post("/satellite/run", json={"campaignId": "c1", "live": True, "useLlm": False}).json()
+    data = client.post("/satellite/run", json={"campaignId": "c1", "live": True, "useLlm": False, "wait": True}).json()
 
     assert data["status"] == "ok" and data["posted"] is True
     assert len(fake.bulk) == 1
@@ -83,7 +83,7 @@ def test_no_targets_falls_back_to_niche():
     fake = FakeErp(targets=[])
     _wire(fake)
     client = TestClient(server.app)
-    data = client.post("/satellite/run", json={"campaignId": "c1", "useLlm": False}).json()
+    data = client.post("/satellite/run", json={"campaignId": "c1", "useLlm": False, "wait": True}).json()
 
     assert data["status"] == "ok"
     assert data["nicheFallback"] is True
@@ -91,6 +91,55 @@ def test_no_targets_falls_back_to_niche():
     assert fake.niche_triggers == ["c1"]      # analytics still triggered, just non-blocking
     assert data["leadsFound"] == 2            # offline path builds from the niche-as-target
     assert fake.bulk == []                    # dry run still writes nothing
+
+
+def test_nationwide_loops_all_regions(monkeypatch):
+    # "Anywhere" for ANY country -> loop EVERY region the profiler returns (here 2), bilingually.
+    from satellite.clients import llm as llmmod
+    from satellite.settings import Settings
+
+    monkeypatch.setattr(llmmod, "profile_country", lambda *a, **k: {
+        "iso2": "BG", "langCode": "bg",
+        "keywordsLocal": ["киберсигурност"], "keywordsEnglish": ["cybersecurity"],
+        "regions": [{"name": "Sofia", "cities": ["София"]}, {"name": "Plovdiv", "cities": ["Пловдив"]}],
+        "cities": ["София", "Пловдив"],
+    })
+    monkeypatch.setattr(llmmod, "recover_emails", lambda *a, **k: {})
+
+    class FakeErpBG:
+        def fetch_campaign_config(self, cid):
+            return CampaignConfig(campaign_id=cid, niche="Cybersecurity", targets=[],
+                                  region="Anywhere", country="Bulgaria", max_leads_per_run=500)
+
+        def post_prospects_bulk(self, *a, **k):
+            return {"created": 0, "updated": 0}
+
+        def post_run_callback(self, *a, **k):
+            return {}
+
+        def trigger_niche_analytics(self, *a, **k):
+            return {}
+
+    class FakeSearch:
+        offline = False
+
+        def query(self, q):
+            return [{"title": "Кибер ООД", "url": "https://kibersec.bg/", "content": "киберсигурност"}]
+
+        def query_paged(self, q, pages=1, language=""):
+            return self.query(q)
+
+    server.app.dependency_overrides[server.get_settings] = lambda: Settings(
+        llm_base_url="http://fake-llm", searxng_url="", region_cooldown=0.0, lead_target=10_000)
+    server.app.dependency_overrides[server.get_erp] = lambda: FakeErpBG()
+    server.app.dependency_overrides[server.get_search] = lambda: FakeSearch()
+    server.app.dependency_overrides[server.get_fetcher] = lambda: OfflineFetcher()
+    data = TestClient(server.app).post(
+        "/satellite/run", json={"campaignId": "bg", "useLlm": True, "wait": True}).json()
+
+    assert data["status"] == "ok"
+    assert data["regionsScanned"] == 2          # looped BOTH regions of the country
+    assert data["leadsFound"] >= 1              # native-named .bg lead kept (bilingual gate + .bg market)
 
 
 def test_health():

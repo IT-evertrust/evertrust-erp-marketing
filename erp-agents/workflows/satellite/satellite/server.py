@@ -1,13 +1,17 @@
-"""HTTP surface for Satellite — the route the ERP calls.
+"""HTTP surface for Satellite — the route the ERP's "run lead" button calls.
 
-client -> ERP route -> POST /satellite/run {campaignId} -> run() -> structured output.
-ERP/search/fetcher gateways are injectable FastAPI deps so tests override them with fakes.
+ERP ArsenalService -> POST {AGENT_LEAD_SATELLITE_URL}/satellite/run {campaignId, live:true} -> here.
+The ERP fires this with a 120s timeout and only records the HAND-OFF (DISPATCHED on a 2xx), so a
+real run (LLM + search + scrape, minutes long) must NOT block the response: by default we accept
+the request, return 2xx immediately, run the pipeline in the BACKGROUND, and the pipeline posts its
+own /arsenal/runs/callback when done. Pass `wait:true` to run synchronously and get the full result
+(used by the CLI/tests). ERP/search/fetcher gateways are injectable FastAPI deps so tests fake them.
 
 Run it: `uvicorn satellite.server:app --port 8801`
 """
 from __future__ import annotations
 
-from fastapi import Depends, FastAPI
+from fastapi import BackgroundTasks, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -37,8 +41,9 @@ def get_erp(settings: Settings = Depends(get_settings)) -> ErpGateway:
 
 
 def get_search(settings: Settings = Depends(get_settings)) -> SearchGateway:
-    # SearXNG if configured (auth via X-Search-Key = SEARXNG_API_KEY), otherwise DuckDuckGo.
-    return WebSearch(settings.searxng_url, settings.searxng_api_key, pages=settings.ddg_pages)
+    # SearXNG-first (auth via X-Search-Key = SEARXNG_API_KEY); DDG only as an opt-in fallback.
+    return WebSearch(settings.searxng_url, settings.searxng_api_key,
+                     pages=settings.ddg_pages, enable_ddg=settings.enable_ddg_fallback)
 
 
 def get_fetcher() -> UrlFetcher:
@@ -51,6 +56,30 @@ class RunRequest(BaseModel):
     persist: bool | None = None   # write prospects to ERP; defaults to `live` when unset
     useLlm: bool = True
     maxSegments: int | None = None
+    # False (default = the ERP fire-and-forget): dispatch in the background, return 2xx immediately,
+    # post the run callback when done. True: run synchronously and return the full result (CLI/tests).
+    wait: bool = False
+
+
+def _close_all(*gateways) -> None:
+    for gw in gateways:
+        close = getattr(gw, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                pass
+
+
+def _run_bg(settings, opts, erp, search, fetcher) -> None:
+    """Background worker: run the full pipeline (which posts /arsenal/runs/callback at the end),
+    then close the gateways. Errors are swallowed — the ERP already recorded the dispatch."""
+    try:
+        run(settings, opts, erp, search, fetcher)
+    except Exception:
+        pass
+    finally:
+        _close_all(erp, search, fetcher)
 
 
 @app.get("/health")
@@ -61,6 +90,7 @@ def health() -> dict:
 @app.post("/satellite/run")
 def satellite_run(
     req: RunRequest,
+    background_tasks: BackgroundTasks,
     settings: Settings = Depends(get_settings),
     erp: ErpGateway = Depends(get_erp),
     search: SearchGateway = Depends(get_search),
@@ -71,10 +101,13 @@ def satellite_run(
         campaign_id=req.campaignId, live=req.live, persist=persist,
         use_llm=req.useLlm, max_segments=req.maxSegments,
     )
-    try:
-        return run(settings, opts, erp, search, fetcher)
-    finally:
-        for gw in (erp, search, fetcher):
-            close = getattr(gw, "close", None)
-            if callable(close):
-                close()
+    if req.wait:
+        try:
+            return run(settings, opts, erp, search, fetcher)
+        finally:
+            _close_all(erp, search, fetcher)
+    # Fire-and-forget (the ERP path): return the hand-off now, do the work in the background so the
+    # ERP's 120s POST doesn't time out. The pipeline posts /arsenal/runs/callback when it finishes.
+    background_tasks.add_task(_run_bg, settings, opts, erp, search, fetcher)
+    return {"status": "dispatched", "campaignId": req.campaignId,
+            "mode": "live" if req.live else "dry"}

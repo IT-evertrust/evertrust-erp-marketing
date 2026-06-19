@@ -25,7 +25,7 @@ _JUNK_HOST_FRAGMENTS = (
     "amazon.", "ebay.", "alibaba.", "indeed.", "glassdoor.", "crunchbase.", "trustpilot.",
     "reddit.", "quora.", "medium.", "blogspot.", "wordpress.com", "wix.com", "t.me",
     "wa.me", "whatsapp.com", "apple.com", "play.google", "maps.", "search.", "translate.",
-    "archive.org", "scribd.", "slideshare.", "github.", "gov.", "europa.eu",
+    "archive.org", "scribd.", "slideshare.", "github.", "gov.", "europa.eu", ".google",
     # spam/parking/scraper-aggregator hosts seen in the wild
     "qanator.", "namepros.", "sedo.", "dan.com", "afternic.", "hugedomains.",
     "thegioididong.", "lazada.", "shopee.", "made-in-china.", "globalsources.", "thomasnet.",
@@ -116,11 +116,34 @@ def queries_for_segment(seg: Segment) -> list[str]:
 # --- site scraping (I/O via the injected fetcher) --------------------------
 
 _CONTACT_HINTS = ("kontakt", "contact", "impressum", "imprint", "about", "ueber",
-                  "%C3%BCber", "legal", "datenschutz", "o-nas", "kontaktyt")
-# Common paths to try when the homepage + discovered links yield no email.
+                  "%C3%BCber", "legal", "datenschutz", "privacy", "o-nas", "kontaktyt",
+                  # deeper pages where emails often live (Team/Careers/Leadership/Partners)
+                  "team", "career", "karriere", "kariera", "jobs", "people",
+                  "leadership", "management", "partners",
+                  # Hungarian (kapcsolat=contact, elerhetoseg=reachability, impresszum=imprint,
+                  # rolunk=about us, cegunk=our company)
+                  "kapcsolat", "elerhetoseg", "impresszum", "rolunk", "cegunk")
+# Common paths to try when the homepage + discovered links yield no email — including the deeper
+# pages (Team/Careers/Privacy/Partners/Leadership) the email-coverage research called out.
 _GUESS_PATHS = ["/kontakt", "/contact", "/contact-us", "/contacts", "/impressum",
                 "/imprint", "/about", "/about-us", "/ueber-uns", "/o-nas",
-                "/kontakt.html", "/impressum.html", "/contact.html"]
+                "/team", "/our-team", "/careers", "/career", "/karriere", "/jobs",
+                "/people", "/leadership", "/management", "/partners",
+                "/privacy", "/privacy-policy", "/datenschutz",
+                "/kontakt.html", "/impressum.html", "/contact.html",
+                # Hungarian contact/imprint/about paths
+                "/kapcsolat", "/elerhetoseg", "/impresszum", "/rolunk", "/cegunk"]
+
+
+def _set_email(lead: Lead, email: str, url: str, kind: str, dom: str) -> None:
+    """Record a recovered email together with WHERE it came from (evidence). On-domain addresses
+    (the company's own domain) are higher-confidence than an off-domain role address."""
+    lead.email, lead.status = email, ""
+    lead.email_source_url = url
+    lead.email_source_type = kind
+    host = email.split("@")[1].lower() if "@" in email else ""
+    key = (dom or "").split(".")[0]
+    lead.email_confidence = 0.9 if (key and key in host) else 0.55
 
 
 def _contact_links(html: str, base: str) -> list[str]:
@@ -143,21 +166,37 @@ def _contact_links(html: str, base: str) -> list[str]:
 
 
 def scrape_one(fetcher, lead: Lead) -> bool:
-    """Fetch a lead's site (home -> discovered contact pages -> guessed paths) and fill .email.
+    """Fetch a lead's site and fill .email + its provenance. Crawl order: the EXACT page the search
+    engine returned (source_url — often already /kontakt or /impressum) -> homepage -> contact links
+    discovered on the homepage -> guessed contact paths. Crawling source_url FIRST means an email
+    that SearXNG handed us directly on a deep page isn't missed by going to the homepage first.
     Returns True if an email was recovered."""
     if lead.email or not lead.website:
         return False
     base = lead.website.rstrip("/")
     dom = registrable_domain(base)
 
-    home = fetcher.get(base)
-    email = extract_emails_from_html(home, dom) if home else ""
-    if email:
-        lead.email, lead.status = email, ""
-        return True
+    src = (lead.source_url or "").rstrip("/")
+    primary = [(src, "search-page")] if (src and src != base) else []
+    primary.append((base, "website"))
 
-    tried = {base}
-    pages = _contact_links(home, base) + [base + p for p in _GUESS_PATHS]
+    tried: set = set()
+    home_html = ""
+    for url, kind in primary:
+        if url in tried:
+            continue
+        tried.add(url)
+        html = fetcher.get(url)
+        if url == base:
+            home_html = html
+        if not html:
+            continue
+        email = extract_emails_from_html(html, dom)
+        if email:
+            _set_email(lead, email, url, kind, dom)
+            return True
+
+    pages = _contact_links(home_html, base) + [base + p for p in _GUESS_PATHS]
     for url in pages:
         if url in tried:
             continue
@@ -167,7 +206,7 @@ def scrape_one(fetcher, lead: Lead) -> bool:
             continue
         email = extract_emails_from_html(html, dom)
         if email:
-            lead.email, lead.status = email, ""
+            _set_email(lead, email, url, "contact-page", dom)
             return True
     return False
 
