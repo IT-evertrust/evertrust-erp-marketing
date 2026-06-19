@@ -109,10 +109,10 @@ export function WeekView({
                 </span>
 
                 <span className="mt-1 text-[10px] text-muted-foreground">
-                  {dayEvents.length > 0
-                    ? t('calendar.week.meetings', { count: dayEvents.length })
-                    : daySlots.length > 0
-                      ? t('calendar.week.slots', { count: daySlots.length })
+                  {freeOnly
+                    ? t('calendar.week.slots', { count: daySlots.length })
+                    : dayEvents.length > 0
+                      ? t('calendar.week.meetings', { count: dayEvents.length })
                       : t('calendar.week.free')}
                 </span>
               </div>
@@ -122,7 +122,11 @@ export function WeekView({
 
         {hasAllDay ? (
           <div className="flex border-b bg-muted/30 pr-2">
-            <div className="flex w-16 shrink-0 items-center justify-end border-r px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <div
+              className={`flex shrink-0 items-center justify-end border-r px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground ${
+                secondaryTz ? 'w-32' : 'w-16'
+              }`}
+            >
               {t('calendar.allDay')}
             </div>
 
@@ -167,9 +171,13 @@ export function WeekView({
               events={timedEvents.filter((event) =>
                 overlapsDateKey(event.startDate, event.endDate, dayKey, primaryTz),
               )}
-              slots={slots.filter((slot) =>
-                overlapsDateKey(slot.start, slot.end, dayKey, primaryTz),
-              )}
+              slots={
+                freeOnly
+                  ? slots.filter((slot) =>
+                      overlapsDateKey(slot.start, slot.end, dayKey, primaryTz),
+                    )
+                  : []
+              }
               selectedEventId={selectedEventId}
               onSelectEvent={onSelectEvent}
               primaryTz={primaryTz}

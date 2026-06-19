@@ -128,7 +128,11 @@ export function DayView({
 
         {hasAllDay ? (
           <div className="flex border-b bg-muted/30 pr-2">
-            <div className="flex w-16 shrink-0 items-center justify-end border-r px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <div
+              className={`flex shrink-0 items-center justify-end border-r px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground ${
+                secondaryTz ? 'w-32' : 'w-16'
+              }`}
+            >
               {t('calendar.allDay')}
             </div>
 
@@ -158,7 +162,7 @@ export function DayView({
             dayKey={dayKey}
             weekend={weekend}
             events={timedEvents}
-            slots={daySlots}
+            slots={freeOnly ? daySlots : []}
             selectedEventId={selectedEventId}
             onSelectEvent={onSelectEvent}
             primaryTz={primaryTz}

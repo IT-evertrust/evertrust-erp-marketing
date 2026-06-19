@@ -2,7 +2,7 @@
 
 import type { CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
-import { Clock, Users, Video } from 'lucide-react';
+import { Users, Video } from 'lucide-react';
 import type { CalendarEventDto } from '@evertrust/shared';
 import {
   formatClockInTimeZone,
@@ -54,7 +54,13 @@ export function CalendarEventBlock({
   const attendeeLabel =
     attendees.length > 0 ? attendees.join(', ') : t('book.upcoming.noAttendees');
 
-  const compact = height < 54;
+  // Progressive disclosure by card height: a 30-min card (~36px) shows the title
+  // only; taller cards add the time, then guests + Meet. The zone label and the
+  // secondary-zone line are intentionally NOT repeated per card — the left gutter
+  // already shows both scales, and the hover/title + details dialog carry the full
+  // zone breakdown. This keeps narrow week columns readable instead of truncating
+  // "GMT+2 11:00–12:00" to "G…".
+  const showTime = height >= 44;
   const roomy = height >= 78;
 
   const categoryStyle = CATEGORY_STYLE[event.category];
@@ -83,20 +89,13 @@ export function CalendarEventBlock({
         to: primaryTo,
       })}
     >
-      <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground">
-        <Clock className="size-3 shrink-0" />
-        <span className="truncate tabular-nums">
-          {primaryLabel} {primaryFrom}–{primaryTo}
-        </span>
-      </div>
-
       <div className={`truncate text-xs font-semibold leading-tight ${categoryStyle.tint}`}>
         {title}
       </div>
 
-      {!compact && secondaryTz ? (
-        <div className="truncate text-[10px] font-medium text-muted-foreground">
-          {secondaryLabel} {secondaryFrom}–{secondaryTo}
+      {showTime ? (
+        <div className="truncate text-[10px] font-medium tabular-nums text-muted-foreground">
+          {primaryFrom}–{primaryTo}
         </div>
       ) : null}
 
