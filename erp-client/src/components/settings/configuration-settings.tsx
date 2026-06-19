@@ -13,6 +13,8 @@ import {
   useGoogleAccounts,
   useSetDefaultMailbox,
   useUpdateAiEngineConfig,
+  useUpdateWorkflowConfig,
+  useWorkflowConfig,
 } from '@/hooks/use-arsenal';
 import { ApiError, api } from '@/lib/api';
 import { Can } from '@/components/auth/can';
@@ -478,9 +480,94 @@ function AiEngineCard() {
   );
 }
 
-// Configuration: integrations + AI engine, admin-only (the route gates on
-// admin:config). Exactly the three cards from the R.E.A.N. mockup — Google
-// Workspace, Other integrations, AI engine.
+// ============================================================================
+// Card — Sales calendar timezone
+// ============================================================================
+// Per-org timezones for the Activate calendar (org_config.salesTimeZone /
+// salesSecondaryTimeZone). Both are raw overrides: a blank primary inherits the
+// product default (Europe/Berlin); a blank secondary drops the dual time scale.
+// Writes ride the WorkflowConfig PUT (admin:config); the backend validates the IANA
+// zone, so an invalid value surfaces as the API error toast.
+function SalesCalendarCard() {
+  const t = useTranslations('settings');
+  const config = useWorkflowConfig();
+  const update = useUpdateWorkflowConfig();
+  const data = config.data;
+
+  const [primary, setPrimary] = useState<string>('');
+  const [secondary, setSecondary] = useState<string>('');
+
+  useEffect(() => {
+    if (!data) return;
+    setPrimary(data.salesTimeZone ?? '');
+    setSecondary(data.salesSecondaryTimeZone ?? '');
+  }, [data]);
+
+  function handleSave() {
+    update.mutate(
+      {
+        // '' clears the override (primary → product default, secondary → no gutter).
+        salesTimeZone: primary.trim() === '' ? null : primary.trim(),
+        salesSecondaryTimeZone: secondary.trim() === '' ? null : secondary.trim(),
+      },
+      {
+        onSuccess: () => toast.success(t('config.calendar.toastSaved')),
+        onError: (err) => toast.error(err.message || t('config.calendar.toastError')),
+      },
+    );
+  }
+
+  return (
+    <SettingsCard
+      title={t('config.calendar.title')}
+      description={t('config.calendar.description')}
+      className="max-w-[620px]"
+    >
+      {config.isLoading || !data ? (
+        <Skeleton className="h-32 w-full rounded-lg" />
+      ) : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="sales-tz-primary">{t('config.calendar.primaryLabel')}</Label>
+              <Input
+                id="sales-tz-primary"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={t('config.calendar.primaryPlaceholder')}
+                value={primary}
+                onChange={(e) => setPrimary(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="sales-tz-secondary">{t('config.calendar.secondaryLabel')}</Label>
+              <Input
+                id="sales-tz-secondary"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={t('config.calendar.secondaryPlaceholder')}
+                value={secondary}
+                onChange={(e) => setSecondary(e.target.value)}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">{t('config.calendar.hint')}</p>
+          <Button
+            type="button"
+            className="self-start"
+            onClick={handleSave}
+            disabled={update.isPending}
+          >
+            {update.isPending ? t('config.calendar.saving') : t('config.calendar.save')}
+          </Button>
+        </>
+      )}
+    </SettingsCard>
+  );
+}
+
+// Configuration: integrations + AI engine + sales-calendar timezone, admin-only (the
+// route gates on admin:config).
 export function ConfigurationSettings() {
   const t = useTranslations('settings');
 
@@ -493,6 +580,7 @@ export function ConfigurationSettings() {
       <GoogleWorkspaceCard />
       <OtherIntegrationsCard />
       <AiEngineCard />
+      <SalesCalendarCard />
     </div>
   );
 }

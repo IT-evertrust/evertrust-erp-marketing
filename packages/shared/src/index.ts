@@ -523,6 +523,12 @@ export const CalendarUpcomingDto = z.object({
   events: z.array(CalendarEventDto),
   // When configured=false, a human-readable cause to show the user (else null).
   reason: z.string().nullable().default(null),
+  // The org's RESOLVED primary display/booking IANA timezone (org override ?? env
+  // ?? 'Europe/Berlin'); always present so the Activate grid can position events.
+  timeZone: z.string().default('Europe/Berlin'),
+  // The org's resolved SECONDARY timezone for the dual-scale gutter, or null when
+  // the org runs a single time scale.
+  secondaryTimeZone: z.string().nullable().default(null),
 });
 export type CalendarUpcomingDto = z.infer<typeof CalendarUpcomingDto>;
 
@@ -533,6 +539,10 @@ export const CalendarFreeSlotsDto = z.object({
   configured: z.boolean(),
   slots: z.array(z.object({ start: z.string(), end: z.string() })),
   reason: z.string().nullable().default(null),
+  // The org's resolved primary / secondary IANA timezones (mirrors
+  // CalendarUpcomingDto) so the Activate grid renders slots in the org's zone(s).
+  timeZone: z.string().default('Europe/Berlin'),
+  secondaryTimeZone: z.string().nullable().default(null),
 });
 export type CalendarFreeSlotsDto = z.infer<typeof CalendarFreeSlotsDto>;
 export const CalendarAttendeeDto = z.object({
@@ -2455,6 +2465,10 @@ export const WorkflowConfigDto = z.object({
   senders: z.array(OrgSenderDto),
   // The org's default Google Calendar id sales bookings land on (null = unset).
   salesCalendarId: z.string().nullable(),
+  // The org's primary sales-calendar timezone override (null = product default
+  // 'Europe/Berlin') and the optional secondary gutter zone (null = single-scale).
+  salesTimeZone: z.string().nullable(),
+  salesSecondaryTimeZone: z.string().nullable(),
   followupOffsetDays: z.number().int().nullable(),
   finalPushOffsetDays: z.number().int().nullable(),
   // Configuration > Templates / Leads — see WorkflowTemplatesDto / WorkflowLeadsDto
@@ -2494,6 +2508,16 @@ const NullableCap = z.preprocess(
 const NullableText = z.preprocess(
   (v) => (v === '' ? null : v),
   z.string().nullable(),
+);
+
+// A nullable IANA-timezone override (sales calendar zones): a non-empty string must be
+// a valid IANA zone (else 400), empty string OR null clears it back to the default.
+const NullableTimeZone = z.preprocess(
+  (v) => (v === '' ? null : v),
+  z
+    .string()
+    .refine(isValidTimeZone, 'Must be a valid IANA timezone (e.g. Europe/Berlin)')
+    .nullable(),
 );
 
 // Default target regions: an array of NON-EMPTY strings, each trimmed. Blank/
@@ -2553,6 +2577,10 @@ export const UpdateWorkflowConfigDto = z.object({
   // The org's default sales calendar id. Empty string OR null clears it, omit leaves
   // it unchanged. The senders LIST is managed via dedicated CRUD endpoints, not here.
   salesCalendarId: NullableText.optional(),
+  // The org's sales-calendar timezone(s). A valid IANA zone sets it; empty/null clears
+  // (primary → 'Europe/Berlin' default, secondary → no gutter); omit leaves unchanged.
+  salesTimeZone: NullableTimeZone.optional(),
+  salesSecondaryTimeZone: NullableTimeZone.optional(),
   followupOffsetDays: NullableOffsetDays.optional(),
   finalPushOffsetDays: NullableOffsetDays.optional(),
   templates: UpdateTemplates.optional(),

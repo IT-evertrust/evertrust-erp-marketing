@@ -8,6 +8,7 @@ import {
   industries,
   nicheTargets,
   niches,
+  orgConfig,
   organizations,
   users,
 } from './schema';
@@ -44,6 +45,13 @@ async function seed(): Promise<void> {
     })
     .returning();
   if (!org) throw new Error('Failed to seed organization');
+
+  // Per-org config: keep EverTrust's dual time-scale Activate gutter (secondary zone
+  // Asia/Bangkok). salesTimeZone left null → product default 'Europe/Berlin'.
+  await db.insert(orgConfig).values({
+    organizationId: org.id,
+    salesSecondaryTimeZone: 'Asia/Bangkok',
+  });
 
   const [admin, pic] = await db
     .insert(users)

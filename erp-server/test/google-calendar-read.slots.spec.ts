@@ -158,4 +158,76 @@ describe('computeFreeSlots', () => {
     expect(first.getUTCHours()).toBe(8); // 09:00 CET -> 08:00 UTC
     expect(first.getUTCMinutes()).toBe(0);
   });
+
+  it('honours a non-Berlin org timezone (Asia/Bangkok, UTC+7, no DST)', () => {
+    // The multi-tenant path: a third `tz` arg drives business hours in the org's zone.
+    // A Bangkok wall-clock instant as a real UTC Date (same correction trick as berlin()).
+    const inZone = (
+      y: number,
+      mo: number,
+      d: number,
+      h: number,
+      mi: number,
+      tz: string,
+    ): Date => {
+      const guess = Date.UTC(y, mo - 1, d, h, mi);
+      const fmt = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
+      const p = Object.fromEntries(
+        fmt.formatToParts(new Date(guess)).map((x) => [x.type, x.value]),
+      );
+      let hh = Number(p.hour);
+      if (hh === 24) hh = 0;
+      const seen = Date.UTC(
+        Number(p.year),
+        Number(p.month) - 1,
+        Number(p.day),
+        hh,
+        Number(p.minute),
+      );
+      return new Date(guess - (seen - guess));
+    };
+
+    const zoneHM = (iso: string, tz: string) => {
+      const fmt = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        weekday: 'short',
+      });
+      const p = Object.fromEntries(
+        fmt.formatToParts(new Date(iso)).map((x) => [x.type, x.value]),
+      );
+      let hour = Number(p.hour);
+      if (hour === 24) hour = 0;
+      return { hour, minute: Number(p.minute), weekday: p.weekday as string };
+    };
+
+    const TZ = 'Asia/Bangkok';
+    // Wednesday 2026-06-17, 08:00 Bangkok — before business hours, no busy events.
+    const now = inZone(2026, 6, 17, 8, 0, TZ);
+    const slots = computeFreeSlots([], now, TZ);
+
+    expect(slots.length).toBe(6);
+    // First slot is the day's first business-hours opening: 09:00 Bangkok == 02:00 UTC.
+    const first = firstSlot(slots);
+    expect(zoneHM(first.start, TZ).hour).toBe(9);
+    expect(zoneHM(first.start, TZ).minute).toBe(0);
+    expect(new Date(first.start).getUTCHours()).toBe(2); // UTC+7, no DST
+    // Every slot sits inside weekday 09:00–17:00 Bangkok.
+    for (const s of slots) {
+      const { hour, weekday } = zoneHM(s.start, TZ);
+      expect(hour).toBeGreaterThanOrEqual(9);
+      expect(hour).toBeLessThan(17);
+      expect(['Mon', 'Tue', 'Wed', 'Thu', 'Fri']).toContain(weekday);
+    }
+  });
 });

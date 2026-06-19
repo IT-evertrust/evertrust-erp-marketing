@@ -194,6 +194,19 @@
       "toastSaved": "Configuration saved.",
       "toastError": "Could not save the AI engine config."
     },
+    "calendar": {
+      "title": "Sales calendar timezone",
+      "description": "The timezone the Activate calendar and free-slot business hours use. Leave blank for the product default.",
+      "primaryLabel": "Primary timezone",
+      "primaryPlaceholder": "Europe/Berlin (default)",
+      "secondaryLabel": "Secondary timezone (optional)",
+      "secondaryPlaceholder": "e.g. Asia/Bangkok — blank for none",
+      "hint": "Use IANA names like Europe/Berlin or America/New_York. The secondary zone adds a second time scale to the calendar gutter.",
+      "save": "Save",
+      "saving": "Saving…",
+      "toastSaved": "Calendar timezone saved.",
+      "toastError": "Could not save the calendar timezone."
+    },
     "templates": {
       "title": "Templates",
       "description": "The baseline outreach copy the sequence sends. Leave blank to send nothing.",

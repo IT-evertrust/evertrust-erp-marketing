@@ -274,6 +274,11 @@ export class WorkflowConfigService {
       senders,
       // org_config ?? env SALES_CALENDAR_ID ?? null.
       salesCalendarId: this.resolveSalesCalendarId(orgRow),
+      // RAW per-org timezone overrides for the settings form (null = inherit the
+      // product default 'Europe/Berlin' / no secondary gutter). The EFFECTIVE zone the
+      // calendar renders in is resolved in GoogleCalendarReadService (org ?? env ?? default).
+      salesTimeZone: clean(orgRow.salesTimeZone) ?? null,
+      salesSecondaryTimeZone: clean(orgRow.salesSecondaryTimeZone) ?? null,
       followupOffsetDays: row?.followupOffsetDays ?? null,
       finalPushOffsetDays: row?.finalPushOffsetDays ?? null,
       // Templates + Leads share one resolver with getAutomation() (see below) so the
@@ -454,6 +459,15 @@ export class WorkflowConfigService {
     // default). The senders LIST is managed via the dedicated CRUD endpoints, not here.
     if ('salesCalendarId' in patch) {
       prefs.salesCalendarId = patch.salesCalendarId ?? null;
+    }
+    // The sales-calendar timezones are PER-ORG prefs (a valid IANA zone sets it — the
+    // DTO already validated it — null/'' clears: primary → 'Europe/Berlin' default,
+    // secondary → no dual-scale gutter).
+    if ('salesTimeZone' in patch) {
+      prefs.salesTimeZone = patch.salesTimeZone ?? null;
+    }
+    if ('salesSecondaryTimeZone' in patch) {
+      prefs.salesSecondaryTimeZone = patch.salesSecondaryTimeZone ?? null;
     }
 
     // Templates group — each sub-field independent: a value sets it, null clears it,

@@ -344,3 +344,98 @@ have full CRUD; mirror the industries pattern so niches get direct management.
       delete blocked (campaigns+prospects) + clean delete cascades targets + 404 cross-org.
 - [x] corepack pnpm --filter @evertrust/api typecheck (tsc --noEmit clean) + test GREEN
       (49 suites / 418 tests; niches.service.spec 17 tests). Mirrors the industries feature.
+
+## Multi-tenant timezone fix — Activate calendar [2026-06-19]
+
+De-hardcode `Europe/Berlin` / `Asia/Bangkok` from the Activate calendar so each org
+resolves its OWN display/booking timezone(s) per the multi-tenant principle
+(`org value ?? env default`). Event data is already correct UTC — this is purely
+display/config correctness, NOT a cross-tenant data leak.
+
+Decisions (confirmed with user):
+- Add a SECOND nullable column `salesSecondaryTimeZone` for the dual-scale gutter
+  (null = single-scale, no secondary gutter). EverTrust keeps `Asia/Bangkok`.
+- Include a settings-UI field so org admins can edit both zones end-to-end.
+- Migration number: **0034** (latest on disk is 0033 — the spec's "0019" is stale).
+- Risk note: every tz-math helper in activate-view.tsx already takes a `timeZone`
+  arg; only the call sites hardcode the zone, so threading a per-org value is
+  mechanically safe (the fixed-point offset math is already zone-agnostic).
+- Reuse the existing shared `isValidTimeZone()` (packages/shared index.ts) for validation.
+
+### 1. Schema + migration (packages/db)
+- [x] `schema/org-config.ts`: added `salesTimeZone` + `salesSecondaryTimeZone` (both nullable, additive).
+- [x] Migration `0034_org_sales_timezone.sql` HAND-WRITTEN (drizzle-kit generate hit a
+      pre-existing `asset_kind` snapshot drift + interactive prompt — repo already
+      hand-writes additive migrations; idempotent `ADD COLUMN IF NOT EXISTS` ×2 + a
+      tenant-scoped backfill keyed on the 'evertrust' slug via ON CONFLICT/COALESCE).
+      Journal entry idx 34 added. CREATE EXTENSION vector untouched.
+- [x] `seed.ts`: inserts an org_config row for the bootstrap org with
+      `salesSecondaryTimeZone='Asia/Bangkok'` (fresh dev); the migration backfill covers
+      the existing prod org.
+
+### 2. Shared DTOs (packages/shared) — done
+- [x] CalendarUpcomingDto/CalendarFreeSlotsDto gain resolved `timeZone` + `secondaryTimeZone`.
+- [x] WorkflowConfigDto raw overrides; UpdateWorkflowConfigDto uses `NullableTimeZone`
+      (preprocess + `isValidTimeZone` refine → 400 on bad zone).
+
+### 3. Backend — GoogleCalendarReadService — done
+- [x] Injects DB + AppConfigService; `resolveOrgTimeZones` (org ?? env ?? 'Europe/Berlin';
+      secondary org ?? null; invalid → default; never throws).
+- [x] `berlin*` helpers → `zoneParts`/`zoneWallClockToUtc`; `computeFreeSlots(tz='Europe/Berlin')`;
+      `SLOT_TZ`/`DEFAULT_CALENDAR_TIME_ZONE` removed (→ `DEFAULT_TIME_ZONE`).
+- [x] upcoming/freeSlots return zones on all returns (incl. shells); updateEvent defaults
+      to resolved primary; env.schema += SALES_TIME_ZONE.
+
+### 4. Backend — WorkflowConfigService — done
+- [x] getEffective surfaces raw `salesTimeZone`/`salesSecondaryTimeZone`; update() persists both.
+
+### 5. Frontend — activate-view.tsx — done
+- [x] `DEFAULT_TIME_ZONE` bootstrap; `primaryTz`/`secondaryTz` derived from the calendar
+      payload, threaded through the whole tree (helpers were already tz-parameterized).
+- [x] Single- vs dual-scale gutter on `secondaryTz`; `zoneShortLabel` (Intl shortOffset)
+      replaces "CET/CEST"/"GMT+7"/"DE"/"Germany time"; fetch window buffered ±1 day to
+      avoid edge-clipping when render zone ≠ fetch zone.
+
+### 6. Frontend — configuration-settings.tsx — done
+- [x] `SalesCalendarCard` (primary + optional secondary) via useWorkflowConfig/Update; EN/DE i18n.
+
+### 7. Verify
+- [x] API jest: **39 suites / 383 tests green** (was 383; +the new Bangkok slot test &
+      timezone workflow-config tests; existing Berlin tests unchanged).
+- [x] Workspace typecheck GREEN (shared, db, api, web); web lint clean (only 2 pre-existing
+      exhaustive-deps warnings on rawEvents/rawSlots, unrelated).
+- [x] Render-math verified in a sandbox against Asia/Bangkok using the EXACT activate-view
+      helpers: minute positioning (16:30→990), zone labels (GMT+7/GMT+2/GMT-4), and the
+      east-zone midnight day-bucketing edge all correct (11/11 assertions PASS). Full
+      in-browser grid render not reproducible here (needs live Google OAuth calendar data).
+- [x] code-reviewer subagent pass — **approve**, no critical/warning/nit findings.
+
+### Review
+
+**2026-06-19 — Activate calendar timezone de-hardcoded (multi-tenant).** Every org now
+resolves its own primary (+ optional secondary) calendar timezone; the prior hardcoded
+`Europe/Berlin` / `Asia/Bangkok` are gone from the shared paths. Display/config-only —
+event data was already correct UTC.
+- DB: org_config += nullable `sales_time_zone` / `sales_secondary_time_zone`; hand-written
+  additive migration 0034 (drizzle-kit generate was blocked by a pre-existing `asset_kind`
+  snapshot drift + interactive prompt — repo already hand-writes additive migrations) with
+  an idempotent, tenant-scoped backfill (`WHERE slug='evertrust'`, ON CONFLICT/COALESCE) so
+  EverTrust's GMT+7 gutter survives on the live DB; seed covers fresh bootstraps. NOTE: the
+  real next migration was 0034, not the spec's "0019" (CLAUDE.md's "0000–0018" is stale).
+- shared: calendar DTOs carry resolved `timeZone`/`secondaryTimeZone`; WorkflowConfigDto raw
+  overrides; UpdateWorkflowConfigDto validates IANA zones (NullableTimeZone + isValidTimeZone).
+- API: GoogleCalendarReadService.resolveOrgTimeZones (org ?? env SALES_TIME_ZONE ?? Berlin;
+  invalid → default; never throws); berlin* helpers generalized; computeFreeSlots(tz);
+  zones returned on all branches; updateEvent defaults to the org primary; WorkflowConfigService
+  surfaces + persists the overrides; env.schema += SALES_TIME_ZONE.
+- web: activate-view threads primaryTz/secondaryTz (helpers were already tz-parameterized —
+  only the source changed); single/dual-scale gutter; Intl shortOffset labels replace
+  "CET/CEST"/"GMT+7"/"Germany time"; ±1-day fetch buffer prevents edge-clipping. New
+  SalesCalendarCard on the Configuration page (EN/DE).
+- VERIFY: API jest 39 suites / 383 tests green (incl. new Asia/Bangkok slot test + timezone
+  workflow-config tests); workspace typecheck green; web lint clean (only pre-existing
+  exhaustive-deps warnings); render-math sandbox-verified against Asia/Bangkok using the exact
+  activate-view helpers (11/11, incl. east-zone midnight day-bucketing); code-reviewer approve.
+  Full in-browser grid render not reproducible here (needs live Google OAuth calendar data).
+- KNOWN/OUT-OF-SCOPE: createEvent still takes dto.timeZone straight through (shared DTO default
+  'Europe/Berlin'); pre-existing, booking UI not wired yet — left as-is per spec.
