@@ -1,9 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 import {
   isValidTimeZone,
+  type CalendarEventCategory,
   type CalendarEventDto,
   type CalendarFreeSlotsDto,
   type CalendarUpcomingDto,
@@ -67,6 +68,10 @@ interface EventsListResponse {
     htmlLink?: string;
     hangoutLink?: string;
     status?: string;
+    // Google event classification ('default' | 'outOfOffice' | 'focusTime' | ...).
+    eventType?: string;
+    // The user's chosen Google Calendar color for this event (1–11), or undefined.
+    colorId?: string;
 
     creator?: {
       email?: string;
@@ -111,6 +116,33 @@ interface EventsListResponse {
       organizer?: boolean;
     }[];
   }[];
+}
+
+// PURE category classifier for the Activate color code (exported for unit testing).
+// Hybrid structural rules, FIRST MATCH WINS — no keyword guessing:
+//   1. eventType 'outOfOffice'        → 'ooo'
+//   2. all-day (Google start.date)     → 'reminder'
+//   3. has an EXTERNAL attendee        → 'client'
+//   4. has attendees, internal-only    → 'team'
+//   5. otherwise (timed, no attendees) → 'personal'
+// `selfDomain` is the org's own email domain (internal vs external test). Room/resource
+// and self attendees never count as a "meeting".
+export function classifyEvent(
+  e: {
+    eventType?: string;
+    allDay: boolean;
+    attendees: { email?: string; self?: boolean; resource?: boolean }[];
+  },
+  selfDomain: string,
+): CalendarEventCategory {
+  if (e.eventType === 'outOfOffice') return 'ooo';
+  if (e.allDay) return 'reminder';
+  const real = e.attendees.filter((a) => !a.self && !a.resource && !!a.email);
+  if (real.length === 0) return 'personal';
+  const hasExternal = real.some(
+    (a) => !(selfDomain && (a.email as string).toLowerCase().endsWith(`@${selfDomain}`)),
+  );
+  return hasExternal ? 'client' : 'team';
 }
 
 // The local Y/M/D/H/M parts of an instant in an arbitrary IANA zone, DST-correct
