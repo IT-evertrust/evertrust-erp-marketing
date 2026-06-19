@@ -307,12 +307,12 @@ export function AimLaunchDialog() {
           {t('trigger')}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{t('dialogTitle')}</DialogTitle>
           <DialogDescription>{t('dialogDescription')}</DialogDescription>
         </DialogHeader>
-        <div className="grid gap-x-4 gap-y-3 sm:grid-cols-2">
+        <div className="grid items-start gap-x-6 gap-y-5 sm:grid-cols-2">
           {/* Name (optional) — spans the full width above the paired fields. */}
           <div className="grid gap-2 sm:col-span-2">
             <Label htmlFor={`${fieldId}-name`}>
