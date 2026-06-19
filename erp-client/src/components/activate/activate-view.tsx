@@ -44,8 +44,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 
-const BERLIN_TIME_ZONE = 'Europe/Berlin';
-const GMT7_TIME_ZONE = 'Asia/Bangkok';
+// Bootstrap/product-default zone used only until the org's resolved timezone arrives
+// from the calendar API. The org's actual primary/secondary zones (org_config) drive
+// all rendering — see primaryTz / secondaryTz threaded from the calendar payload.
+const DEFAULT_TIME_ZONE = 'Europe/Berlin';
 
 const HOUR_HEIGHT = 72;
 const HOURS = Array.from({ length: 24 }, (_, i) => i);
@@ -59,23 +61,32 @@ export function ActivateView() {
   const [tab, setTab] = useState<ActivateTab>('book');
 
   const [calendarWeekStartKey, setCalendarWeekStartKey] = useState(() =>
-    startOfWorkWeekKey(new Date(), BERLIN_TIME_ZONE),
+    startOfWorkWeekKey(new Date(), DEFAULT_TIME_ZONE),
   );
 
   const calendarRange = useMemo(() => {
-    const timeMin = zonedTimeToUtcDate(calendarWeekStartKey, 0, 0, BERLIN_TIME_ZONE);
+    // Fetch a buffered window (±1 day) around the visible work week so no event is
+    // clipped at the week edge regardless of the org's render zone (the grid re-buckets
+    // events into days using the resolved org zone). The fetch window is zone-agnostic;
+    // timeZone here only tags the request.
+    const timeMin = zonedTimeToUtcDate(
+      addDaysToDateKey(calendarWeekStartKey, -1),
+      0,
+      0,
+      DEFAULT_TIME_ZONE,
+    );
 
     const timeMax = zonedTimeToUtcDate(
-      addDaysToDateKey(calendarWeekStartKey, WORK_WEEK_DAYS),
+      addDaysToDateKey(calendarWeekStartKey, WORK_WEEK_DAYS + 1),
       0,
       0,
-      BERLIN_TIME_ZONE,
+      DEFAULT_TIME_ZONE,
     );
 
     return {
       timeMin: timeMin.toISOString(),
       timeMax: timeMax.toISOString(),
-      timeZone: BERLIN_TIME_ZONE,
+      timeZone: DEFAULT_TIME_ZONE,
     };
   }, [calendarWeekStartKey]);
 
@@ -85,6 +96,13 @@ export function ActivateView() {
     ...calendarRange,
     durationMinutes: 30,
   });
+
+  // The org's RESOLVED calendar zones (org_config ?? product default), carried on the
+  // calendar payload. `primaryTz` always present; `secondaryTz` null = single time scale.
+  const primaryTz =
+    upcoming.data?.timeZone ?? freeSlots.data?.timeZone ?? DEFAULT_TIME_ZONE;
+  const secondaryTz =
+    upcoming.data?.secondaryTimeZone ?? freeSlots.data?.secondaryTimeZone ?? null;
 
   const configured = Boolean(upcoming.data?.configured || freeSlots.data?.configured);
 
@@ -141,6 +159,8 @@ export function ActivateView() {
           freeSlots={freeSlots}
           weekStartKey={calendarWeekStartKey}
           onWeekStartKeyChange={setCalendarWeekStartKey}
+          primaryTz={primaryTz}
+          secondaryTz={secondaryTz}
         />
       ) : tab === 'research' ? (
         <EmptyState
@@ -212,11 +232,15 @@ function BookTab({
   freeSlots,
   weekStartKey,
   onWeekStartKeyChange,
+  primaryTz,
+  secondaryTz,
 }: {
   upcoming: UpcomingQuery;
   freeSlots: FreeSlotsQuery;
   weekStartKey: string;
   onWeekStartKeyChange: Dispatch<SetStateAction<string>>;
+  primaryTz: string;
+  secondaryTz: string | null;
 }) {
   const t = useTranslations('activate');
   const format = useFormatter();
@@ -260,11 +284,11 @@ function BookTab({
           event.endDate,
           weekStartKey,
           weekEndKey,
-          BERLIN_TIME_ZONE,
+          primaryTz,
         );
       })
       .sort((a, b) => a.startDate.getTime() - b.startDate.getTime());
-  }, [rawEvents, weekStartKey, weekEndKey]);
+  }, [rawEvents, weekStartKey, weekEndKey, primaryTz]);
 
   const gridSlots = useMemo<CalendarGridSlot[]>(() => {
     return rawSlots
@@ -282,11 +306,11 @@ function BookTab({
           slot.end,
           weekStartKey,
           weekEndKey,
-          BERLIN_TIME_ZONE,
+          primaryTz,
         );
       })
       .sort((a, b) => a.start.getTime() - b.start.getTime());
-  }, [rawSlots, weekStartKey, weekEndKey]);
+  }, [rawSlots, weekStartKey, weekEndKey, primaryTz]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -369,7 +393,7 @@ function BookTab({
                 variant="outline"
                 className="h-8 text-xs"
                 onClick={() =>
-                  onWeekStartKeyChange(startOfWorkWeekKey(new Date(), BERLIN_TIME_ZONE))
+                  onWeekStartKeyChange(startOfWorkWeekKey(new Date(), primaryTz))
                 }
               >
                 Today
@@ -402,15 +426,15 @@ function BookTab({
           <div className="overflow-x-auto">
             <div className="flex h-[calc(100vh-300px)] min-h-[480px] min-w-[980px] flex-col">
               <div className="flex border-b pr-2">
-                <TimeScaleHeader />
+                <TimeScaleHeader primaryTz={primaryTz} secondaryTz={secondaryTz} />
 
                 {days.map((dayKey) => {
                   const dayEvents = gridEvents.filter((event) =>
-                    overlapsDateKey(event.startDate, event.endDate, dayKey, BERLIN_TIME_ZONE),
+                    overlapsDateKey(event.startDate, event.endDate, dayKey, primaryTz),
                   );
 
                   const daySlots = gridSlots.filter((slot) =>
-                    overlapsDateKey(slot.start, slot.end, dayKey, BERLIN_TIME_ZONE),
+                    overlapsDateKey(slot.start, slot.end, dayKey, primaryTz),
                   );
 
                   return (
@@ -449,20 +473,26 @@ function BookTab({
                 ref={scrollRef}
                 className="flex flex-1 items-start overflow-y-auto overflow-x-hidden"
               >
-                <TimeScaleColumns sampleDayKey={weekStartKey} />
+                <TimeScaleColumns
+                  sampleDayKey={weekStartKey}
+                  primaryTz={primaryTz}
+                  secondaryTz={secondaryTz}
+                />
 
                 {days.map((dayKey) => (
                   <DayColumn
                     key={dayKey}
                     dayKey={dayKey}
                     events={gridEvents.filter((event) =>
-                      overlapsDateKey(event.startDate, event.endDate, dayKey, BERLIN_TIME_ZONE),
+                      overlapsDateKey(event.startDate, event.endDate, dayKey, primaryTz),
                     )}
                     slots={gridSlots.filter((slot) =>
-                      overlapsDateKey(slot.start, slot.end, dayKey, BERLIN_TIME_ZONE),
+                      overlapsDateKey(slot.start, slot.end, dayKey, primaryTz),
                     )}
                     selectedEventId={selectedEvent?.id ?? null}
                     onSelectEvent={setSelectedEvent}
+                    primaryTz={primaryTz}
+                    secondaryTz={secondaryTz}
                   />
                 ))}
               </div>
@@ -480,66 +510,107 @@ function BookTab({
                 Click a solid meeting card to open details. Dashed blocks are proposed free slots.
               </span>
 
-              <span>Positioned by Germany time. Left gutter also shows GMT+7.</span>
+              <span>
+                {secondaryTz
+                  ? `Positioned by ${zoneShortLabel(primaryTz)}. Left gutter also shows ${zoneShortLabel(secondaryTz)}.`
+                  : `Positioned by ${zoneShortLabel(primaryTz)}.`}
+              </span>
             </div>
           )}
         </CardContent>
       </Card>
 
-      <CalendarEventDetailsDialog event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+      <CalendarEventDetailsDialog
+        event={selectedEvent}
+        onClose={() => setSelectedEvent(null)}
+        primaryTz={primaryTz}
+        secondaryTz={secondaryTz}
+      />
     </>
   );
 }
 
-function TimeScaleHeader() {
+// Gutter header. Dual-scale (org has a secondary zone): secondary on the left, primary
+// on the right. Single-scale (secondary null): one primary column. Labels are derived
+// from each IANA zone (e.g. "GMT+2"), never hardcoded.
+function TimeScaleHeader({
+  primaryTz,
+  secondaryTz,
+}: {
+  primaryTz: string;
+  secondaryTz: string | null;
+}) {
+  const cell =
+    'flex items-end justify-end px-2 pb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground';
+
+  if (!secondaryTz) {
+    return (
+      <div className="w-16 shrink-0 border-r">
+        <div className={`h-full ${cell}`}>{zoneShortLabel(primaryTz)}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="grid w-32 shrink-0 grid-cols-2 border-r">
-      <div className="flex items-end justify-end border-r px-2 pb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-        GMT+7
-      </div>
-
-      <div className="flex items-end justify-end px-2 pb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-        CET/CEST
-      </div>
+      <div className={`border-r ${cell}`}>{zoneShortLabel(secondaryTz)}</div>
+      <div className={cell}>{zoneShortLabel(primaryTz)}</div>
     </div>
   );
 }
 
-function TimeScaleColumns({ sampleDayKey }: { sampleDayKey: string }) {
+function TimeScaleColumns({
+  sampleDayKey,
+  primaryTz,
+  secondaryTz,
+}: {
+  sampleDayKey: string;
+  primaryTz: string;
+  secondaryTz: string | null;
+}) {
   const labels = useMemo(() => {
     return HOURS.map((hour) => {
-      const instant = zonedTimeToUtcDate(sampleDayKey, hour, 0, BERLIN_TIME_ZONE);
+      const instant = zonedTimeToUtcDate(sampleDayKey, hour, 0, primaryTz);
 
       return {
         hour,
-        gmt7: formatClockInTimeZone(instant, GMT7_TIME_ZONE),
-        berlin: formatClockInTimeZone(instant, BERLIN_TIME_ZONE),
+        secondary: secondaryTz ? formatClockInTimeZone(instant, secondaryTz) : null,
+        primary: formatClockInTimeZone(instant, primaryTz),
       };
     });
-  }, [sampleDayKey]);
+  }, [sampleDayKey, primaryTz, secondaryTz]);
+
+  const labelCell =
+    'absolute right-2 -translate-y-1/2 whitespace-nowrap text-[10px] font-medium text-muted-foreground';
+
+  if (!secondaryTz) {
+    return (
+      <div className="w-16 shrink-0" style={{ height: HOURS.length * HOUR_HEIGHT }}>
+        <div className="relative border-r">
+          {labels.map((label) => (
+            <div key={`primary-${label.hour}`} className={labelCell} style={{ top: label.hour * HOUR_HEIGHT }}>
+              {label.primary}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="grid w-32 shrink-0 grid-cols-2" style={{ height: HOURS.length * HOUR_HEIGHT }}>
       <div className="relative border-r">
         {labels.map((label) => (
-          <div
-            key={`gmt7-${label.hour}`}
-            className="absolute right-2 -translate-y-1/2 whitespace-nowrap text-[10px] font-medium text-muted-foreground"
-            style={{ top: label.hour * HOUR_HEIGHT }}
-          >
-            {label.gmt7}
+          <div key={`secondary-${label.hour}`} className={labelCell} style={{ top: label.hour * HOUR_HEIGHT }}>
+            {label.secondary}
           </div>
         ))}
       </div>
 
       <div className="relative">
         {labels.map((label) => (
-          <div
-            key={`berlin-${label.hour}`}
-            className="absolute right-2 -translate-y-1/2 whitespace-nowrap text-[10px] font-medium text-muted-foreground"
-            style={{ top: label.hour * HOUR_HEIGHT }}
-          >
-            {label.berlin}
+          <div key={`primary-${label.hour}`} className={labelCell} style={{ top: label.hour * HOUR_HEIGHT }}>
+            {label.primary}
           </div>
         ))}
       </div>
@@ -553,14 +624,21 @@ function DayColumn({
   slots,
   selectedEventId,
   onSelectEvent,
+  primaryTz,
+  secondaryTz,
 }: {
   dayKey: string;
   events: CalendarGridEvent[];
   slots: CalendarGridSlot[];
   selectedEventId: string | null;
   onSelectEvent: (event: CalendarGridEvent) => void;
+  primaryTz: string;
+  secondaryTz: string | null;
 }) {
-  const laidOutEvents = useMemo(() => layoutDayEvents(events, dayKey), [events, dayKey]);
+  const laidOutEvents = useMemo(
+    () => layoutDayEvents(events, dayKey, primaryTz),
+    [events, dayKey, primaryTz],
+  );
 
   return (
     <div
@@ -578,6 +656,8 @@ function DayColumn({
           dayKey={dayKey}
           start={slot.start}
           end={slot.end}
+          primaryTz={primaryTz}
+          secondaryTz={secondaryTz}
         />
       ))}
 
@@ -588,24 +668,40 @@ function DayColumn({
           event={event}
           selected={selectedEventId === event.id}
           onSelect={() => onSelectEvent(event)}
+          primaryTz={primaryTz}
+          secondaryTz={secondaryTz}
         />
       ))}
     </div>
   );
 }
 
-function CalendarSlotBlock({ dayKey, start, end }: { dayKey: string; start: Date; end: Date }) {
+function CalendarSlotBlock({
+  dayKey,
+  start,
+  end,
+  primaryTz,
+  secondaryTz,
+}: {
+  dayKey: string;
+  start: Date;
+  end: Date;
+  primaryTz: string;
+  secondaryTz: string | null;
+}) {
   const t = useTranslations('activate');
 
-  const visual = getVisualRangeForDateKey(start, end, dayKey, BERLIN_TIME_ZONE);
+  const visual = getVisualRangeForDateKey(start, end, dayKey, primaryTz);
 
   const top = minuteToTop(visual.startMinute);
   const height = minuteRangeToHeight(visual.startMinute, visual.endMinute);
 
-  const berlinFrom = formatClockInTimeZone(start, BERLIN_TIME_ZONE);
-  const berlinTo = formatClockInTimeZone(end, BERLIN_TIME_ZONE);
-  const gmt7From = formatClockInTimeZone(start, GMT7_TIME_ZONE);
-  const gmt7To = formatClockInTimeZone(end, GMT7_TIME_ZONE);
+  const primaryLabel = zoneShortLabel(primaryTz);
+  const primaryFrom = formatClockInTimeZone(start, primaryTz);
+  const primaryTo = formatClockInTimeZone(end, primaryTz);
+  const secondaryLabel = secondaryTz ? zoneShortLabel(secondaryTz) : null;
+  const secondaryFrom = secondaryTz ? formatClockInTimeZone(start, secondaryTz) : null;
+  const secondaryTo = secondaryTz ? formatClockInTimeZone(end, secondaryTz) : null;
 
   return (
     <button
@@ -616,19 +712,25 @@ function CalendarSlotBlock({ dayKey, start, end }: { dayKey: string; start: Date
         top,
         height,
       }}
-      title={`DE ${berlinFrom}–${berlinTo} · GMT+7 ${gmt7From}–${gmt7To}`}
+      title={
+        secondaryTz
+          ? `${primaryLabel} ${primaryFrom}–${primaryTo} · ${secondaryLabel} ${secondaryFrom}–${secondaryTo}`
+          : `${primaryLabel} ${primaryFrom}–${primaryTo}`
+      }
       aria-label={t('book.slots.rangeAria', {
-        start: berlinFrom,
-        end: berlinTo,
+        start: primaryFrom,
+        end: primaryTo,
       })}
     >
       <span className="block font-semibold tabular-nums">
-        DE {berlinFrom}–{berlinTo}
+        {primaryLabel} {primaryFrom}–{primaryTo}
       </span>
 
-      <span className="block truncate tabular-nums">
-        GMT+7 {gmt7From}–{gmt7To}
-      </span>
+      {secondaryTz ? (
+        <span className="block truncate tabular-nums">
+          {secondaryLabel} {secondaryFrom}–{secondaryTo}
+        </span>
+      ) : null}
 
       <span className="block truncate">{t('book.slots.book')}</span>
     </button>
@@ -640,24 +742,30 @@ function CalendarEventBlock({
   event,
   selected,
   onSelect,
+  primaryTz,
+  secondaryTz,
 }: {
   dayKey: string;
   event: LaidOutCalendarEvent;
   selected: boolean;
   onSelect: () => void;
+  primaryTz: string;
+  secondaryTz: string | null;
 }) {
   const t = useTranslations('activate');
 
-  const visual = getVisualRangeForDateKey(event.startDate, event.endDate, dayKey, BERLIN_TIME_ZONE);
+  const visual = getVisualRangeForDateKey(event.startDate, event.endDate, dayKey, primaryTz);
 
   const top = minuteToTop(visual.startMinute);
   const height = minuteRangeToHeight(visual.startMinute, visual.endMinute);
   const style = getEventBlockStyle(event.layout, top, height);
 
-  const berlinFrom = formatClockInTimeZone(event.startDate, BERLIN_TIME_ZONE);
-  const berlinTo = formatClockInTimeZone(event.endDate, BERLIN_TIME_ZONE);
-  const gmt7From = formatClockInTimeZone(event.startDate, GMT7_TIME_ZONE);
-  const gmt7To = formatClockInTimeZone(event.endDate, GMT7_TIME_ZONE);
+  const primaryLabel = zoneShortLabel(primaryTz);
+  const primaryFrom = formatClockInTimeZone(event.startDate, primaryTz);
+  const primaryTo = formatClockInTimeZone(event.endDate, primaryTz);
+  const secondaryLabel = secondaryTz ? zoneShortLabel(secondaryTz) : null;
+  const secondaryFrom = secondaryTz ? formatClockInTimeZone(event.startDate, secondaryTz) : null;
+  const secondaryTo = secondaryTz ? formatClockInTimeZone(event.endDate, secondaryTz) : null;
 
   const title = event.title || t('book.upcoming.untitled');
   const attendees = event.attendees ?? [];
@@ -679,21 +787,25 @@ function CalendarEventBlock({
         selected ? 'ring-2 ring-blue-400' : '',
       ].join(' ')}
       style={style}
-      title={`${title} · DE ${berlinFrom}–${berlinTo} · GMT+7 ${gmt7From}–${gmt7To}`}
-      aria-label={`${title}. Germany ${berlinFrom} to ${berlinTo}. Click for details.`}
+      title={
+        secondaryTz
+          ? `${title} · ${primaryLabel} ${primaryFrom}–${primaryTo} · ${secondaryLabel} ${secondaryFrom}–${secondaryTo}`
+          : `${title} · ${primaryLabel} ${primaryFrom}–${primaryTo}`
+      }
+      aria-label={`${title}. ${primaryLabel} ${primaryFrom} to ${primaryTo}. Click for details.`}
     >
       <div className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground">
         <Clock className="size-3 shrink-0" />
         <span className="truncate tabular-nums">
-          DE {berlinFrom}–{berlinTo}
+          {primaryLabel} {primaryFrom}–{primaryTo}
         </span>
       </div>
 
       <div className="truncate text-xs font-semibold leading-tight">{title}</div>
 
-      {!compact ? (
+      {!compact && secondaryTz ? (
         <div className="truncate text-[10px] font-medium text-muted-foreground">
-          GMT+7 {gmt7From}–{gmt7To}
+          {secondaryLabel} {secondaryFrom}–{secondaryTo}
         </div>
       ) : null}
 
@@ -717,9 +829,13 @@ function CalendarEventBlock({
 function CalendarEventDetailsDialog({
   event,
   onClose,
+  primaryTz,
+  secondaryTz,
 }: {
   event: CalendarGridEvent | null;
   onClose: () => void;
+  primaryTz: string;
+  secondaryTz: string | null;
 }) {
   const t = useTranslations('activate');
   const format = useFormatter();
@@ -745,27 +861,31 @@ function CalendarEventDetailsDialog({
   const title = event.title || t('book.upcoming.untitled');
   const attendees = event.attendees ?? [];
 
-  const berlinDate = format.dateTime(event.startDate, {
-    timeZone: BERLIN_TIME_ZONE,
+  const primaryLabel = zoneShortLabel(primaryTz);
+  const primaryDate = format.dateTime(event.startDate, {
+    timeZone: primaryTz,
     weekday: 'long',
     day: 'numeric',
     month: 'long',
     year: 'numeric',
   });
 
-  const berlinFrom = formatClockInTimeZone(event.startDate, BERLIN_TIME_ZONE);
-  const berlinTo = formatClockInTimeZone(event.endDate, BERLIN_TIME_ZONE);
+  const primaryFrom = formatClockInTimeZone(event.startDate, primaryTz);
+  const primaryTo = formatClockInTimeZone(event.endDate, primaryTz);
 
-  const gmt7Date = format.dateTime(event.startDate, {
-    timeZone: GMT7_TIME_ZONE,
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  });
+  const secondaryLabel = secondaryTz ? zoneShortLabel(secondaryTz) : null;
+  const secondaryDate = secondaryTz
+    ? format.dateTime(event.startDate, {
+        timeZone: secondaryTz,
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      })
+    : null;
 
-  const gmt7From = formatClockInTimeZone(event.startDate, GMT7_TIME_ZONE);
-  const gmt7To = formatClockInTimeZone(event.endDate, GMT7_TIME_ZONE);
+  const secondaryFrom = secondaryTz ? formatClockInTimeZone(event.startDate, secondaryTz) : null;
+  const secondaryTo = secondaryTz ? formatClockInTimeZone(event.endDate, secondaryTz) : null;
 
   const location = getEventString(event, 'location');
   const rawDescription = getEventString(event, 'description');
@@ -820,12 +940,14 @@ function CalendarEventDetailsDialog({
           <EventDetailRow icon={<Clock className="size-4" />} label="Time">
             <div className="flex flex-col gap-1">
               <span className="font-medium">
-                {berlinDate}, {berlinFrom}–{berlinTo}
+                {primaryDate}, {primaryFrom}–{primaryTo}
               </span>
-              <span className="text-xs text-muted-foreground">Germany time · CET/CEST</span>
-              <span className="text-xs text-muted-foreground">
-                GMT+7: {gmt7Date}, {gmt7From}–{gmt7To}
-              </span>
+              <span className="text-xs text-muted-foreground">{primaryLabel}</span>
+              {secondaryTz ? (
+                <span className="text-xs text-muted-foreground">
+                  {secondaryLabel}: {secondaryDate}, {secondaryFrom}–{secondaryTo}
+                </span>
+              ) : null}
             </div>
           </EventDetailRow>
 
@@ -937,7 +1059,11 @@ function EventDetailRow({
   );
 }
 
-function layoutDayEvents(events: CalendarGridEvent[], dayKey: string): LaidOutCalendarEvent[] {
+function layoutDayEvents(
+  events: CalendarGridEvent[],
+  dayKey: string,
+  timeZone: string,
+): LaidOutCalendarEvent[] {
   type LayoutItem = {
     event: CalendarGridEvent;
     startMinute: number;
@@ -951,7 +1077,7 @@ function layoutDayEvents(events: CalendarGridEvent[], dayKey: string): LaidOutCa
         event.startDate,
         event.endDate,
         dayKey,
-        BERLIN_TIME_ZONE,
+        timeZone,
       );
 
       return {
@@ -1289,4 +1415,18 @@ function formatClockInTimeZone(date: Date, timeZone: string): string {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);
+}
+
+// A short, human-readable label for an IANA zone (e.g. 'Europe/Berlin' → "GMT+2",
+// 'Asia/Bangkok' → "GMT+7"), derived at the given instant so DST is reflected. Used
+// for the time-scale gutters and event copy — never a hardcoded "CET/CEST"/"GMT+7".
+function zoneShortLabel(timeZone: string, at: Date = new Date()): string {
+  const part = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    timeZoneName: 'shortOffset',
+  })
+    .formatToParts(at)
+    .find((p) => p.type === 'timeZoneName');
+
+  return part?.value ?? timeZone;
 }

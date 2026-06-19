@@ -33,6 +33,8 @@ const PREF_KEYS = new Set([
   'templateLanguage',
   'defaultSender',
   'salesCalendarId',
+  'salesTimeZone',
+  'salesSecondaryTimeZone',
   'maxLeadsPerRun',
   'maxPerNiche',
   'dailySendCap',
@@ -381,6 +383,42 @@ describe('WorkflowConfigService — salesCalendarId resolution', () => {
     eff = await service.update({ salesCalendarId: null }, ORG);
     // Cleared → falls back to the env product default.
     expect(eff.salesCalendarId).toBe('env-cal');
+  });
+});
+
+describe('WorkflowConfigService — sales timezones (raw per-org overrides)', () => {
+  it('getEffective: surfaces stored zones verbatim; null when unset', async () => {
+    const set = make(ENV, {
+      salesTimeZone: 'America/New_York',
+      salesSecondaryTimeZone: 'Asia/Bangkok',
+    });
+    const eff = await set.service.getEffective(ORG);
+    expect(eff.salesTimeZone).toBe('America/New_York');
+    expect(eff.salesSecondaryTimeZone).toBe('Asia/Bangkok');
+
+    const unset = make(ENV);
+    const effUnset = await unset.service.getEffective(ORG);
+    expect(effUnset.salesTimeZone).toBeNull();
+    expect(effUnset.salesSecondaryTimeZone).toBeNull();
+  });
+
+  it('update: sets both per-org zones, then null clears them back to the default', async () => {
+    const { service, orgConfig } = make(ENV);
+    let eff = await service.update(
+      { salesTimeZone: 'America/New_York', salesSecondaryTimeZone: 'Asia/Bangkok' },
+      ORG,
+    );
+    expect(eff.salesTimeZone).toBe('America/New_York');
+    expect(eff.salesSecondaryTimeZone).toBe('Asia/Bangkok');
+    // Per-org prefs — land on org_config, not the global singleton.
+    expect(orgConfig.rows).toHaveLength(1);
+
+    eff = await service.update(
+      { salesTimeZone: null, salesSecondaryTimeZone: null },
+      ORG,
+    );
+    expect(eff.salesTimeZone).toBeNull();
+    expect(eff.salesSecondaryTimeZone).toBeNull();
   });
 });
 

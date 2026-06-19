@@ -48,6 +48,14 @@ export const orgConfig = pgTable(
     // Calendar this org books sales meetings into. Opaque provider id (e.g. a
     // Google Calendar id). Null = fall back to the product default.
     salesCalendarId: text('sales_calendar_id'),
+    // IANA timezone the org's sales calendar runs in — drives free-slot business
+    // hours, the Activate week grid, and event create/update defaults. Null = fall
+    // back to the product default (env SALES_TIME_ZONE ?? 'Europe/Berlin').
+    salesTimeZone: text('sales_time_zone'),
+    // Optional SECOND IANA timezone shown alongside the primary one (the Activate
+    // dual time-scale gutter, e.g. a remote team's zone). Null = no secondary gutter
+    // (single-scale calendar). Purely per-org — no product default.
+    salesSecondaryTimeZone: text('sales_secondary_time_zone'),
     // Default connected Google account for sending Gmail. Null = none chosen.
     defaultGmailAccountId: uuid('default_gmail_account_id').references(
       () => googleAccounts.id,

@@ -1,13 +1,18 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import type {
-  CalendarEventDto,
-  CalendarFreeSlotsDto,
-  CalendarUpcomingDto,
-  CalendarMutationResultDto,
-  CreateCalendarEventDto,
-  UpdateCalendarEventDto,
+import { eq } from 'drizzle-orm';
+import { schema } from '@evertrust/db';
+import {
+  isValidTimeZone,
+  type CalendarEventDto,
+  type CalendarFreeSlotsDto,
+  type CalendarUpcomingDto,
+  type CalendarMutationResultDto,
+  type CreateCalendarEventDto,
+  type UpdateCalendarEventDto,
 } from '@evertrust/shared';
+import { DB, type DbClient } from '../db/db.tokens';
+import { AppConfigService } from '../config/app-config.service';
 import { GoogleAccountsService } from './google-accounts.service';
 
 // READ-side Google Calendar for the Activate page: real upcoming meetings + proposed
@@ -24,15 +29,17 @@ import { GoogleAccountsService } from './google-accounts.service';
 // degraded to a `configured: false` shell. The Activate UI degrades gracefully — it
 // must never 500 the page.
 
-// Business-hours slot window, in Europe/Berlin local time.
-const SLOT_TZ = 'Europe/Berlin';
+// Business-hours slot window, in the org's local sales timezone.
 const BUSINESS_START_HOUR = 9; // 09:00 inclusive
 const BUSINESS_END_HOUR = 17; // 17:00 exclusive (last slot starts 16:30)
 const SLOT_MINUTES = 30;
 const FREE_SLOT_HORIZON_DAYS = 7;
 const MAX_FREE_SLOTS = 6;
 const MAX_UPCOMING_EVENTS = 10;
-const DEFAULT_CALENDAR_TIME_ZONE = 'Europe/Berlin';
+// LAST-resort product default when an org has no salesTimeZone override and no
+// SALES_TIME_ZONE env is set. Also the default for the pure slot generator so the
+// existing Berlin-pinned unit tests stay green without passing a zone explicitly.
+const DEFAULT_TIME_ZONE = 'Europe/Berlin';
 
 type CalendarRangeInput = {
   timeMin?: string;
@@ -106,9 +113,12 @@ interface EventsListResponse {
   }[];
 }
 
-// The Europe/Berlin local Y/M/D/H/M parts of an instant, DST-correct (uses the ICU
-// tz database via Intl, so no tz library / no hardcoded +1/+2 offset).
-function berlinParts(at: Date): {
+// The local Y/M/D/H/M parts of an instant in an arbitrary IANA zone, DST-correct
+// (uses the ICU tz database via Intl, so no tz library / no hardcoded offset).
+function zoneParts(
+  at: Date,
+  tz: string,
+): {
   year: number;
   month: number;
   day: number;
@@ -117,7 +127,7 @@ function berlinParts(at: Date): {
   weekday: number; // 0=Sun..6=Sat
 } {
   const fmt = new Intl.DateTimeFormat('en-US', {
-    timeZone: SLOT_TZ,
+    timeZone: tz,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -148,51 +158,54 @@ function berlinParts(at: Date): {
   };
 }
 
-// The UTC instant for a given Europe/Berlin wall-clock time, DST-correct. We probe the
-// zone's offset at a candidate UTC instant and correct once — sufficient outside the
-// 1-hour DST fold, which never overlaps 09:00–17:00 business hours.
-function berlinWallClockToUtc(
+// The UTC instant for a given wall-clock time in an arbitrary IANA zone, DST-correct.
+// We probe the zone's offset at a candidate UTC instant and correct once — sufficient
+// outside the 1-hour DST fold, which never overlaps 09:00–17:00 business hours.
+function zoneWallClockToUtc(
   year: number,
   month: number, // 1-12
   day: number,
   hour: number,
   minute: number,
+  tz: string,
 ): Date {
   const asUtc = Date.UTC(year, month - 1, day, hour, minute);
   const probe = new Date(asUtc);
-  const p = berlinParts(probe);
+  const p = zoneParts(probe, tz);
   const seenAsUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute);
-  const offset = seenAsUtc - asUtc; // how far Berlin local ran ahead of UTC at probe
+  const offset = seenAsUtc - asUtc; // how far local ran ahead of UTC at the probe
   return new Date(asUtc - offset);
 }
 
 // PURE slot computation (exported for unit testing). Given busy intervals and a
 // reference `now`, returns up to `MAX_FREE_SLOTS` 30-minute openings within weekday
-// 09:00–17:00 Europe/Berlin business hours over the next `FREE_SLOT_HORIZON_DAYS`
-// days. A slot is free when it lies entirely in the future and overlaps no busy
-// interval. Deterministic and timezone-correct (DST-aware via Intl).
+// 09:00–17:00 business hours (in `tz`) over the next `FREE_SLOT_HORIZON_DAYS` days. A
+// slot is free when it lies entirely in the future and overlaps no busy interval.
+// Deterministic and timezone-correct (DST-aware via Intl). `tz` defaults to the
+// product default so existing Berlin-pinned callers/tests need no change.
 export function computeFreeSlots(
   busy: BusyInterval[],
   now: Date = new Date(),
+  tz: string = DEFAULT_TIME_ZONE,
 ): { start: string; end: string }[] {
   const slotMs = SLOT_MINUTES * 60_000;
   const nowMs = now.getTime();
   const horizonMs = nowMs + FREE_SLOT_HORIZON_DAYS * 24 * 60 * 60_000;
   const out: { start: string; end: string }[] = [];
 
-  // Walk each calendar day in the horizon by its Berlin date, generating candidate
-  // slots within business hours. Iterate by UTC-midnight steps but resolve each
-  // business-hour slot through the Berlin wall clock so DST shifts stay correct.
+  // Walk each calendar day in the horizon by its local date in `tz`, generating
+  // candidate slots within business hours. Iterate by UTC-midnight steps but resolve
+  // each business-hour slot through the zone's wall clock so DST shifts stay correct.
   for (let dayOffset = 0; dayOffset <= FREE_SLOT_HORIZON_DAYS; dayOffset++) {
     const probe = new Date(nowMs + dayOffset * 24 * 60 * 60_000);
-    const { year, month, day, weekday } = berlinParts(probe);
+    const { year, month, day, weekday } = zoneParts(probe, tz);
 
     // Weekdays only (Mon–Fri).
     if (weekday === 0 || weekday === 6) continue;
 
     for (let h = BUSINESS_START_HOUR; h < BUSINESS_END_HOUR; h++) {
       for (let m = 0; m < 60; m += SLOT_MINUTES) {
-        const startDate = berlinWallClockToUtc(year, month, day, h, m);
+        const startDate = zoneWallClockToUtc(year, month, day, h, m, tz);
         const startMs = startDate.getTime();
         const endMs = startMs + slotMs;
 
@@ -214,8 +227,11 @@ export function computeFreeSlots(
   return out;
 }
 
-function resolveCalendarRange(input: CalendarRangeInput = {}) {
-  const timeZone = input.timeZone || DEFAULT_CALENDAR_TIME_ZONE;
+function resolveCalendarRange(
+  input: CalendarRangeInput = {},
+  defaultTimeZone: string = DEFAULT_TIME_ZONE,
+) {
+  const timeZone = input.timeZone || defaultTimeZone;
 
   const fallbackMin = new Date();
   const fallbackMax = new Date(fallbackMin.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -246,18 +262,73 @@ function resolveCalendarRange(input: CalendarRangeInput = {}) {
 export class GoogleCalendarReadService {
   private readonly logger = new Logger(GoogleCalendarReadService.name);
 
-  constructor(private readonly googleAccounts: GoogleAccountsService) {}
+  constructor(
+    private readonly googleAccounts: GoogleAccountsService,
+    @Inject(DB) private readonly db: DbClient,
+    private readonly config: AppConfigService,
+  ) {}
+
+  // The CALLING org's resolved calendar timezones, per the multi-tenant rule
+  // (org value ?? env default). `primary` always resolves to a valid IANA zone
+  // (org_config.salesTimeZone ?? env SALES_TIME_ZONE ?? 'Europe/Berlin'); `secondary`
+  // is the org's optional dual-scale gutter zone (org_config.salesSecondaryTimeZone)
+  // or null. Invalid stored/env zones are ignored (degrade to the default) — this
+  // powers a page load and must never throw.
+  private async resolveOrgTimeZones(
+    orgId: string,
+  ): Promise<{ primary: string; secondary: string | null }> {
+    let primary = DEFAULT_TIME_ZONE;
+    let secondary: string | null = null;
+
+    try {
+      const rows = await this.db
+        .select({
+          salesTimeZone: schema.orgConfig.salesTimeZone,
+          salesSecondaryTimeZone: schema.orgConfig.salesSecondaryTimeZone,
+        })
+        .from(schema.orgConfig)
+        .where(eq(schema.orgConfig.organizationId, orgId))
+        .limit(1);
+      const row = rows[0];
+
+      const orgPrimary = row?.salesTimeZone?.trim();
+      const envPrimary = this.config.get('SALES_TIME_ZONE').trim();
+      const candidate =
+        (orgPrimary && orgPrimary.length > 0 ? orgPrimary : null) ??
+        (envPrimary.length > 0 ? envPrimary : null);
+      if (candidate && isValidTimeZone(candidate)) primary = candidate;
+
+      const orgSecondary = row?.salesSecondaryTimeZone?.trim();
+      if (orgSecondary && orgSecondary.length > 0 && isValidTimeZone(orgSecondary)) {
+        secondary = orgSecondary;
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown error';
+      this.logger.warn(`resolveOrgTimeZones failed for org ${orgId}: ${msg}`);
+    }
+
+    return { primary, secondary };
+  }
 
   // The next upcoming real events from the org's primary calendar. Never throws —
   // returns a `configured: false` shell when the org has no default calendar mailbox
   // or Google is unreachable.
   async upcoming(orgId: string, rangeInput: CalendarRangeInput = {}): Promise<CalendarUpcomingDto> {
+    const { primary: timeZone, secondary: secondaryTimeZone } =
+      await this.resolveOrgTimeZones(orgId);
     const access = await this.googleAccounts.resolveMailbox(orgId, 'calendar');
     if (!access.ok) {
-      return { configured: false, account: null, events: [], reason: access.reason };
+      return {
+        configured: false,
+        account: null,
+        events: [],
+        reason: access.reason,
+        timeZone,
+        secondaryTimeZone,
+      };
     }
     const perOrg = access;
-    const range = resolveCalendarRange(rangeInput);
+    const range = resolveCalendarRange(rangeInput, timeZone);
     const selfEmail = perOrg.account.email.toLowerCase();
     const selfDomain = selfEmail.split('@')[1] ?? '';
 
@@ -288,6 +359,8 @@ export class GoogleCalendarReadService {
           account: null,
           events: [],
           reason: `Google Calendar API error (HTTP ${res.status}). Reconnect the account and allow Calendar.`,
+          timeZone,
+          secondaryTimeZone,
         };
       }
 
@@ -349,6 +422,8 @@ export class GoogleCalendarReadService {
         account: { email: perOrg.account.email },
         events,
         reason: null,
+        timeZone,
+        secondaryTimeZone,
       };
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown error';
@@ -358,6 +433,8 @@ export class GoogleCalendarReadService {
         account: null,
         events: [],
         reason: 'Could not reach Google Calendar. Try again, or reconnect the account.',
+        timeZone,
+        secondaryTimeZone,
       };
     }
   }
@@ -365,12 +442,14 @@ export class GoogleCalendarReadService {
   // Proposed free slots over the next 7 days within Europe/Berlin business hours.
   // Never throws — returns a `configured: false` shell on any failure.
   async freeSlots(orgId: string, rangeInput: CalendarRangeInput = {}): Promise<CalendarFreeSlotsDto> {
+    const { primary: timeZone, secondary: secondaryTimeZone } =
+      await this.resolveOrgTimeZones(orgId);
     const access = await this.googleAccounts.resolveMailbox(orgId, 'calendar');
     if (!access.ok) {
-      return { configured: false, slots: [], reason: access.reason };
+      return { configured: false, slots: [], reason: access.reason, timeZone, secondaryTimeZone };
     }
     const perOrg = access;
-    const range = resolveCalendarRange(rangeInput);
+    const range = resolveCalendarRange(rangeInput, timeZone);
     const durationMinutes = rangeInput.durationMinutes ?? 30;
 
     try {
@@ -397,6 +476,8 @@ export class GoogleCalendarReadService {
           configured: false,
           slots: [],
           reason: `Google Calendar API error (HTTP ${res.status}). Reconnect the account and allow Calendar.`,
+          timeZone,
+          secondaryTimeZone,
         };
       }
 
@@ -414,7 +495,13 @@ export class GoogleCalendarReadService {
         }))
         .filter((b) => Number.isFinite(b.start) && Number.isFinite(b.end));
 
-      return { configured: true, slots: computeFreeSlots(busy, now), reason: null };
+      return {
+        configured: true,
+        slots: computeFreeSlots(busy, now, timeZone),
+        reason: null,
+        timeZone,
+        secondaryTimeZone,
+      };
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown error';
       this.logger.warn(`Calendar freeSlots failed for org ${orgId}: ${msg}`);
@@ -422,6 +509,8 @@ export class GoogleCalendarReadService {
         configured: false,
         slots: [],
         reason: 'Could not reach Google Calendar. Try again, or reconnect the account.',
+        timeZone,
+        secondaryTimeZone,
       };
     }
   }
@@ -537,17 +626,21 @@ export class GoogleCalendarReadService {
     if (dto.description !== undefined) body.description = dto.description;
     if (dto.location !== undefined) body.location = dto.location;
 
+    // Default the wall-clock timezone to the org's resolved primary zone (per-org,
+    // never a hardcoded EverTrust value) when the caller doesn't supply one.
+    const { primary: defaultTimeZone } = await this.resolveOrgTimeZones(orgId);
+
     if (dto.start !== undefined) {
       body.start = {
         dateTime: dto.start,
-        timeZone: dto.timeZone ?? 'Europe/Berlin',
+        timeZone: dto.timeZone ?? defaultTimeZone,
       };
     }
 
     if (dto.end !== undefined) {
       body.end = {
         dateTime: dto.end,
-        timeZone: dto.timeZone ?? 'Europe/Berlin',
+        timeZone: dto.timeZone ?? defaultTimeZone,
       };
     }
 

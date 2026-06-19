@@ -194,6 +194,19 @@
       "toastSaved": "Konfiguration gespeichert.",
       "toastError": "KI-Engine-Konfiguration konnte nicht gespeichert werden."
     },
+    "calendar": {
+      "title": "Zeitzone des Vertriebskalenders",
+      "description": "Die Zeitzone, die der Activate-Kalender und die Geschäftszeiten für freie Termine verwenden. Für den Produktstandard leer lassen.",
+      "primaryLabel": "Primäre Zeitzone",
+      "primaryPlaceholder": "Europe/Berlin (Standard)",
+      "secondaryLabel": "Sekundäre Zeitzone (optional)",
+      "secondaryPlaceholder": "z. B. Asia/Bangkok — leer für keine",
+      "hint": "IANA-Namen wie Europe/Berlin oder America/New_York verwenden. Die sekundäre Zone fügt der Kalenderleiste eine zweite Zeitskala hinzu.",
+      "save": "Speichern",
+      "saving": "Speichern…",
+      "toastSaved": "Kalenderzeitzone gespeichert.",
+      "toastError": "Kalenderzeitzone konnte nicht gespeichert werden."
+    },
     "templates": {
       "title": "Vorlagen",
       "description": "Der Basistext für die Ansprache, den die Sequenz versendet. Leer lassen, um nichts zu senden.",

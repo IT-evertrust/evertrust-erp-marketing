@@ -144,6 +144,12 @@ export const EnvSchema = z.object({
   // and the workflow uses its own built-in default calendar).
   SALES_CALENDAR_ID: z.string().default(''),
 
+  // Growth Engine: the PRODUCT-DEFAULT sales-calendar IANA timezone. It is the LAST
+  // fallback for an org's primary calendar zone — org_config.salesTimeZone wins, then
+  // this env var, then the hardcoded 'Europe/Berlin'. Drives free-slot business hours,
+  // the Activate week grid, and event create/update defaults. Blank = use 'Europe/Berlin'.
+  SALES_TIME_ZONE: z.string().default(''),
+
   // Growth Engine: the Google `authorized_user` token JSON for the ONE account whose
   // calendars the AIM "scan by org" endpoint lists ({ client_id, client_secret,
   // refresh_token, type: "authorized_user" }). A single deployment-wide refresh token —
