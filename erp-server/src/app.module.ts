@@ -31,7 +31,7 @@ import { PerformanceModule } from './performance/performance.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from './auth/guards/permissions.guard';
 import { AuditInterceptor } from './common/audit.interceptor';
-
+import { GrowthModule } from './modules/(growth)/growth.module';
 @Module({
   imports: [
     AppConfigModule,
@@ -50,6 +50,7 @@ import { AuditInterceptor } from './common/audit.interceptor';
     WorkflowConfigModule,
     CampaignsModule,
     ArsenalModule,
+    GrowthModule,
     ProspectsModule,
     OutreachModule,
     ContractsModule,

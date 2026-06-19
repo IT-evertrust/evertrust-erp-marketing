@@ -3,6 +3,7 @@ import { Fraunces, IBM_Plex_Mono, Inter } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 import './globals.css';
+import { GrowthShell } from '@/modules/(growth)/shell';
 import { Providers } from './providers';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
