@@ -10,15 +10,18 @@ TZ = "Europe/Berlin"
 
 
 def _load_dotenv() -> None:
-    env_file = PACKAGE_ROOT / ".env"
-    if not env_file.exists():
-        return
-    for line in env_file.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
+    # Load the per-agent .env (most specific) then the shared erp-agents/.env (central
+    # defaults), so one central file works for every agent. setdefault means the process
+    # environment wins over both, and the per-agent file wins over the central one.
+    for env_file in (PACKAGE_ROOT / ".env", PACKAGE_ROOT.parent.parent / ".env"):
+        if not env_file.exists():
             continue
-        k, _, v = line.partition("=")
-        os.environ.setdefault(k.strip(), v.strip())
+        for line in env_file.read_text(encoding="utf-8", errors="ignore").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            os.environ.setdefault(k.strip(), v.strip())
 
 
 @dataclass(frozen=True)
