@@ -16,6 +16,7 @@ import type {
   CalendarGridEvent,
   LaidOutCalendarEvent,
 } from '@/components/activate/calendar/types';
+import { CATEGORY_STYLE } from '@/components/activate/calendar/event-category';
 
 export function CalendarEventBlock({
   dayKey,
@@ -56,15 +57,18 @@ export function CalendarEventBlock({
   const compact = height < 54;
   const roomy = height >= 78;
 
+  const categoryStyle = CATEGORY_STYLE[event.category];
+
   return (
     <button
       type="button"
       onClick={onSelect}
       className={[
-        'absolute z-20 overflow-hidden rounded-lg border border-border border-l-4 border-l-blue-500 bg-popover px-2 py-1.5 text-left text-popover-foreground shadow-lg transition',
+        'absolute z-20 overflow-hidden rounded-lg border border-border border-l-4 bg-popover px-2 py-1.5 text-left text-popover-foreground shadow-lg transition',
+        categoryStyle.bar,
         'hover:-translate-y-0.5 hover:bg-muted hover:shadow-xl',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        selected ? 'ring-2 ring-blue-400' : '',
+        selected ? 'ring-2 ring-ring' : '',
       ].join(' ')}
       style={style}
       title={
@@ -81,7 +85,9 @@ export function CalendarEventBlock({
         </span>
       </div>
 
-      <div className="truncate text-xs font-semibold leading-tight">{title}</div>
+      <div className={`truncate text-xs font-semibold leading-tight ${categoryStyle.tint}`}>
+        {title}
+      </div>
 
       {!compact && secondaryTz ? (
         <div className="truncate text-[10px] font-medium text-muted-foreground">
