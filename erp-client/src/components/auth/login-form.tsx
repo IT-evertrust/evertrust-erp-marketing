@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { LoginDto } from '@evertrust/shared';
 import { ApiError } from '@/lib/api';
+import { API_URL } from '@/lib/env';
 import { useLogin } from '@/hooks/use-auth';
 import { Button } from '@/components/ui/button';
 import {
@@ -91,6 +92,11 @@ export function LoginForm() {
             </Button>
           </form>
         </Form>
+        <div className="mt-4 border-t border-border/60 pt-4">
+          <Button asChild variant="outline" className="w-full">
+            <a href={`${API_URL}/auth/google`}>Continue with Google</a>
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

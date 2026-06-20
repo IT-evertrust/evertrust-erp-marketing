@@ -2,6 +2,7 @@ import { GrowthCard, StatusPill } from '../../shared';
 
 import type { Campaign, Lead } from '../types';
 import { CampaignTable } from './campaign-table';
+import { Spinner } from './spinner';
 
 type LeadScraperPanelProps = {
   campaigns: Campaign[];
@@ -10,6 +11,9 @@ type LeadScraperPanelProps = {
   onCreateCampaign: () => void;
   selectedCampaignName?: string;
   leads: Lead[];
+  loadingCampaigns?: boolean;
+  loadingLeads?: boolean;
+  scraping?: boolean;
 };
 
 export function LeadScraperPanel({
@@ -19,6 +23,9 @@ export function LeadScraperPanel({
   onCreateCampaign,
   selectedCampaignName,
   leads,
+  loadingCampaigns = false,
+  loadingLeads = false,
+  scraping = false,
 }: LeadScraperPanelProps) {
   return (
     <div className="flex flex-col gap-4">
@@ -29,13 +36,18 @@ export function LeadScraperPanel({
         showAction
         actionLabel="Aim"
         onActionClick={onCreateCampaign}
-        />  
+        loading={loadingCampaigns}
+        />
 
       <GrowthCard
         title={`Leads · ${selectedCampaignName ?? 'Selected Campaign'}`}
-        hint={`${leads.length} COMPANIES`}
+        hint={scraping ? 'SCRAPING…' : `${leads.length} COMPANIES`}
       >
-        {leads.length === 0 ? (
+        {scraping ? (
+          <Spinner label="Lead Satellite is scraping leads…" />
+        ) : loadingLeads ? (
+          <Spinner label="Loading leads…" />
+        ) : leads.length === 0 ? (
           <div className="rounded-lg border border-dashed border-[#d6dade] bg-[#f6f7f9] p-6 text-center text-[12.5px] font-bold text-[#959ca7]">
             No leads loaded for this campaign yet.
           </div>

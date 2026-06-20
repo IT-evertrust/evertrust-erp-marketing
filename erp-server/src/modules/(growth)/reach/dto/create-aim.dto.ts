@@ -6,6 +6,8 @@ export const createAimSchema = z.object({
   region: z.string().min(1),
   segment: z.string().optional(),
   source: z.string().optional(),
+  // The sending mailbox (info | hanna). Defaults to info.
+  sender: z.string().optional(),
 });
 
 export type CreateAimDto = z.infer<typeof createAimSchema>;

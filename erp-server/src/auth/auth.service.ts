@@ -62,14 +62,58 @@ export class AuthService {
       organizationId: row.organizationId,
       organizationName: row.organizationName,
     };
+    const accessToken = await this.signSession(user);
+    return { accessToken, user };
+  }
+
+  // Mint the session JWT for a resolved user. Shared by password login and the
+  // Google OAuth callback so both issue an identical session.
+  async signSession(user: MeDto): Promise<string> {
     const payload: JwtPayload = {
       sub: user.id,
       role: user.role,
       org: user.organizationId,
     };
-    const accessToken = await this.jwt.signAsync(payload);
+    return this.jwt.signAsync(payload);
+  }
 
-    return { accessToken, user };
+  // Hydrate the public user by email for the Google OAuth flow. Returns null for an
+  // unknown or inactive account (Google sign-in is for EXISTING users only).
+  async findActiveUserByEmail(email: string): Promise<MeDto | null> {
+    const rows = await this.db
+      .select({
+        id: schema.users.id,
+        email: schema.users.email,
+        name: schema.users.name,
+        role: schema.users.role,
+        department: schema.users.department,
+        position: schema.users.position,
+        permissions: schema.users.permissions,
+        organizationId: schema.users.organizationId,
+        organizationName: schema.organizations.name,
+        active: schema.users.active,
+      })
+      .from(schema.users)
+      .innerJoin(
+        schema.organizations,
+        eq(schema.organizations.id, schema.users.organizationId),
+      )
+      .where(eq(schema.users.email, email))
+      .limit(1);
+
+    const row = rows[0];
+    if (!row || !row.active) return null;
+    return {
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      role: row.role,
+      department: row.department,
+      position: row.position,
+      permissions: effectivePermissions(row.role, row.permissions),
+      organizationId: row.organizationId,
+      organizationName: row.organizationName,
+    };
   }
 
   // Hydrate the full public user for /auth/me. The JWT only carries id+role, so

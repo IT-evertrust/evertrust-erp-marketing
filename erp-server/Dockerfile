@@ -6,11 +6,10 @@
 #     for linux inside the image),
 #   - pre-build the NestJS API so `dist/main.js` is baked into the image.
 #
-# The workspace deps @evertrust/db and @evertrust/shared ship raw TS source
-# (their package.json `main` points at src/index.ts). Plain `node dist/main.js`
-# therefore cannot require them. We run the API under the `tsx` loader at
-# runtime (see docker-compose `api.command`), which transpiles those TS packages
-# on the fly. This is the endorsed "runtime-transpile is fine for M0" approach.
+# The workspace deps @evertrust/db and @evertrust/shared are compiled to JS
+# (package.json `main` -> dist/index.js). The build step below uses pnpm's
+# "...": "@evertrust/api..." builds the API AND its workspace deps in dependency
+# order, so plain `node dist/main.js` can require them with no runtime loader.
 #
 # Build context = repo root (see docker-compose: build.context: ..).
 FROM node:24-bookworm-slim
@@ -36,10 +35,11 @@ COPY . .
 # linux here, which is exactly what we want (the host build was for macOS).
 RUN corepack pnpm install --frozen-lockfile
 
-# Pre-compile the NestJS API to dist/. The api service then runs this dist under
-# the tsx loader; the migrate service uses drizzle-kit/tsx directly and does not
-# need this output, but baking it keeps a single shared image.
-RUN corepack pnpm --filter @evertrust/api build
+# Pre-compile the workspace deps (@evertrust/db, @evertrust/shared) and then the
+# NestJS API to dist/. The "..." suffix pulls in the API's workspace dependencies
+# and builds them first. The migrate service uses drizzle-kit/tsx against src
+# directly and does not need this output, but baking it keeps a single image.
+RUN corepack pnpm --filter "@evertrust/api..." build
 
 # Default command is a no-op; each service overrides `command` in compose.
 CMD ["node", "--version"]

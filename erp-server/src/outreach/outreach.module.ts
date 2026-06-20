@@ -16,5 +16,8 @@ import { SuppressionsService } from './suppressions.service';
     SuppressionsService,
     ArsenalTokenGuard,
   ],
+  // Exported so the Growth/Engage module can reuse the classification write (verdict
+  // projection + audit) and the conversation-ledger reads instead of duplicating them.
+  exports: [OutreachMessagesService, ReplyClassificationsService],
 })
 export class OutreachModule {}

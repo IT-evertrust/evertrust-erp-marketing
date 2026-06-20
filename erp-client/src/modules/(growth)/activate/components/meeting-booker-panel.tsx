@@ -1,94 +1,236 @@
+'use client';
+
+import { useState } from 'react';
+
 import { GrowthCard, LiveDot } from '@/modules/(growth)/shared';
 
-import type { CalendarMeeting } from '../types';
+import { requestToJoinMeeting } from '../services/activate-service';
+import type { CalendarMeeting, MeetingAccount } from '../types';
 
 type MeetingBookerPanelProps = {
+  accounts: MeetingAccount[];
+  accountId: string;
+  onSelectAccount: (accountId: string) => void;
+  loadingAccounts: boolean;
   meetings: CalendarMeeting[];
+  loadingMeetings: boolean;
 };
 
-const DAYS = ['MON 16', 'TUE 17', 'WED 18', 'THU 19', 'FRI 20'];
 const HOURS = Array.from({ length: 11 }, (_, index) => 8 + index);
+const WEEKDAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
-export function MeetingBookerPanel({ meetings }: MeetingBookerPanelProps) {
+// The five weekday Date objects (Mon–Fri) of the week `offset` weeks from this one.
+// (The backend returns a -2w → +10w window, so prev/next weeks always have data.)
+function weekDates(offset: number): Date[] {
+  const today = new Date();
+  const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const dow = (today.getDay() + 6) % 7; // 0 = Monday
+  monday.setDate(monday.getDate() - dow + offset * 7);
+  return Array.from({ length: 5 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    return d;
+  });
+}
+
+const dayLabel = (d: Date): string => `${WEEKDAYS[d.getDay()]} ${d.getDate()}`;
+
+// True when an event's ISO start falls on calendar day `d` (local time).
+function sameDay(iso: string | null | undefined, d: Date): boolean {
+  if (!iso) return false;
+  const m = new Date(iso);
+  return (
+    m.getFullYear() === d.getFullYear() &&
+    m.getMonth() === d.getMonth() &&
+    m.getDate() === d.getDate()
+  );
+}
+
+function weekLabel(offset: number): string {
+  if (offset === 0) return 'This week';
+  if (offset === 1) return 'Next week';
+  if (offset === -1) return 'Last week';
+  return offset > 0 ? `In ${offset} weeks` : `${-offset} weeks ago`;
+}
+
+export function MeetingBookerPanel({
+  accounts,
+  accountId,
+  onSelectAccount,
+  loadingAccounts,
+  meetings,
+  loadingMeetings,
+}: MeetingBookerPanelProps) {
+  const [openMeeting, setOpenMeeting] = useState<CalendarMeeting | null>(null);
+  const [weekOffset, setWeekOffset] = useState(0);
+  const dates = weekDates(weekOffset);
+  // Events on a given day: by real start date, falling back to the day-label for any
+  // DB-seeded meeting that lacks an ISO start.
+  const eventsFor = (d: Date) =>
+    meetings.filter(
+      (m) => sameDay(m.startsAt, d) || (!m.startsAt && m.day === dayLabel(d)),
+    );
+
   return (
     <GrowthCard
-      title="Calendar · Week 25"
+      title={`Calendar · ${weekLabel(weekOffset)}`}
       hint={
         <span className="inline-flex items-center gap-2">
           <LiveDot />
-          Google Calendar connected
+          Booked meetings
         </span>
       }
     >
-      <div className="overflow-hidden rounded-[10px] border border-[#e4e7eb]">
-        <div className="grid grid-cols-[58px_repeat(5,minmax(0,1fr))] border-b border-[#e4e7eb] bg-white">
-          <div className="flex items-end justify-end px-2 pb-2 text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#959ca7]">
-            GMT+02
+      {/* Email-account toggle (interchangeable, like Engage's inbox switch) */}
+      <div className="mb-3 flex items-center gap-2">
+        <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+          Account
+        </span>
+        {accounts.length > 0 ? (
+          <select
+            value={accountId}
+            onChange={(event) => onSelectAccount(event.target.value)}
+            className="rounded-[8px] border border-[#e4e7eb] bg-white px-3 py-1.5 text-[12.5px] text-[#15171c]"
+          >
+            {accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.email}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span className="text-[12px] text-[#959ca7]">
+            {loadingAccounts ? 'Loading accounts…' : 'No meetings yet'}
+          </span>
+        )}
+
+        {/* Week navigation */}
+        <div className="ml-auto flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setWeekOffset((w) => w - 1)}
+            className="rounded-[8px] border border-[#e4e7eb] bg-white px-2.5 py-1.5 text-[12px] font-bold text-[#15171c] hover:bg-[#f6f7f9]"
+            aria-label="Previous week"
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            onClick={() => setWeekOffset(0)}
+            disabled={weekOffset === 0}
+            className="rounded-[8px] border border-[#e4e7eb] bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.06em] text-[#15171c] hover:bg-[#f6f7f9] disabled:opacity-40"
+          >
+            This week
+          </button>
+          <button
+            type="button"
+            onClick={() => setWeekOffset((w) => w + 1)}
+            className="rounded-[8px] border border-[#e4e7eb] bg-white px-2.5 py-1.5 text-[12px] font-bold text-[#15171c] hover:bg-[#f6f7f9]"
+            aria-label="Next week"
+          >
+            ›
+          </button>
+        </div>
+      </div>
+
+      {accounts.length === 0 && !loadingAccounts ? (
+        <div className="rounded-[10px] border border-dashed border-[#d6dade] bg-[#f6f7f9] px-6 py-10 text-center text-[12.5px] font-bold text-[#959ca7]">
+          No booked meetings yet. Run the Activate demo seed to populate the calendar.
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-[10px] border border-[#e4e7eb]">
+          <div className="grid grid-cols-[58px_repeat(5,minmax(0,1fr))] border-b border-[#e4e7eb] bg-white">
+            <div className="flex items-end justify-end px-2 pb-2 text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#959ca7]">
+              GMT+02
+            </div>
+
+            {dates.map((d) => {
+              const count = eventsFor(d).length;
+
+              return (
+                <div
+                  key={d.toISOString()}
+                  className="border-l border-[#e4e7eb] px-2 py-2 text-center"
+                >
+                  <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#5b626d]">
+                    {dayLabel(d)}
+                  </div>
+                  <div className="mt-1 text-[9px] font-bold text-[#959ca7]">
+                    {count ? `${count} meeting${count > 1 ? 's' : ''}` : 'free'}
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
-          {DAYS.map((day) => {
-            const count = meetings.filter((meeting) => meeting.day === day)
-              .length;
-
-            return (
-              <div
-                key={day}
-                className="border-l border-[#e4e7eb] px-2 py-2 text-center"
-              >
-                <div className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#5b626d]">
-                  {day}
+          <div className="grid max-h-[620px] grid-cols-[58px_repeat(5,minmax(0,1fr))] overflow-y-auto">
+            <div className="relative bg-white">
+              {HOURS.map((hour) => (
+                <div
+                  key={hour}
+                  className="h-14 border-t border-[#e4e7eb] pr-2 text-right text-[9.5px] font-bold text-[#959ca7]"
+                >
+                  <span className="relative top-[-7px]">
+                    {hour <= 12 ? `${hour} AM` : `${hour - 12} PM`}
+                  </span>
                 </div>
-                <div className="mt-1 text-[9px] font-bold text-[#959ca7]">
-                  {count ? `${count} meeting${count > 1 ? 's' : ''}` : 'free'}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              ))}
+            </div>
 
-        <div className="grid max-h-[620px] grid-cols-[58px_repeat(5,minmax(0,1fr))] overflow-y-auto">
-          <div className="relative bg-white">
-            {HOURS.map((hour) => (
+            {dates.map((d) => (
               <div
-                key={hour}
-                className="h-14 border-t border-[#e4e7eb] pr-2 text-right text-[9.5px] font-bold text-[#959ca7]"
+                key={d.toISOString()}
+                className="relative border-l border-[#e4e7eb] bg-white"
               >
-                <span className="relative top-[-7px]">
-                  {hour <= 12 ? `${hour} AM` : `${hour - 12} PM`}
-                </span>
+                {HOURS.map((hour) => (
+                  <div key={hour} className="h-14 border-t border-[#e4e7eb]" />
+                ))}
+
+                {eventsFor(d).map((meeting) => (
+                  <CalendarEvent
+                    key={meeting.id}
+                    meeting={meeting}
+                    onOpen={() => setOpenMeeting(meeting)}
+                  />
+                ))}
               </div>
             ))}
           </div>
-
-          {DAYS.map((day) => (
-            <div
-              key={day}
-              className="relative border-l border-[#e4e7eb] bg-white"
-            >
-              {HOURS.map((hour) => (
-                <div key={hour} className="h-14 border-t border-[#e4e7eb]" />
-              ))}
-
-              {meetings
-                .filter((meeting) => meeting.day === day)
-                .map((meeting) => (
-                  <CalendarEvent key={meeting.id} meeting={meeting} />
-                ))}
-            </div>
-          ))}
         </div>
-      </div>
+      )}
+
+      {loadingMeetings ? (
+        <div className="mt-2 text-center text-[11px] font-bold text-[#959ca7]">
+          Loading meetings…
+        </div>
+      ) : null}
+
+      {openMeeting ? (
+        <MeetingPopup
+          meeting={openMeeting}
+          accountId={accountId}
+          onClose={() => setOpenMeeting(null)}
+        />
+      ) : null}
     </GrowthCard>
   );
 }
 
-function CalendarEvent({ meeting }: { meeting: CalendarMeeting }) {
-  const [hour, minute] = meeting.time.split(':').map(Number);
+function CalendarEvent({
+  meeting,
+  onOpen,
+}: {
+  meeting: CalendarMeeting;
+  onOpen: () => void;
+}) {
+  const [hour = 0, minute = 0] = meeting.time.split(':').map(Number);
   const top = ((hour - 8) * 56) + (minute / 60) * 56;
 
   return (
-    <div
-      className="absolute left-1.5 right-1.5 z-[1] rounded-md border border-[#d6dade] border-l-2 border-l-[#15171c] bg-[#eceef1] px-2 py-1.5"
+    <button
+      type="button"
+      onClick={onOpen}
+      className="gc-press absolute left-1.5 right-1.5 z-[1] cursor-pointer rounded-md border border-[#d6dade] border-l-2 border-l-[#15171c] bg-[#eceef1] px-2 py-1.5 text-left transition-all duration-150 hover:z-[2] hover:bg-[#e2e5ea] hover:shadow-[0_4px_12px_-6px_rgba(21,23,28,0.3)]"
       style={{ top, minHeight: 54 }}
     >
       <div className="text-[9px] font-bold text-[#959ca7]">{meeting.time}</div>
@@ -98,6 +240,128 @@ function CalendarEvent({ meeting }: { meeting: CalendarMeeting }) {
       <div className="truncate text-[9.5px] text-[#959ca7]">
         {meeting.contact} · {meeting.title}
       </div>
+    </button>
+  );
+}
+
+function MeetingPopup({
+  meeting,
+  accountId,
+  onClose,
+}: {
+  meeting: CalendarMeeting;
+  accountId: string;
+  onClose: () => void;
+}) {
+  const [joining, setJoining] = useState(false);
+
+  async function handleJoin() {
+    setJoining(true);
+    try {
+      const res = await requestToJoinMeeting(accountId, meeting.id);
+      const url = res.joinUrl ?? res.htmlLink;
+      if (url) {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+    } catch {
+      // surface nothing destructive — the calendar link below still works
+    } finally {
+      setJoining(false);
+    }
+  }
+
+  const when = meeting.startsAt
+    ? new Date(meeting.startsAt).toLocaleString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : `${meeting.day} · ${meeting.time}`;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 duration-200 animate-in fade-in"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="w-full max-w-[460px] rounded-[12px] border border-[#e4e7eb] bg-white shadow-xl duration-200 animate-in fade-in zoom-in-95 slide-in-from-bottom-2"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-3 border-b border-[#e4e7eb] px-5 py-4">
+          <div>
+            <div className="text-[15px] font-bold text-[#15171c]">{meeting.title}</div>
+            <div className="mt-1 text-[11px] text-[#959ca7]">{when}</div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-[18px] leading-none text-[#959ca7] hover:text-[#15171c]"
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-3 px-5 py-4">
+          <DetailRow label="Company" value={meeting.company} />
+          <DetailRow label="Contact" value={meeting.contact} />
+          {meeting.durationMinutes ? (
+            <DetailRow label="Duration" value={`${meeting.durationMinutes} min`} />
+          ) : null}
+          {meeting.location ? <DetailRow label="Location" value={meeting.location} /> : null}
+          {meeting.organizer ? <DetailRow label="Organizer" value={meeting.organizer} /> : null}
+          {meeting.attendees && meeting.attendees.length > 0 ? (
+            <DetailRow
+              label="Attendees"
+              value={meeting.attendees
+                .map((a) => a.name ?? a.email ?? '')
+                .filter(Boolean)
+                .join(', ')}
+            />
+          ) : null}
+          {meeting.description ? (
+            <div>
+              <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+                Notes
+              </div>
+              <p className="max-h-[120px] overflow-auto whitespace-pre-wrap text-[12.5px] leading-relaxed text-[#5b626d]">
+                {meeting.description}
+              </p>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex flex-wrap justify-end gap-2 border-t border-[#e4e7eb] px-5 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            className="gc-press rounded-md border border-[#c2c7ce] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#15171c] hover:bg-[#f6f7f9]"
+          >
+            Close
+          </button>
+          <button
+            type="button"
+            onClick={handleJoin}
+            disabled={joining}
+            className="gc-press rounded-md border border-[#15171c] bg-[#15171c] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:bg-[#2a2d34] disabled:opacity-50"
+          >
+            {joining ? 'Opening…' : 'Request to join'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-4 border-b border-dashed border-[#d6dade] pb-2 text-[12.5px]">
+      <span className="text-[#959ca7]">{label}</span>
+      <b className="text-right text-[#15171c]">{value}</b>
     </div>
   );
 }

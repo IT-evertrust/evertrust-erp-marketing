@@ -1,0 +1,10 @@
+{
+  "campaign_id": "camp_test_001",
+  "name": "Housing Co-ops >= 500 units - Bavaria",
+  "niche": "Housing",
+  "region": "Bavaria",
+  "segment": "Portfolio holders",
+  "source": "Company DB",
+  "country": "Germany",
+  "max_leads": 6
+}

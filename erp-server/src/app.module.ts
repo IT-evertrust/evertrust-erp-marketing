@@ -7,31 +7,21 @@ import { DbModule } from './db/db.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
-import { TendersModule } from './tenders/tenders.module';
-import { PricingModule } from './pricing/pricing.module';
-import { RfqModule } from './rfq/rfq.module';
-import { SubmissionModule } from './submission/submission.module';
-import { ApprovalsModule } from './approvals/approvals.module';
 import { NichesModule } from './niches/niches.module';
-import { IndustriesModule } from './industries/industries.module';
 import { WorkflowConfigModule } from './arsenal/workflow-config.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
 import { ArsenalModule } from './arsenal/arsenal.module';
 import { ProspectsModule } from './prospects/prospects.module';
 import { OutreachModule } from './outreach/outreach.module';
-import { ContractsModule } from './contracts/contracts.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { LeadsModule } from './leads/leads.module';
 import { MeetingsModule } from './meetings/meetings.module';
-import { MarketingModule } from './marketing/marketing.module';
-import { DocumentsModule } from './documents/documents.module';
-import { SuppliersModule } from './suppliers/suppliers.module';
-import { CustomersModule } from './customers/customers.module';
 import { PerformanceModule } from './performance/performance.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from './auth/guards/permissions.guard';
 import { AuditInterceptor } from './common/audit.interceptor';
 import { GrowthModule } from './modules/(growth)/growth.module';
+
 @Module({
   imports: [
     AppConfigModule,
@@ -40,27 +30,16 @@ import { GrowthModule } from './modules/(growth)/growth.module';
     HealthModule,
     AuthModule,
     UsersModule,
-    TendersModule,
-    PricingModule,
-    RfqModule,
-    SubmissionModule,
-    ApprovalsModule,
     NichesModule,
-    IndustriesModule,
     WorkflowConfigModule,
     CampaignsModule,
     ArsenalModule,
     GrowthModule,
     ProspectsModule,
     OutreachModule,
-    ContractsModule,
     NotificationsModule,
     LeadsModule,
     MeetingsModule,
-    MarketingModule,
-    DocumentsModule,
-    SuppliersModule,
-    CustomersModule,
     PerformanceModule,
   ],
   providers: [

@@ -1,0 +1,21 @@
+{
+  "reply_id": "reply_003",
+  "campaign_id": "campaign_nrw",
+  "lead_id": "lead_125",
+  "sender_name": "Mr. Vogel",
+  "sender_email": "vogel@example-immo.example",
+  "company": "Vogel Immobilien",
+  "subject": "Re: 600W balcony solar kits",
+  "body": "What certifications do these kits carry, and are they compatible with existing balcony railings?",
+  "received_at": "2026-06-19T12:00:00Z",
+  "campaign_context": {
+    "campaign_id": "campaign_nrw",
+    "campaign_name": "Property Mgmt Firms NRW",
+    "product_or_service": "600W balcony solar kits",
+    "offer": "Tiered pricing for property portfolios from 100 units",
+    "sender_name": "Robin Held",
+    "sender_company": "Saloot GmbH",
+    "sender_signature": "Robin Held · Saloot GmbH"
+  },
+  "previous_thread": []
+}

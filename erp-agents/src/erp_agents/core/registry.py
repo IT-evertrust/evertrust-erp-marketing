@@ -1,0 +1,27 @@
+from erp_agents.core.workflow import Workflow
+from erp_agents.workflows.activate.company_research import CompanyResearchWorkflow
+from erp_agents.workflows.activate.sales_agent import SalesAgentWorkflow
+from erp_agents.workflows.engage.rag_agent import RagAgentWorkflow
+from erp_agents.workflows.engage.reply_glock import ReplyGlockWorkflow
+from erp_agents.workflows.reach.ammo_forge import AmmoForgeWorkflow
+from erp_agents.workflows.reach.lead_satellite import LeadSatelliteWorkflow
+
+# Maps workflow names to workflow classes. Add nurture entries as they are built.
+WORKFLOW_REGISTRY: dict[str, type[Workflow]] = {
+    "engage.reply_glock": ReplyGlockWorkflow,
+    "engage.rag_agent": RagAgentWorkflow,
+    "reach.ammo_forge": AmmoForgeWorkflow,
+    "reach.lead_satellite": LeadSatelliteWorkflow,
+    "activate.sales_agent": SalesAgentWorkflow,
+    "activate.company_research": CompanyResearchWorkflow,
+    # "reach.reach_bazooka": ReachBazookaWorkflow,
+}
+
+
+def get_workflow(name: str) -> Workflow:
+    try:
+        workflow_cls = WORKFLOW_REGISTRY[name]
+    except KeyError as exc:
+        available = ", ".join(sorted(WORKFLOW_REGISTRY)) or "(none)"
+        raise KeyError(f"Unknown workflow '{name}'. Available: {available}") from exc
+    return workflow_cls()

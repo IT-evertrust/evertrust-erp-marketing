@@ -10,14 +10,21 @@ export function ActivatePage() {
   const activate = useActivate();
 
   return (
-    <main className="px-6 py-5">
+    <main className="px-6 py-5 duration-300 animate-in fade-in">
       <ActivateTabs
         activeTab={activate.activeTab}
         onChange={activate.setActiveTab}
       />
 
       {activate.activeTab === 'booker' ? (
-        <MeetingBookerPanel meetings={activate.meetings} />
+        <MeetingBookerPanel
+          accounts={activate.accounts}
+          accountId={activate.accountId}
+          onSelectAccount={activate.setAccountId}
+          loadingAccounts={activate.loadingAccounts}
+          meetings={activate.meetings}
+          loadingMeetings={activate.loadingMeetings}
+        />
       ) : null}
 
       {activate.activeTab === 'research' ? (
@@ -26,6 +33,8 @@ export function ActivatePage() {
           selectedDossierId={activate.selectedDossierId}
           onSelectDossier={activate.setSelectedDossierId}
           selectedDossier={activate.selectedDossier}
+          loading={activate.loadingDossiers}
+          generating={activate.generating}
         />
       ) : null}
 
@@ -35,6 +44,18 @@ export function ActivatePage() {
           selectedAnalysisId={activate.selectedCallAnalysisId}
           onSelectAnalysis={activate.setSelectedCallAnalysisId}
           selectedAnalysis={activate.selectedCallAnalysis}
+          loading={activate.loadingAnalyses}
+          personas={activate.personas}
+          selectedPersona={activate.selectedPersona}
+          onSelectPersona={activate.setSelectedPersona}
+          analyzing={activate.analyzing}
+          onAnalyze={activate.runAnalysis}
+          query={activate.analysisQuery}
+          onQuery={activate.setAnalysisQuery}
+          date={activate.analysisDate}
+          onDate={activate.setAnalysisDate}
+          onSyncReadAi={activate.syncReadAi}
+          syncingReadAi={activate.syncingReadAi}
         />
       ) : null}
     </main>

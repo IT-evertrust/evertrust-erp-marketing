@@ -7,6 +7,8 @@ type CompanyResearchPanelProps = {
   selectedDossierId: string;
   onSelectDossier: (dossierId: string) => void;
   selectedDossier?: ResearchDossier;
+  loading?: boolean;
+  generating?: boolean;
 };
 
 export function CompanyResearchPanel({
@@ -14,6 +16,8 @@ export function CompanyResearchPanel({
   selectedDossierId,
   onSelectDossier,
   selectedDossier,
+  loading = false,
+  generating = false,
 }: CompanyResearchPanelProps) {
   return (
     <GrowthCard title="Company Research">
@@ -25,45 +29,61 @@ export function CompanyResearchPanel({
             </span>
           </div>
 
-          {dossiers.map((dossier) => {
-            const selected = selectedDossierId === dossier.id;
+          {loading && dossiers.length === 0 ? (
+            <div className="p-6 text-center text-[12.5px] font-bold text-[#959ca7]">
+              Loading meetings…
+            </div>
+          ) : dossiers.length === 0 ? (
+            <div className="p-6 text-center text-[12.5px] font-bold text-[#959ca7]">
+              No upcoming meetings on this calendar.
+            </div>
+          ) : (
+            dossiers.map((dossier) => {
+              const selected = selectedDossierId === dossier.id;
 
-            return (
-              <button
-                key={dossier.id}
-                type="button"
-                onClick={() => onSelectDossier(dossier.id)}
-                className={[
-                  'block w-full border-b border-[#e4e7eb] px-4 py-3 text-left hover:bg-[#f6f7f9]',
-                  selected
-                    ? 'bg-[#f6f7f9] shadow-[inset_2px_0_0_#15171c]'
-                    : 'bg-white',
-                ].join(' ')}
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-[13px] font-bold text-[#15171c]">
-                    {dossier.company}
-                  </span>
-                  <span className="shrink-0 text-[10px] text-[#959ca7]">
-                    {dossier.meetingTime}
-                  </span>
-                </div>
+              return (
+                <button
+                  key={dossier.id}
+                  type="button"
+                  onClick={() => onSelectDossier(dossier.id)}
+                  className={[
+                    'block w-full border-b border-[#e4e7eb] px-4 py-3 text-left hover:bg-[#f6f7f9]',
+                    selected
+                      ? 'bg-[#f6f7f9] shadow-[inset_2px_0_0_#15171c]'
+                      : 'bg-white',
+                  ].join(' ')}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-[13px] font-bold text-[#15171c]">
+                      {dossier.company}
+                    </span>
+                    <span className="shrink-0 text-[10px] text-[#959ca7]">
+                      {dossier.meetingTime}
+                    </span>
+                  </div>
 
-                <div className="mt-1 text-[11px] text-[#959ca7]">
-                  {dossier.status} · {dossier.contact.split(' · ')[0]}
-                </div>
-              </button>
-            );
-          })}
+                  <div className="mt-1 text-[11px] text-[#959ca7]">
+                    {dossier.status} · {dossier.contact.split(' · ')[0]}
+                  </div>
+                </button>
+              );
+            })
+          )}
         </aside>
 
         <section className="p-5">
-          {selectedDossier ? (
-            <DossierDetail dossier={selectedDossier} />
-          ) : (
+          {!selectedDossier ? (
             <div className="rounded-lg border border-dashed border-[#d6dade] bg-[#f6f7f9] px-6 py-8 text-center text-[12.5px] font-bold text-[#959ca7]">
               Select a meeting to view the dossier.
             </div>
+          ) : selectedDossier.status === 'Being generated' ? (
+            <div className="flex min-h-[300px] items-center justify-center rounded-lg border border-dashed border-[#d6dade] bg-[#f6f7f9] px-6 py-8 text-center text-[12.5px] font-bold text-[#959ca7]">
+              {generating
+                ? 'Researching the company — building the dossier…'
+                : 'Dossier will be generated when you open this meeting.'}
+            </div>
+          ) : (
+            <DossierDetail dossier={selectedDossier} />
           )}
         </section>
       </div>
@@ -90,32 +110,38 @@ function DossierDetail({ dossier }: { dossier: ResearchDossier }) {
         </span>
       </div>
 
-      <section>
-        <SectionTitle>Company Profile</SectionTitle>
-        {dossier.profile.map((item) => (
-          <div
-            key={item.label}
-            className="flex justify-between border-b border-dashed border-[#d6dade] py-2 text-[12.5px]"
-          >
-            <span className="text-[#959ca7]">{item.label}</span>
-            <b className="text-[#15171c]">{item.value}</b>
-          </div>
-        ))}
-      </section>
+      {dossier.profile.length > 0 ? (
+        <section>
+          <SectionTitle>Company Profile</SectionTitle>
+          {dossier.profile.map((item) => (
+            <div
+              key={item.label}
+              className="flex justify-between border-b border-dashed border-[#d6dade] py-2 text-[12.5px]"
+            >
+              <span className="text-[#959ca7]">{item.label}</span>
+              <b className="text-[#15171c]">{item.value}</b>
+            </div>
+          ))}
+        </section>
+      ) : null}
 
-      <section>
-        <SectionTitle>Signals</SectionTitle>
-        {dossier.signals.map((signal) => (
-          <Bullet key={signal}>{signal}</Bullet>
-        ))}
-      </section>
+      {dossier.signals.length > 0 ? (
+        <section>
+          <SectionTitle>Signals</SectionTitle>
+          {dossier.signals.map((signal) => (
+            <Bullet key={signal}>{signal}</Bullet>
+          ))}
+        </section>
+      ) : null}
 
-      <section>
-        <SectionTitle>Talking Points</SectionTitle>
-        {dossier.talkingPoints.map((point) => (
-          <Bullet key={point}>{point}</Bullet>
-        ))}
-      </section>
+      {dossier.talkingPoints.length > 0 ? (
+        <section>
+          <SectionTitle>Talking Points</SectionTitle>
+          {dossier.talkingPoints.map((point) => (
+            <Bullet key={point}>{point}</Bullet>
+          ))}
+        </section>
+      ) : null}
 
       <div className="flex flex-wrap gap-2">
         <button className="rounded-md border border-[#c2c7ce] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#15171c]">

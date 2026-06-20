@@ -1,5 +1,49 @@
 export type AimStatus = 'DRAFT' | 'READY' | 'RUNNING' | 'COMPLETED' | 'FAILED';
 
+export type EmailBlock = { subject: string; body: string };
+
+export type ReachTemplates = {
+  cold_outreach: EmailBlock;
+  follow_up: EmailBlock;
+  final_push: EmailBlock;
+};
+
+export type ReachNewsBrief = { title: string; body: string };
+
+// The three outreach rounds.
+export type ReachRound = 'cold' | 'followup' | 'final';
+
+// Per-round stats. `sent` is real (Send action); the rest are 0 until tracking.
+export type RoundStats = {
+  sent: number;
+  opened: number;
+  clicked: number;
+  replied: number;
+  bounced: number;
+  meetings: number;
+};
+
+export type ReachStats = {
+  cold: RoundStats;
+  followup: RoundStats;
+  final: RoundStats;
+};
+
+export const EMPTY_ROUND_STATS: RoundStats = {
+  sent: 0,
+  opened: 0,
+  clicked: 0,
+  replied: 0,
+  bounced: 0,
+  meetings: 0,
+};
+
+export const EMPTY_STATS: ReachStats = {
+  cold: { ...EMPTY_ROUND_STATS },
+  followup: { ...EMPTY_ROUND_STATS },
+  final: { ...EMPTY_ROUND_STATS },
+};
+
 export type ReachAim = {
   id: string;
   name: string;
@@ -9,9 +53,28 @@ export type ReachAim = {
   source?: string;
   status: AimStatus;
   companies: number;
+  // Which mailbox the campaign sends from (info | hanna).
+  sender: string;
+  // Ammo Forge output (null until generated).
+  templates: ReachTemplates | null;
+  newsBrief: ReachNewsBrief | null;
+  generatedBy: string | null;
+  // Per-round send/engagement stats (always present; zeros until sends happen).
+  stats: ReachStats;
+  // Reach Bazooka on/off toggle.
+  autoSend: boolean;
   createdAt: string;
   updatedAt: string;
 };
+
+// Summary returned by a Reach Bazooka run.
+export type BazookaRunSummary = {
+  campaignsProcessed: number;
+  sends: { aimId: string; campaign: string; round: ReachRound; count: number }[];
+};
+
+// Which tracking signal a tracking endpoint records.
+export type TrackKind = 'open' | 'click' | 'reply';
 
 export type ReachLeadStatus =
   | 'NEW'
@@ -25,12 +88,15 @@ export type ReachLead = {
   id: string;
   aimId: string;
   company: string;
+  website?: string;
   contactName?: string;
   contactTitle?: string;
   email?: string;
   phone?: string;
   location?: string;
   source?: string;
+  qualificationReason?: string;
+  confidence?: number;
   status: ReachLeadStatus;
   createdAt: string;
   updatedAt: string;

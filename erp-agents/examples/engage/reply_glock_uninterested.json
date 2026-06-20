@@ -1,0 +1,21 @@
+{
+  "reply_id": "reply_002",
+  "campaign_id": "campaign_nrw",
+  "lead_id": "lead_124",
+  "sender_name": "Frau Becker",
+  "sender_email": "becker@example-hv.example",
+  "company": "Becker Hausverwaltung",
+  "subject": "Re: 600W balcony solar kits",
+  "body": "No thank you, this is not relevant for us. Please remove us from your list and do not contact us again.",
+  "received_at": "2026-06-19T11:00:00Z",
+  "campaign_context": {
+    "campaign_id": "campaign_nrw",
+    "campaign_name": "Property Mgmt Firms NRW",
+    "product_or_service": "600W balcony solar kits",
+    "offer": "Tiered pricing for property portfolios from 100 units",
+    "sender_name": "Robin Held",
+    "sender_company": "Saloot GmbH",
+    "sender_signature": "Robin Held · Saloot GmbH"
+  },
+  "previous_thread": []
+}

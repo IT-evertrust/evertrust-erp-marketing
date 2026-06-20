@@ -1,0 +1,21 @@
+{
+  "reply_id": "reply_001",
+  "campaign_id": "campaign_nrw",
+  "lead_id": "lead_123",
+  "sender_name": "Mr. Schmitz",
+  "sender_email": "schmitz@hv-rheinland.example",
+  "company": "HV Rheinland GmbH",
+  "subject": "Re: 600W balcony solar kits",
+  "body": "Interesting — could you send a quote for 120 units? Storage optional, please include delivery times.",
+  "received_at": "2026-06-19T10:00:00Z",
+  "campaign_context": {
+    "campaign_id": "campaign_nrw",
+    "campaign_name": "Property Mgmt Firms NRW",
+    "product_or_service": "600W balcony solar kits",
+    "offer": "Tiered pricing for property portfolios from 100 units",
+    "sender_name": "Robin Held",
+    "sender_company": "Saloot GmbH",
+    "sender_signature": "Robin Held · Saloot GmbH"
+  },
+  "previous_thread": []
+}

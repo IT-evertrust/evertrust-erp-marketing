@@ -1,0 +1,21 @@
+{
+  "prospect_id": "prospect_555",
+  "campaign_id": "campaign_nrw",
+  "company": "Vogel Immobilien",
+  "country": "Germany",
+  "lead_email": "vogel@example-immo.example",
+  "thread": [
+    {
+      "direction": "OUTBOUND",
+      "from_address": "hanna@evertrust-germany.de",
+      "body": "Dear Vogel Immobilien, we supply 600W balcony solar kits with tiered pricing for property portfolios from 100 units. Would a short call make sense?",
+      "sent_at": "2026-06-17T09:00:00Z"
+    },
+    {
+      "direction": "INBOUND",
+      "from_address": "vogel@example-immo.example",
+      "body": "Thanks. Before we go further — what certifications do these kits carry, and who handles installation liability on our buildings?",
+      "sent_at": "2026-06-18T15:30:00Z"
+    }
+  ]
+}

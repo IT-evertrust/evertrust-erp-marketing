@@ -8,41 +8,14 @@ type NewCampaignModalProps = {
   open: boolean;
   onClose: () => void;
   onSubmit: (values: NewCampaignFormValues) => void;
+  submitting?: boolean;
 };
-
-const NICHE_OPTIONS = [
-  'Housing',
-  'Property Mgmt',
-  'Municipality',
-  'Installer',
-  'Wholesale',
-  'Investor',
-];
-
-const REGION_OPTIONS = [
-  'Bavaria',
-  'NRW',
-  'Baden-Württemberg',
-  'Hesse',
-  'Berlin',
-  'Hamburg',
-  'Nationwide DE',
-  'DE-South',
-];
-
-const SOURCE_OPTIONS = [
-  'iBau',
-  'Company DB',
-  'Tender portal',
-  'Google search',
-  'LinkedIn',
-  'Manual upload',
-];
 
 export function NewCampaignModal({
   open,
   onClose,
   onSubmit,
+  submitting = false,
 }: NewCampaignModalProps) {
   const [values, setValues] = useState<NewCampaignFormValues>({
     name: '',
@@ -50,6 +23,7 @@ export function NewCampaignModal({
     region: 'Bavaria',
     segment: '',
     source: 'Company DB',
+    sender: 'info',
   });
 
   if (!open) return null;
@@ -81,6 +55,7 @@ export function NewCampaignModal({
       region: 'Bavaria',
       segment: '',
       source: 'Company DB',
+      sender: 'info',
     });
   }
 
@@ -119,31 +94,21 @@ export function NewCampaignModal({
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <Field label="Niche">
-                <select
+                <input
                   value={values.niche}
-                  onChange={(event) =>
-                    updateValue('niche', event.target.value)
-                  }
+                  onChange={(event) => updateValue('niche', event.target.value)}
+                  placeholder="e.g. Housing, Property Mgmt, Installer"
                   className="w-full rounded-lg border border-[#d6dade] bg-[#f6f7f9] px-3 py-2.5 text-[13px] text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
-                >
-                  {NICHE_OPTIONS.map((option) => (
-                    <option key={option}>{option}</option>
-                  ))}
-                </select>
+                />
               </Field>
 
               <Field label="Region">
-                <select
+                <input
                   value={values.region}
-                  onChange={(event) =>
-                    updateValue('region', event.target.value)
-                  }
+                  onChange={(event) => updateValue('region', event.target.value)}
+                  placeholder="e.g. Bavaria, NRW, Nationwide DE"
                   className="w-full rounded-lg border border-[#d6dade] bg-[#f6f7f9] px-3 py-2.5 text-[13px] text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
-                >
-                  {REGION_OPTIONS.map((option) => (
-                    <option key={option}>{option}</option>
-                  ))}
-                </select>
+                />
               </Field>
             </div>
 
@@ -157,15 +122,21 @@ export function NewCampaignModal({
             </Field>
 
             <Field label="Source">
-              <select
+              <input
                 value={values.source}
                 onChange={(event) => updateValue('source', event.target.value)}
+                placeholder="e.g. Company DB, iBau, LinkedIn"
                 className="w-full rounded-lg border border-[#d6dade] bg-[#f6f7f9] px-3 py-2.5 text-[13px] text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
-              >
-                {SOURCE_OPTIONS.map((option) => (
-                  <option key={option}>{option}</option>
-                ))}
-              </select>
+              />
+            </Field>
+
+            <Field label="Sender mailbox">
+              <input
+                value={values.sender}
+                onChange={(event) => updateValue('sender', event.target.value)}
+                placeholder="info or hanna"
+                className="w-full rounded-lg border border-[#d6dade] bg-[#f6f7f9] px-3 py-2.5 text-[13px] text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
+              />
             </Field>
           </div>
 
@@ -173,16 +144,18 @@ export function NewCampaignModal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-md border border-[#c2c7ce] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#15171c]"
+              disabled={submitting}
+              className="rounded-md border border-[#c2c7ce] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#15171c] disabled:opacity-50"
             >
               Cancel
             </button>
 
             <button
               type="submit"
-              className="rounded-md border border-[#15171c] bg-[#15171c] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-white"
+              disabled={submitting}
+              className="rounded-md border border-[#15171c] bg-[#15171c] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-white disabled:opacity-60"
             >
-              Start Aim
+              {submitting ? 'Aiming…' : 'Start Aim'}
             </button>
           </div>
         </form>

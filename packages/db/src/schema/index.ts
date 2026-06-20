@@ -19,3 +19,6 @@ export * from './notifications';
 export * from './personas';
 export * from './performance';
 export * from './workflow-config';
+export * from './google';
+export * from './org-config';
+export * from './reach';

@@ -24,8 +24,12 @@ export const meetings = pgTable(
     organizationId: uuid('organization_id')
       .notNull()
       .references(() => organizations.id),
-    // Read.ai session id — the idempotency key for re-syncs.
+    // Idempotency key for re-syncs. For Read AI meetings this is a deterministic
+    // (title, date) key so the Gmail-harvest path (summary) and the MCP path
+    // (transcript) converge on the SAME row.
     sessionId: text('session_id'),
+    // The Read AI meeting ULID when known (from the MCP path); null for email-harvested.
+    readAiId: text('read_ai_id'),
     title: text('title'),
     clientCompany: text('client_company'),
     aeName: text('ae_name'),
@@ -34,6 +38,8 @@ export const meetings = pgTable(
     meetingDate: text('meeting_date'),
     persona: text('persona'),
     analysis: jsonb('analysis'),
+    // Read AI's own summary (from the report email), shown until our coaching analysis runs.
+    summary: text('summary'),
     // Raw transcript (kept so the ERP can re-analyze under a chosen persona).
     transcript: text('transcript'),
     docUrl: text('doc_url'),

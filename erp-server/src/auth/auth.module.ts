@@ -4,6 +4,7 @@ import { PassportModule } from '@nestjs/passport';
 import { AppConfigService } from '../config/app-config.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { GoogleAuthService } from './google/google-auth.service';
 import { JwtStrategy } from './jwt.strategy';
 
 @Module({
@@ -24,7 +25,9 @@ import { JwtStrategy } from './jwt.strategy';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy],
-  exports: [AuthService],
+  providers: [AuthService, GoogleAuthService, JwtStrategy],
+  // GoogleAuthService is exported so the future Gmail/Calendar send layer can call
+  // getAccessToken(userId) to act on the signed-in user's behalf.
+  exports: [AuthService, GoogleAuthService],
 })
 export class AuthModule {}

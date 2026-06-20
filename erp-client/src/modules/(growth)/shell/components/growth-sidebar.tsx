@@ -6,10 +6,6 @@ import { usePathname } from 'next/navigation';
 import { GROWTH_NAV_ITEMS } from '../services/growth-nav';
 
 function isActivePath(pathname: string, href: string) {
-  if (href === '/dashboard') {
-    return pathname === '/' || pathname === '/dashboard';
-  }
-
   return pathname.startsWith(href);
 }
 

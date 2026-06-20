@@ -169,6 +169,13 @@
       "when": 1780571000000,
       "tag": "0023_industries",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1780572000000,
+      "tag": "0024_google_accounts",
+      "breakpoints": true
     }
   ]
 }

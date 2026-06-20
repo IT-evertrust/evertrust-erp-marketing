@@ -45,6 +45,25 @@ export const EnvSchema = z.object({
   // Created at boot if missing. In containers this is a mounted volume.
   UPLOAD_DIR: z.string().min(1).default('./uploads'),
 
+  // ---- Google OAuth ("Sign in with Google" + Gmail/Calendar on the user's behalf) ----
+  // Blank CLIENT_ID/SECRET = the Google sign-in route is DISABLED (redirects to
+  // /login?error=google_not_configured), so the API is safe to run before GCP is set up.
+  GOOGLE_CLIENT_ID: z.string().default(''),
+  GOOGLE_CLIENT_SECRET: z.string().default(''),
+  // The backend callback Google redirects to, e.g. http://localhost:3001/auth/google/callback.
+  GOOGLE_OAUTH_REDIRECT_URI: z.string().default(''),
+  // Space-separated scopes: identity (openid/email/profile) + minimal Gmail/Calendar.
+  GOOGLE_OAUTH_SCOPES: z
+    .string()
+    .default(
+      'openid email profile https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/calendar.events',
+    ),
+  // Secret used to encrypt stored refresh tokens at rest (any string; sha256-derived to
+  // a 32-byte AES key). Blank = refresh tokens cannot be stored (sign-in fails clearly).
+  GOOGLE_TOKEN_ENC_KEY: z.string().default(''),
+  // Where to send the browser after a successful Google sign-in (the web app origin).
+  FRONTEND_URL: z.string().default('http://localhost:3000'),
+
   // Growth Engine: the AIM "deploy campaign" n8n webhook (the reference's
   // EVERTRUST_DEPLOY_WEBHOOK). Empty = skip the deploy step — the campaign still
   // persists as DRAFT — so the feature is safe to run before the webhook is set.
@@ -71,8 +90,27 @@ export const EnvSchema = z.object({
   AGENT_REACH_BAZOOKA_URL: z.string().default(''),
   AGENT_REPLY_GLOCK_URL: z.string().default(''),
   AGENT_SLEEPER_GRENADE_URL: z.string().default(''),
+
+  // The unified erp-agents service (modular monolith) base URL. The engage module
+  // POSTs `${AGENTS_BASE_URL}/run` { workflow, mode, input } and gets the AgentResult
+  // back SYNCHRONOUSLY (engage is per-reply, not a campaign batch). Blank = engage
+  // agent runs are disabled (the run/classify endpoints return 503), so the API is
+  // safe to deploy before the agent service is up. Local dev: http://localhost:8001.
+  AGENTS_BASE_URL: z.string().default(''),
+  // How long the backend waits for a synchronous agent /run (classify + draft). The
+  // local Hermes model does two sequential LLM calls, so this needs headroom; raise it
+  // further for slower hardware. Milliseconds.
+  AGENT_TIMEOUT_MS: z.coerce.number().int().positive().default(300_000),
   // (The daily Bazooka send time is now an ERP-editable setting in arsenal_settings,
   // not an env var — changeable in the UI without a redeploy.)
+
+  // Reach Gmail send safety. 'test' (default) redirects EVERY send to
+  // REACH_TEST_RECIPIENT (capped at REACH_TEST_SEND_CAP) so synthetic lead
+  // addresses are never emailed; 'live' sends to the real lead email. Flip to
+  // 'live' only when you intend real outbound mail.
+  REACH_SEND_MODE: z.enum(['test', 'live']).default('test'),
+  REACH_TEST_RECIPIENT: z.string().default('admin@evertrust-germany.de'),
+  REACH_TEST_SEND_CAP: z.coerce.number().int().positive().default(3),
 
   // Phase 5b — Claude price-assist. Blank ANTHROPIC_API_KEY = the feature is
   // DISABLED (the price-assist endpoint returns { configured: false } instead of

@@ -28,7 +28,9 @@ ARG NEXT_PUBLIC_API_URL=http://localhost:3001
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN corepack pnpm --filter @evertrust/web build
+# "@evertrust/web..." builds the web app's workspace deps (@evertrust/shared)
+# before the Next build, so its compiled dist/ is resolvable.
+RUN corepack pnpm --filter "@evertrust/web..." build
 
 # erp-client has no public/ dir in the repo; ensure one exists so the runner's
 # COPY of it always has a source (Next serves it as the static asset root).

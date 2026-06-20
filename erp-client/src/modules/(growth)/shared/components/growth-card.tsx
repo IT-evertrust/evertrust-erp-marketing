@@ -16,7 +16,8 @@ export function GrowthCard({
   return (
     <section
       className={[
-        'min-w-0 rounded-[10px] border border-[#e4e7eb] bg-white',
+        'gc-card min-w-0 rounded-[10px] border border-[#e4e7eb] bg-white',
+        'duration-300 animate-in fade-in slide-in-from-bottom-1',
         className,
       ].join(' ')}
     >

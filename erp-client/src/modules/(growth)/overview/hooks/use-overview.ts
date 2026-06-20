@@ -2,9 +2,11 @@
 
 import { useMemo } from 'react';
 
+import { useQuery } from '@tanstack/react-query';
 import type { CampaignDto, MeetingDto } from '@evertrust/shared';
 import { useCampaigns } from '@/hooks/use-campaigns';
 import { useMeetings } from '@/hooks/use-meetings';
+import { API_URL } from '@/lib/env';
 
 import {
   FALLBACK_ACTIVITY,
@@ -14,9 +16,34 @@ import {
 
 import type {
   EngineActivityItem,
+  EngineAlert,
   FunnelStage,
   OverviewKpi,
 } from '../types';
+
+type OverviewActivityResponse = {
+  activity: EngineActivityItem[];
+  alerts: EngineAlert[];
+};
+
+// The real cross-system Engine Activity feed + alerts from the backend. Polled so the
+// dashboard stays roughly live; falls back to the client-synthesized feed if it errors.
+function useEngineActivity() {
+  return useQuery<OverviewActivityResponse, Error>({
+    queryKey: ['growth', 'overview', 'activity'],
+    queryFn: async ({ signal }) => {
+      const res = await fetch(`${API_URL}/growth/overview/activity`, {
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+        signal,
+      });
+      if (!res.ok) throw new Error(`overview activity -> ${res.status}`);
+      return (await res.json()) as OverviewActivityResponse;
+    },
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+  });
+}
 
 function numberFormat(value: number) {
   return new Intl.NumberFormat('en-US').format(value);
@@ -50,37 +77,37 @@ function buildKpis(
       label: 'NEW LEADS',
       value: numberFormat(campaigns.length),
       delta: 'live',
-      spark: FALLBACK_KPIS[0].spark,
+      spark: FALLBACK_KPIS[0]?.spark ?? '',
     },
     {
       label: 'CONTACTED',
       value: numberFormat(activeCampaigns),
       delta: 'active',
-      spark: FALLBACK_KPIS[1].spark,
+      spark: FALLBACK_KPIS[1]?.spark ?? '',
     },
     {
       label: 'REPLY RATE',
       value: `${replyRate}%`,
       delta: 'from meetings',
-      spark: FALLBACK_KPIS[2].spark,
+      spark: FALLBACK_KPIS[2]?.spark ?? '',
     },
     {
       label: 'INTERESTED',
       value: numberFormat(meetings.length),
       delta: 'meeting intent',
-      spark: FALLBACK_KPIS[3].spark,
+      spark: FALLBACK_KPIS[3]?.spark ?? '',
     },
     {
       label: 'MEETINGS',
       value: numberFormat(meetings.length),
       delta: `${analyzedMeetings} analyzed`,
-      spark: FALLBACK_KPIS[4].spark,
+      spark: FALLBACK_KPIS[4]?.spark ?? '',
     },
     {
       label: 'PIPELINE VALUE',
       value: '—',
       delta: 'needs deals API',
-      spark: FALLBACK_KPIS[5].spark,
+      spark: FALLBACK_KPIS[5]?.spark ?? '',
     },
   ];
 }
@@ -140,7 +167,7 @@ function buildActivity(
   campaigns: CampaignDto[],
   meetings: MeetingDto[],
 ): EngineActivityItem[] {
-  const feed: Array<EngineActivityItem & { at: number }> = [];
+  const feed: Array<EngineActivityItem & { sortTs: number }> = [];
 
   for (const campaign of campaigns) {
     const ts = Date.parse(campaign.activatedAt ?? campaign.createdAt);
@@ -150,7 +177,7 @@ function buildActivity(
     const name = campaign.name?.trim() || campaign.project || 'Unnamed campaign';
 
     feed.push({
-      at: ts,
+      sortTs: ts,
       time: new Intl.DateTimeFormat('en-GB', {
         hour: '2-digit',
         minute: '2-digit',
@@ -174,7 +201,7 @@ function buildActivity(
     const company = meeting.clientCompany?.trim() || 'Prospect';
 
     feed.push({
-      at: ts,
+      sortTs: ts,
       time: new Intl.DateTimeFormat('en-GB', {
         hour: '2-digit',
         minute: '2-digit',
@@ -186,18 +213,19 @@ function buildActivity(
     });
   }
 
-  const realFeed = feed.sort((a, b) => b.at - a.at).slice(0, 8);
+  const realFeed = feed.sort((a, b) => b.sortTs - a.sortTs).slice(0, 8);
 
   if (realFeed.length === 0) {
     return FALLBACK_ACTIVITY;
   }
 
-  return realFeed.map(({ at: _at, ...item }) => item);
+  return realFeed.map(({ sortTs: _sortTs, ...item }) => item);
 }
 
 export function useOverview() {
   const campaigns = useCampaigns();
   const meetings = useMeetings();
+  const engine = useEngineActivity();
 
   const campaignRows = campaigns.data ?? [];
   const meetingRows = meetings.data ?? [];
@@ -212,15 +240,21 @@ export function useOverview() {
     [campaignRows, meetingRows],
   );
 
-  const activity = useMemo(
+  // Prefer the real backend feed; fall back to the client-synthesized one if it's
+  // unavailable or empty (so the card is never blank).
+  const clientActivity = useMemo(
     () => buildActivity(campaignRows, meetingRows),
     [campaignRows, meetingRows],
   );
+  const serverActivity = engine.data?.activity ?? [];
+  const activity = serverActivity.length > 0 ? serverActivity : clientActivity;
+  const alerts = engine.data?.alerts ?? [];
 
   return {
     kpis,
     funnel,
     activity,
+    alerts,
     isLoading: campaigns.isLoading || meetings.isLoading,
     isError: campaigns.isError || meetings.isError,
   };

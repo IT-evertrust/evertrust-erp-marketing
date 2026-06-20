@@ -1,3 +1,7 @@
+[project]
+name = "erp-agents"
+version = "0.1.0"
+requires-python = ">=3.11"
 dependencies = [
   "pydantic>=2.8.0",
   "pydantic-settings>=2.4.0",
@@ -8,5 +12,23 @@ dependencies = [
   "google-api-python-client>=2.130.0",
   "google-auth>=2.30.0",
   "google-auth-oauthlib>=1.2.0",
-  "google-auth-httplib2>=0.2.0"
+  "google-auth-httplib2>=0.2.0",
+  "fastapi>=0.110.0",
+  "uvicorn>=0.29.0",
 ]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

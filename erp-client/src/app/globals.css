@@ -182,4 +182,57 @@
   body {
     @apply bg-background text-foreground;
   }
+  /* Smooth every interactive state change app-wide (hover bg, selected border, focus,
+     small transforms) so nothing snaps. Only animates properties that actually change. */
+  button:not(:disabled),
+  [role='button'],
+  a,
+  select,
+  summary,
+  input,
+  textarea {
+    @apply transition-[color,background-color,border-color,box-shadow,transform,opacity] duration-150 ease-out;
+  }
+}
+
+/* Reusable Growth-UI motion utilities (applied across Overview / Reach / Engage / Activate). */
+@layer components {
+  /* Card: lift the shadow slightly on hover. */
+  .gc-card {
+    @apply transition-[box-shadow,transform] duration-200 ease-out;
+  }
+  .gc-card:hover {
+    box-shadow: 0 6px 20px -10px rgba(21, 23, 28, 0.22);
+  }
+  /* Interactive tile/row: lift + shadow on hover. */
+  .gc-lift {
+    @apply transition-[transform,box-shadow] duration-200 ease-out;
+  }
+  .gc-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px -10px rgba(21, 23, 28, 0.25);
+  }
+  /* Tactile press for buttons/tiles. */
+  .gc-press:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gc-card,
+  .gc-lift,
+  .gc-press,
+  button,
+  a,
+  select,
+  summary,
+  input,
+  textarea {
+    transition-duration: 0.001ms !important;
+  }
+  .gc-card:hover,
+  .gc-lift:hover,
+  .gc-press:active {
+    transform: none !important;
+  }
 }

@@ -1,6 +1,7 @@
 import { GrowthCard, StatusPill } from '../../shared';
 
 import type { Campaign } from '../types';
+import { Spinner } from './spinner';
 
 type CampaignTableProps = {
   campaigns: Campaign[];
@@ -10,6 +11,7 @@ type CampaignTableProps = {
   showAction?: boolean;
   actionLabel?: string;
   onActionClick?: () => void;
+  loading?: boolean;
 };
 
 export function CampaignTable({
@@ -20,6 +22,7 @@ export function CampaignTable({
   showAction = false,
   actionLabel = 'Aim',
   onActionClick,
+  loading = false,
 }: CampaignTableProps) {
   return (
     <GrowthCard
@@ -36,6 +39,13 @@ export function CampaignTable({
         ) : null
         }
     >
+      {loading && campaigns.length === 0 ? (
+        <Spinner label="Loading campaigns…" />
+      ) : campaigns.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-[#d6dade] bg-[#f6f7f9] p-6 text-center text-[12.5px] font-bold text-[#959ca7]">
+          No campaigns yet. Click Aim to launch one.
+        </div>
+      ) : (
       <div className="max-h-[280px] overflow-auto">
         <table className="w-full border-collapse">
           <thead>
@@ -93,6 +103,7 @@ export function CampaignTable({
           </tbody>
         </table>
       </div>
+      )}
     </GrowthCard>
   );
 }

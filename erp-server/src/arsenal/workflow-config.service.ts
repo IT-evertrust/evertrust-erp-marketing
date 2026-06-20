@@ -191,12 +191,12 @@ export class WorkflowConfigService {
       ingestTokenSetAt: row?.ingestTokenSetAt
         ? row.ingestTokenSetAt.toISOString()
         : null,
-      defaultSender: (clean(row?.defaultSender) ?? null) as DefaultSender | null,
+      defaultSender: null as DefaultSender | null,
       followupOffsetDays: row?.followupOffsetDays ?? null,
       finalPushOffsetDays: row?.finalPushOffsetDays ?? null,
       // Templates + Leads share one resolver with getAutomation() (see below) so the
       // /arsenal/config read and the machine campaign config never drift.
-      ...this.resolveAutomation(row),
+      ...this.resolveAutomation(),
     };
   }
 
@@ -209,25 +209,29 @@ export class WorkflowConfigService {
   // default of `true` — an unset (null) value must never read as "off" (so
   // suppressions are honoured and a niche analysis is required until an admin
   // explicitly turns them off).
-  private resolveAutomation(row: WorkflowConfigRow | null): {
+  private resolveAutomation(): {
     templates: WorkflowTemplatesDto;
     leads: WorkflowLeadsDto;
   } {
+    // The Templates/Leads governance moved to the per-org `org_config` table and is
+    // not yet wired through this (global, singleton) service, so resolve to safe
+    // product defaults: suppressions honoured + niche analysis required until an
+    // admin explicitly turns them off via org config.
     return {
       templates: {
-        default: (row?.defaultTemplate ?? null) as DefaultTemplateDto | null,
-        signature: clean(row?.signature) ?? null,
-        tone: (clean(row?.tone) ?? null) as OutreachTone | null,
-        language: (clean(row?.templateLanguage) ?? null) as TemplateLanguage | null,
+        default: null as DefaultTemplateDto | null,
+        signature: null,
+        tone: null as OutreachTone | null,
+        language: null as TemplateLanguage | null,
       },
       leads: {
-        maxLeadsPerRun: row?.maxLeadsPerRun ?? null,
-        maxPerNiche: row?.maxPerNiche ?? null,
-        dailySendCap: row?.dailySendCap ?? null,
-        defaultRegions: row?.defaultRegions ?? [],
-        respectSuppressions: row?.respectSuppressions ?? true,
-        dedupDays: row?.dedupDays ?? null,
-        requireNicheAnalysis: row?.requireNicheAnalysis ?? true,
+        maxLeadsPerRun: null,
+        maxPerNiche: null,
+        dailySendCap: null,
+        defaultRegions: [],
+        respectSuppressions: true,
+        dedupDays: null,
+        requireNicheAnalysis: true,
       },
     };
   }
@@ -241,8 +245,7 @@ export class WorkflowConfigService {
     templates: WorkflowTemplatesDto;
     leads: WorkflowLeadsDto;
   }> {
-    const row = await this.row();
-    return this.resolveAutomation(row);
+    return this.resolveAutomation();
   }
 
   // ----- lead stats (GET /arsenal/lead-stats) ------------------------------
@@ -294,7 +297,6 @@ export class WorkflowConfigService {
       }
     }
     if ('n8nApiUrl' in patch) set.n8nApiUrl = patch.n8nApiUrl ?? null;
-    if ('defaultSender' in patch) set.defaultSender = patch.defaultSender ?? null;
     if ('followupOffsetDays' in patch) {
       set.followupOffsetDays = patch.followupOffsetDays ?? null;
     }
@@ -302,35 +304,11 @@ export class WorkflowConfigService {
       set.finalPushOffsetDays = patch.finalPushOffsetDays ?? null;
     }
 
-    // Templates group — each sub-field independent: a value sets it, null clears it,
-    // an omitted key is left unchanged. `default` is stored as the jsonb object (or
-    // null to clear the baseline).
-    if (patch.templates) {
-      const t = patch.templates;
-      if ('default' in t) set.defaultTemplate = t.default ?? null;
-      if ('signature' in t) set.signature = t.signature ?? null;
-      if ('tone' in t) set.tone = t.tone ?? null;
-      if ('language' in t) set.templateLanguage = t.language ?? null;
-    }
-
-    // Leads group — caps: value sets / null clears; defaultRegions replaces the
-    // stored array wholesale when provided; the two booleans set directly.
-    if (patch.leads) {
-      const l = patch.leads;
-      if ('maxLeadsPerRun' in l) set.maxLeadsPerRun = l.maxLeadsPerRun ?? null;
-      if ('maxPerNiche' in l) set.maxPerNiche = l.maxPerNiche ?? null;
-      if ('dailySendCap' in l) set.dailySendCap = l.dailySendCap ?? null;
-      if ('defaultRegions' in l && l.defaultRegions !== undefined) {
-        set.defaultRegions = l.defaultRegions;
-      }
-      if ('respectSuppressions' in l && l.respectSuppressions !== undefined) {
-        set.respectSuppressions = l.respectSuppressions;
-      }
-      if ('dedupDays' in l) set.dedupDays = l.dedupDays ?? null;
-      if ('requireNicheAnalysis' in l && l.requireNicheAnalysis !== undefined) {
-        set.requireNicheAnalysis = l.requireNicheAnalysis;
-      }
-    }
+    // NOTE: the Templates / Leads / defaultSender groups moved to the per-org
+    // `org_config` table and are no longer columns on workflow_config. They are
+    // accepted on the patch for API compatibility but NOT persisted here yet — wiring
+    // them through to org_config is the remaining follow-up. (Webhooks, the n8n base,
+    // the ingest token, and the sequence offsets still persist normally below.)
 
     await this.persist(set);
     this.invalidate();

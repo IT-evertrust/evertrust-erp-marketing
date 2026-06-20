@@ -6,13 +6,15 @@
 #   pkg            module                      port   endpoint
 #   bazooka        bazooka.server:app          8800   /reach/run
 #   satellite      satellite.server:app        8801   /satellite/run
-#   glock          glock.server:app            8802   /glock/run
 #   sleeper        sleeper.server:app          8803   /sleeper/run
 #   ammoforge      ammoforge.server:app        8804   /ammoforge/run
 #   crm            crm.server:app              8805   /crm/run
-#   rag            rag.server:app              8806   /rag/run
 #   contractmaker  contractmaker.server:app    8807   /contractmaker/run
 #   sales          sales.server:app            8808   /sales/run
+#
+# NOTE: glock + rag removed — they were ported to the modular monolith at
+#   src/erp_agents/workflows/engage/{reply_glock,rag_agent}. Run those via
+#   scripts/run_workflow.py (CLI) or the unified agent server (future phase).
 #
 # Usage:  run-pipeline-agents.sh         # start all
 #         run-pipeline-agents.sh stop    # stop the ones we started
@@ -22,11 +24,9 @@ ROOT="/Users/kobewannkenobi/marketing-agent-workflows/erp-agents/workflows"
 AGENTS=(
   "bazooka:bazooka.server:app:8800"
   "satellite:satellite.server:app:8801"
-  "glock:glock.server:app:8802"
   "sleeper:sleeper.server:app:8803"
   "ammoforge:ammoforge.server:app:8804"
   "crm:crm.server:app:8805"
-  "rag:rag.server:app:8806"
   "contractmaker:contractmaker.server:app:8807"
   "sales:sales.server:app:8808"
 )
