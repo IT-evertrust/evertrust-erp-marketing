@@ -1,6 +1,8 @@
+'use client';
+
 import { GrowthCard, StatusPill } from '../../shared';
 
-import type { Campaign, CampaignEmail } from '../types';
+import type { Campaign, CampaignEmail, ReachRound } from '../types';
 import { CampaignTable } from './campaign-table';
 
 type EmailGeneratorPanelProps = {
@@ -9,6 +11,8 @@ type EmailGeneratorPanelProps = {
   onSelectCampaign: (campaignId: string) => void;
   selectedCampaignName?: string;
   emails: CampaignEmail[];
+  loadingCampaigns?: boolean;
+  onSend: (round: ReachRound) => void;
 };
 
 export function EmailGeneratorPanel({
@@ -17,6 +21,8 @@ export function EmailGeneratorPanel({
   onSelectCampaign,
   selectedCampaignName,
   emails,
+  loadingCampaigns = false,
+  onSend,
 }: EmailGeneratorPanelProps) {
   return (
     <div className="flex flex-col gap-4">
@@ -24,9 +30,16 @@ export function EmailGeneratorPanel({
         campaigns={campaigns}
         selectedCampaignId={selectedCampaignId}
         onSelectCampaign={onSelectCampaign}
+        loading={loadingCampaigns}
       />
 
       <GrowthCard title={`Emails · ${selectedCampaignName ?? 'Campaign'}`}>
+        {emails.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-[#d6dade] bg-[#f6f7f9] p-6 text-center text-[12.5px] font-bold text-[#959ca7]">
+            No templates generated yet. Launch an Aim to generate the cold
+            outreach, follow up, and final push.
+          </div>
+        ) : (
         <div className="flex flex-col gap-4">
           {emails.map((email) => {
             const sent = email.sent || 1;
@@ -49,34 +62,27 @@ export function EmailGeneratorPanel({
                     </div>
                   </div>
 
-                  <StatusPill live={email.status === 'SENT'}>
-                    {email.status}
-                  </StatusPill>
+                  <div className="flex items-center gap-2">
+                    <StatusPill live={email.status === 'SENT'}>
+                      {email.status}
+                    </StatusPill>
+                    <button
+                      type="button"
+                      onClick={() => onSend(email.id as ReachRound)}
+                      className="rounded-md border border-[#15171c] bg-[#15171c] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:opacity-90"
+                    >
+                      Send
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
                   <div
                     contentEditable
                     suppressContentEditableWarning
-                    className="min-h-[120px] rounded-lg border border-[#d6dade] bg-[#f6f7f9] p-3 text-[12.5px] leading-relaxed text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
+                    className="min-h-[120px] whitespace-pre-wrap rounded-lg border border-[#d6dade] bg-[#f6f7f9] p-3 text-[12.5px] leading-relaxed text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
                   >
-                    Subject: {email.subject}
-                    <br />
-                    <br />
-                    Dear [Contact],
-                    <br />
-                    <br />
-                    We supply plug-and-play 600W balcony solar kits with
-                    integrated micro-inverters. From 100 units, we can provide
-                    tiered pricing and delivery options.
-                    <br />
-                    <br />
-                    Would a short 15-minute call next week make sense?
-                    <br />
-                    <br />
-                    Best regards,
-                    <br />
-                    Evertrust Growth Engine
+                    {`Subject: ${email.subject}\n\n${email.body ?? ''}`}
                   </div>
 
                   <div className="rounded-lg border border-[#d6dade] bg-[#f6f7f9] p-3">
@@ -120,6 +126,7 @@ export function EmailGeneratorPanel({
             );
           })}
         </div>
+        )}
       </GrowthCard>
     </div>
   );
