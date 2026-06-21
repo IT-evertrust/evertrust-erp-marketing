@@ -361,6 +361,32 @@ export class GoogleAccountsService {
     }
   }
 
+  // Resolve a LIVE access token for a SPECIFIC org-owned account (by id) — the
+  // per-account funnel the Growth readers (Gmail/Calendar/Read AI) use to iterate
+  // every connected mailbox individually rather than just the org default. Looks up
+  // the org-owned row; returns null if it is missing or not CONNECTED, else mints a
+  // fresh token reusing resolveMailbox's refresh+cache path (decrypt refresh ->
+  // refresh at Google -> best-effort cache). Returns null + logs a warn on any error.
+  async getAccessTokenForAccount(orgId: string, accountId: string): Promise<string | null> {
+    try {
+      const row = await this.ownedRow(orgId, accountId);
+      if (!row || row.status !== 'CONNECTED') return null;
+
+      const refreshToken = this.crypto.decrypt(row.refreshTokenEnc);
+      const { accessToken, expiryDate } = await this.oauth.refreshAccessToken(refreshToken);
+
+      // Best-effort cache the fresh access token back; a cache-write failure must
+      // not change the resolve contract.
+      this.cacheAccessToken(row.id, accessToken, expiryDate).catch(() => undefined);
+
+      return accessToken;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown error';
+      this.logger.warn(`getAccessTokenForAccount(${orgId}, ${accountId}) token error: ${msg}`);
+      return null;
+    }
+  }
+
   private canServeKind(row: GoogleAccountRow, kind: GoogleMailboxKind): boolean {
     if (kind === 'calendar') return this.hasCalendarScope(row);
     if (kind === 'gmail-read') return this.hasGmailReadScope(row);
