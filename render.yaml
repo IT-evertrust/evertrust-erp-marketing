@@ -73,3 +73,20 @@ services:
         sync: false
       - key: ANTHROPIC_MODEL
         value: claude-3-5-sonnet-latest
+      # ── Reach + Activate (Growth Engine agents) ──────────────────────────────
+      # The erp-agents Python `/run` monolith runs on the MAC MINI (Tailscale
+      # Funnel), NOT on Render. Set AGENTS_BASE_URL in the dashboard to the funnel
+      # URL once the mini service is up (see docs/reach-activate-prod-runbook.md).
+      - key: AGENTS_BASE_URL    # e.g. https://mac-mini-ca-mac.tailc3d837.ts.net  (blank = Reach/Activate agent calls 503)
+        sync: false
+      - key: AGENT_TIMEOUT_MS
+        value: "300000"
+      # Reach send safety: 'test' redirects EVERY send to REACH_TEST_RECIPIENT
+      # (capped at REACH_TEST_SEND_CAP). Keep 'test' for the first prod deploy;
+      # flip to 'live' (per-org) only after the prod smoke-test passes.
+      - key: REACH_SEND_MODE
+        value: test
+      - key: REACH_TEST_RECIPIENT
+        value: admin@evertrust-germany.de
+      - key: REACH_TEST_SEND_CAP
+        value: "3"
