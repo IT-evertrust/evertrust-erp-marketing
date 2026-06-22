@@ -58,6 +58,10 @@
       "exit": "Exit free-slot view",
       "banner": "Free-slot view: showing only proposed openings. Meetings are hidden."
     },
+    "businessDays": {
+      "label": "Business days ({count})",
+      "heading": "Bookable days"
+    },
     "footer": {
       "hint": "Click a solid meeting card to open details. Dashed blocks are proposed free slots.",
       "positionedSingle": "Positioned by {primary}.",

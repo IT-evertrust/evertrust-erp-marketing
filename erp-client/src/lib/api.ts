@@ -130,6 +130,8 @@ export type CalendarRangeParams = {
   timeMax?: string;
   timeZone?: string;
   durationMinutes?: number;
+  // Allowed weekdays for free-slot generation (0=Sun..6=Sat). Omitted ⇒ Mon–Fri.
+  businessDays?: number[];
 };
 
 export type CalendarUpcomingParams = Pick<CalendarRangeParams, 'timeMin' | 'timeMax' | 'timeZone'>;
@@ -186,6 +188,12 @@ function calendarQuery(params?: CalendarRangeParams): string {
 
   if (params?.durationMinutes != null) {
     q.set('durationMinutes', String(params.durationMinutes));
+  }
+
+  // Serialize allowed weekdays as a CSV (e.g. "1,2,3,4,5"); omitted ⇒ backend
+  // Mon–Fri default.
+  if (params?.businessDays != null && params.businessDays.length > 0) {
+    q.set('businessDays', params.businessDays.join(','));
   }
 
   const qs = q.toString();

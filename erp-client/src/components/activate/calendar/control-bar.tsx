@@ -1,7 +1,15 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { CalendarDays, CalendarRange, ChevronLeft, ChevronRight, Search, SquareDot } from 'lucide-react';
+import {
+  CalendarCheck,
+  CalendarDays,
+  CalendarRange,
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  SquareDot,
+} from 'lucide-react';
 import type { CampaignDto } from '@evertrust/shared';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,11 +19,34 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { SegmentedTabs } from '@/components/rean/segmented-tabs';
 import { cn } from '@/lib/utils';
 import type { CalendarView } from '@/components/activate/calendar/types';
 
 const ALL_CAMPAIGNS = 'all';
+
+// Mon-first order (matches the calendar grid) of weekday numbers (0=Sun..6=Sat),
+// for the Business-days toggle list.
+const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0] as const;
+// Stable, locale-agnostic short labels for the toggles (the calendar grid itself
+// renders localized weekday names; this compact control uses fixed abbreviations).
+const WEEKDAY_LABELS: Record<number, string> = {
+  0: 'Sun',
+  1: 'Mon',
+  2: 'Tue',
+  3: 'Wed',
+  4: 'Thu',
+  5: 'Fri',
+  6: 'Sat',
+};
 
 export function ControlBar({
   view,
@@ -26,7 +57,8 @@ export function ControlBar({
   rangeLabel,
   onPrev,
   onNext,
-  onToday,
+  businessDays,
+  onBusinessDaysChange,
   freeOnly,
   onToggleFreeOnly,
 }: {
@@ -38,11 +70,20 @@ export function ControlBar({
   rangeLabel: string;
   onPrev: () => void;
   onNext: () => void;
-  onToday: () => void;
+  businessDays: number[];
+  onBusinessDaysChange: (businessDays: number[]) => void;
   freeOnly: boolean;
   onToggleFreeOnly: () => void;
 }) {
   const t = useTranslations('activate');
+
+  // Toggle a weekday in/out of the allowed set, kept sorted for a stable query key.
+  const toggleDay = (day: number, checked: boolean) => {
+    const next = checked
+      ? [...businessDays, day]
+      : businessDays.filter((d) => d !== day);
+    onBusinessDaysChange([...new Set(next)].sort((a, b) => a - b));
+  };
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -91,16 +132,6 @@ export function ControlBar({
             <ChevronLeft className="size-4" />
           </Button>
 
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-8 text-xs"
-            onClick={onToday}
-          >
-            {t('calendar.nav.today')}
-          </Button>
-
           <span className="min-w-28 text-center text-xs font-semibold text-muted-foreground">
             {rangeLabel}
           </span>
@@ -116,6 +147,32 @@ export function ControlBar({
             <ChevronRight className="size-4" />
           </Button>
         </div>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5 text-xs">
+              <CalendarCheck className="size-3.5" />
+              {t('calendar.businessDays.label', { count: businessDays.length })}
+            </Button>
+          </DropdownMenuTrigger>
+
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuLabel>{t('calendar.businessDays.heading')}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+
+            {WEEKDAY_ORDER.map((day) => (
+              <DropdownMenuCheckboxItem
+                key={day}
+                checked={businessDays.includes(day)}
+                // Keep the menu open while toggling several days.
+                onSelect={(event) => event.preventDefault()}
+                onCheckedChange={(checked) => toggleDay(day, checked)}
+              >
+                {WEEKDAY_LABELS[day]}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
 
         <Button
           type="button"

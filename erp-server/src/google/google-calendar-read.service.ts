@@ -35,7 +35,13 @@ const BUSINESS_START_HOUR = 9; // 09:00 inclusive
 const BUSINESS_END_HOUR = 17; // 17:00 exclusive (last slot starts 16:30)
 const SLOT_MINUTES = 30;
 const FREE_SLOT_HORIZON_DAYS = 7;
-const MAX_FREE_SLOTS = 6;
+// Per-day cap: each in-range business day surfaces at most this many openings, so
+// later days still get slots instead of the first day or two consuming a single
+// global budget. The overall ceiling is derived from it across the horizon.
+const MAX_FREE_SLOTS_PER_DAY = 4;
+const MAX_FREE_SLOTS = MAX_FREE_SLOTS_PER_DAY * (FREE_SLOT_HORIZON_DAYS + 1);
+// The default business days when none are requested: Mon–Fri (0=Sun..6=Sat).
+const DEFAULT_BUSINESS_DAYS: readonly number[] = [1, 2, 3, 4, 5];
 const MAX_UPCOMING_EVENTS = 10;
 // LAST-resort product default when an org has no salesTimeZone override and no
 // SALES_TIME_ZONE env is set. Also the default for the pure slot generator so the
@@ -47,15 +53,12 @@ type CalendarRangeInput = {
   timeMax?: string;
   timeZone?: string;
   durationMinutes?: number;
+  // Allowed weekdays for free-slot generation (0=Sun..6=Sat). Omitted ⇒ Mon–Fri.
+  businessDays?: number[];
 };
 interface BusyInterval {
   start: number; // epoch ms
   end: number; // epoch ms
-}
-
-// Minimal shape of a Google freeBusy response we depend on.
-interface FreeBusyResponse {
-  calendars?: Record<string, { busy?: { start?: string; end?: string }[] }>;
 }
 
 // Minimal shape of a Google events.list response we depend on.
@@ -210,18 +213,22 @@ function zoneWallClockToUtc(
 }
 
 // PURE slot computation (exported for unit testing). Given busy intervals and a
-// reference `now`, returns up to `MAX_FREE_SLOTS` openings of `durationMinutes`
-// (default 30) within weekday 09:00–17:00 business hours (in `tz`, default the product
-// default) over the next `FREE_SLOT_HORIZON_DAYS` days. Slot START times stay on the
-// 30-minute grid; a slot is free when it lies entirely in the future, finishes within
-// business hours, and overlaps no busy interval. Deterministic and timezone-correct
-// (DST-aware via Intl). `tz` defaults to the product default so existing Berlin-pinned
-// callers/tests need no change.
+// reference `now`, returns openings of `durationMinutes` (default 30) within
+// 09:00–17:00 business hours (in `tz`, default the product default) over the next
+// `FREE_SLOT_HORIZON_DAYS` days, on the allowed `businessDays` (0=Sun..6=Sat,
+// default Mon–Fri). Each day yields at most `MAX_FREE_SLOTS_PER_DAY` openings — so
+// every in-range business day surfaces slots instead of the earliest day or two
+// exhausting a single global budget — with an overall ceiling of `MAX_FREE_SLOTS`.
+// Slot START times stay on the 30-minute grid; a slot is free when it lies entirely
+// in the future, finishes within business hours, and overlaps no busy interval.
+// Deterministic and timezone-correct (DST-aware via Intl). `tz`/`businessDays`
+// default so existing Berlin-pinned, Mon–Fri callers/tests need no change.
 export function computeFreeSlots(
   busy: BusyInterval[],
   now: Date = new Date(),
   tz: string = DEFAULT_TIME_ZONE,
   durationMinutes: number = SLOT_MINUTES,
+  businessDays: readonly number[] = DEFAULT_BUSINESS_DAYS,
 ): { start: string; end: string }[] {
   // The slot LENGTH honors the requested meeting duration; the start grid stays on
   // SLOT_MINUTES boundaries. Clamp to a sane positive value no longer than the
@@ -236,6 +243,15 @@ export function computeFreeSlots(
   const horizonMs = nowMs + FREE_SLOT_HORIZON_DAYS * 24 * 60 * 60_000;
   const out: { start: string; end: string }[] = [];
 
+  // Allowed weekdays as a Set for O(1) membership. A malformed/empty request falls
+  // back to Mon–Fri so the calendar never silently returns nothing.
+  const allowedDays = new Set(
+    (businessDays.length > 0 ? businessDays : DEFAULT_BUSINESS_DAYS).filter(
+      (d) => Number.isInteger(d) && d >= 0 && d <= 6,
+    ),
+  );
+  if (allowedDays.size === 0) for (const d of DEFAULT_BUSINESS_DAYS) allowedDays.add(d);
+
   // Walk each calendar day in the horizon by its local date in `tz`, generating
   // candidate slots within business hours. Iterate by UTC-midnight steps but resolve
   // each business-hour slot through the zone's wall clock so DST shifts stay correct.
@@ -243,12 +259,16 @@ export function computeFreeSlots(
     const probe = new Date(nowMs + dayOffset * 24 * 60 * 60_000);
     const { year, month, day, weekday } = zoneParts(probe, tz);
 
-    // Weekdays only (Mon–Fri).
-    if (weekday === 0 || weekday === 6) continue;
+    // Only the configured business days (default Mon–Fri).
+    if (!allowedDays.has(weekday)) continue;
 
     // The day's close as a UTC instant — a longer slot may start within business
     // hours yet must not run past it (e.g. a 60-min slot can't start at 16:30).
     const businessEndMs = zoneWallClockToUtc(year, month, day, BUSINESS_END_HOUR, 0, tz).getTime();
+
+    // Per-day budget so every in-range business day surfaces slots. We move to the
+    // next day once this day fills up, and stop entirely only at the overall ceiling.
+    let perDayCount = 0;
 
     for (let h = BUSINESS_START_HOUR; h < BUSINESS_END_HOUR; h++) {
       for (let m = 0; m < 60; m += SLOT_MINUTES) {
@@ -267,8 +287,12 @@ export function computeFreeSlots(
           start: new Date(startMs).toISOString(),
           end: new Date(endMs).toISOString(),
         });
-        if (out.length >= MAX_FREE_SLOTS) return out;
+        perDayCount += 1;
+        if (out.length >= MAX_FREE_SLOTS) return out; // overall ceiling
+        if (perDayCount >= MAX_FREE_SLOTS_PER_DAY) break; // this day is full
       }
+
+      if (perDayCount >= MAX_FREE_SLOTS_PER_DAY) break; // roll on to the next day
     }
   }
 
@@ -394,28 +418,22 @@ export class GoogleCalendarReadService {
     return out;
   }
 
-  // The next upcoming real events from the org's primary calendar. Never throws —
-  // returns a `configured: false` shell when the org has no default calendar mailbox
-  // or Google is unreachable.
-  async upcoming(orgId: string, rangeInput: CalendarRangeInput = {}): Promise<CalendarUpcomingDto> {
-    const { primary: timeZone, secondary: secondaryTimeZone } =
-      await this.resolveOrgTimeZones(orgId);
-    const access = await this.googleAccounts.resolveMailbox(orgId, 'calendar');
-    if (!access.ok) {
-      return {
-        configured: false,
-        account: null,
-        events: [],
-        reason: access.reason,
-        timeZone,
-        secondaryTimeZone,
-      };
-    }
-    const perOrg = access;
-    const range = resolveCalendarRange(rangeInput, timeZone);
-    const selfEmail = perOrg.account.email.toLowerCase();
-    const selfDomain = selfEmail.split('@')[1] ?? '';
-
+  // Fetch + classify the org's primary-calendar events for a range. The SINGLE
+  // events.list path shared by upcoming() and freeSlots() — both need the same
+  // classified `CalendarEventDto[]` (with `category`), only differing in what they
+  // do with it (campaign-tag + return vs. derive client-only busy intervals).
+  // Never throws — returns a discriminated `configured: false` shell on any failure
+  // so both callers degrade gracefully. Does NOT tag campaigns (caller's concern).
+  private async fetchClassifiedEvents(
+    orgId: string,
+    accessToken: string,
+    selfEmail: string,
+    selfDomain: string,
+    range: { timeMin: string; timeMax: string; timeZone: string },
+  ): Promise<
+    | { ok: true; events: CalendarEventDto[] }
+    | { ok: false; reason: string }
+  > {
     try {
       const params = new URLSearchParams({
         timeMin: range.timeMin,
@@ -429,7 +447,7 @@ export class GoogleCalendarReadService {
         `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`,
         {
           headers: {
-            Authorization: `Bearer ${access.accessToken}`,
+            Authorization: `Bearer ${accessToken}`,
           },
         },
       );
@@ -439,12 +457,8 @@ export class GoogleCalendarReadService {
         this.logger.warn(`Calendar events returned HTTP ${res.status} for org ${orgId}: ${body}`);
 
         return {
-          configured: false,
-          account: null,
-          events: [],
+          ok: false,
           reason: `Google Calendar API error (HTTP ${res.status}). Reconnect the account and allow Calendar.`,
-          timeZone,
-          secondaryTimeZone,
         };
       }
 
@@ -501,7 +515,7 @@ export class GoogleCalendarReadService {
           meetingUrl,
 
           // Color-code + filter fields. category is derived from the RAW attendees
-          // (with self/resource flags); campaignIds filled in one batch query below.
+          // (with self/resource flags); campaignIds filled by the caller (upcoming).
           category: classifyEvent(
             { eventType: item.eventType, allDay, attendees: item.attendees ?? [] },
             selfDomain,
@@ -514,43 +528,84 @@ export class GoogleCalendarReadService {
         return [event];
       });
 
-      // Attendee→campaign match (per-org): one prospects lookup over all external
-      // attendee emails, then tag each event with the campaigns it belongs to.
-      const campaignMap = await this.resolveEventCampaigns(
-        orgId,
-        events.flatMap((e) => e.attendees),
-      );
-      for (const e of events) {
-        const ids = new Set<string>();
-        for (const email of e.attendees) {
-          for (const c of campaignMap.get(email.toLowerCase()) ?? []) ids.add(c);
-        }
-        e.campaignIds = [...ids];
-      }
-
-      return {
-        configured: true,
-        account: { email: perOrg.account.email },
-        events,
-        reason: null,
-        timeZone,
-        secondaryTimeZone,
-      };
+      return { ok: true, events };
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown error';
-      this.logger.warn(`Calendar upcoming failed for org ${orgId}: ${msg}`);
+      this.logger.warn(`Calendar events fetch failed for org ${orgId}: ${msg}`);
       return {
-        configured: false,
-        account: null,
-        events: [],
+        ok: false,
         reason: 'Could not reach Google Calendar. Try again, or reconnect the account.',
-        timeZone,
-        secondaryTimeZone,
       };
     }
   }
 
-  // Proposed free slots over the next 7 days within Europe/Berlin business hours.
+  // The next upcoming real events from the org's primary calendar. Never throws —
+  // returns a `configured: false` shell when the org has no default calendar mailbox
+  // or Google is unreachable.
+  async upcoming(orgId: string, rangeInput: CalendarRangeInput = {}): Promise<CalendarUpcomingDto> {
+    const { primary: timeZone, secondary: secondaryTimeZone } =
+      await this.resolveOrgTimeZones(orgId);
+    const access = await this.googleAccounts.resolveMailbox(orgId, 'calendar');
+    if (!access.ok) {
+      return {
+        configured: false,
+        account: null,
+        events: [],
+        reason: access.reason,
+        timeZone,
+        secondaryTimeZone,
+      };
+    }
+    const perOrg = access;
+    const range = resolveCalendarRange(rangeInput, timeZone);
+    const selfEmail = perOrg.account.email.toLowerCase();
+    const selfDomain = selfEmail.split('@')[1] ?? '';
+
+    const fetched = await this.fetchClassifiedEvents(
+      orgId,
+      access.accessToken,
+      selfEmail,
+      selfDomain,
+      range,
+    );
+    if (!fetched.ok) {
+      return {
+        configured: false,
+        account: null,
+        events: [],
+        reason: fetched.reason,
+        timeZone,
+        secondaryTimeZone,
+      };
+    }
+
+    const events = fetched.events;
+
+    // Attendee→campaign match (per-org): one prospects lookup over all external
+    // attendee emails, then tag each event with the campaigns it belongs to.
+    const campaignMap = await this.resolveEventCampaigns(
+      orgId,
+      events.flatMap((e) => e.attendees),
+    );
+    for (const e of events) {
+      const ids = new Set<string>();
+      for (const email of e.attendees) {
+        for (const c of campaignMap.get(email.toLowerCase()) ?? []) ids.add(c);
+      }
+      e.campaignIds = [...ids];
+    }
+
+    return {
+      configured: true,
+      account: { email: perOrg.account.email },
+      events,
+      reason: null,
+      timeZone,
+      secondaryTimeZone,
+    };
+  }
+
+  // Proposed free slots over the next 7 days within the org's business hours.
   // Never throws — returns a `configured: false` shell on any failure.
   async freeSlots(orgId: string, rangeInput: CalendarRangeInput = {}): Promise<CalendarFreeSlotsDto> {
     const { primary: timeZone, secondary: secondaryTimeZone } =
@@ -562,53 +617,45 @@ export class GoogleCalendarReadService {
     const perOrg = access;
     const range = resolveCalendarRange(rangeInput, timeZone);
     const durationMinutes = rangeInput.durationMinutes ?? 30;
+    const businessDays = rangeInput.businessDays;
+    const selfEmail = perOrg.account.email.toLowerCase();
+    const selfDomain = selfEmail.split('@')[1] ?? '';
 
     try {
       const now = new Date();
-      const res = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${perOrg.accessToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          timeMin: range.timeMin,
-          timeMax: range.timeMax,
-          timeZone: range.timeZone,
-          items: [{ id: 'primary' }],
-        }),
-      });
-      if (!res.ok) {
-        const body = await res.text();
 
-        this.logger.warn(`Calendar freeBusy returned HTTP ${res.status} for org ${orgId}: ${body}`);
-
+      // Use the SAME classified event list as upcoming() — Google freeBusy returns
+      // flat busy intervals it can't categorize, so it can't tell a client meeting
+      // from a personal block. Only events classified as 'client' (an external
+      // attendee) should make a slot unbookable; team/personal/reminder/OOO must NOT.
+      const fetched = await this.fetchClassifiedEvents(
+        orgId,
+        perOrg.accessToken,
+        selfEmail,
+        selfDomain,
+        range,
+      );
+      if (!fetched.ok) {
         return {
           configured: false,
           slots: [],
-          reason: `Google Calendar API error (HTTP ${res.status}). Reconnect the account and allow Calendar.`,
+          reason: fetched.reason,
           timeZone,
           secondaryTimeZone,
         };
       }
 
-      const data = (await res.json()) as FreeBusyResponse;
-      const busyRaw =
-        data.calendars?.primary?.busy ??
-        // freeBusy echoes the requested id as the key; "primary" resolves to the
-        // account's calendar id, so fall back to merging every returned calendar.
-        Object.values(data.calendars ?? {}).flatMap((c) => c.busy ?? []);
-
-      const busy: BusyInterval[] = busyRaw
-        .map((b) => ({
-          start: b.start ? Date.parse(b.start) : NaN,
-          end: b.end ? Date.parse(b.end) : NaN,
+      const busy: BusyInterval[] = fetched.events
+        .filter((e) => e.category === 'client')
+        .map((e) => ({
+          start: Date.parse(e.start),
+          end: Date.parse(e.end),
         }))
         .filter((b) => Number.isFinite(b.start) && Number.isFinite(b.end));
 
       return {
         configured: true,
-        slots: computeFreeSlots(busy, now, timeZone, durationMinutes),
+        slots: computeFreeSlots(busy, now, timeZone, durationMinutes, businessDays),
         reason: null,
         timeZone,
         secondaryTimeZone,

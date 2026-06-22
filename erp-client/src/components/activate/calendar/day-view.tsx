@@ -34,6 +34,7 @@ export function DayView({
   primaryTz,
   secondaryTz,
   freeOnly = false,
+  loading = false,
 }: {
   dayKey: string;
   events: CalendarGridEvent[];
@@ -43,6 +44,7 @@ export function DayView({
   primaryTz: string;
   secondaryTz: string | null;
   freeOnly?: boolean;
+  loading?: boolean;
 }) {
   const t = useTranslations('activate');
   const format = useFormatter();
@@ -84,13 +86,15 @@ export function DayView({
 
   const hasAllDay = allDayEvents.length > 0;
 
-  const countLabel = freeOnly
-    ? t('calendar.day.freeSlots', { count: daySlots.length })
-    : timedEvents.length > 0
-      ? t('calendar.day.meetings', { count: timedEvents.length })
-      : daySlots.length > 0
-        ? t('calendar.day.openSlots', { count: daySlots.length })
-        : t('calendar.day.nothing');
+  const countLabel = loading
+    ? '…'
+    : freeOnly
+      ? t('calendar.day.freeSlots', { count: daySlots.length })
+      : timedEvents.length > 0
+        ? t('calendar.day.meetings', { count: timedEvents.length })
+        : daySlots.length > 0
+          ? t('calendar.day.openSlots', { count: daySlots.length })
+          : t('calendar.day.nothing');
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -167,6 +171,7 @@ export function DayView({
             onSelectEvent={onSelectEvent}
             primaryTz={primaryTz}
             secondaryTz={secondaryTz}
+            loading={loading}
           />
         </div>
       </div>
