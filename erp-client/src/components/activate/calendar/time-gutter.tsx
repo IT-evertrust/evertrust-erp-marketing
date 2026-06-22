@@ -105,8 +105,12 @@ export function TimeScaleColumns({
     });
   }, [sampleDayKey, primaryTz, secondaryTz]);
 
+  // Labels sit just BELOW each hour rule line (top-anchored), so they read inside
+  // their hour row and the very first label (top of the grid) is never clipped by
+  // the scroll edge. `top` matches the day-column gridlines (hour * HOUR_HEIGHT).
   const labelCell =
-    'absolute right-2 -translate-y-1/2 whitespace-nowrap text-[10px] font-medium text-muted-foreground';
+    'absolute right-2 whitespace-nowrap text-[10px] font-medium leading-none text-muted-foreground';
+  const labelTop = (hour: number) => hour * HOUR_HEIGHT + 4;
 
   if (!secondaryTz) {
     return (
@@ -116,7 +120,7 @@ export function TimeScaleColumns({
             <div
               key={`primary-${label.hour}`}
               className={labelCell}
-              style={{ top: label.hour * HOUR_HEIGHT }}
+              style={{ top: labelTop(label.hour) }}
             >
               {label.primary}
             </div>
