@@ -484,7 +484,7 @@ function AiEngineCard() {
   }
 
   return (
-    <SettingsCard title={t('config.ai.title')} className="max-w-[620px]">
+    <SettingsCard title={t('config.ai.title')}>
       {config.isLoading || !data ? (
         <Skeleton className="h-32 w-full rounded-lg" />
       ) : (
@@ -626,7 +626,7 @@ function LeadScraperCard() {
   }
 
   return (
-    <SettingsCard title={t('config.leadScraper.title')} className="max-w-[620px]">
+    <SettingsCard title={t('config.leadScraper.title')}>
       {config.isLoading || !data ? (
         <Skeleton className="h-32 w-full rounded-lg" />
       ) : (
@@ -747,8 +747,7 @@ function SalesCalendarCard() {
     <SettingsCard
       title={t('config.calendar.title')}
       description={t('config.calendar.description')}
-      className="max-w-[620px]"
-    >
+         >
       {config.isLoading || !data ? (
         <Skeleton className="h-32 w-full rounded-lg" />
       ) : (
@@ -815,8 +814,7 @@ function ReachSendModeCard() {
       title="Reach send mode"
       description="Controls whether the Reach sender delivers real email or routes everything to a test inbox. Today this reflects the global REACH_SEND_MODE; per-org wiring is pending."
       action={<MockupBadge>Mockup — wires to backend next</MockupBadge>}
-      className="max-w-[620px]"
-    >
+         >
       <div className="flex flex-col gap-1.5">
         <Eyebrow>Send mode</Eyebrow>
         {/* Segmented test/live toggle, defaulting to Test. Disabled mockup. */}
@@ -887,8 +885,7 @@ function BrandingCard() {
       title="Branding & sender identity"
       description="How your org presents itself in outbound email and across the app — logo, sender name, signature, and accent color."
       action={<MockupBadge>Coming soon</MockupBadge>}
-      className="max-w-[620px]"
-    >
+         >
       <div className="flex flex-col gap-1.5">
         <Eyebrow>Org logo</Eyebrow>
         {/* Dashed drop area placeholder — disabled, non-interactive. */}
@@ -999,8 +996,7 @@ function NotificationsCard() {
       title="Notifications & alerts"
       description="Choose where each event shows up. In-app surfaces in the notification bell; email sends to your address."
       action={<MockupBadge>Coming soon</MockupBadge>}
-      className="max-w-[620px]"
-    >
+         >
       <div className="overflow-hidden rounded-[10px] border border-sidebar-border">
         <Table>
           <TableHeader>
@@ -1106,7 +1102,10 @@ export function ConfigurationSettings() {
   // subtitle), so this page renders NO header of its own — only the cards.
   return (
     <main className="px-6 py-5 duration-300 animate-in fade-in">
-      <div className="flex flex-col gap-4">
+      {/* Masonry: cards flow into two columns on wide screens so the page fills
+          the width instead of hugging the left. break-inside-avoid keeps each
+          card whole; mb-4 spaces them within a column. */}
+      <div className="columns-1 gap-4 xl:columns-2 [&>*]:mb-4 [&>*]:break-inside-avoid">
         {/* Live, working integration first, with the (mockup) marketplace as a
             sibling right beside it. */}
         <GoogleWorkspaceCard />
