@@ -9,7 +9,6 @@ import { Columns3, FileSignature, Inbox } from 'lucide-react';
 import type { CampaignDto } from '@evertrust/shared';
 import { useRequirePermission } from '@/lib/permissions';
 import { useCampaigns } from '@/hooks/use-campaigns';
-import { PageHeader } from '@/components/common/page-header';
 import { EmptyState } from '@/components/common/empty-state';
 import { SegmentedTabs } from '@/components/rean/segmented-tabs';
 import {
@@ -73,30 +72,31 @@ function NurtureView() {
   ];
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        title={tn('title')}
-        description={tn('subtitle')}
-        actions={
-          campaigns.length > 0 ? (
-            <Select
-              value={campaignId ?? undefined}
-              onValueChange={setCampaignId}
-            >
-              <SelectTrigger className="w-[260px]">
-                <SelectValue placeholder={tn('campaignPlaceholder')} />
-              </SelectTrigger>
-              <SelectContent>
-                {campaigns.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {campaignLabel(c)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : null
-        }
-      />
+    <main className="flex flex-col gap-5 px-6 py-5 duration-300 animate-in fade-in">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-sidebar-border pb-5">
+        <div className="min-w-0">
+          <h1 className="text-[22px] font-bold leading-none tracking-[-0.01em] text-foreground">
+            {tn('title')}
+          </h1>
+          <div className="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+            {tn('subtitle')}
+          </div>
+        </div>
+        {campaigns.length > 0 ? (
+          <Select value={campaignId ?? undefined} onValueChange={setCampaignId}>
+            <SelectTrigger className="w-[260px]">
+              <SelectValue placeholder={tn('campaignPlaceholder')} />
+            </SelectTrigger>
+            <SelectContent>
+              {campaigns.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {campaignLabel(c)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
+      </div>
 
       <SegmentedTabs
         tabs={tabs}
@@ -132,6 +132,6 @@ function NurtureView() {
           showDraftForm
         />
       )}
-    </div>
+    </main>
   );
 }

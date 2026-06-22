@@ -24,12 +24,12 @@ import {
   type Department,
   type UserRole,
 } from '@evertrust/shared';
+import { Users as UsersIcon } from 'lucide-react';
 import { useMe } from '@/hooks/use-auth';
 import {
   useAdminUsers,
   useUpdateUser,
 } from '@/hooks/use-admin-users';
-import { PageHeader } from '@/components/common/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -130,34 +130,44 @@ export function UsersView() {
   const cols = (layout === 'flat' ? 8 : 7) + (isOwn ? 1 : 0);
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        title={t('title')}
-        description={t('description')}
-        actions={
-          <div className="flex items-center gap-2">
-            <div className="inline-flex rounded-lg border bg-card p-0.5">
-              {(['flat', 'grouped'] as const).map((l) => (
-                <button
-                  key={l}
-                  onClick={() => setLayout(l)}
-                  className={cn(
-                    'rounded-md px-3 py-1 text-xs font-medium transition-colors',
-                    layout === l ? 'bg-muted text-foreground' : 'text-muted-foreground',
-                  )}
-                >
-                  {l === 'flat' ? t('layout.flat') : t('layout.grouped')}
-                </button>
-              ))}
+    <main className="px-6 py-5 duration-300 animate-in fade-in">
+      <header className="mb-5 flex flex-wrap items-end justify-between gap-3 border-b border-sidebar-border pb-5">
+        <div className="flex items-center gap-3">
+          <UsersIcon className="h-7 w-7 stroke-[2] text-foreground" />
+          <div>
+            <h1 className="text-[30px] font-bold leading-none tracking-[-0.02em] text-foreground">
+              {t('title')}
+            </h1>
+            <div className="mt-2">
+              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                {t('description')}
+              </span>
             </div>
-            <Button onClick={() => setShowCreate(true)}>
-              <UserPlus className="size-4" />
-              {t('addMember')}
-            </Button>
           </div>
-        }
-      />
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="inline-flex rounded-[10px] border border-sidebar-border bg-muted p-0.5">
+            {(['flat', 'grouped'] as const).map((l) => (
+              <button
+                key={l}
+                onClick={() => setLayout(l)}
+                className={cn(
+                  'rounded-md px-3 py-1 text-xs font-medium transition-colors',
+                  layout === l ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground',
+                )}
+              >
+                {l === 'flat' ? t('layout.flat') : t('layout.grouped')}
+              </button>
+            ))}
+          </div>
+          <Button onClick={() => setShowCreate(true)}>
+            <UserPlus className="size-4" />
+            {t('addMember')}
+          </Button>
+        </div>
+      </header>
 
+      <div className="flex flex-col gap-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {([
           ['members', all.length, 'emerald'],
@@ -184,7 +194,7 @@ export function UsersView() {
         <select
           value={roleF}
           onChange={(e) => setRoleF(e.target.value as 'all' | UserRole)}
-          className="h-9 rounded-md border bg-card px-2 text-sm"
+          className="h-9 rounded-md border border-sidebar-border bg-card px-2 text-sm"
         >
           <option value="all">{t('allRoles')}</option>
           {(Object.keys(ROLE_LABELS) as UserRole[]).map((r) => (
@@ -195,7 +205,7 @@ export function UsersView() {
           <select
             value={deptF}
             onChange={(e) => setDeptF(e.target.value as 'all' | Department)}
-            className="h-9 rounded-md border bg-card px-2 text-sm"
+            className="h-9 rounded-md border border-sidebar-border bg-card px-2 text-sm"
           >
             <option value="all">{t('allDepartments')}</option>
             {DEPTS.map((d) => (
@@ -203,7 +213,7 @@ export function UsersView() {
             ))}
           </select>
         ) : null}
-        <div className="inline-flex overflow-hidden rounded-md border">
+        <div className="inline-flex overflow-hidden rounded-md border border-sidebar-border">
           {(['all', 'active', 'inactive'] as StatusFilter[]).map((s) => (
             <button
               key={s}
@@ -219,7 +229,7 @@ export function UsersView() {
         </span>
       </div>
 
-      <div className="overflow-hidden rounded-xl border bg-card">
+      <div className="overflow-hidden rounded-[10px] border border-sidebar-border bg-card">
         {usersQ.isLoading ? (
           <Skeleton className="h-64 w-full" />
         ) : usersQ.isError ? (
@@ -308,6 +318,7 @@ export function UsersView() {
           </Table>
         )}
       </div>
+      </div>
 
       <UserCreateDialog open={showCreate} onOpenChange={setShowCreate} />
       {editUser ? (
@@ -319,7 +330,7 @@ export function UsersView() {
       {deleteUser ? (
         <DeleteUserDialog user={deleteUser} open onOpenChange={(o) => !o && setDeleteUser(null)} />
       ) : null}
-    </div>
+    </main>
   );
 }
 
@@ -440,7 +451,7 @@ function UserRowCells({
             <span
               className={cn(
                 'inline-block size-4 rounded-full shadow transition-transform',
-                u.active ? 'translate-x-4 bg-white' : 'translate-x-0.5 bg-zinc-300',
+                u.active ? 'translate-x-4 bg-background' : 'translate-x-0.5 bg-muted-foreground',
               )}
             />
           </button>
