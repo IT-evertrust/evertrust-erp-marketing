@@ -20,12 +20,11 @@ import {
   useSendReply,
 } from '@/hooks/use-engage';
 import { Can } from '@/components/auth/can';
-import { PageHeader } from '@/components/common/page-header';
 import { EmptyState } from '@/components/common/empty-state';
 import { AccountBar } from '@/components/rean/account-bar';
 import { ToneBadge, type ToneName } from '@/components/rean/tone-badge';
+import { GrowthCard, LiveDot } from '@/modules/(growth)/shared';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
@@ -35,11 +34,13 @@ import { ProspectDetailDrawer } from './prospect-detail-drawer';
 
 // Engage — Reply INBOX (master-detail). The ERP-direct Gmail reply pipeline (no
 // n8n): the API reads recent inbound replies straight from the org's connected
-// default mailbox, classifies + drafts via Claude. Reframed as a two-pane inbox:
-// an AccountBar (Gmail) + "Scan inbox" + a count summary on top, then below a
-// LEFT list of replies and a RIGHT reading pane for the selected reply (header,
-// body/snippet, the matched-prospect thread, and the editable suggested reply
-// with approve & send / regenerate / copy).
+// default mailbox, classifies + drafts via Claude. Styled to match Kobe's
+// minimalist "Reply Sorter" look (GrowthCard framing, monochrome chips,
+// uppercase section labels, muted chat bubbles) while keeping every live
+// behaviour: the AccountBar (Gmail) mailbox selector + "Scan inbox", a LEFT list
+// of triaged replies and a RIGHT reading pane (header, body/snippet, the
+// matched-prospect thread, and the editable suggested reply with approve & send /
+// re-draft / copy).
 
 // The per-classification pill tone (re-uses the shared ToneBadge palette):
 // INTERESTED → emerald, UNSURE → amber, NOT_INTERESTED → rose. `classification`
@@ -160,17 +161,28 @@ export function ReplyDraftsView() {
   );
 
   return (
-    <div className="flex flex-col gap-6 font-sans">
-      <PageHeader title={t('header.title')} description={t('header.description')} />
+    <main className="flex flex-col gap-4 px-6 py-5 font-sans">
+      {/* "Reply Sorter" tab masthead — mirrors Kobe's engage header. */}
+      <div className="border-b border-sidebar-border">
+        <span className="mb-[-1px] inline-block border-b-2 border-foreground px-1 py-3 text-[13px] font-bold text-foreground">
+          {t('header.title')}
+        </span>
+      </div>
+
+      <p className="text-[12px] text-muted-foreground">
+        {t('header.description')}
+      </p>
 
       {accountBar}
 
       {q.isLoading ? (
         <InboxSkeleton />
       ) : q.isError ? (
-        <Card className="p-6 text-sm text-destructive">
-          {t('drafts.loadError', { message: q.error.message })}
-        </Card>
+        <GrowthCard title={t('header.title')}>
+          <p className="text-sm text-destructive">
+            {t('drafts.loadError', { message: q.error.message })}
+          </p>
+        </GrowthCard>
       ) : !configured ? (
         <EmptyState
           icon={<Inbox />}
@@ -190,23 +202,25 @@ export function ReplyDraftsView() {
           action={scanButton}
         />
       ) : (
-        <div className="flex flex-col gap-4 lg:h-[calc(100vh-18rem)] lg:flex-row lg:gap-5">
-          <ReplyList
-            replies={filtered}
-            selectedId={selected?.id ?? null}
-            onSelect={setSelectedId}
-            filter={filter}
-            onFilterChange={setFilter}
-          />
-          <ReplyReadingPane
-            reply={selected}
-            onOpenProspect={
-              selected?.prospectId
-                ? () => setOpenProspect(selected.prospectId)
-                : undefined
-            }
-          />
-        </div>
+        <GrowthCard title={t('header.title')}>
+          <div className="grid min-h-[560px] grid-cols-1 overflow-hidden rounded-[10px] border border-sidebar-border lg:grid-cols-[320px_1fr]">
+            <ReplyList
+              replies={filtered}
+              selectedId={selected?.id ?? null}
+              onSelect={setSelectedId}
+              filter={filter}
+              onFilterChange={setFilter}
+            />
+            <ReplyReadingPane
+              reply={selected}
+              onOpenProspect={
+                selected?.prospectId
+                  ? () => setOpenProspect(selected.prospectId)
+                  : undefined
+              }
+            />
+          </div>
+        </GrowthCard>
       )}
 
       <ProspectDetailDrawer
@@ -215,11 +229,12 @@ export function ReplyDraftsView() {
           if (!open) setOpenProspect(null);
         }}
       />
-    </div>
+    </main>
   );
 }
 
-// LEFT pane — the email list with optional filter chips. Narrower, own scroll.
+// LEFT pane — the email list with filter chips. Kobe's monochrome list: a
+// bordered aside, pill filters, rows that highlight with an inset left rule.
 function ReplyList({
   replies,
   selectedId,
@@ -236,8 +251,8 @@ function ReplyList({
   const t = useTranslations('engage');
 
   return (
-    <Card className="flex max-h-[60vh] flex-col gap-0 overflow-hidden p-0 lg:max-h-none lg:w-[380px] lg:shrink-0">
-      <div className="flex flex-wrap gap-1.5 border-b p-2.5">
+    <aside className="flex max-h-[60vh] flex-col overflow-hidden border-b border-sidebar-border lg:max-h-none lg:border-b-0 lg:border-r">
+      <div className="flex flex-wrap gap-1.5 border-b border-sidebar-border p-3.5">
         {FILTER_ORDER.map((f) => (
           <button
             key={f}
@@ -245,10 +260,10 @@ function ReplyList({
             onClick={() => onFilterChange(f)}
             aria-pressed={filter === f}
             className={cn(
-              'rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
+              'rounded-full border px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.06em] transition-colors',
               filter === f
-                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                : 'border-transparent text-muted-foreground hover:bg-muted',
+                ? 'border-foreground bg-foreground text-background'
+                : 'border-sidebar-border text-muted-foreground hover:bg-muted',
             )}
           >
             {t(`filters.${f}`)}
@@ -256,66 +271,79 @@ function ReplyList({
         ))}
       </div>
 
-      <ul className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {replies.length === 0 ? (
-          <li className="px-3 py-10 text-center text-xs text-muted-foreground">
+          <p className="p-6 text-center text-[12.5px] font-bold text-muted-foreground">
             {t('filters.empty')}
-          </li>
+          </p>
         ) : (
           replies.map((r) => {
             const active = r.id === selectedId;
             return (
-              <li key={r.id}>
-                <button
-                  type="button"
-                  onClick={() => onSelect(r.id)}
-                  aria-current={active}
-                  className={cn(
-                    'flex w-full flex-col gap-1 border-l-2 border-b px-3 py-2.5 text-left transition-colors',
-                    active
-                      ? 'border-l-emerald-500 bg-emerald-500/10'
-                      : 'border-l-transparent hover:bg-muted/60',
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="min-w-0 truncate text-[12.5px] font-semibold">
-                      {r.company ?? r.fromEmail}
-                    </span>
-                    <span
-                      aria-hidden
-                      className={cn(
-                        'size-2 shrink-0 rounded-full',
-                        DOT_CLASS[VERDICT_TONE[r.classification]],
-                      )}
-                    />
-                  </div>
-                  <span className="truncate text-[11.5px] text-muted-foreground">
-                    {r.subject ?? r.snippet ?? r.fromEmail}
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => onSelect(r.id)}
+                aria-current={active}
+                className={cn(
+                  'block w-full border-b border-sidebar-border px-4 py-3 text-left transition-colors hover:bg-muted',
+                  active
+                    ? 'bg-muted shadow-[inset_2px_0_0_var(--foreground)]'
+                    : 'bg-card',
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate text-[13px] font-bold text-foreground">
+                    {r.company ?? r.fromEmail}
                   </span>
-                  <span className="text-[10.5px] tabular-nums text-muted-foreground/80">
+                  <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
                     {formatDateTime(r.receivedAt)}
                   </span>
-                </button>
-              </li>
+                </div>
+
+                <div className="mt-1 truncate text-[11px] text-muted-foreground">
+                  {r.fromEmail}
+                </div>
+
+                <div className="mt-2 line-clamp-2 text-[11.5px] text-muted-foreground">
+                  {r.subject ?? r.snippet ?? r.fromEmail}
+                </div>
+
+                <div className="mt-2">
+                  <span
+                    className={cn(
+                      'rounded-full border px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.06em]',
+                      CHIP_CLASS[VERDICT_TONE[r.classification]],
+                    )}
+                  >
+                    {t(`verdict.${r.classification}`)}
+                  </span>
+                </div>
+              </button>
             );
           })
         )}
-      </ul>
-    </Card>
+      </div>
+    </aside>
   );
 }
 
-// The classification indicator dot, keyed off the same ToneBadge palette.
-const DOT_CLASS: Record<ToneName, string> = {
-  emerald: 'bg-emerald-500',
-  amber: 'bg-amber-500',
-  rose: 'bg-rose-500',
-  sky: 'bg-sky-500',
-  violet: 'bg-violet-500',
-  muted: 'bg-muted-foreground/40',
+// The left-list category chip, keyed off the same ToneBadge palette so the list
+// and the reading-pane badge stay in lockstep.
+const CHIP_CLASS: Record<ToneName, string> = {
+  emerald:
+    'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+  amber:
+    'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400',
+  rose: 'border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-400',
+  sky: 'border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-400',
+  violet:
+    'border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-400',
+  muted: 'border-sidebar-border bg-muted text-muted-foreground',
 };
 
-// RIGHT pane — the reading view for the selected reply. Its own scroll.
+// RIGHT pane — the reading view for the selected reply. Kobe's detail layout:
+// header row + bordered thread + a bordered "AI Reply Draft" editor box.
 function ReplyReadingPane({
   reply: r,
   onOpenProspect,
@@ -337,12 +365,12 @@ function ReplyReadingPane({
 
   if (!r) {
     return (
-      <Card className="flex min-h-[200px] flex-1 items-center justify-center p-6">
-        <div className="flex flex-col items-center gap-2 text-center text-muted-foreground">
+      <section className="flex min-h-[200px] flex-1 items-center justify-center p-6">
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-sidebar-border bg-muted px-6 py-8 text-center text-muted-foreground">
           <Mail className="size-8 text-muted-foreground/40" />
-          <p className="text-sm">{t('inbox.selectPrompt')}</p>
+          <p className="text-[12.5px] font-bold">{t('inbox.selectPrompt')}</p>
         </div>
-      </Card>
+      </section>
     );
   }
 
@@ -360,146 +388,147 @@ function ReplyReadingPane({
   }
 
   return (
-    <Card className="flex min-h-0 flex-1 flex-col gap-0 overflow-hidden p-0">
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="flex flex-col gap-4 p-5">
-          {/* Header block */}
-          <div className="flex flex-col gap-2 border-b pb-4">
-            <div className="flex flex-wrap items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="truncate text-base font-semibold">
-                  {r.company ?? r.fromEmail}
-                </p>
-                <p className="truncate text-[12px] text-muted-foreground">
-                  {r.fromEmail}
-                </p>
-              </div>
-              <ToneBadge tone={VERDICT_TONE[r.classification]} className="shrink-0">
-                {t(`verdict.${r.classification}`)}
-              </ToneBadge>
-            </div>
-
-            {r.subject ? (
-              <p className="text-sm font-medium">{r.subject}</p>
-            ) : null}
-
-            <p className="text-[11px] tabular-nums text-muted-foreground">
-              {formatDateTime(r.receivedAt)}
-            </p>
-
-            {r.reason ? (
-              <p className="text-[12px] text-muted-foreground">{r.reason}</p>
-            ) : null}
+    <section className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
+      {/* Header block */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-[15px] font-bold text-foreground">
+            {r.company ?? r.fromEmail}
           </div>
-
-          {/* Inbound body / snippet */}
-          {r.snippet ? (
-            <p className="whitespace-pre-wrap rounded-md border bg-background/50 p-3 text-[13px] leading-relaxed">
-              {r.snippet}
-            </p>
+          <div className="mt-1 truncate text-[11px] text-muted-foreground">
+            {r.fromEmail}
+          </div>
+          {r.subject ? (
+            <div className="mt-1 text-[12.5px] font-bold text-foreground">
+              {r.subject}
+            </div>
           ) : null}
+          <div className="mt-1 text-[10px] tabular-nums text-muted-foreground">
+            {formatDateTime(r.receivedAt)}
+          </div>
+          {r.reason ? (
+            <p className="mt-1 text-[11.5px] text-muted-foreground">{r.reason}</p>
+          ) : null}
+        </div>
 
-          {/* The full conversation, when matched to a prospect */}
-          {r.prospectId ? (
-            <div className="flex flex-col gap-2 border-t pt-4">
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                {t('drafts.showConversation')}
-              </p>
-              <OutreachThread prospectId={r.prospectId} />
+        <ToneBadge tone={VERDICT_TONE[r.classification]} className="shrink-0">
+          {t(`verdict.${r.classification}`)}
+        </ToneBadge>
+      </div>
+
+      {/* Inbound body / snippet */}
+      {r.snippet ? (
+        <p className="whitespace-pre-wrap rounded-[10px] border border-sidebar-border bg-muted p-3 text-[12.5px] leading-relaxed text-muted-foreground">
+          {r.snippet}
+        </p>
+      ) : null}
+
+      {/* The full conversation, when matched to a prospect */}
+      {r.prospectId ? (
+        <div className="flex flex-col gap-2">
+          <div className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+            {t('drafts.showConversation')}
+          </div>
+          <div className="max-h-[260px] overflow-auto rounded-[10px] border border-sidebar-border p-3">
+            <OutreachThread prospectId={r.prospectId} />
+          </div>
+        </div>
+      ) : (
+        <p className="rounded-[10px] border border-dashed border-sidebar-border bg-muted p-3 text-[11.5px] text-muted-foreground">
+          {t('inbox.notLinked')}
+        </p>
+      )}
+
+      {/* Suggested reply editor (or the verdict-only note when undrafted) */}
+      {hasReply ? (
+        <div className="overflow-hidden rounded-[10px] border border-sidebar-border bg-card">
+          <div className="p-4">
+            <div className="mb-2 flex items-center gap-2 text-[9.5px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+              <LiveDot />
+              {t('send.label')}
             </div>
-          ) : (
-            <p className="rounded-md border border-dashed p-3 text-[12px] text-muted-foreground">
-              {t('inbox.notLinked')}
-            </p>
-          )}
 
-          {/* Suggested reply editor (or the verdict-only note when undrafted) */}
-          {hasReply ? (
-            <div className="flex flex-col gap-2 border-t pt-4">
-              <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                {t('send.label')}
-              </p>
-              <Textarea
-                value={draft}
-                onChange={(e) => setDraft(e.target.value)}
-                rows={7}
-                className="text-[13px] leading-relaxed"
-              />
-              <div className="flex flex-wrap items-center gap-2">
-                <Can permission="campaigns:write">
-                  <Button
-                    size="sm"
-                    onClick={() => send.mutate({ id: r.id, text: draft })}
-                    disabled={send.isPending || draft.trim().length === 0}
-                  >
-                    {send.isPending ? (
-                      <Loader2 className="animate-spin" />
-                    ) : (
-                      <Send />
-                    )}
-                    {t('send.button')}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => redraft.mutate({ id: r.id })}
-                    disabled={redraft.isPending}
-                  >
-                    {redraft.isPending ? (
-                      <Loader2 className="animate-spin" />
-                    ) : (
-                      <RefreshCw />
-                    )}
-                    {t('redraft.button')}
-                  </Button>
-                </Can>
-                <Button size="sm" variant="outline" onClick={copyReply}>
-                  <Copy />
-                  {t('drafts.copyDraft')}
+            <Textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={7}
+              className="resize-none border-sidebar-border bg-muted text-[12.5px] leading-relaxed"
+            />
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Can permission="campaigns:write">
+                <Button
+                  size="sm"
+                  onClick={() => send.mutate({ id: r.id, text: draft })}
+                  disabled={send.isPending || draft.trim().length === 0}
+                >
+                  {send.isPending ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <Send />
+                  )}
+                  {t('send.button')}
                 </Button>
-                {onOpenProspect ? (
-                  <Button size="sm" variant="ghost" onClick={onOpenProspect}>
-                    <UserSearch />
-                    {t('drafts.openProspect')}
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-2 border-t pt-4">
-              <p className="text-[12px] text-muted-foreground">
-                {t('inbox.noDraft')}
-              </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => redraft.mutate({ id: r.id })}
+                  disabled={redraft.isPending}
+                >
+                  {redraft.isPending ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <RefreshCw />
+                  )}
+                  {t('redraft.button')}
+                </Button>
+              </Can>
+              <Button size="sm" variant="outline" onClick={copyReply}>
+                <Copy />
+                {t('drafts.copyDraft')}
+              </Button>
               {onOpenProspect ? (
-                <div>
-                  <Button size="sm" variant="outline" onClick={onOpenProspect}>
-                    <UserSearch />
-                    {t('drafts.openProspect')}
-                  </Button>
-                </div>
+                <Button size="sm" variant="ghost" onClick={onOpenProspect}>
+                  <UserSearch />
+                  {t('drafts.openProspect')}
+                </Button>
               ) : null}
             </div>
-          )}
+          </div>
         </div>
-      </div>
-    </Card>
+      ) : (
+        <div className="flex flex-col gap-2 rounded-[10px] border border-dashed border-sidebar-border bg-muted p-4">
+          <p className="text-[11.5px] text-muted-foreground">
+            {t('inbox.noDraft')}
+          </p>
+          {onOpenProspect ? (
+            <div>
+              <Button size="sm" variant="outline" onClick={onOpenProspect}>
+                <UserSearch />
+                {t('drafts.openProspect')}
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </section>
   );
 }
 
 function InboxSkeleton() {
   return (
-    <div className="flex flex-col gap-4 lg:h-[calc(100vh-18rem)] lg:flex-row lg:gap-5">
-      <Card className="flex flex-col gap-2 p-3 lg:w-[380px] lg:shrink-0">
-        <Skeleton className="h-16 w-full rounded-lg" />
-        <Skeleton className="h-16 w-full rounded-lg" />
-        <Skeleton className="h-16 w-full rounded-lg" />
-        <Skeleton className="h-16 w-full rounded-lg" />
-      </Card>
-      <Card className="flex flex-1 flex-col gap-3 p-5">
+    <div className="grid min-h-[560px] grid-cols-1 overflow-hidden rounded-[10px] border border-sidebar-border bg-card lg:grid-cols-[320px_1fr]">
+      <div className="flex flex-col gap-2 border-b border-sidebar-border p-3 lg:border-b-0 lg:border-r">
+        <Skeleton className="h-20 w-full rounded-lg" />
+        <Skeleton className="h-20 w-full rounded-lg" />
+        <Skeleton className="h-20 w-full rounded-lg" />
+        <Skeleton className="h-20 w-full rounded-lg" />
+      </div>
+      <div className="flex flex-col gap-3 p-5">
         <Skeleton className="h-7 w-1/2" />
         <Skeleton className="h-24 w-full rounded-lg" />
         <Skeleton className="h-40 w-full rounded-lg" />
-      </Card>
+      </div>
     </div>
   );
 }
