@@ -12,6 +12,17 @@ export const EnvSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   JWT_SECRET: z.string().min(1, 'JWT_SECRET is required'),
 
+  // Postgres connection-pool knobs. Read directly by @evertrust/db's client
+  // (packages/db/src/client.ts) at import time — declared here so the boot contract
+  // documents them. DATABASE_POOL_MAX bounds postgres.js connections per instance
+  // (default 5) to fit under Supabase's session-pooler 15-client cap; DATABASE_PREPARE
+  // disables prepared statements for a TRANSACTION pooler (auto-off for :6543/pgbouncer).
+  // MIGRATION_DATABASE_URL (drizzle.config.ts) sends migrations to a separate connection
+  // — the Supabase DIRECT URL — so DDL never competes for pooler slots.
+  DATABASE_POOL_MAX: z.coerce.number().int().positive().default(5),
+  DATABASE_PREPARE: z.enum(['true', 'false']).default('true'),
+  MIGRATION_DATABASE_URL: z.string().default(''),
+
   JWT_EXPIRES_IN: z.string().default('1d'),
 
   // DEMO / NO-LOGIN MODE. When true, the JwtAuthGuard stops requiring a token and
