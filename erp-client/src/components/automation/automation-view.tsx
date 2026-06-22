@@ -23,15 +23,8 @@ import {
 import { StatusDot } from '@/components/growth/status-dot';
 import { RunStageButton } from '@/components/growth/run-stage-button';
 import { Can } from '@/components/auth/can';
-import { Badge } from '@/components/ui/badge';
+import { GrowthCard, StatusPill } from '@/modules/(growth)/shared';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 // The five autonomous arsenal stages — the ones with REAL ERP run/status wiring
@@ -66,6 +59,15 @@ const LIFECYCLE_AGENTS: {
   { code: '09', name: 'CRM Customer', what: 'Promotes hot leads and graduates won companies to customers.', where: 'Nurture', href: '/nurture' },
 ];
 
+// Shared eyebrow label — uppercase, tracked, muted. Matches the GrowthShell idiom.
+function Eyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+      {children}
+    </span>
+  );
+}
+
 export function AutomationView() {
   const runs = useArsenalRuns();
   const settings = useArsenalSettings();
@@ -82,16 +84,9 @@ export function AutomationView() {
   const nextSend = settings.data?.bazookaDailyAt ?? null;
 
   return (
-    <div className="flex flex-col gap-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Automation</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            The agents that run your growth engine — orchestrated by the ERP. Gmail
-            and Calendar use this org&apos;s connected Google account.
-          </p>
-        </div>
+    <main className="px-6 py-5 duration-300 animate-in fade-in">
+      {/* Page title lives in the GrowthTopbar — only the action stays here. */}
+      <div className="mb-5 flex flex-wrap items-center justify-end gap-2">
         <Button asChild variant="outline" size="sm">
           <Link href="/settings/configuration">
             <Cpu /> Configure agents
@@ -99,60 +94,65 @@ export function AutomationView() {
         </Button>
       </div>
 
-      {/* Summary strip */}
-      <Card>
-        <CardContent className="flex flex-wrap items-center gap-x-6 gap-y-2.5 py-4 text-sm">
+      <div className="flex flex-col gap-4">
+        {/* Summary strip */}
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2.5 rounded-[10px] border border-sidebar-border bg-card px-4 py-3.5 text-sm">
           <span className="inline-flex items-center gap-2">
-            <span className="size-2.5 rounded-full bg-emerald-500" />
-            <b className="tabular-nums">{healthy}</b>
+            <span className="size-2.5 rounded-full bg-foreground" />
+            <b className="tabular-nums text-foreground">{healthy}</b>
             <span className="text-muted-foreground">healthy</span>
           </span>
           <span className="inline-flex items-center gap-2">
-            <span className="size-2.5 rounded-full bg-rose-500" />
-            <b className="tabular-nums">{failed}</b>
+            <span className="size-2.5 rounded-full bg-destructive" />
+            <b className="tabular-nums text-foreground">{failed}</b>
             <span className="text-muted-foreground">failed</span>
           </span>
           <span className="inline-flex items-center gap-2">
             <span className="size-2.5 rounded-full bg-muted-foreground/30" />
-            <b className="tabular-nums">{idle}</b>
+            <b className="tabular-nums text-foreground">{idle}</b>
             <span className="text-muted-foreground">idle</span>
           </span>
-          <span className="hidden text-muted-foreground/30 sm:inline">·</span>
+          <span className="hidden text-sidebar-border sm:inline">·</span>
           <span className="inline-flex items-center gap-1.5 text-muted-foreground">
             <Clock className="size-3.5" /> Next send{' '}
             <b className="text-foreground tabular-nums">{nextSend ?? 'manual'}</b>
           </span>
-          <Badge
-            variant="outline"
-            className="ml-auto border-emerald-500/30 bg-emerald-500/10 font-normal text-emerald-400"
-          >
+          <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-sidebar-border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
             <CircleCheck className="size-3.5" /> Dispatched by the ERP
-          </Badge>
-        </CardContent>
-      </Card>
+          </span>
+        </div>
 
-      {/* Pipeline agents — dense table with master-detail */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Pipeline agents</CardTitle>
-          <CardDescription>
+        {/* Pipeline agents — dense table with master-detail */}
+        <GrowthCard
+          title="Pipeline agents"
+          hint={<StatusPill live>Engine live</StatusPill>}
+        >
+          <p className="mb-4 text-xs text-muted-foreground">
             The five autonomous stages. Each self-runs on its schedule; “Run now” is
             an optional manual nudge. Click a row for wiring + recent runs.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-hidden rounded-lg border">
+          </p>
+          <div className="overflow-hidden rounded-[10px] border border-sidebar-border">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b bg-muted/30 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                  <th className="px-4 py-2.5 font-semibold">Agent</th>
-                  <th className="px-4 py-2.5 font-semibold">Status</th>
-                  <th className="hidden px-4 py-2.5 font-semibold sm:table-cell">Last run</th>
-                  <th className="hidden px-4 py-2.5 font-semibold md:table-cell">Schedule</th>
-                  <th className="px-4 py-2.5 text-right font-semibold">Actions</th>
+                <tr className="border-b border-sidebar-border bg-muted/40 text-left">
+                  <th className="px-4 py-2.5">
+                    <Eyebrow>Agent</Eyebrow>
+                  </th>
+                  <th className="px-4 py-2.5">
+                    <Eyebrow>Status</Eyebrow>
+                  </th>
+                  <th className="hidden px-4 py-2.5 sm:table-cell">
+                    <Eyebrow>Last run</Eyebrow>
+                  </th>
+                  <th className="hidden px-4 py-2.5 md:table-cell">
+                    <Eyebrow>Schedule</Eyebrow>
+                  </th>
+                  <th className="px-4 py-2.5 text-right">
+                    <Eyebrow>Actions</Eyebrow>
+                  </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody className="divide-y divide-sidebar-border">
                 {rows.map((r) => {
                   const meta = ARSENAL_STAGE_META[r.stage];
                   const isOpen = open === r.stage;
@@ -160,8 +160,8 @@ export function AutomationView() {
                     <Fragment key={r.stage}>
                       <tr
                         className={cn(
-                          'cursor-pointer transition-colors hover:bg-muted/30',
-                          isOpen && 'bg-muted/30',
+                          'cursor-pointer transition-colors hover:bg-muted/40',
+                          isOpen && 'bg-muted/40',
                         )}
                         onClick={() => setOpen(isOpen ? null : r.stage)}
                       >
@@ -169,15 +169,15 @@ export function AutomationView() {
                           <div className="flex items-center gap-3">
                             <ChevronDown
                               className={cn(
-                                'size-4 shrink-0 text-muted-foreground/60 transition-transform',
+                                'size-4 shrink-0 text-muted-foreground transition-transform',
                                 !isOpen && '-rotate-90',
                               )}
                             />
                             <div>
-                              <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/60">
+                              <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
                                 {r.code}
                               </div>
-                              <div className="font-medium">{meta.label}</div>
+                              <div className="font-semibold text-foreground">{meta.label}</div>
                             </div>
                           </div>
                         </td>
@@ -204,10 +204,10 @@ export function AutomationView() {
                         </td>
                       </tr>
                       {isOpen && (
-                        <tr className="bg-muted/15">
+                        <tr className="bg-muted/20">
                           <td colSpan={5} className="px-4 pb-4 pt-1">
                             <div className="grid gap-3 md:grid-cols-2">
-                              <div className="rounded-lg border bg-card p-4">
+                              <div className="rounded-[10px] border border-sidebar-border bg-card p-4">
                                 <p className="text-sm text-muted-foreground">{meta.what}</p>
                                 <dl className="mt-3 space-y-2 text-sm">
                                   <Row k="Endpoint" v={<code className="rounded bg-muted px-1.5 py-0.5 text-xs">{r.endpoint}</code>} />
@@ -221,10 +221,8 @@ export function AutomationView() {
                                   />
                                 </dl>
                               </div>
-                              <div className="rounded-lg border bg-card p-4">
-                                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/70">
-                                  Recent runs
-                                </div>
+                              <div className="rounded-[10px] border border-sidebar-border bg-card p-4">
+                                <Eyebrow>Recent runs</Eyebrow>
                                 <RecentRuns stage={r.stage} status={r.st} running={r.running} />
                               </div>
                             </div>
@@ -237,28 +235,23 @@ export function AutomationView() {
               </tbody>
             </table>
           </div>
-        </CardContent>
-      </Card>
+        </GrowthCard>
 
-      {/* Lifecycle agents */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Reply &amp; lifecycle agents</CardTitle>
-          <CardDescription>
+        {/* Lifecycle agents */}
+        <GrowthCard title="Reply & lifecycle agents">
+          <p className="mb-4 text-xs text-muted-foreground">
             Operated from their R.E.A.N. surface rather than the run feed.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-hidden rounded-lg border">
+          </p>
+          <div className="overflow-hidden rounded-[10px] border border-sidebar-border">
             <table className="w-full text-sm">
-              <tbody className="divide-y divide-border">
+              <tbody className="divide-y divide-sidebar-border">
                 {LIFECYCLE_AGENTS.map((a) => (
-                  <tr key={a.code} className="hover:bg-muted/30">
+                  <tr key={a.code} className="hover:bg-muted/40">
                     <td className="px-4 py-3 align-top">
-                      <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/60">
+                      <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
                         {a.code}
                       </div>
-                      <div className="font-medium">{a.name}</div>
+                      <div className="font-semibold text-foreground">{a.name}</div>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{a.what}</td>
                     <td className="px-4 py-3 text-right">
@@ -273,9 +266,9 @@ export function AutomationView() {
               </tbody>
             </table>
           </div>
-        </CardContent>
-      </Card>
-    </div>
+        </GrowthCard>
+      </div>
+    </main>
   );
 }
 
@@ -283,7 +276,7 @@ function Row({ k, v }: { k: React.ReactNode; v: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3">
       <dt className="text-muted-foreground">{k}</dt>
-      <dd className="font-medium">{v}</dd>
+      <dd className="font-medium text-foreground">{v}</dd>
     </div>
   );
 }

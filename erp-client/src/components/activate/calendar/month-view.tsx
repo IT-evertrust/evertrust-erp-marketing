@@ -12,6 +12,7 @@ import {
 } from '@/components/activate/calendar/time-grid';
 import { CATEGORY_STYLE } from '@/components/activate/calendar/event-category';
 import { isWeekendDateKey } from '@/components/activate/calendar/time-gutter';
+import { Skeleton } from '@/components/ui/skeleton';
 import type {
   CalendarGridEvent,
   CalendarGridSlot,
@@ -39,6 +40,7 @@ export function MonthView({
   primaryTz,
   onDayClick,
   freeOnly = false,
+  loading = false,
 }: {
   anchorKey: string;
   events: CalendarGridEvent[];
@@ -46,6 +48,7 @@ export function MonthView({
   primaryTz: string;
   onDayClick: (dateKey: string) => void;
   freeOnly?: boolean;
+  loading?: boolean;
 }) {
   const format = useFormatter();
 
@@ -87,6 +90,7 @@ export function MonthView({
             primaryTz={primaryTz}
             onDayClick={onDayClick}
             freeOnly={freeOnly}
+            loading={loading}
           />
         ))}
       </div>
@@ -103,6 +107,7 @@ function MonthCell({
   primaryTz,
   onDayClick,
   freeOnly,
+  loading,
 }: {
   dateKey: string;
   inMonth: boolean;
@@ -112,6 +117,7 @@ function MonthCell({
   primaryTz: string;
   onDayClick: (dateKey: string) => void;
   freeOnly: boolean;
+  loading: boolean;
 }) {
   const t = useTranslations('activate');
   const dayNumber = parseDateKey(dateKey).day;
@@ -166,29 +172,39 @@ function MonthCell({
       </span>
 
       <div className="flex flex-1 flex-col gap-0.5 overflow-hidden">
-        {chips.map((event) => {
-          const style = CATEGORY_STYLE[event.category];
-          const title = event.title || t('calendar.event.untitled');
+        {loading ? (
+          // Placeholder chips while meetings fetch; the cell frame stays put.
+          <>
+            <Skeleton className="h-3.5 w-full rounded" />
+            <Skeleton className="h-3.5 w-2/3 rounded" />
+          </>
+        ) : (
+          <>
+            {chips.map((event) => {
+              const style = CATEGORY_STYLE[event.category];
+              const title = event.title || t('calendar.event.untitled');
 
-          return (
-            <span
-              key={`${event.id}-${event.start}`}
-              className={`truncate rounded border-l-2 bg-popover px-1 py-0.5 text-[10px] font-medium ${style.bar} ${style.tint}`}
-              title={title}
-            >
-              {title}
-            </span>
-          );
-        })}
+              return (
+                <span
+                  key={`${event.id}-${event.start}`}
+                  className={`truncate rounded border-l-2 bg-popover px-1 py-0.5 text-[10px] font-medium ${style.bar} ${style.tint}`}
+                  title={title}
+                >
+                  {title}
+                </span>
+              );
+            })}
 
-        {overflow > 0 ? (
-          <span className="px-1 text-[10px] font-medium text-muted-foreground">
-            {t('calendar.month.more', { count: overflow })}
-          </span>
-        ) : null}
+            {overflow > 0 ? (
+              <span className="px-1 text-[10px] font-medium text-muted-foreground">
+                {t('calendar.month.more', { count: overflow })}
+              </span>
+            ) : null}
+          </>
+        )}
       </div>
 
-      {freeOnly && freeCount > 0 ? (
+      {!loading && freeOnly && freeCount > 0 ? (
         <span className="self-start rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">
           {t('calendar.month.free', { count: freeCount })}
         </span>

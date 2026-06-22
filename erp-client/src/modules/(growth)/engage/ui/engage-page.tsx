@@ -12,10 +12,10 @@ export function EngagePage() {
 
   return (
     <main className="px-6 py-5">
-      <div className="mb-4 border-b border-[#e4e7eb]">
+      <div className="mb-4 border-b border-border">
         <button
           type="button"
-          className="mb-[-1px] border-b-2 border-[#15171c] px-4 py-3 text-[13px] font-bold text-[#15171c]"
+          className="mb-[-1px] border-b-2 border-foreground px-4 py-3 text-[13px] font-bold text-foreground"
         >
           Reply Sorter
         </button>
@@ -29,7 +29,7 @@ export function EngagePage() {
         />
 
         <GrowthCard title="Reply Sorter">
-          <div className="grid min-h-[560px] grid-cols-[320px_1fr] overflow-hidden rounded-[10px] border border-[#e4e7eb]">
+          <div className="grid min-h-[560px] grid-cols-[320px_1fr] overflow-hidden rounded-[10px] border border-border">
             <ReplyList
               replies={engage.replies}
               selectedReplyId={engage.selectedReplyId}

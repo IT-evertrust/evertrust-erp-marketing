@@ -1,8 +1,14 @@
 # Render Blueprint — EverTrust ERP API only.
-# Database lives on SUPABASE (set DATABASE_URL to the Supabase SESSION pooler URI —
-# IPv4, port 5432; the transaction pooler on 6543 breaks postgres-js prepared
-# statements). Web lives on VERCEL (root directory erp-client). The AI stack
-# (LiteLLM/Qdrant/SearXNG) stays on the Mac mini — see docs/team-hosting.md.
+# Database lives on SUPABASE. DATABASE_URL = the SESSION pooler URI (IPv4, port 5432);
+# its client budget is hard-capped (pool_size 15), so the app pool is bounded small via
+# DATABASE_POOL_MAX (the db client defaults to 5) to leave room for overlapping deploys
+# + migrations. The transaction pooler (6543) has far more headroom but needs prepared
+# statements OFF — the db client auto-disables them for a :6543/pgbouncer=true URL (or
+# set DATABASE_PREPARE=false), so you can switch DATABASE_URL to 6543 for more capacity.
+# MIGRATION_DATABASE_URL (optional) points drizzle-kit migrate at the Supabase DIRECT
+# connection so DDL never competes for pooler slots. Web lives on VERCEL (root directory
+# erp-client). The AI stack (LiteLLM/Qdrant/SearXNG) stays on the Mac mini — see
+# docs/team-hosting.md.
 
 services:
   - type: web
@@ -28,6 +34,10 @@ services:
         value: production       # gates the dev seed + switches pino transport
       - key: DATABASE_URL       # Supabase SESSION pooler URI (…pooler.supabase.com:5432)
         sync: false
+      - key: DATABASE_POOL_MAX  # app pool cap; keep small under the session pooler's 15-client limit
+        value: "5"
+      # MIGRATION_DATABASE_URL (optional, sync:false) → Supabase DIRECT connection so
+      # drizzle-kit migrate doesn't compete for pooler slots. Falls back to DATABASE_URL.
       - key: JWT_SECRET
         sync: false
       - key: JWT_EXPIRES_IN
@@ -73,3 +83,20 @@ services:
         sync: false
       - key: ANTHROPIC_MODEL
         value: claude-3-5-sonnet-latest
+      # ── Reach + Activate (Growth Engine agents) ──────────────────────────────
+      # The erp-agents Python `/run` monolith runs on the MAC MINI (Tailscale
+      # Funnel), NOT on Render. Set AGENTS_BASE_URL in the dashboard to the funnel
+      # URL once the mini service is up (see docs/reach-activate-prod-runbook.md).
+      - key: AGENTS_BASE_URL    # e.g. https://mac-mini-ca-mac.tailc3d837.ts.net  (blank = Reach/Activate agent calls 503)
+        sync: false
+      - key: AGENT_TIMEOUT_MS
+        value: "300000"
+      # Reach send safety: 'test' redirects EVERY send to REACH_TEST_RECIPIENT
+      # (capped at REACH_TEST_SEND_CAP). Keep 'test' for the first prod deploy;
+      # flip to 'live' (per-org) only after the prod smoke-test passes.
+      - key: REACH_SEND_MODE
+        value: test
+      - key: REACH_TEST_RECIPIENT
+        value: admin@evertrust-germany.de
+      - key: REACH_TEST_SEND_CAP
+        value: "3"

@@ -17,7 +17,6 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -75,20 +74,26 @@ export function ProfileView({ userId }: { userId: string }) {
   const [newPw, setNewPw] = useState('');
 
   if (users.isLoading) {
-    return <Skeleton className="h-96 w-full rounded-lg" />;
+    return (
+      <main className="px-6 py-5">
+        <Skeleton className="h-96 w-full rounded-[10px]" />
+      </main>
+    );
   }
   if (users.isError) {
     return (
-      <p className="text-sm text-destructive">
-        {t('profile.loadError', { message: users.error.message })}
-      </p>
+      <main className="px-6 py-5">
+        <p className="text-sm text-destructive">
+          {t('profile.loadError', { message: users.error.message })}
+        </p>
+      </main>
     );
   }
 
   const user = users.data?.find((u) => u.id === userId);
   if (!user) {
     return (
-      <div className="flex flex-col gap-3">
+      <main className="flex flex-col gap-3 px-6 py-5">
         <Button asChild variant="outline" size="sm" className="self-start">
           <Link href="/users">
             <ArrowLeft className="mr-1 size-3.5" /> {t('profile.back')}
@@ -97,7 +102,7 @@ export function ProfileView({ userId }: { userId: string }) {
         <p className="text-sm text-muted-foreground">
           {t('profile.notFound')}
         </p>
-      </div>
+      </main>
     );
   }
 
@@ -107,18 +112,18 @@ export function ProfileView({ userId }: { userId: string }) {
   const isSuperAdmin = user.role === 'SUPER_ADMIN';
 
   return (
-    <div className="flex flex-col gap-6">
+    <main className="flex flex-col gap-6 px-6 py-5 duration-300 animate-in fade-in">
       <Link
         href="/users"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="size-3.5" /> {t('profile.back')}
       </Link>
 
       {/* header card */}
-      <Card className="overflow-hidden">
+      <div className="overflow-hidden rounded-[10px] border border-sidebar-border bg-card">
         <div className="h-20 bg-gradient-to-r from-emerald-500/30 via-sky-500/20 to-violet-500/20" />
-        <CardContent className="pt-0">
+        <div className="px-6 pb-6 pt-0">
           <div className="-mt-8 flex flex-wrap items-end gap-4">
             <Avatar className="size-20 rounded-2xl border-4 border-background">
               <AvatarFallback
@@ -180,8 +185,8 @@ export function ProfileView({ userId }: { userId: string }) {
               {t('profile.editProfile')}
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* contribution tiles — REAL per-user data (campaigns deployed, stages
           triggered, audited actions) */}
@@ -210,7 +215,7 @@ export function ProfileView({ userId }: { userId: string }) {
       </div>
 
       <Tabs defaultValue="access">
-        <TabsList className="h-auto w-fit rounded-[10px] border bg-card p-1">
+        <TabsList className="h-auto w-fit rounded-[10px] border border-sidebar-border bg-card p-1">
           {(['access', 'account', 'activity'] as const).map((v) => (
             <TabsTrigger
               key={v}
@@ -228,10 +233,10 @@ export function ProfileView({ userId }: { userId: string }) {
 
         {/* Access */}
         <TabsContent value="access" className="mt-4">
-          <Card>
-            <CardContent className="flex flex-col gap-5 pt-6">
+          <div className="rounded-[10px] border border-sidebar-border bg-card p-5">
+            <div className="flex flex-col gap-5">
               <div>
-                <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
                   {t('profile.rolePlacement')}
                 </p>
                 <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
@@ -265,7 +270,7 @@ export function ProfileView({ userId }: { userId: string }) {
 
               <div>
                 <div className="mb-2 flex items-center justify-between">
-                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
                     {t('profile.effectivePermissions', { count: perms.length })}
                   </p>
                   <Button
@@ -277,7 +282,7 @@ export function ProfileView({ userId }: { userId: string }) {
                     <Link href="/users">{t('profile.editAccess')}</Link>
                   </Button>
                 </div>
-                <div className="flex flex-col gap-2 rounded-lg border bg-muted/30 p-3">
+                <div className="flex flex-col gap-2 rounded-[10px] border border-sidebar-border bg-muted/30 p-3">
                   {grouped.map(([resource, actions]) => (
                     <div
                       key={resource}
@@ -301,18 +306,17 @@ export function ProfileView({ userId }: { userId: string }) {
                   ))}
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </TabsContent>
 
         {/* Account */}
         <TabsContent value="account" className="mt-4">
-          <Card>
-            <CardContent className="pt-6">
-              <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <div className="rounded-[10px] border border-sidebar-border bg-card p-5">
+              <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
                 {t('profile.account')}
               </p>
-              <div className="flex flex-col divide-y">
+              <div className="flex flex-col divide-y divide-sidebar-border">
                 <AccountRow k={t('profile.accountRow.email')} v={user.email} />
                 <AccountRow k={t('profile.accountRow.phone')} v={user.phone ?? '—'} />
                 <div className="flex items-center justify-between gap-4 py-2.5 text-sm">
@@ -343,14 +347,12 @@ export function ProfileView({ userId }: { userId: string }) {
               <p className="mt-4 text-xs text-muted-foreground">
                 {t('profile.passwordNote')}
               </p>
-            </CardContent>
-          </Card>
+          </div>
         </TabsContent>
 
         {/* Activity — real, from the audit log */}
         <TabsContent value="activity" className="mt-4">
-          <Card>
-            <CardContent className="pt-6">
+          <div className="rounded-[10px] border border-sidebar-border bg-card p-5">
               {stats.isLoading ? (
                 <Skeleton className="h-24 w-full" />
               ) : !stats.data || stats.data.recentActivity.length === 0 ? (
@@ -358,7 +360,7 @@ export function ProfileView({ userId }: { userId: string }) {
                   {t('profile.noActivity')}
                 </p>
               ) : (
-                <div className="flex flex-col divide-y">
+                <div className="flex flex-col divide-y divide-sidebar-border">
                   {stats.data.recentActivity.map((a, i) => (
                     <div
                       key={i}
@@ -377,8 +379,7 @@ export function ProfileView({ userId }: { userId: string }) {
                   ))}
                 </div>
               )}
-            </CardContent>
-          </Card>
+          </div>
         </TabsContent>
       </Tabs>
 
@@ -434,7 +435,7 @@ export function ProfileView({ userId }: { userId: string }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </main>
   );
 }
 

@@ -9,10 +9,7 @@ type GrowthShellProps = {
 
 export function GrowthShell({ children }: GrowthShellProps) {
   return (
-    <div
-      className="grid min-h-screen grid-cols-[240px_1fr] bg-[#eef0f3] text-[#15171c]"
-      style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
-    >
+    <div className="grid min-h-screen grid-cols-[240px_1fr] bg-background font-sans text-foreground">
       <GrowthSidebar />
 
       <div className="min-w-0">

@@ -12,6 +12,7 @@ import {
 import { CalendarEventBlock, layoutDayEvents } from '@/components/activate/calendar/event-block';
 import { CalendarSlotBlock } from '@/components/activate/calendar/slot-block';
 import { CATEGORY_STYLE } from '@/components/activate/calendar/event-category';
+import { Skeleton } from '@/components/ui/skeleton';
 import type {
   CalendarGridEvent,
   CalendarGridSlot,
@@ -104,8 +105,12 @@ export function TimeScaleColumns({
     });
   }, [sampleDayKey, primaryTz, secondaryTz]);
 
+  // Labels sit just BELOW each hour rule line (top-anchored), so they read inside
+  // their hour row and the very first label (top of the grid) is never clipped by
+  // the scroll edge. `top` matches the day-column gridlines (hour * HOUR_HEIGHT).
   const labelCell =
-    'absolute right-2 -translate-y-1/2 whitespace-nowrap text-[10px] font-medium text-muted-foreground';
+    'absolute right-2 whitespace-nowrap text-[10px] font-medium leading-none text-muted-foreground';
+  const labelTop = (hour: number) => hour * HOUR_HEIGHT + 4;
 
   if (!secondaryTz) {
     return (
@@ -115,7 +120,7 @@ export function TimeScaleColumns({
             <div
               key={`primary-${label.hour}`}
               className={labelCell}
-              style={{ top: label.hour * HOUR_HEIGHT }}
+              style={{ top: labelTop(label.hour) }}
             >
               {label.primary}
             </div>
@@ -166,6 +171,7 @@ export function DayColumn({
   onSelectEvent,
   primaryTz,
   secondaryTz,
+  loading = false,
 }: {
   dayKey: string;
   weekend: boolean;
@@ -175,6 +181,7 @@ export function DayColumn({
   onSelectEvent: (event: CalendarGridEvent) => void;
   primaryTz: string;
   secondaryTz: string | null;
+  loading?: boolean;
 }) {
   const laidOutEvents = useMemo(
     () => layoutDayEvents(events, dayKey, primaryTz),
@@ -192,6 +199,19 @@ export function DayColumn({
       {HOURS.map((hour) => (
         <div key={hour} className="shrink-0 border-t" style={{ height: HOUR_HEIGHT }} />
       ))}
+
+      {/* While fetching, overlay a couple of placeholder blocks within the business-
+          hours band so the cells read as "loading" without disturbing the grid frame
+          (the hour rule lines above stay put). */}
+      {loading ? (
+        <div className="pointer-events-none absolute inset-x-1 flex flex-col gap-2"
+          style={{ top: 9 * HOUR_HEIGHT }}
+        >
+          <Skeleton className="h-12 w-full rounded-md" />
+          <Skeleton className="h-16 w-full rounded-md" />
+          <Skeleton className="h-10 w-full rounded-md" />
+        </div>
+      ) : null}
 
       {slots.map((slot) => (
         <CalendarSlotBlock

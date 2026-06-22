@@ -1,6 +1,10 @@
+'use client';
+
+import { useTranslations } from 'next-intl';
+
 import { GrowthCard, StatusPill } from '../../shared';
 
-import type { Campaign, CampaignEmail } from '../types';
+import type { Campaign, CampaignEmail, ReachRound } from '../types';
 import { CampaignTable } from './campaign-table';
 
 type EmailGeneratorPanelProps = {
@@ -9,6 +13,8 @@ type EmailGeneratorPanelProps = {
   onSelectCampaign: (campaignId: string) => void;
   selectedCampaignName?: string;
   emails: CampaignEmail[];
+  loadingCampaigns?: boolean;
+  onSend: (round: ReachRound) => void;
 };
 
 export function EmailGeneratorPanel({
@@ -17,16 +23,30 @@ export function EmailGeneratorPanel({
   onSelectCampaign,
   selectedCampaignName,
   emails,
+  loadingCampaigns = false,
+  onSend,
 }: EmailGeneratorPanelProps) {
+  const t = useTranslations('reach');
+
   return (
     <div className="flex flex-col gap-4">
       <CampaignTable
         campaigns={campaigns}
         selectedCampaignId={selectedCampaignId}
         onSelectCampaign={onSelectCampaign}
+        loading={loadingCampaigns}
       />
 
-      <GrowthCard title={`Emails · ${selectedCampaignName ?? 'Campaign'}`}>
+      <GrowthCard
+        title={t('generator.emailsTitle', {
+          campaign: selectedCampaignName ?? t('generator.campaign'),
+        })}
+      >
+        {emails.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border bg-muted p-6 text-center text-[12.5px] font-bold text-muted-foreground">
+            {t('generator.empty')}
+          </div>
+        ) : (
         <div className="flex flex-col gap-4">
           {emails.map((email) => {
             const sent = email.sent || 1;
@@ -34,83 +54,80 @@ export function EmailGeneratorPanel({
             return (
               <div
                 key={email.id}
-                className="border-b border-dashed border-[#d6dade] pb-4 last:border-b-0 last:pb-0"
+                className="border-b border-dashed border-border pb-4 last:border-b-0 last:pb-0"
               >
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <div className="text-[13px] font-bold text-[#15171c]">
-                      {email.step}{' '}
-                      <span className="text-[11px] font-normal text-[#959ca7]">
-                        · {email.round}
+                    <div className="text-[13px] font-bold text-foreground">
+                      {t(`generator.step.${email.step}`)}{' '}
+                      <span className="text-[11px] font-normal text-muted-foreground">
+                        · {t(`generator.round.${email.round}`)}
                       </span>
                     </div>
-                    <div className="mt-1 text-[11.5px] text-[#959ca7]">
+                    <div className="mt-1 text-[11.5px] text-muted-foreground">
                       {email.subject}
                     </div>
                   </div>
 
-                  <StatusPill live={email.status === 'SENT'}>
-                    {email.status}
-                  </StatusPill>
+                  <div className="flex items-center gap-2">
+                    <StatusPill live={email.status === 'SENT'}>
+                      {t(`generator.emailStatus.${email.status}`)}
+                    </StatusPill>
+                    <button
+                      type="button"
+                      onClick={() => onSend(email.id as ReachRound)}
+                      className="rounded-md border border-foreground bg-foreground px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-background hover:opacity-90"
+                    >
+                      {t('generator.send')}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
                   <div
                     contentEditable
                     suppressContentEditableWarning
-                    className="min-h-[120px] rounded-lg border border-[#d6dade] bg-[#f6f7f9] p-3 text-[12.5px] leading-relaxed text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
+                    className="min-h-[120px] whitespace-pre-wrap rounded-lg border border-border bg-muted p-3 text-[12.5px] leading-relaxed text-foreground outline-none focus:border-foreground focus:bg-background"
                   >
-                    Subject: {email.subject}
-                    <br />
-                    <br />
-                    Dear [Contact],
-                    <br />
-                    <br />
-                    We supply plug-and-play 600W balcony solar kits with
-                    integrated micro-inverters. From 100 units, we can provide
-                    tiered pricing and delivery options.
-                    <br />
-                    <br />
-                    Would a short 15-minute call next week make sense?
-                    <br />
-                    <br />
-                    Best regards,
-                    <br />
-                    Evertrust Growth Engine
+                    {`Subject: ${email.subject}\n\n${email.body ?? ''}`}
                   </div>
 
-                  <div className="rounded-lg border border-[#d6dade] bg-[#f6f7f9] p-3">
-                    <div className="mb-3 text-[9px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
-                      Performance
+                  <div className="rounded-lg border border-border bg-muted p-3">
+                    <div className="mb-3 text-[9px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+                      {t('generator.performance')}
                     </div>
 
-                    <Metric label="Sent" value={email.sent} percent={100} />
                     <Metric
-                      label="Opened"
+                      label={t('generator.metric.sent')}
+                      value={email.sent}
+                      percent={100}
+                    />
+                    <Metric
+                      label={t('generator.metric.opened')}
                       value={email.opened}
                       percent={(email.opened / sent) * 100}
                     />
                     <Metric
-                      label="Clicked"
+                      label={t('generator.metric.clicked')}
                       value={email.clicked}
                       percent={(email.clicked / sent) * 100}
                     />
                     <Metric
-                      label="Replied"
+                      label={t('generator.metric.replied')}
                       value={email.replied}
                       percent={(email.replied / sent) * 100}
                     />
                     <Metric
-                      label="Bounced"
+                      label={t('generator.metric.bounced')}
                       value={email.bounced}
                       percent={(email.bounced / sent) * 100}
                     />
 
-                    <div className="mt-3 flex items-center justify-between rounded-lg border border-[#d6dade] bg-white px-3 py-2">
-                      <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
-                        Meetings
+                    <div className="mt-3 flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
+                      <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+                        {t('generator.metric.meetings')}
                       </span>
-                      <b className="text-[18px] text-[#15171c]">
+                      <b className="text-[18px] text-foreground">
                         {email.meetings}
                       </b>
                     </div>
@@ -120,6 +137,7 @@ export function EmailGeneratorPanel({
             );
           })}
         </div>
+        )}
       </GrowthCard>
     </div>
   );
@@ -138,19 +156,19 @@ function Metric({
 
   return (
     <div className="mb-2 grid grid-cols-[64px_40px_1fr_46px] items-center gap-2">
-      <span className="text-[9px] font-bold uppercase tracking-[0.08em] text-[#959ca7]">
+      <span className="text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
         {label}
       </span>
-      <span className="text-right text-[13px] font-bold text-[#15171c]">
+      <span className="text-right text-[13px] font-bold text-foreground">
         {value}
       </span>
-      <span className="h-2 overflow-hidden rounded-full border border-[#d6dade] bg-[#eceef1]">
+      <span className="h-2 overflow-hidden rounded-full border border-border bg-muted">
         <span
-          className="block h-full bg-[#15171c]"
+          className="block h-full bg-foreground"
           style={{ width: `${safePercent}%` }}
         />
       </span>
-      <span className="text-right text-[11px] font-bold text-[#5b626d]">
+      <span className="text-right text-[11px] font-bold text-muted-foreground">
         {Math.round(safePercent)}%
       </span>
     </div>

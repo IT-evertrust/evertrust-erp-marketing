@@ -30,6 +30,7 @@ export function WeekView({
   primaryTz,
   secondaryTz,
   freeOnly = false,
+  loading = false,
 }: {
   days: string[];
   weekStartKey: string;
@@ -40,6 +41,7 @@ export function WeekView({
   primaryTz: string;
   secondaryTz: string | null;
   freeOnly?: boolean;
+  loading?: boolean;
 }) {
   const t = useTranslations('activate');
   const format = useFormatter();
@@ -72,7 +74,12 @@ export function WeekView({
   return (
     <div className="overflow-x-auto">
       <div className="flex h-[calc(100vh-300px)] min-h-[480px] min-w-[1180px] flex-col">
-        <div className="flex border-b pr-2">
+        {/* Header + all-day strip reserve the SAME scrollbar gutter as the scroll
+            body below ([scrollbar-gutter:stable] + overflow-hidden makes the row a
+            scroll container that reserves the gutter), so day columns line up
+            across header and grid on every platform — no magic pr-2 that only
+            matched one scrollbar width. */}
+        <div className="flex overflow-hidden border-b [scrollbar-gutter:stable]">
           <TimeScaleHeader primaryTz={primaryTz} secondaryTz={secondaryTz} />
 
           {days.map((dayKey, index) => {
@@ -109,11 +116,13 @@ export function WeekView({
                 </span>
 
                 <span className="mt-1 text-[10px] text-muted-foreground">
-                  {freeOnly
-                    ? t('calendar.week.slots', { count: daySlots.length })
-                    : dayEvents.length > 0
-                      ? t('calendar.week.meetings', { count: dayEvents.length })
-                      : t('calendar.week.free')}
+                  {loading
+                    ? '…'
+                    : freeOnly
+                      ? t('calendar.week.slots', { count: daySlots.length })
+                      : dayEvents.length > 0
+                        ? t('calendar.week.meetings', { count: dayEvents.length })
+                        : t('calendar.week.free')}
                 </span>
               </div>
             );
@@ -121,7 +130,7 @@ export function WeekView({
         </div>
 
         {hasAllDay ? (
-          <div className="flex border-b bg-muted/30 pr-2">
+          <div className="flex overflow-hidden border-b bg-muted/30 [scrollbar-gutter:stable]">
             <div
               className={`flex shrink-0 items-center justify-end border-r px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground ${
                 secondaryTz ? 'w-32' : 'w-16'
@@ -155,7 +164,7 @@ export function WeekView({
 
         <div
           ref={scrollRef}
-          className="flex flex-1 items-start overflow-y-auto overflow-x-hidden"
+          className="flex flex-1 items-start overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]"
         >
           <TimeScaleColumns
             sampleDayKey={weekStartKey}
@@ -182,6 +191,7 @@ export function WeekView({
               onSelectEvent={onSelectEvent}
               primaryTz={primaryTz}
               secondaryTz={secondaryTz}
+              loading={loading}
             />
           ))}
         </div>

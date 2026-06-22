@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 
-// The Industry → Niche → Target catalog moved to the Insights "Sector" page.
-// This route is kept as a permanent redirect so existing links/bookmarks still land.
+// Marketing is folded into Reach (step 1 of R.E.A.N.). This route is kept as a
+// thin permanent redirect so existing links/bookmarks still land on Reach.
 export default function NichesPage() {
-  redirect('/sector');
+  redirect('/reach');
 }

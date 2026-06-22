@@ -1,12 +1,8 @@
-import { DashboardView } from '@/components/dashboard/dashboard-view';
+import { redirect } from 'next/navigation';
 
-// Render on demand, never prerendered: the dashboard is a protected, per-user
-// surface, so it should be dynamic rather than a static asset. The view itself is
-// client-rendered (DashboardView uses TanStack Query), so user data is fetched in
-// the browser and nothing touches the API at build time. Middleware guards access;
-// this is a defence-in-depth second layer.
-export const dynamic = 'force-dynamic';
-
+// `/dashboard` is folded into the Growth Overview. It stays as a thin permanent
+// redirect so existing links/bookmarks (and the old cockpit entry point) resolve
+// to the unified Overview surface rendered inside GrowthShell at /overview.
 export default function DashboardPage() {
-  return <DashboardView />;
+  redirect('/overview');
 }

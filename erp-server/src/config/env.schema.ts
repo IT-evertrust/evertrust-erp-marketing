@@ -12,6 +12,17 @@ export const EnvSchema = z.object({
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   JWT_SECRET: z.string().min(1, 'JWT_SECRET is required'),
 
+  // Postgres connection-pool knobs. Read directly by @evertrust/db's client
+  // (packages/db/src/client.ts) at import time — declared here so the boot contract
+  // documents them. DATABASE_POOL_MAX bounds postgres.js connections per instance
+  // (default 5) to fit under Supabase's session-pooler 15-client cap; DATABASE_PREPARE
+  // disables prepared statements for a TRANSACTION pooler (auto-off for :6543/pgbouncer).
+  // MIGRATION_DATABASE_URL (drizzle.config.ts) sends migrations to a separate connection
+  // — the Supabase DIRECT URL — so DDL never competes for pooler slots.
+  DATABASE_POOL_MAX: z.coerce.number().int().positive().default(5),
+  DATABASE_PREPARE: z.enum(['true', 'false']).default('true'),
+  MIGRATION_DATABASE_URL: z.string().default(''),
+
   JWT_EXPIRES_IN: z.string().default('1d'),
 
   // DEMO / NO-LOGIN MODE. When true, the JwtAuthGuard stops requiring a token and
@@ -94,6 +105,21 @@ export const EnvSchema = z.object({
   AGENT_REACH_BAZOOKA_URL: z.string().default(''),
   AGENT_REPLY_GLOCK_URL: z.string().default(''),
   AGENT_SLEEPER_GRENADE_URL: z.string().default(''),
+
+  // erp-agents server base URL — the SYNCHRONOUS run gateway the Reach + Activate
+  // planes call (`${AGENTS_BASE_URL}/run`). Blank = the agent clients return 503
+  // (the planes still persist/read DB data; only the brain calls fail), so the
+  // feature is safe to deploy before the agents server is up. AGENT_TIMEOUT_MS is
+  // the per-run abort timeout in ms (default 5 min for long scrape/analysis jobs).
+  AGENTS_BASE_URL: z.string().default(''),
+  AGENT_TIMEOUT_MS: z.coerce.number().int().positive().default(300_000),
+
+  // Reach send mode. 'test' (default) redirects every Reach email to
+  // REACH_TEST_RECIPIENT (capped by REACH_TEST_SEND_CAP) with a banner so synthetic
+  // lead inboxes are never hit; 'live' sends to the real lead email.
+  REACH_SEND_MODE: z.enum(['test', 'live']).default('test'),
+  REACH_TEST_RECIPIENT: z.string().default('admin@evertrust-germany.de'),
+  REACH_TEST_SEND_CAP: z.coerce.number().int().positive().default(3),
   // (The daily Bazooka send time is now an ERP-editable setting in arsenal_settings,
   // not an env var — changeable in the UI without a redeploy.)
 

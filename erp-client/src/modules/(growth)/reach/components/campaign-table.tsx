@@ -1,6 +1,11 @@
+'use client';
+
+import { useTranslations } from 'next-intl';
+
 import { GrowthCard, StatusPill } from '../../shared';
 
 import type { Campaign } from '../types';
+import { Spinner } from './spinner';
 
 type CampaignTableProps = {
   campaigns: Campaign[];
@@ -10,50 +15,61 @@ type CampaignTableProps = {
   showAction?: boolean;
   actionLabel?: string;
   onActionClick?: () => void;
+  loading?: boolean;
 };
 
 export function CampaignTable({
   campaigns,
   selectedCampaignId,
   onSelectCampaign,
-  title = 'Campaigns',
+  title,
   showAction = false,
-  actionLabel = 'Aim',
+  actionLabel,
   onActionClick,
+  loading = false,
 }: CampaignTableProps) {
+  const t = useTranslations('reach');
+
   return (
     <GrowthCard
-      title={title}
+      title={title ?? t('campaignTable.title')}
       hint={
         showAction ? (
             <button
             type="button"
             onClick={onActionClick}
-            className="rounded-md border border-[#15171c] bg-[#15171c] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-white"
+            className="rounded-md border border-foreground bg-foreground px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-background"
             >
-            {actionLabel}
+            {actionLabel ?? t('campaignTable.aim')}
             </button>
         ) : null
         }
     >
+      {loading && campaigns.length === 0 ? (
+        <Spinner label={t('campaignTable.loading')} />
+      ) : campaigns.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border bg-muted p-6 text-center text-[12.5px] font-bold text-muted-foreground">
+          {t('campaignTable.empty')}
+        </div>
+      ) : (
       <div className="max-h-[280px] overflow-auto">
         <table className="w-full border-collapse">
           <thead>
             <tr>
-              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
-                Campaign
+              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+                {t('campaignTable.col.campaign')}
               </th>
-              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
-                Niche
+              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+                {t('campaignTable.col.niche')}
               </th>
-              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
-                Region
+              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+                {t('campaignTable.col.region')}
               </th>
-              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
-                Companies
+              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+                {t('campaignTable.col.companies')}
               </th>
-              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
-                Status
+              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+                {t('campaignTable.col.status')}
               </th>
             </tr>
           </thead>
@@ -68,24 +84,26 @@ export function CampaignTable({
                   key={campaign.id}
                   onClick={() => onSelectCampaign(campaign.id)}
                   className={[
-                    'cursor-pointer border-t border-[#e4e7eb] hover:bg-[#f6f7f9]',
-                    selected ? 'bg-[#f6f7f9]' : '',
+                    'cursor-pointer border-t border-border hover:bg-muted',
+                    selected ? 'bg-muted' : '',
                   ].join(' ')}
                 >
-                  <td className="px-3 py-3 text-[12.5px] font-bold text-[#15171c]">
+                  <td className="px-3 py-3 text-[12.5px] font-bold text-foreground">
                     {campaign.name}
                   </td>
-                  <td className="px-3 py-3 text-[12.5px] text-[#5b626d]">
+                  <td className="px-3 py-3 text-[12.5px] text-muted-foreground">
                     {campaign.niche}
                   </td>
-                  <td className="px-3 py-3 text-[12.5px] text-[#5b626d]">
+                  <td className="px-3 py-3 text-[12.5px] text-muted-foreground">
                     {campaign.region}
                   </td>
-                  <td className="px-3 py-3 text-[12.5px] text-[#5b626d]">
+                  <td className="px-3 py-3 text-[12.5px] text-muted-foreground">
                     {campaign.companies}
                   </td>
                   <td className="px-3 py-3">
-                    <StatusPill live={live}>{campaign.status}</StatusPill>
+                    <StatusPill live={live}>
+                      {t(`campaignTable.status.${campaign.status}`)}
+                    </StatusPill>
                   </td>
                 </tr>
               );
@@ -93,6 +111,7 @@ export function CampaignTable({
           </tbody>
         </table>
       </div>
+      )}
     </GrowthCard>
   );
 }

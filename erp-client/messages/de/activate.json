@@ -58,6 +58,10 @@
       "exit": "Freie-Slots-Ansicht verlassen",
       "banner": "Freie-Slots-Ansicht: Es werden nur vorgeschlagene freie Slots gezeigt. Meetings sind ausgeblendet."
     },
+    "businessDays": {
+      "label": "Arbeitstage ({count})",
+      "heading": "Buchbare Tage"
+    },
     "footer": {
       "hint": "Klicke auf eine ausgefüllte Meeting-Karte, um Details zu öffnen. Gestrichelte Blöcke sind vorgeschlagene freie Slots.",
       "positionedSingle": "Positioniert nach {primary}.",

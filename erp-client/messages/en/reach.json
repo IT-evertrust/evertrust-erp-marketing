@@ -1,0 +1,138 @@
+{
+  "tabs": {
+    "scraper": "Lead Scraper",
+    "generator": "Email Generator",
+    "sender": "Sequence Sender"
+  },
+  "campaignTable": {
+    "title": "Campaigns",
+    "aim": "Aim",
+    "loading": "Loading campaigns…",
+    "empty": "No campaigns yet. Click Aim to launch one.",
+    "col": {
+      "campaign": "Campaign",
+      "niche": "Niche",
+      "region": "Region",
+      "companies": "Companies",
+      "status": "Status"
+    },
+    "status": {
+      "NEW": "New",
+      "IN CAMPAIGN": "In campaign",
+      "OVER": "Over"
+    }
+  },
+  "scraper": {
+    "leadsTitle": "Leads · {campaign}",
+    "selectedCampaign": "Selected Campaign",
+    "scrapingHint": "SCRAPING…",
+    "companiesHint": "{count} COMPANIES",
+    "scrapingLabel": "Lead Satellite is scraping leads…",
+    "loadingLeads": "Loading leads…",
+    "empty": "No leads loaded for this campaign yet.",
+    "col": {
+      "company": "Company",
+      "contact": "Contact",
+      "location": "Location",
+      "source": "Source",
+      "status": "Status"
+    },
+    "leadStatus": {
+      "New": "New",
+      "Cold Outreach": "Cold Outreach",
+      "Followed Up": "Followed Up",
+      "Interested": "Interested",
+      "Unsure": "Unsure",
+      "Not Interested": "Not Interested"
+    }
+  },
+  "generator": {
+    "emailsTitle": "Emails · {campaign}",
+    "campaign": "Campaign",
+    "empty": "No templates generated yet. Launch an Aim to generate the cold outreach, follow up, and final push.",
+    "send": "Send",
+    "performance": "Performance",
+    "metric": {
+      "sent": "Sent",
+      "opened": "Opened",
+      "clicked": "Clicked",
+      "replied": "Replied",
+      "bounced": "Bounced",
+      "meetings": "Meetings"
+    },
+    "emailStatus": {
+      "DRAFT": "Draft",
+      "SENT": "Sent",
+      "SCHEDULED": "Scheduled"
+    },
+    "step": {
+      "cold": "Cold Outreach",
+      "followup": "Follow Up",
+      "final": "Final Push"
+    },
+    "round": {
+      "1": "Round 1",
+      "2": "Round 2",
+      "3": "Round 3"
+    }
+  },
+  "sender": {
+    "campaignsTitle": "Campaigns",
+    "runBazooka": "Run Bazooka",
+    "running": "Running…",
+    "col": {
+      "campaign": "Campaign",
+      "nicheRegion": "Niche / Region",
+      "round": "Round",
+      "nextSend": "Next Send",
+      "status": "Status",
+      "sent": "Sent",
+      "opened": "Opened",
+      "replied": "Replied",
+      "meetings": "Meetings",
+      "bazooka": "Bazooka"
+    },
+    "on": "On",
+    "off": "Off",
+    "tomorrow": "Tomorrow 09:00",
+    "chartTitle": "Emails sent per day",
+    "chartHint": "PAST & PROJECTED · LIMIT 120 / DAY",
+    "limit": "120 LIMIT",
+    "legend": {
+      "sent": "Sent",
+      "today": "Today",
+      "projected": "Projected"
+    }
+  },
+  "modal": {
+    "title": "New Reach Aim",
+    "description": "Define the campaign target before scraping leads.",
+    "close": "Close",
+    "cancel": "Cancel",
+    "submit": "Start Aim",
+    "submitting": "Aiming…",
+    "field": {
+      "name": "Campaign Name",
+      "namePlaceholder": "e.g. Housing Co-ops ≥ 500 units · Bavaria",
+      "niche": "Niche",
+      "nichePlaceholder": "e.g. Housing, Property Mgmt, Installer",
+      "region": "Region",
+      "regionPlaceholder": "e.g. Bavaria, NRW, Nationwide DE",
+      "segment": "Segment",
+      "segmentPlaceholder": "e.g. Portfolio holders, public housing, utilities",
+      "source": "Source",
+      "sourcePlaceholder": "e.g. Company DB, iBau, LinkedIn",
+      "sender": "Sender mailbox",
+      "senderPlaceholder": "info or hanna"
+    }
+  },
+  "toast": {
+    "launchFailed": "Campaign launch failed",
+    "toggleFailed": "Toggle failed",
+    "bazookaNone": "Bazooka: no campaigns due (toggle one on first).",
+    "bazookaSent": "Bazooka sent {total} email(s) across {campaigns} campaign(s). Delivery pending OAuth.",
+    "bazookaFailed": "Bazooka run failed",
+    "roundRecorded": "Recorded {count} {round} send(s). Gmail delivery pending OAuth.",
+    "sendFailed": "Send failed"
+  }
+}

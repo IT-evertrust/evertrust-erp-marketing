@@ -21,6 +21,9 @@ import { MarketingModule } from './marketing/marketing.module';
 import { PerformanceModule } from './performance/performance.module';
 import { GoogleModule } from './google/google.module';
 import { EngageModule } from './engage/engage.module';
+import { ReachModule } from './reach/reach.module';
+import { ActivateModule } from './activate/activate.module';
+import { OverviewModule } from './overview/overview.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from './auth/guards/permissions.guard';
 import { AuditInterceptor } from './common/audit.interceptor';
@@ -47,6 +50,9 @@ import { AuditInterceptor } from './common/audit.interceptor';
     PerformanceModule,
     GoogleModule,
     EngageModule,
+    ReachModule,
+    ActivateModule,
+    OverviewModule,
   ],
   providers: [
     // Zod DTOs are the contract: validate every request body/param/query.

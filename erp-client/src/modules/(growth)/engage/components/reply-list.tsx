@@ -19,8 +19,8 @@ export function ReplyList({
   counts,
 }: ReplyListProps) {
   return (
-    <aside className="border-r border-[#e4e7eb]">
-      <div className="flex flex-wrap gap-1.5 border-b border-[#e4e7eb] p-3.5">
+    <aside className="border-r border-border">
+      <div className="flex flex-wrap gap-1.5 border-b border-border p-3.5">
         <FilterChip active>All · {counts.all}</FilterChip>
         <FilterChip>Interested · {counts.interested}</FilterChip>
         <FilterChip>Unsure · {counts.unsure}</FilterChip>
@@ -28,7 +28,7 @@ export function ReplyList({
       </div>
 
       {replies.length === 0 ? (
-        <div className="p-6 text-center text-[12.5px] font-bold text-[#959ca7]">
+        <div className="p-6 text-center text-[12.5px] font-bold text-muted-foreground">
           No replies yet for this campaign.
         </div>
       ) : (
@@ -42,26 +42,26 @@ export function ReplyList({
                 type="button"
                 onClick={() => onSelectReply(reply.id)}
                 className={[
-                  'block w-full border-b border-[#e4e7eb] px-4 py-3 text-left hover:bg-[#f6f7f9]',
+                  'block w-full border-b border-border px-4 py-3 text-left hover:bg-muted',
                   selected
-                    ? 'bg-[#f6f7f9] shadow-[inset_2px_0_0_#15171c]'
-                    : 'bg-white',
+                    ? 'bg-muted shadow-[inset_2px_0_0_var(--foreground)]'
+                    : 'bg-card',
                 ].join(' ')}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-[13px] font-bold text-[#15171c]">
+                  <span className="truncate text-[13px] font-bold text-foreground">
                     {reply.company}
                   </span>
-                  <span className="shrink-0 text-[10px] text-[#959ca7]">
+                  <span className="shrink-0 text-[10px] text-muted-foreground">
                     {reply.time}
                   </span>
                 </div>
 
-                <div className="mt-1 text-[11px] text-[#959ca7]">
+                <div className="mt-1 text-[11px] text-muted-foreground">
                   {reply.contact}
                 </div>
 
-                <div className="mt-2 line-clamp-2 text-[11.5px] text-[#5b626d]">
+                <div className="mt-2 line-clamp-2 text-[11.5px] text-muted-foreground">
                   {reply.inboundPreview}
                 </div>
 
@@ -89,8 +89,8 @@ function FilterChip({
       className={[
         'rounded-full border px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.06em]',
         active
-          ? 'border-[#15171c] bg-[#15171c] text-white'
-          : 'border-[#c2c7ce] text-[#5b626d]',
+          ? 'border-foreground bg-foreground text-background'
+          : 'border-border text-muted-foreground',
       ].join(' ')}
     >
       {children}
@@ -100,7 +100,7 @@ function FilterChip({
 
 function CategoryChip({ category }: { category: CampaignReply['category'] }) {
   return (
-    <span className="rounded-full border border-[#c2c7ce] px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#5b626d]">
+    <span className="rounded-full border border-border px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
       {category}
     </span>
   );

@@ -1,0 +1,28 @@
+{
+  "loadError": "Live-Dashboard-Daten konnten nicht geladen werden. Ersatz-Kennzahlen werden angezeigt.",
+  "kpi": {
+    "newLeads": "Neue Leads",
+    "contacted": "Kontaktiert",
+    "replyRate": "Antwortrate",
+    "interested": "Interessiert",
+    "meetings": "Termine",
+    "pipelineValue": "Pipeline-Wert"
+  },
+  "funnel": {
+    "title": "R.E.A.N Funnel",
+    "hint": "Reichweite → Pflege",
+    "stage": {
+      "reach": "Reichweite",
+      "engage": "Ansprache",
+      "activate": "Aktivierung",
+      "nurture": "Pflege",
+      "won": "Gewonnen"
+    }
+  },
+  "activity": {
+    "title": "Engine-Aktivität",
+    "liveLog": "Live-Protokoll",
+    "alerts": "Warnungen",
+    "empty": "Noch keine Engine-Aktivität."
+  }
+}

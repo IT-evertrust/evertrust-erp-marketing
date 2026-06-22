@@ -23,6 +23,8 @@ export type CalendarRangeParams = {
   timeMax?: string;
   timeZone?: string;
   durationMinutes?: number;
+  // Allowed weekdays for free-slot generation (0=Sun..6=Sat). Omitted ⇒ Mon–Fri.
+  businessDays?: number[];
 };
 
 type CalendarUpcomingParams = Pick<CalendarRangeParams, 'timeMin' | 'timeMax' | 'timeZone'>;
@@ -41,6 +43,7 @@ function normalizeCalendarFreeSlotsParams(params: CalendarRangeParams = {}): Cal
     timeMax: params.timeMax,
     timeZone: params.timeZone,
     durationMinutes: params.durationMinutes,
+    businessDays: params.businessDays,
   };
 }
 

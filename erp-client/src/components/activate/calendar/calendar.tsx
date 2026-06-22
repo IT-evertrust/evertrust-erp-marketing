@@ -9,7 +9,6 @@ import { useCampaigns } from '@/hooks/use-campaigns';
 import { EmptyState } from '@/components/common/empty-state';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
 import {
   DEFAULT_TIME_ZONE,
   addDaysToDateKey,
@@ -90,6 +89,9 @@ export function Calendar() {
   const [view, setView] = useState<CalendarView>('week');
   const [campaignId, setCampaignId] = useState<string | null>(null);
   const [freeOnly, setFreeOnly] = useState(false);
+  // Bookable weekdays for the free-slot finder (0=Sun..6=Sat), default Mon–Fri so
+  // nothing changes unless the user toggles. Passed to the free-slots query as CSV.
+  const [businessDays, setBusinessDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const [anchorKey, setAnchorKey] = useState(() =>
     startOfWorkWeekKey(new Date(), DEFAULT_TIME_ZONE),
   );
@@ -144,7 +146,12 @@ export function Calendar() {
   const freeSlots = useCalendarFreeSlots({
     ...calendarRange,
     durationMinutes: FREE_SLOT_DURATION_MINUTES,
+    businessDays,
   });
+
+  // Only the meeting/slot CELLS show a loading state — the chrome (ControlBar,
+  // Legend, grid frame, headers) renders immediately and stays mounted.
+  const loading = upcoming.isLoading || freeSlots.isLoading;
 
   // The org's RESOLVED calendar zones (org_config ?? product default), carried on
   // the payload. `primaryTz` always present; `secondaryTz` null = single scale.
@@ -245,20 +252,6 @@ export function Calendar() {
     return `${start} – ${end}`;
   }, [view, anchorKey, gridStartKey, format]);
 
-  if (upcoming.isLoading || freeSlots.isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <Skeleton className="h-5 w-48" />
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <Skeleton className="h-12 w-full" />
-          <Skeleton className="h-[420px] w-full" />
-        </CardContent>
-      </Card>
-    );
-  }
-
   if (upcoming.isError || freeSlots.isError) {
     return (
       <Card>
@@ -269,7 +262,10 @@ export function Calendar() {
     );
   }
 
-  if (!configured) {
+  // Only treat the org as unconfigured once a query has actually resolved — during
+  // the initial fetch both payloads are undefined, so don't flash the connect hint;
+  // the chrome + skeleton cells render instead.
+  if (!loading && !configured) {
     return <ConnectHint reason={reason} />;
   }
 
@@ -286,7 +282,8 @@ export function Calendar() {
             rangeLabel={rangeLabel}
             onPrev={() => setAnchorKey((key) => stepAnchor(key, view, -1))}
             onNext={() => setAnchorKey((key) => stepAnchor(key, view, 1))}
-            onToday={() => setAnchorKey(startOfWorkWeekKey(new Date(), primaryTz))}
+            businessDays={businessDays}
+            onBusinessDaysChange={setBusinessDays}
             freeOnly={freeOnly}
             onToggleFreeOnly={() => setFreeOnly((value) => !value)}
           />
@@ -312,6 +309,7 @@ export function Calendar() {
               primaryTz={primaryTz}
               secondaryTz={secondaryTz}
               freeOnly={freeOnly}
+              loading={loading}
             />
           ) : view === 'day' ? (
             <DayView
@@ -323,6 +321,7 @@ export function Calendar() {
               primaryTz={primaryTz}
               secondaryTz={secondaryTz}
               freeOnly={freeOnly}
+              loading={loading}
             />
           ) : (
             <MonthView
@@ -331,6 +330,7 @@ export function Calendar() {
               slots={gridSlots}
               primaryTz={primaryTz}
               freeOnly={freeOnly}
+              loading={loading}
               onDayClick={(dateKey) => {
                 setAnchorKey(dateKey);
                 setView('day');
@@ -338,7 +338,7 @@ export function Calendar() {
             />
           )}
 
-          {gridEvents.length === 0 && gridSlots.length === 0 ? (
+          {loading ? null : gridEvents.length === 0 && gridSlots.length === 0 ? (
             <div className="flex items-center justify-center gap-2 border-t px-4 py-3 text-center text-xs text-muted-foreground">
               <CalendarClock className="size-3.5" />
               {t('book.upcoming.emptyBody')}

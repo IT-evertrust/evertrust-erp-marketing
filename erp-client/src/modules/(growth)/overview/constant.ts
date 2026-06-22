@@ -6,37 +6,37 @@ import type {
 
 export const FALLBACK_KPIS: OverviewKpi[] = [
   {
-    label: 'NEW LEADS',
+    labelKey: 'newLeads',
     value: '1,248',
     delta: '+18%',
     spark: '0,18 14,15 28,16 42,11 56,12 70,7 84,8 100,4',
   },
   {
-    label: 'CONTACTED',
+    labelKey: 'contacted',
     value: '980',
     delta: '+12%',
     spark: '0,16 14,14 28,15 42,12 56,10 70,9 84,7 100,6',
   },
   {
-    label: 'REPLY RATE',
+    labelKey: 'replyRate',
     value: '21.8%',
     delta: '+3.1 pp',
     spark: '0,15 14,16 28,12 42,13 56,9 70,10 84,7 100,8',
   },
   {
-    label: 'INTERESTED',
+    labelKey: 'interested',
     value: '86',
     delta: '+9',
     spark: '0,17 14,15 28,14 42,12 56,11 70,9 84,8 100,5',
   },
   {
-    label: 'MEETINGS',
+    labelKey: 'meetings',
     value: '31',
     delta: '+6',
     spark: '0,16 14,16 28,13 42,14 56,10 70,11 84,9 100,7',
   },
   {
-    label: 'PIPELINE VALUE',
+    labelKey: 'pipelineValue',
     value: '€184.5K',
     delta: '+€42K',
     spark: '0,18 14,17 28,15 42,13 56,12 70,8 84,6 100,3',
@@ -44,11 +44,11 @@ export const FALLBACK_KPIS: OverviewKpi[] = [
 ];
 
 export const FALLBACK_FUNNEL: FunnelStage[] = [
-  { name: 'Reach', value: '1,248', width: 100, conversion: '100%' },
-  { name: 'Engage', value: '214', width: 42, conversion: '22%' },
-  { name: 'Activate', value: '31', width: 16, conversion: '36%' },
-  { name: 'Nurture', value: '86', width: 26, conversion: '40%' },
-  { name: 'Won', value: '12', width: 9, conversion: '39%' },
+  { nameKey: 'reach', value: '1,248', width: 100, conversion: '100%' },
+  { nameKey: 'engage', value: '214', width: 42, conversion: '22%' },
+  { nameKey: 'activate', value: '31', width: 16, conversion: '36%' },
+  { nameKey: 'nurture', value: '86', width: 26, conversion: '40%' },
+  { nameKey: 'won', value: '12', width: 9, conversion: '39%' },
 ];
 
 export const FALLBACK_ACTIVITY: EngineActivityItem[] = [
