@@ -34,23 +34,16 @@ type NewCampaignModalProps = {
   submitting?: boolean;
 };
 
-// AIM Region zones — the same strict set as main's "Lock & Load" launcher. The
-// Lead Satellite seeds its city searches from these, so the values stay stable
-// English strings ("Anywhere" is the catch-all default).
-const REGION_OPTIONS = [
-  'Anywhere',
-  'North',
-  'South',
-  'East',
-  'West',
-  'Central',
-  'Near border (DE-PL)',
-] as const;
-
 const EMPTY_FORM: NewCampaignFormValues = {
   name: '',
   niche: '',
-  region: 'Anywhere',
+  // Region is a FREE-TEXT geo term, not a zone — the Reach lead_satellite resolves
+  // it via satellite/domain/geo.cities_for: "Anywhere"/nationwide → LLM country
+  // profiler; a real region/state name ("Bavaria") → literal geo search term; a
+  // comma list ("Berlin, Munich") → used verbatim. Zone words ("North"/"South")
+  // are NOT real places and would scrape garbage, so we don't offer them here
+  // (that dropdown belongs to main's n8n campaigns flow, which also passes country).
+  region: '',
   segment: '',
   source: '',
   // Seeded from the org's default sender once the list loads (see effect); 'info'
@@ -228,21 +221,17 @@ export function NewCampaignModal({
             )}
           </div>
 
-          {/* Region — fixed zone the Lead Satellite seeds city searches from. */}
+          {/* Region — free-text geo term the lead_satellite resolves (real region/
+              state name, a "City, City" list, or "Anywhere" for nationwide). */}
           <div className="grid gap-2">
             <Label htmlFor={`${fieldId}-region`}>{t('modal.field.region')}</Label>
-            <Select value={form.region} onValueChange={(v) => set('region', v)}>
-              <SelectTrigger id={`${fieldId}-region`} className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {REGION_OPTIONS.map((opt) => (
-                  <SelectItem key={opt} value={opt}>
-                    {opt}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Input
+              id={`${fieldId}-region`}
+              value={form.region}
+              placeholder={t('modal.field.regionPlaceholder')}
+              maxLength={120}
+              onChange={(e) => set('region', e.target.value)}
+            />
           </div>
 
           {/* Segment */}
