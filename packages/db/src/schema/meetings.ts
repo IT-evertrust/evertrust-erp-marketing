@@ -26,7 +26,9 @@ export const meetings = pgTable(
       .references(() => organizations.id),
     // Read.ai session id — the idempotency key for re-syncs.
     sessionId: text('session_id'),
+    readAiId: text('read_ai_id'),
     title: text('title'),
+    summary: text('summary'),
     clientCompany: text('client_company'),
     aeName: text('ae_name'),
     clientContact: text('client_contact'),
