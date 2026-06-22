@@ -98,6 +98,8 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
         buzz = tender.fallback_buzzwords(cfg.niche)
     buzz = list(dict.fromkeys([b for b in buzz if b]))
     result["buzzwords"] = len(buzz)
+    result["buzzList"] = buzz          # the AIM niche's own keywords — used to build the qualify ICP
+    result["marketTld"] = market_tld   # exposed for the qualify geo gate
 
     lang = (profile.get("langCode") if profile else "") or ""
     result["searchLanguage"] = lang or "any"
