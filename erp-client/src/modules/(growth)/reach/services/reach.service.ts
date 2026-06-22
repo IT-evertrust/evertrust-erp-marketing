@@ -175,8 +175,10 @@ export function getSenderSchedule(
       campaign: c.name,
       nicheRegion: `${c.niche} · ${c.region}`,
       round: `${roundsSent} / 3`,
-      nextSend:
-        c.status === 'OVER' || roundsSent === 3 ? '-' : 'Tomorrow 09:00',
+      // null = the default "tomorrow 09:00" slot (translated in the component);
+      // '-' = no further send. The next-send schedule is a placeholder until the
+      // Reach Bazooka send pipeline lands.
+      nextSend: c.status === 'OVER' || roundsSent === 3 ? '-' : null,
       status: c.status,
       sent: sum('sent'),
       opened: sum('opened'),
@@ -271,15 +273,14 @@ export function templatesToEmails(
   if (!templates) return [];
   const row = (
     id: ReachRound,
-    step: string,
-    roundLabel: string,
+    round: number,
     block: { subject: string; body: string },
   ): CampaignEmail => {
     const s = stats[id];
     return {
       id,
-      step,
-      round: roundLabel,
+      step: id,
+      round,
       subject: block.subject,
       body: block.body,
       status: s.sent > 0 ? 'SENT' : 'DRAFT',
@@ -292,8 +293,8 @@ export function templatesToEmails(
     };
   };
   return [
-    row('cold', 'Cold Outreach', 'Round 1', templates.cold_outreach),
-    row('followup', 'Follow Up', 'Round 2', templates.follow_up),
-    row('final', 'Final Push', 'Round 3', templates.final_push),
+    row('cold', 1, templates.cold_outreach),
+    row('followup', 2, templates.follow_up),
+    row('final', 3, templates.final_push),
   ];
 }

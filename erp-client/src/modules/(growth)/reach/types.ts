@@ -28,13 +28,18 @@ export type Lead = {
   status: LeadStatus;
 };
 
+export type EmailStatus = 'DRAFT' | 'SENT' | 'SCHEDULED';
+
 export type CampaignEmail = {
   id: string;
-  step: string;
-  round: string;
+  // Stable keys for i18n: `step` is the round id (reach.generator.step.<step>),
+  // `round` is the round number 1..3 (reach.generator.round.<round>). The display
+  // text is resolved in the component via next-intl, never stored here.
+  step: ReachRound;
+  round: number;
   subject: string;
   body?: string;
-  status: 'DRAFT' | 'SENT' | 'SCHEDULED';
+  status: EmailStatus;
   sent: number;
   opened: number;
   clicked: number;
@@ -48,8 +53,9 @@ export type SenderSchedule = {
   campaign: string;
   nicheRegion: string;
   round: string;
-  nextSend: string;
-  status: string;
+  // null = the default "tomorrow 09:00" slot (translated at render); '-' = none.
+  nextSend: string | null;
+  status: CampaignStatus;
   // Aggregate email stats across the three rounds (for the Sequence Sender).
   sent: number;
   opened: number;

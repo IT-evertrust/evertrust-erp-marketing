@@ -29,6 +29,8 @@ const NAMESPACES = [
   'login',
   // R.E.A.N. redesign pages. Each owns its own namespace so page agents can fill
   // them in parallel; the files start as empty objects until a page wires copy.
+  'overview',
+  'reach',
   'analytics',
   'reports',
   'engage',

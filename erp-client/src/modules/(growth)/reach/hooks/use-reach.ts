@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 
 import {
@@ -25,6 +26,7 @@ import type {
 } from '../types';
 
 export function useReach() {
+  const t = useTranslations('reach');
   const [campaigns, setCampaigns] = useState<ReachCampaignView[]>([]);
   const [activeTab, setActiveTab] = useState<ReachTab>('scraper');
   const [selectedCampaignId, setSelectedCampaignId] = useState('');
@@ -147,7 +149,7 @@ export function useReach() {
         ),
       );
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Campaign launch failed';
+      const msg = err instanceof Error ? err.message : t('toast.launchFailed');
       toast.error(msg);
     } finally {
       setCreatingAim(false);
@@ -163,7 +165,7 @@ export function useReach() {
       const updated = await setReachAutoSend(aimId, !current.autoSend);
       setCampaigns((cs) => cs.map((c) => (c.id === aimId ? updated : c)));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Toggle failed');
+      toast.error(err instanceof Error ? err.message : t('toast.toggleFailed'));
     }
   }
 
@@ -176,14 +178,17 @@ export function useReach() {
       setCampaigns(fresh);
       const total = summary.sends.reduce((acc, s) => acc + s.count, 0);
       if (summary.campaignsProcessed === 0) {
-        toast.message('Bazooka: no campaigns due (toggle one on first).');
+        toast.message(t('toast.bazookaNone'));
       } else {
         toast.success(
-          `Bazooka sent ${total} email(s) across ${summary.campaignsProcessed} campaign(s). Delivery pending OAuth.`,
+          t('toast.bazookaSent', {
+            total,
+            campaigns: summary.campaignsProcessed,
+          }),
         );
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Bazooka run failed');
+      toast.error(err instanceof Error ? err.message : t('toast.bazookaFailed'));
     } finally {
       setBazookaRunning(false);
     }
@@ -199,10 +204,13 @@ export function useReach() {
         current.map((c) => (c.id === updated.id ? updated : c)),
       );
       toast.success(
-        `Recorded ${updated.stats[round].sent} ${round} send(s). Gmail delivery pending OAuth.`,
+        t('toast.roundRecorded', {
+          count: updated.stats[round].sent,
+          round: t(`generator.step.${round}`),
+        }),
       );
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Send failed');
+      toast.error(err instanceof Error ? err.message : t('toast.sendFailed'));
     }
   }
 

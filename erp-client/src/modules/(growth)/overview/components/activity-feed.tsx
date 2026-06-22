@@ -1,3 +1,7 @@
+'use client';
+
+import { useTranslations } from 'next-intl';
+
 import { GrowthCard, LiveDot } from '@/modules/(growth)/shared';
 
 import type { ActivityLevel, EngineActivityItem, EngineAlert } from '../types';
@@ -33,20 +37,22 @@ const ALERT_ACCENT: Record<EngineAlert['level'], { box: string; text: string }> 
 };
 
 export function EngineActivityFeed({ activity, alerts = [] }: EngineActivityFeedProps) {
+  const t = useTranslations('overview');
+
   return (
     <GrowthCard
-      title="Engine Activity"
+      title={t('activity.title')}
       hint={
         <span className="inline-flex items-center gap-2">
           <LiveDot />
-          Live log
+          {t('activity.liveLog')}
         </span>
       }
     >
       {alerts.length > 0 ? (
         <div className="mb-3">
           <div className="mb-2 flex items-center gap-2 text-[9.5px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-            Alerts · {alerts.length}
+            {t('activity.alerts')} · {alerts.length}
           </div>
           <div className="flex flex-col gap-1.5">
             {alerts.map((alert) => (
@@ -59,7 +65,7 @@ export function EngineActivityFeed({ activity, alerts = [] }: EngineActivityFeed
       <div className="max-h-[420px] overflow-y-auto pr-2">
         {activity.length === 0 ? (
           <div className="py-6 text-center text-[12px] font-bold text-muted-foreground">
-            No engine activity yet.
+            {t('activity.empty')}
           </div>
         ) : (
           activity.map((item, index) => (
