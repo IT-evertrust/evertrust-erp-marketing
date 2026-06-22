@@ -1,131 +1,43 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import {
   getCampaignReplies,
   getEngageCampaigns,
-  syncEngageInbox,
 } from '../services/engage.service';
-import type {
-  AiAgentMode,
-  CampaignReply,
-  EngageCampaign,
-  ReplyCategory,
-} from '../types';
-
-export type CategoryFilter = ReplyCategory | 'ALL';
+import type { AiAgentMode } from '../types';
 
 export function useEngage() {
-  const [campaigns, setCampaigns] = useState<EngageCampaign[]>([]);
-  const [selectedCampaignId, setSelectedCampaignId] = useState('');
-  const [replies, setReplies] = useState<CampaignReply[]>([]);
-  const [selectedReplyId, setSelectedReplyId] = useState('');
+  const campaigns = useMemo(() => getEngageCampaigns(), []);
+
+  const firstCampaignWithReplies =
+    campaigns.find((campaign) => campaign.replies > 0) ?? campaigns[0];
+
+  const [selectedCampaignId, setSelectedCampaignId] = useState(
+    firstCampaignWithReplies?.id ?? '',
+  );
+
+  const replies = useMemo(
+    () => getCampaignReplies(selectedCampaignId),
+    [selectedCampaignId],
+  );
+
+  const [selectedReplyId, setSelectedReplyId] = useState(
+    replies[0]?.id ?? '',
+  );
+
   const [aiMode, setAiMode] = useState<AiAgentMode>('write');
-  // Inbox (sender mailbox) filter. '' = all inboxes. Lets a user review the replies
-  // that landed in another worker's mailbox; data is org-scoped, so any inbox is visible.
-  const [inboxFilter, setInboxFilter] = useState('');
-  // Reply-status filter (the clickable All/Interested/Unsure/Not Interested chips).
-  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('ALL');
-  // Loading flags for the DB-backed reads, so the UI can show a spinner instead of
-  // a blank/empty state while data is in flight.
-  const [loadingCampaigns, setLoadingCampaigns] = useState(true);
-  const [loadingReplies, setLoadingReplies] = useState(false);
 
-  // Load campaigns once; default the selection to the first with replies. Best-effort
-  // inbox sync first so real inbound Gmail (matched to known prospects) is in the queue.
   useEffect(() => {
-    let active = true;
-    setLoadingCampaigns(true);
-    syncEngageInbox()
-      .catch(() => undefined)
-      .then(() => getEngageCampaigns())
-      .then((data) => {
-        if (!active) return;
-        setCampaigns(data);
-        const first = data.find((campaign) => campaign.replies > 0) ?? data[0];
-        setSelectedCampaignId((prev) => prev || (first?.id ?? ''));
-      })
-      .catch(() => {
-        if (active) setCampaigns([]);
-      })
-      .finally(() => {
-        if (active) setLoadingCampaigns(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+    setSelectedReplyId(replies[0]?.id ?? '');
+  }, [selectedCampaignId, replies]);
 
-  // Load replies whenever the selected campaign changes.
-  useEffect(() => {
-    if (!selectedCampaignId) {
-      setReplies([]);
-      setSelectedReplyId('');
-      return;
-    }
-    let active = true;
-    setLoadingReplies(true);
-    getCampaignReplies(selectedCampaignId)
-      .then((data) => {
-        if (!active) return;
-        setReplies(data);
-        setSelectedReplyId(data[0]?.id ?? '');
-      })
-      .catch(() => {
-        if (!active) return;
-        setReplies([]);
-        setSelectedReplyId('');
-      })
-      .finally(() => {
-        if (active) setLoadingReplies(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [selectedCampaignId]);
-
-  // Distinct inboxes present across all campaigns (the filter options).
-  const inboxes = Array.from(
-    new Set(campaigns.map((campaign) => campaign.senderEmail)),
-  ).sort();
-
-  // Campaigns shown for the active inbox filter ('' = all inboxes).
-  const visibleCampaigns = inboxFilter
-    ? campaigns.filter((campaign) => campaign.senderEmail === inboxFilter)
-    : campaigns;
-
-  // Keep the selected campaign inside the visible set when the inbox filter changes;
-  // fall back to the first filtered campaign with replies (else the first).
-  useEffect(() => {
-    if (visibleCampaigns.some((campaign) => campaign.id === selectedCampaignId)) {
-      return;
-    }
-    const next =
-      visibleCampaigns.find((campaign) => campaign.replies > 0) ??
-      visibleCampaigns[0];
-    setSelectedCampaignId(next?.id ?? '');
-  }, [inboxFilter, campaigns, selectedCampaignId, visibleCampaigns]);
-
-  const selectedCampaign = visibleCampaigns.find(
+  const selectedCampaign = campaigns.find(
     (campaign) => campaign.id === selectedCampaignId,
   );
 
-  // Replies shown for the active status filter ('ALL' = all categories).
-  const visibleReplies =
-    categoryFilter === 'ALL'
-      ? replies
-      : replies.filter((reply) => reply.category === categoryFilter);
-
-  // Keep the selected reply inside the filtered set when the status filter changes.
-  useEffect(() => {
-    if (visibleReplies.some((reply) => reply.id === selectedReplyId)) return;
-    setSelectedReplyId(visibleReplies[0]?.id ?? '');
-  }, [categoryFilter, replies, selectedReplyId, visibleReplies]);
-
-  const selectedReply = visibleReplies.find(
-    (reply) => reply.id === selectedReplyId,
-  );
+  const selectedReply = replies.find((reply) => reply.id === selectedReplyId);
 
   const counts = {
     all: replies.length,
@@ -138,22 +50,15 @@ export function useEngage() {
   };
 
   return {
-    campaigns: visibleCampaigns,
+    campaigns,
     selectedCampaignId,
     setSelectedCampaignId,
     selectedCampaign,
-    inboxes,
-    inboxFilter,
-    setInboxFilter,
-    replies: visibleReplies,
+    replies,
     selectedReplyId,
     setSelectedReplyId,
     selectedReply,
     counts,
-    categoryFilter,
-    setCategoryFilter,
-    loadingCampaigns,
-    loadingReplies,
     aiMode,
     setAiMode,
   };
