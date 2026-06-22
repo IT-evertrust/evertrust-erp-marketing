@@ -9,7 +9,6 @@ import { Columns3, FileSignature, Inbox } from 'lucide-react';
 import type { CampaignDto } from '@evertrust/shared';
 import { useRequirePermission } from '@/lib/permissions';
 import { useCampaigns } from '@/hooks/use-campaigns';
-import { AppShell } from '@/components/shell/app-shell';
 import { PageHeader } from '@/components/common/page-header';
 import { EmptyState } from '@/components/common/empty-state';
 import { SegmentedTabs } from '@/components/rean/segmented-tabs';
@@ -30,21 +29,16 @@ function campaignLabel(c: CampaignDto): string {
   return c.name || c.project || c.nicheName || c.region;
 }
 
+// GrowthShell chrome comes from the (growth) route-group layout; this page renders
+// only its body content.
 export default function NurturePage() {
   const t = useTranslations('common');
   const { allowed, isLoading } = useRequirePermission('campaigns:read');
 
-  return (
-    <AppShell>
-      {isLoading ? (
-        <Skeleton className="h-64 w-full rounded-lg" />
-      ) : allowed ? (
-        <NurtureView />
-      ) : (
-        <p className="text-sm text-muted-foreground">{t('redirecting')}</p>
-      )}
-    </AppShell>
-  );
+  if (isLoading) return <Skeleton className="h-64 w-full rounded-lg" />;
+  if (!allowed)
+    return <p className="text-sm text-muted-foreground">{t('redirecting')}</p>;
+  return <NurtureView />;
 }
 
 function NurtureView() {
