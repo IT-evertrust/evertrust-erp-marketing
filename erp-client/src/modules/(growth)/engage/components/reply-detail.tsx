@@ -1,5 +1,11 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
+
 import { LiveDot } from '@/modules/(growth)/shared';
 
+import { saveReplyDraft, sendReply } from '../services/engage.service';
 import type { AiAgentMode, CampaignReply } from '../types';
 import { AiAgentBox } from './ai-agent-box';
 
@@ -14,6 +20,19 @@ export function ReplyDetail({
   aiMode,
   onChangeAiMode,
 }: ReplyDetailProps) {
+  // Draft is editable + controlled, so switching replies always shows the right text
+  // and Send/Save read the latest edits.
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [sending, setSending] = useState(false);
+
+  const replyId = reply?.id;
+  useEffect(() => {
+    setSubject(reply?.draftSubject ?? '');
+    setBody(reply?.draftBody ?? '');
+  }, [replyId, reply?.draftSubject, reply?.draftBody]);
+
   if (!reply) {
     return (
       <section className="flex min-h-[560px] items-center justify-center p-6">
@@ -24,6 +43,40 @@ export function ReplyDetail({
     );
   }
 
+  async function handleSave() {
+    if (!reply) return;
+    if (!subject.trim() || !body.trim()) {
+      toast.error('Subject and body are required.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await saveReplyDraft(reply.id, subject, body);
+      toast.success('Draft saved.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not save draft.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSend() {
+    if (!reply) return;
+    if (!subject.trim() || !body.trim()) {
+      toast.error('Subject and body are required.');
+      return;
+    }
+    setSending(true);
+    try {
+      await sendReply(reply.id, subject, body);
+      toast.success('Reply sent.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not send reply.');
+    } finally {
+      setSending(false);
+    }
+  }
+
   return (
     <section className="flex min-h-[560px] flex-col gap-4 p-5">
       <div className="flex items-start justify-between gap-3">
@@ -31,9 +84,7 @@ export function ReplyDetail({
           <div className="text-[15px] font-bold text-[#15171c]">
             {reply.company}
           </div>
-          <div className="mt-1 text-[11px] text-[#959ca7]">
-            {reply.contact}
-          </div>
+          <div className="mt-1 text-[11px] text-[#959ca7]">{reply.contact}</div>
         </div>
 
         <span className="rounded-full border border-[#c2c7ce] px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#5b626d]">
@@ -41,7 +92,7 @@ export function ReplyDetail({
         </span>
       </div>
 
-      <div className="max-h-[260px] overflow-auto rounded-[10px] border border-[#c2c7ce] p-3">
+      <div className="max-h-[300px] overflow-auto rounded-[10px] border border-[#c2c7ce] p-3">
         <div className="flex flex-col gap-2.5">
           {reply.thread.map((message) => (
             <div
@@ -59,7 +110,7 @@ export function ReplyDetail({
               <div className="mb-2 text-[12.5px] font-bold text-[#15171c]">
                 {message.subject}
               </div>
-              <div className="whitespace-pre-line text-[12.5px] leading-relaxed text-[#5b626d]">
+              <div className="whitespace-pre-wrap break-words text-[12.5px] leading-relaxed text-[#5b626d]">
                 {message.body}
               </div>
             </div>
@@ -76,23 +127,37 @@ export function ReplyDetail({
 
           <div className="overflow-hidden rounded-lg border border-[#e4e7eb] bg-[#f6f7f9]">
             <input
-              defaultValue={reply.draftSubject}
+              value={subject}
+              onChange={(event) => setSubject(event.target.value)}
+              placeholder="Subject"
               className="w-full border-b border-[#e4e7eb] bg-transparent px-3 py-2.5 text-[12.5px] font-bold text-[#15171c] outline-none focus:bg-white"
             />
 
             <textarea
-              defaultValue={reply.draftBody}
-              rows={7}
-              className="w-full resize-none bg-transparent px-3 py-3 text-[12.5px] leading-relaxed text-[#15171c] outline-none focus:bg-white"
+              value={body}
+              onChange={(event) => setBody(event.target.value)}
+              rows={9}
+              placeholder="Draft reply…"
+              className="w-full resize-y bg-transparent px-3 py-3 text-[12.5px] leading-relaxed text-[#15171c] outline-none focus:bg-white"
             />
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2">
-            <button className="rounded-md border border-[#15171c] bg-[#15171c] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-white">
-              Send
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={sending || saving}
+              className="rounded-md border border-[#15171c] bg-[#15171c] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-white disabled:opacity-50"
+            >
+              {sending ? 'Sending…' : 'Send'}
             </button>
-            <button className="rounded-md border border-[#c2c7ce] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#15171c]">
-              Save draft
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || sending}
+              className="rounded-md border border-[#c2c7ce] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#15171c] disabled:opacity-50"
+            >
+              {saving ? 'Saving…' : 'Save draft'}
             </button>
           </div>
         </div>

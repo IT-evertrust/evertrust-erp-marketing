@@ -12,8 +12,22 @@ export type FunnelStage = {
   conversion: string;
 };
 
+export type ActivityLevel = 'info' | 'success' | 'warning' | 'error';
+
 export type EngineActivityItem = {
   time: string;
   source: string;
   message: string;
+  level?: ActivityLevel;
+  at?: string;
+};
+
+// A condition that needs attention, surfaced above the activity log.
+export type EngineAlert = {
+  id: string;
+  level: 'error' | 'warning' | 'info';
+  title: string;
+  detail: string | null;
+  source: string;
+  time: string;
 };
