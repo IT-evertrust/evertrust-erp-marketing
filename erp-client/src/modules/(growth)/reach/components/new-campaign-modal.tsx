@@ -34,16 +34,34 @@ type NewCampaignModalProps = {
   submitting?: boolean;
 };
 
+// Region options — REAL places the lead_satellite can resolve (satellite/domain/
+// geo.cities_for): "Anywhere" → nationwide via the LLM country profiler; a German
+// Bundesland name → a literal geo search term. NOT the n8n zone words
+// (North/South/…), which aren't real places and would scrape garbage here.
+const REGION_OPTIONS = [
+  'Anywhere',
+  'Baden-Württemberg',
+  'Bayern',
+  'Berlin',
+  'Brandenburg',
+  'Bremen',
+  'Hamburg',
+  'Hessen',
+  'Mecklenburg-Vorpommern',
+  'Niedersachsen',
+  'Nordrhein-Westfalen',
+  'Rheinland-Pfalz',
+  'Saarland',
+  'Sachsen',
+  'Sachsen-Anhalt',
+  'Schleswig-Holstein',
+  'Thüringen',
+] as const;
+
 const EMPTY_FORM: NewCampaignFormValues = {
   name: '',
   niche: '',
-  // Region is a FREE-TEXT geo term, not a zone — the Reach lead_satellite resolves
-  // it via satellite/domain/geo.cities_for: "Anywhere"/nationwide → LLM country
-  // profiler; a real region/state name ("Bavaria") → literal geo search term; a
-  // comma list ("Berlin, Munich") → used verbatim. Zone words ("North"/"South")
-  // are NOT real places and would scrape garbage, so we don't offer them here
-  // (that dropdown belongs to main's n8n campaigns flow, which also passes country).
-  region: '',
+  region: 'Anywhere',
   segment: '',
   source: '',
   // Seeded from the org's default sender once the list loads (see effect); 'info'
@@ -221,17 +239,22 @@ export function NewCampaignModal({
             )}
           </div>
 
-          {/* Region — free-text geo term the lead_satellite resolves (real region/
-              state name, a "City, City" list, or "Anywhere" for nationwide). */}
+          {/* Region — dropdown of REAL places the lead_satellite resolves
+              ("Anywhere" → nationwide, a Bundesland → literal geo term). */}
           <div className="grid gap-2">
             <Label htmlFor={`${fieldId}-region`}>{t('modal.field.region')}</Label>
-            <Input
-              id={`${fieldId}-region`}
-              value={form.region}
-              placeholder={t('modal.field.regionPlaceholder')}
-              maxLength={120}
-              onChange={(e) => set('region', e.target.value)}
-            />
+            <Select value={form.region} onValueChange={(v) => set('region', v)}>
+              <SelectTrigger id={`${fieldId}-region`} className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {REGION_OPTIONS.map((opt) => (
+                  <SelectItem key={opt} value={opt}>
+                    {opt}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Segment */}
