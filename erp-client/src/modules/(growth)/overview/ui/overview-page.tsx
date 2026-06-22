@@ -15,7 +15,7 @@ export function OverviewUI() {
 
   return (
       <main
-        className="min-h-[calc(100vh-64px)] bg-[#eef0f3] px-6 py-5 text-[#15171c]"
+        className="min-h-[calc(100vh-64px)] bg-[#eef0f3] px-6 py-5 text-[#15171c] duration-300 animate-in fade-in"
         style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
       >
         <div className="mb-5 flex items-center justify-between border-b border-[#e4e7eb] pb-5">
@@ -48,7 +48,7 @@ export function OverviewUI() {
 
         <section className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[1.35fr_1fr]">
           <ReanFunnel stages={overview.funnel} />
-          <EngineActivityFeed activity={overview.activity} />
+          <EngineActivityFeed activity={overview.activity} alerts={overview.alerts} />
         </section>
       </main>
   );
