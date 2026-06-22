@@ -35,7 +35,7 @@ export function EmailGeneratorPanel({
 
       <GrowthCard title={`Emails · ${selectedCampaignName ?? 'Campaign'}`}>
         {emails.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-[#d6dade] bg-[#f6f7f9] p-6 text-center text-[12.5px] font-bold text-[#959ca7]">
+          <div className="rounded-lg border border-dashed border-border bg-muted p-6 text-center text-[12.5px] font-bold text-muted-foreground">
             No templates generated yet. Launch an Aim to generate the cold
             outreach, follow up, and final push.
           </div>
@@ -47,17 +47,17 @@ export function EmailGeneratorPanel({
             return (
               <div
                 key={email.id}
-                className="border-b border-dashed border-[#d6dade] pb-4 last:border-b-0 last:pb-0"
+                className="border-b border-dashed border-border pb-4 last:border-b-0 last:pb-0"
               >
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <div className="text-[13px] font-bold text-[#15171c]">
+                    <div className="text-[13px] font-bold text-foreground">
                       {email.step}{' '}
-                      <span className="text-[11px] font-normal text-[#959ca7]">
+                      <span className="text-[11px] font-normal text-muted-foreground">
                         · {email.round}
                       </span>
                     </div>
-                    <div className="mt-1 text-[11.5px] text-[#959ca7]">
+                    <div className="mt-1 text-[11.5px] text-muted-foreground">
                       {email.subject}
                     </div>
                   </div>
@@ -69,7 +69,7 @@ export function EmailGeneratorPanel({
                     <button
                       type="button"
                       onClick={() => onSend(email.id as ReachRound)}
-                      className="rounded-md border border-[#15171c] bg-[#15171c] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:opacity-90"
+                      className="rounded-md border border-foreground bg-foreground px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-background hover:opacity-90"
                     >
                       Send
                     </button>
@@ -80,13 +80,13 @@ export function EmailGeneratorPanel({
                   <div
                     contentEditable
                     suppressContentEditableWarning
-                    className="min-h-[120px] whitespace-pre-wrap rounded-lg border border-[#d6dade] bg-[#f6f7f9] p-3 text-[12.5px] leading-relaxed text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
+                    className="min-h-[120px] whitespace-pre-wrap rounded-lg border border-border bg-muted p-3 text-[12.5px] leading-relaxed text-foreground outline-none focus:border-foreground focus:bg-background"
                   >
                     {`Subject: ${email.subject}\n\n${email.body ?? ''}`}
                   </div>
 
-                  <div className="rounded-lg border border-[#d6dade] bg-[#f6f7f9] p-3">
-                    <div className="mb-3 text-[9px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+                  <div className="rounded-lg border border-border bg-muted p-3">
+                    <div className="mb-3 text-[9px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                       Performance
                     </div>
 
@@ -112,11 +112,11 @@ export function EmailGeneratorPanel({
                       percent={(email.bounced / sent) * 100}
                     />
 
-                    <div className="mt-3 flex items-center justify-between rounded-lg border border-[#d6dade] bg-white px-3 py-2">
-                      <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+                    <div className="mt-3 flex items-center justify-between rounded-lg border border-border bg-card px-3 py-2">
+                      <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                         Meetings
                       </span>
-                      <b className="text-[18px] text-[#15171c]">
+                      <b className="text-[18px] text-foreground">
                         {email.meetings}
                       </b>
                     </div>
@@ -145,19 +145,19 @@ function Metric({
 
   return (
     <div className="mb-2 grid grid-cols-[64px_40px_1fr_46px] items-center gap-2">
-      <span className="text-[9px] font-bold uppercase tracking-[0.08em] text-[#959ca7]">
+      <span className="text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
         {label}
       </span>
-      <span className="text-right text-[13px] font-bold text-[#15171c]">
+      <span className="text-right text-[13px] font-bold text-foreground">
         {value}
       </span>
-      <span className="h-2 overflow-hidden rounded-full border border-[#d6dade] bg-[#eceef1]">
+      <span className="h-2 overflow-hidden rounded-full border border-border bg-muted">
         <span
-          className="block h-full bg-[#15171c]"
+          className="block h-full bg-foreground"
           style={{ width: `${safePercent}%` }}
         />
       </span>
-      <span className="text-right text-[11px] font-bold text-[#5b626d]">
+      <span className="text-right text-[11px] font-bold text-muted-foreground">
         {Math.round(safePercent)}%
       </span>
     </div>

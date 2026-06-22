@@ -23,18 +23,18 @@ function FunnelRow({ stage }: { stage: FunnelStage }) {
 
   return (
     <div className="grid grid-cols-[108px_1fr_50px] items-center gap-3">
-      <span className="text-[12.5px] text-[#5b626d]">{stage.name}</span>
+      <span className="text-[12.5px] text-muted-foreground">{stage.name}</span>
 
-      <div className="relative h-[26px] overflow-hidden rounded-md border border-[#d6dade] bg-[#eceef1]">
+      <div className="relative h-[26px] overflow-hidden rounded-md border border-border bg-muted">
         <div
-          className="absolute inset-y-0 left-0 flex items-center bg-[#15171c] pl-2.5 text-[11px] font-bold text-white transition-all duration-700"
+          className="absolute inset-y-0 left-0 flex items-center bg-foreground pl-2.5 text-[11px] font-bold text-background transition-all duration-700"
           style={{ width: `${width}%` }}
         >
           {stage.value}
         </div>
       </div>
 
-      <span className="text-right text-[10.5px] font-bold text-[#959ca7]">
+      <span className="text-right text-[10.5px] font-bold text-muted-foreground">
         {stage.conversion}
       </span>
     </div>

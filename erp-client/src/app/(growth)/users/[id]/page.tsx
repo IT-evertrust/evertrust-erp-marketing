@@ -7,10 +7,11 @@
 import { use } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRequirePermission } from '@/lib/permissions';
-import { AppShell } from '@/components/shell/app-shell';
 import { ProfileView } from '@/components/users/profile-view';
 import { Skeleton } from '@/components/ui/skeleton';
 
+// GrowthShell chrome comes from the (growth) route-group layout; this page renders
+// only its body content.
 export default function UserProfilePage({
   params,
 }: {
@@ -21,15 +22,8 @@ export default function UserProfilePage({
   const t = useTranslations('common');
   const { allowed, isLoading } = useRequirePermission('users:manage');
 
-  return (
-    <AppShell>
-      {isLoading ? (
-        <Skeleton className="h-64 w-full rounded-lg" />
-      ) : allowed ? (
-        <ProfileView userId={id} />
-      ) : (
-        <p className="text-sm text-muted-foreground">{t('redirecting')}</p>
-      )}
-    </AppShell>
-  );
+  if (isLoading) return <Skeleton className="h-64 w-full rounded-lg" />;
+  if (!allowed)
+    return <p className="text-sm text-muted-foreground">{t('redirecting')}</p>;
+  return <ProfileView userId={id} />;
 }

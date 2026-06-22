@@ -32,7 +32,7 @@ export function CampaignTable({
             <button
             type="button"
             onClick={onActionClick}
-            className="rounded-md border border-[#15171c] bg-[#15171c] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-white"
+            className="rounded-md border border-foreground bg-foreground px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-background"
             >
             {actionLabel}
             </button>
@@ -42,7 +42,7 @@ export function CampaignTable({
       {loading && campaigns.length === 0 ? (
         <Spinner label="Loading campaigns…" />
       ) : campaigns.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-[#d6dade] bg-[#f6f7f9] p-6 text-center text-[12.5px] font-bold text-[#959ca7]">
+        <div className="rounded-lg border border-dashed border-border bg-muted p-6 text-center text-[12.5px] font-bold text-muted-foreground">
           No campaigns yet. Click Aim to launch one.
         </div>
       ) : (
@@ -50,19 +50,19 @@ export function CampaignTable({
         <table className="w-full border-collapse">
           <thead>
             <tr>
-              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                 Campaign
               </th>
-              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                 Niche
               </th>
-              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                 Region
               </th>
-              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                 Companies
               </th>
-              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                 Status
               </th>
             </tr>
@@ -78,20 +78,20 @@ export function CampaignTable({
                   key={campaign.id}
                   onClick={() => onSelectCampaign(campaign.id)}
                   className={[
-                    'cursor-pointer border-t border-[#e4e7eb] hover:bg-[#f6f7f9]',
-                    selected ? 'bg-[#f6f7f9]' : '',
+                    'cursor-pointer border-t border-border hover:bg-muted',
+                    selected ? 'bg-muted' : '',
                   ].join(' ')}
                 >
-                  <td className="px-3 py-3 text-[12.5px] font-bold text-[#15171c]">
+                  <td className="px-3 py-3 text-[12.5px] font-bold text-foreground">
                     {campaign.name}
                   </td>
-                  <td className="px-3 py-3 text-[12.5px] text-[#5b626d]">
+                  <td className="px-3 py-3 text-[12.5px] text-muted-foreground">
                     {campaign.niche}
                   </td>
-                  <td className="px-3 py-3 text-[12.5px] text-[#5b626d]">
+                  <td className="px-3 py-3 text-[12.5px] text-muted-foreground">
                     {campaign.region}
                   </td>
-                  <td className="px-3 py-3 text-[12.5px] text-[#5b626d]">
+                  <td className="px-3 py-3 text-[12.5px] text-muted-foreground">
                     {campaign.companies}
                   </td>
                   <td className="px-3 py-3">

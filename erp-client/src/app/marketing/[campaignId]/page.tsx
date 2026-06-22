@@ -1,32 +1,8 @@
-'use client';
+import { redirect } from 'next/navigation';
 
-import { use } from 'react';
-import { useTranslations } from 'next-intl';
-// Client-rendered + dynamic: gated, browser-fetched data, nothing at build time.
-import { useRequirePermission } from '@/lib/permissions';
-import { AppShell } from '@/components/shell/app-shell';
-import { CampaignDetail } from '@/components/growth/campaign-detail';
-import { Skeleton } from '@/components/ui/skeleton';
-
-// In Next 15 route params arrive as a Promise; unwrap with React.use().
-export default function CampaignDetailPage({
-  params,
-}: {
-  params: Promise<{ campaignId: string }>;
-}) {
-  const { campaignId } = use(params);
-  const t = useTranslations('common');
-  const { allowed, isLoading } = useRequirePermission('campaigns:read');
-
-  return (
-    <AppShell>
-      {isLoading ? (
-        <Skeleton className="mx-auto h-96 max-w-5xl rounded-lg" />
-      ) : allowed ? (
-        <CampaignDetail id={campaignId} />
-      ) : (
-        <p className="text-sm text-muted-foreground">{t('redirecting')}</p>
-      )}
-    </AppShell>
-  );
+// Marketing is folded into Reach (step 1 of R.E.A.N.). Per-campaign detail pages
+// are kept as a thin permanent redirect so existing links/bookmarks still land on
+// Reach. The old <CampaignDetail> lives in components/growth/ if needed.
+export default function CampaignDetailPage() {
+  redirect('/reach');
 }

@@ -61,13 +61,13 @@ export function NewCampaignModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-5">
-      <div className="w-full max-w-[560px] overflow-hidden rounded-[12px] border border-[#d6dade] bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-[#e4e7eb] px-5 py-4">
+      <div className="w-full max-w-[560px] overflow-hidden rounded-[12px] border border-border bg-card shadow-xl">
+        <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <div>
-            <h2 className="text-[14px] font-bold text-[#15171c]">
+            <h2 className="text-[14px] font-bold text-foreground">
               New Reach Aim
             </h2>
-            <p className="mt-1 text-[11px] text-[#959ca7]">
+            <p className="mt-1 text-[11px] text-muted-foreground">
               Define the campaign target before scraping leads.
             </p>
           </div>
@@ -75,7 +75,7 @@ export function NewCampaignModal({
           <button
             type="button"
             onClick={onClose}
-            className="text-[12px] font-bold uppercase tracking-[0.08em] text-[#959ca7] hover:text-[#15171c]"
+            className="text-[12px] font-bold uppercase tracking-[0.08em] text-muted-foreground hover:text-foreground"
           >
             Close
           </button>
@@ -88,7 +88,7 @@ export function NewCampaignModal({
                 value={values.name}
                 onChange={(event) => updateValue('name', event.target.value)}
                 placeholder="e.g. Housing Co-ops ≥ 500 units · Bavaria"
-                className="w-full rounded-lg border border-[#d6dade] bg-[#f6f7f9] px-3 py-2.5 text-[13px] text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-[13px] text-foreground outline-none focus:border-foreground focus:bg-card"
               />
             </Field>
 
@@ -98,7 +98,7 @@ export function NewCampaignModal({
                   value={values.niche}
                   onChange={(event) => updateValue('niche', event.target.value)}
                   placeholder="e.g. Housing, Property Mgmt, Installer"
-                  className="w-full rounded-lg border border-[#d6dade] bg-[#f6f7f9] px-3 py-2.5 text-[13px] text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-[13px] text-foreground outline-none focus:border-foreground focus:bg-card"
                 />
               </Field>
 
@@ -107,7 +107,7 @@ export function NewCampaignModal({
                   value={values.region}
                   onChange={(event) => updateValue('region', event.target.value)}
                   placeholder="e.g. Bavaria, NRW, Nationwide DE"
-                  className="w-full rounded-lg border border-[#d6dade] bg-[#f6f7f9] px-3 py-2.5 text-[13px] text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-[13px] text-foreground outline-none focus:border-foreground focus:bg-card"
                 />
               </Field>
             </div>
@@ -117,7 +117,7 @@ export function NewCampaignModal({
                 value={values.segment}
                 onChange={(event) => updateValue('segment', event.target.value)}
                 placeholder="e.g. Portfolio holders, public housing, utilities"
-                className="w-full rounded-lg border border-[#d6dade] bg-[#f6f7f9] px-3 py-2.5 text-[13px] text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-[13px] text-foreground outline-none focus:border-foreground focus:bg-card"
               />
             </Field>
 
@@ -126,7 +126,7 @@ export function NewCampaignModal({
                 value={values.source}
                 onChange={(event) => updateValue('source', event.target.value)}
                 placeholder="e.g. Company DB, iBau, LinkedIn"
-                className="w-full rounded-lg border border-[#d6dade] bg-[#f6f7f9] px-3 py-2.5 text-[13px] text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-[13px] text-foreground outline-none focus:border-foreground focus:bg-card"
               />
             </Field>
 
@@ -135,17 +135,17 @@ export function NewCampaignModal({
                 value={values.sender}
                 onChange={(event) => updateValue('sender', event.target.value)}
                 placeholder="info or hanna"
-                className="w-full rounded-lg border border-[#d6dade] bg-[#f6f7f9] px-3 py-2.5 text-[13px] text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-[13px] text-foreground outline-none focus:border-foreground focus:bg-card"
               />
             </Field>
           </div>
 
-          <div className="flex justify-end gap-2 border-t border-[#e4e7eb] px-5 py-4">
+          <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
             <button
               type="button"
               onClick={onClose}
               disabled={submitting}
-              className="rounded-md border border-[#c2c7ce] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#15171c] disabled:opacity-50"
+              className="rounded-md border border-border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-foreground disabled:opacity-50"
             >
               Cancel
             </button>
@@ -153,7 +153,7 @@ export function NewCampaignModal({
             <button
               type="submit"
               disabled={submitting}
-              className="rounded-md border border-[#15171c] bg-[#15171c] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-white disabled:opacity-60"
+              className="rounded-md border border-foreground bg-foreground px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-background disabled:opacity-60"
             >
               {submitting ? 'Aiming…' : 'Start Aim'}
             </button>
@@ -173,7 +173,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-[#959ca7]">
+      <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
         {label}
       </div>
       {children}

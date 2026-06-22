@@ -19,18 +19,11 @@ import {
   useWorkflowConfig,
 } from '@/hooks/use-arsenal';
 import { ApiError, api } from '@/lib/api';
+import { Settings2 } from 'lucide-react';
 import { Can } from '@/components/auth/can';
-import { PageHeader } from '@/components/common/page-header';
+import { GrowthCard } from '@/modules/(growth)/shared';
 import { ToneBadge } from '@/components/rean/tone-badge';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -59,8 +52,18 @@ function hasCalendarScope(scopes: string[]): boolean {
   );
 }
 
-// A card matching the mockup's "card-head" layout: title left, an optional action
-// (e.g. a Connect button) flush right, then the body.
+// Shared eyebrow label — uppercase, tracked, muted. Matches the GrowthShell idiom.
+function Eyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+      {children}
+    </span>
+  );
+}
+
+// A settings card rendered in the GrowthShell idiom: GrowthCard gives the
+// rounded-[10px] bordered surface + title/hint head; the optional action (e.g. a
+// Connect button) sits in the head's hint slot, the description leads the body.
 function SettingsCard({
   title,
   description,
@@ -75,14 +78,14 @@ function SettingsCard({
   children: React.ReactNode;
 }) {
   return (
-    <Card className={className}>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        {description ? <CardDescription>{description}</CardDescription> : null}
-        {action ? <CardAction>{action}</CardAction> : null}
-      </CardHeader>
-      <CardContent className="flex flex-col gap-6">{children}</CardContent>
-    </Card>
+    <GrowthCard title={title} hint={action} className={className}>
+      <div className="flex flex-col gap-6">
+        {description ? (
+          <p className="text-xs text-muted-foreground">{description}</p>
+        ) : null}
+        {children}
+      </div>
+    </GrowthCard>
   );
 }
 
@@ -225,7 +228,7 @@ function GoogleWorkspaceCard() {
             {connectButton}
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border">
+          <div className="overflow-x-auto rounded-[10px] border border-sidebar-border">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -446,7 +449,9 @@ function AiEngineCard() {
         <>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="ai-model">{t('config.ai.modelLabel')}</Label>
+              <Label htmlFor="ai-model">
+                <Eyebrow>{t('config.ai.modelLabel')}</Eyebrow>
+              </Label>
               <Select value={model} onValueChange={setModel}>
                 <SelectTrigger id="ai-model">
                   <SelectValue placeholder={t('config.ai.modelPlaceholder')} />
@@ -464,7 +469,9 @@ function AiEngineCard() {
               </Select>
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="ai-gateway">{t('config.ai.gatewayLabel')}</Label>
+              <Label htmlFor="ai-gateway">
+                <Eyebrow>{t('config.ai.gatewayLabel')}</Eyebrow>
+              </Label>
               <Input
                 id="ai-gateway"
                 autoComplete="off"
@@ -480,17 +487,15 @@ function AiEngineCard() {
               (org value ?? env default). Separate from the Claude model above, which
               powers the ERP's own AI features. The API key is never edited here; it
               stays in the agents' env. */}
-          <div className="border-t pt-4">
-            <p className="text-sm font-medium">
-              {t('config.ai.agentSectionTitle')}
-            </p>
-            <p className="mb-3 text-xs text-muted-foreground">
+          <div className="border-t border-sidebar-border pt-4">
+            <Eyebrow>{t('config.ai.agentSectionTitle')}</Eyebrow>
+            <p className="mb-3 mt-1.5 text-xs text-muted-foreground">
               {t('config.ai.agentSectionHint')}
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="agent-gateway">
-                  {t('config.ai.agentGatewayLabel')}
+                  <Eyebrow>{t('config.ai.agentGatewayLabel')}</Eyebrow>
                 </Label>
                 <Input
                   id="agent-gateway"
@@ -503,7 +508,7 @@ function AiEngineCard() {
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="agent-model">
-                  {t('config.ai.agentModelLabel')}
+                  <Eyebrow>{t('config.ai.agentModelLabel')}</Eyebrow>
                 </Label>
                 <Input
                   id="agent-model"
@@ -587,7 +592,7 @@ function LeadScraperCard() {
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="lead-target">
-                {t('config.leadScraper.leadTargetLabel')}
+                <Eyebrow>{t('config.leadScraper.leadTargetLabel')}</Eyebrow>
               </Label>
               <Input
                 id="lead-target"
@@ -606,7 +611,7 @@ function LeadScraperCard() {
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="max-queries">
-                {t('config.leadScraper.maxQueriesLabel')}
+                <Eyebrow>{t('config.leadScraper.maxQueriesLabel')}</Eyebrow>
               </Label>
               <Input
                 id="max-queries"
@@ -625,7 +630,7 @@ function LeadScraperCard() {
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="min-score">
-                {t('config.leadScraper.minScoreLabel')}
+                <Eyebrow>{t('config.leadScraper.minScoreLabel')}</Eyebrow>
               </Label>
               <Input
                 id="min-score"
@@ -708,7 +713,9 @@ function SalesCalendarCard() {
         <>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="sales-tz-primary">{t('config.calendar.primaryLabel')}</Label>
+              <Label htmlFor="sales-tz-primary">
+                <Eyebrow>{t('config.calendar.primaryLabel')}</Eyebrow>
+              </Label>
               <Input
                 id="sales-tz-primary"
                 autoComplete="off"
@@ -719,7 +726,9 @@ function SalesCalendarCard() {
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="sales-tz-secondary">{t('config.calendar.secondaryLabel')}</Label>
+              <Label htmlFor="sales-tz-secondary">
+                <Eyebrow>{t('config.calendar.secondaryLabel')}</Eyebrow>
+              </Label>
               <Input
                 id="sales-tz-secondary"
                 autoComplete="off"
@@ -751,16 +760,26 @@ export function ConfigurationSettings() {
   const t = useTranslations('settings');
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
-        title={t('config.header.title')}
-        description={t('config.header.description')}
-      />
-      <GoogleWorkspaceCard />
-      <OtherIntegrationsCard />
-      <AiEngineCard />
-      <LeadScraperCard />
-      <SalesCalendarCard />
-    </div>
+    <main className="px-6 py-5 duration-300 animate-in fade-in">
+      <header className="mb-5 flex items-center gap-3 border-b border-sidebar-border pb-5">
+        <Settings2 className="h-7 w-7 stroke-[2] text-foreground" />
+        <div>
+          <h1 className="text-[30px] font-bold leading-none tracking-[-0.02em] text-foreground">
+            {t('config.header.title')}
+          </h1>
+          <div className="mt-2">
+            <Eyebrow>{t('config.header.description')}</Eyebrow>
+          </div>
+        </div>
+      </header>
+
+      <div className="flex flex-col gap-4">
+        <GoogleWorkspaceCard />
+        <OtherIntegrationsCard />
+        <AiEngineCard />
+        <LeadScraperCard />
+        <SalesCalendarCard />
+      </div>
+    </main>
   );
 }

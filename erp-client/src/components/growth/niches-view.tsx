@@ -17,7 +17,6 @@ import {
   useRenameIndustry,
   useRenameNiche,
 } from '@/hooks/use-industries';
-import { PageHeader } from '@/components/common/page-header';
 import { StatTile } from '@/components/common/stat-tile';
 import { EmptyState } from '@/components/common/empty-state';
 import { ConfirmButton } from '@/components/common/confirm-button';
@@ -271,23 +270,27 @@ export function NichesView() {
   const isLoading = nichesQuery.isLoading || industriesQuery.isLoading;
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
-        title={t('header.title')}
-        description={t('header.description')}
-        actions={
-          <>
-            <Button variant="outline" onClick={() => setNicheCreateOpen(true)}>
-              <Plus />
-              {t('niche.new')}
-            </Button>
-            <Button onClick={() => setCreateOpen(true)}>
-              <Plus />
-              {t('industry.new')}
-            </Button>
-          </>
-        }
-      />
+    <main className="flex flex-col gap-6 px-6 py-5 duration-300 animate-in fade-in">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-sidebar-border pb-5">
+        <div className="min-w-0">
+          <h1 className="text-[22px] font-bold leading-none tracking-[-0.01em] text-foreground">
+            {t('header.title')}
+          </h1>
+          <div className="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+            {t('header.description')}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setNicheCreateOpen(true)}>
+            <Plus />
+            {t('niche.new')}
+          </Button>
+          <Button onClick={() => setCreateOpen(true)}>
+            <Plus />
+            {t('industry.new')}
+          </Button>
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <StatTile
@@ -545,7 +548,7 @@ export function NichesView() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </main>
   );
 }
 
@@ -580,9 +583,9 @@ function IndustrySection({
   const count = industry?.nicheCount ?? niches.length;
 
   return (
-    <section className="flex flex-col gap-2">
+    <section className="flex flex-col gap-2.5">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-sm font-semibold tracking-tight">
+        <h2 className="text-[13.5px] font-bold leading-none text-foreground">
           {industry ? industry.name : t('unassigned')}
         </h2>
         <Badge variant="secondary">{t('nicheCount', { count })}</Badge>
@@ -610,11 +613,11 @@ function IndustrySection({
       </div>
 
       {niches.length === 0 ? (
-        <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+        <p className="rounded-[10px] border border-dashed border-sidebar-border px-4 py-6 text-center text-sm text-muted-foreground">
           {t('empty.title')}
         </p>
       ) : (
-        <div className="overflow-hidden rounded-lg border">
+        <div className="overflow-hidden rounded-[10px] border border-sidebar-border bg-card">
           <Table className="table-fixed">
             <TableHeader>
               <TableRow>

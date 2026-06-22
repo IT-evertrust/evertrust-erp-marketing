@@ -34,7 +34,7 @@ export function SequenceSenderPanel({
             type="button"
             onClick={onRunBazooka}
             disabled={bazookaRunning}
-            className="rounded-md border border-[#15171c] bg-[#15171c] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-white disabled:opacity-60"
+            className="rounded-md border border-foreground bg-foreground px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-background disabled:opacity-60"
           >
             {bazookaRunning ? 'Running…' : 'Run Bazooka'}
           </button>
@@ -43,34 +43,34 @@ export function SequenceSenderPanel({
         <table className="w-full border-collapse">
           <thead>
             <tr>
-              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                 Campaign
               </th>
-              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                 Niche / Region
               </th>
-              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                 Round
               </th>
-              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                 Next Send
               </th>
-              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+              <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                 Status
               </th>
-              <th className="px-3 pb-3 text-right text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+              <th className="px-3 pb-3 text-right text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                 Sent
               </th>
-              <th className="px-3 pb-3 text-right text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+              <th className="px-3 pb-3 text-right text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                 Opened
               </th>
-              <th className="px-3 pb-3 text-right text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+              <th className="px-3 pb-3 text-right text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                 Replied
               </th>
-              <th className="px-3 pb-3 text-right text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+              <th className="px-3 pb-3 text-right text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                 Meetings
               </th>
-              <th className="px-3 pb-3 text-right text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+              <th className="px-3 pb-3 text-right text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                 Bazooka
               </th>
             </tr>
@@ -80,18 +80,18 @@ export function SequenceSenderPanel({
             {schedule.map((item) => (
               <tr
                 key={item.id}
-                className="border-t border-[#e4e7eb] hover:bg-[#f6f7f9]"
+                className="border-t border-border hover:bg-muted"
               >
-                <td className="px-3 py-3 text-[12.5px] font-bold text-[#15171c]">
+                <td className="px-3 py-3 text-[12.5px] font-bold text-foreground">
                   {item.campaign}
                 </td>
-                <td className="px-3 py-3 text-[12.5px] text-[#5b626d]">
+                <td className="px-3 py-3 text-[12.5px] text-muted-foreground">
                   {item.nicheRegion}
                 </td>
-                <td className="px-3 py-3 text-[12.5px] text-[#5b626d]">
+                <td className="px-3 py-3 text-[12.5px] text-muted-foreground">
                   {item.round}
                 </td>
-                <td className="px-3 py-3 text-[12.5px] text-[#5b626d]">
+                <td className="px-3 py-3 text-[12.5px] text-muted-foreground">
                   {item.nextSend}
                 </td>
                 <td className="px-3 py-3">
@@ -99,16 +99,16 @@ export function SequenceSenderPanel({
                     {item.status}
                   </StatusPill>
                 </td>
-                <td className="px-3 py-3 text-right text-[12.5px] font-bold text-[#15171c]">
+                <td className="px-3 py-3 text-right text-[12.5px] font-bold text-foreground">
                   {item.sent}
                 </td>
-                <td className="px-3 py-3 text-right text-[12.5px] text-[#5b626d]">
+                <td className="px-3 py-3 text-right text-[12.5px] text-muted-foreground">
                   {item.opened}
                 </td>
-                <td className="px-3 py-3 text-right text-[12.5px] text-[#5b626d]">
+                <td className="px-3 py-3 text-right text-[12.5px] text-muted-foreground">
                   {item.replied}
                 </td>
-                <td className="px-3 py-3 text-right text-[12.5px] text-[#5b626d]">
+                <td className="px-3 py-3 text-right text-[12.5px] text-muted-foreground">
                   {item.meetings}
                 </td>
                 <td className="px-3 py-3 text-right">
@@ -118,8 +118,8 @@ export function SequenceSenderPanel({
                     className={[
                       'rounded-full border px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.06em] transition-colors',
                       item.autoSend
-                        ? 'border-[#15171c] bg-[#15171c] text-white'
-                        : 'border-[#c2c7ce] text-[#5b626d] hover:border-[#15171c] hover:text-[#15171c]',
+                        ? 'border-foreground bg-foreground text-background'
+                        : 'border-border text-muted-foreground hover:border-foreground hover:text-foreground',
                     ].join(' ')}
                   >
                     {item.autoSend ? 'On' : 'Off'}
@@ -133,8 +133,8 @@ export function SequenceSenderPanel({
 
       <GrowthCard title="Emails sent per day" hint="PAST & PROJECTED · LIMIT 120 / DAY">
         <div className="relative h-[220px]">
-          <div className="absolute left-0 right-0 top-[28px] border-t border-dashed border-[#c2c7ce]">
-            <span className="absolute right-0 top-[-8px] bg-white px-2 text-[8px] font-bold text-[#959ca7]">
+          <div className="absolute left-0 right-0 top-[28px] border-t border-dashed border-border">
+            <span className="absolute right-0 top-[-8px] bg-card px-2 text-[8px] font-bold text-muted-foreground">
               120 LIMIT
             </span>
           </div>
@@ -150,21 +150,21 @@ export function SequenceSenderPanel({
                   key={day.date}
                   className="flex h-full min-w-[46px] flex-col items-center justify-end"
                 >
-                  <span className="mb-1 text-[9px] font-bold text-[#5b626d]">
+                  <span className="mb-1 text-[9px] font-bold text-muted-foreground">
                     {day.value}
                   </span>
                   <div
                     className={[
                       'w-9 rounded-t',
                       isFuture
-                        ? 'border border-dashed border-[#c2c7ce] bg-transparent'
+                        ? 'border border-dashed border-border bg-transparent'
                         : isToday
-                          ? 'bg-[#959ca7]'
-                          : 'bg-[#15171c]',
+                          ? 'bg-muted-foreground'
+                          : 'bg-foreground',
                     ].join(' ')}
                     style={{ height: `${height}%` }}
                   />
-                  <span className="mt-1 text-[8.5px] font-bold text-[#959ca7]">
+                  <span className="mt-1 text-[8.5px] font-bold text-muted-foreground">
                     {day.date}
                   </span>
                 </div>
@@ -173,7 +173,7 @@ export function SequenceSenderPanel({
           </div>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-4 text-[9px] font-bold uppercase tracking-[0.06em] text-[#959ca7]">
+        <div className="mt-3 flex flex-wrap gap-4 text-[9px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
           <span>■ Sent</span>
           <span>■ Today</span>
           <span>□ Projected</span>

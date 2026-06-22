@@ -43,11 +43,11 @@ export function AfterSalesAnalysisPanel({
 }: AfterSalesAnalysisPanelProps) {
   return (
     <GrowthCard title="After-Sales Analysis">
-      <div className="grid min-h-[560px] grid-cols-[320px_1fr] overflow-hidden rounded-[10px] border border-[#e4e7eb]">
-        <aside className="border-r border-[#e4e7eb]">
-          <div className="border-b border-[#e4e7eb] p-3.5">
+      <div className="grid min-h-[560px] grid-cols-[320px_1fr] overflow-hidden rounded-[10px] border border-border">
+        <aside className="border-r border-border">
+          <div className="border-b border-border p-3.5">
             <div className="flex items-center justify-between gap-2">
-              <span className="rounded-full border border-[#15171c] bg-[#15171c] px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.06em] text-white">
+              <span className="rounded-full border border-foreground bg-foreground px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.06em] text-background">
                 Recent calls · {analyses.length}
               </span>
               <button
@@ -55,7 +55,7 @@ export function AfterSalesAnalysisPanel({
                 onClick={onSyncReadAi}
                 disabled={syncingReadAi}
                 title="Pull the meeting list + summaries from Read AI's report emails"
-                className="rounded-md border border-[#15171c] bg-white px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#15171c] hover:bg-[#f6f7f9] disabled:opacity-50"
+                className="rounded-md border border-foreground bg-card px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.06em] text-foreground hover:bg-muted disabled:opacity-50"
               >
                 {syncingReadAi ? 'Syncing…' : 'Sync Read AI'}
               </button>
@@ -67,14 +67,14 @@ export function AfterSalesAnalysisPanel({
                 value={query}
                 onChange={(event) => onQuery(event.target.value)}
                 placeholder="Search by company or contact…"
-                className="w-full rounded-[8px] border border-[#e4e7eb] bg-[#f6f7f9] px-2.5 py-1.5 text-[12px] text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
+                className="w-full rounded-[8px] border border-border bg-muted px-2.5 py-1.5 text-[12px] text-foreground outline-none focus:border-foreground focus:bg-card"
               />
               <div className="flex items-center gap-2">
                 <input
                   type="date"
                   value={date}
                   onChange={(event) => onDate(event.target.value)}
-                  className="flex-1 rounded-[8px] border border-[#e4e7eb] bg-[#f6f7f9] px-2.5 py-1.5 text-[12px] text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
+                  className="flex-1 rounded-[8px] border border-border bg-muted px-2.5 py-1.5 text-[12px] text-foreground outline-none focus:border-foreground focus:bg-card"
                 />
                 {query || date ? (
                   <button
@@ -83,7 +83,7 @@ export function AfterSalesAnalysisPanel({
                       onQuery('');
                       onDate('');
                     }}
-                    className="rounded-[8px] border border-[#e4e7eb] bg-white px-2.5 py-1.5 text-[11px] font-bold text-[#5b626d] hover:bg-[#f6f7f9]"
+                    className="rounded-[8px] border border-border bg-card px-2.5 py-1.5 text-[11px] font-bold text-muted-foreground hover:bg-muted"
                   >
                     Clear
                   </button>
@@ -93,11 +93,11 @@ export function AfterSalesAnalysisPanel({
           </div>
 
           {loading && analyses.length === 0 ? (
-            <div className="p-6 text-center text-[12.5px] font-bold text-[#959ca7]">
+            <div className="p-6 text-center text-[12.5px] font-bold text-muted-foreground">
               Loading calls…
             </div>
           ) : analyses.length === 0 ? (
-            <div className="p-6 text-center text-[12.5px] font-bold text-[#959ca7]">
+            <div className="p-6 text-center text-[12.5px] font-bold text-muted-foreground">
               No analyzable calls yet.
             </div>
           ) : (
@@ -110,22 +110,22 @@ export function AfterSalesAnalysisPanel({
                   type="button"
                   onClick={() => onSelectAnalysis(analysis.id)}
                   className={[
-                    'block w-full border-b border-[#e4e7eb] px-4 py-3 text-left hover:bg-[#f6f7f9]',
+                    'block w-full border-b border-border px-4 py-3 text-left hover:bg-muted',
                     selected
-                      ? 'bg-[#f6f7f9] shadow-[inset_2px_0_0_#15171c]'
-                      : 'bg-white',
+                      ? 'bg-sidebar-accent shadow-[inset_2px_0_0_var(--foreground)]'
+                      : 'bg-card',
                   ].join(' ')}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-[13px] font-bold text-[#15171c]">
+                    <span className="truncate text-[13px] font-bold text-foreground">
                       {analysis.company}
                     </span>
-                    <span className="shrink-0 text-[10px] text-[#959ca7]">
+                    <span className="shrink-0 text-[10px] text-muted-foreground">
                       {analysis.date}
                     </span>
                   </div>
 
-                  <div className="mt-1 text-[11px] text-[#959ca7]">
+                  <div className="mt-1 text-[11px] text-muted-foreground">
                     {analysis.analyzed
                       ? `${analysis.duration} · ${analysis.sentiment} sentiment`
                       : 'Not analyzed yet'}
@@ -147,7 +147,7 @@ export function AfterSalesAnalysisPanel({
               onAnalyze={onAnalyze}
             />
           ) : (
-            <div className="rounded-lg border border-dashed border-[#d6dade] bg-[#f6f7f9] px-6 py-8 text-center text-[12.5px] font-bold text-[#959ca7]">
+            <div className="rounded-lg border border-dashed border-border bg-muted px-6 py-8 text-center text-[12.5px] font-bold text-muted-foreground">
               Select a call to view analysis.
             </div>
           )}
@@ -176,29 +176,29 @@ function AnalysisDetail({
     <div className="flex flex-col gap-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[15px] font-bold text-[#15171c]">
+          <div className="text-[15px] font-bold text-foreground">
             {analysis.company} · Call Analysis
           </div>
-          <div className="mt-1 text-[11px] text-[#959ca7]">
+          <div className="mt-1 text-[11px] text-muted-foreground">
             {analysis.duration} · {analysis.contact} · {analysis.date}
           </div>
         </div>
 
-        <span className="inline-flex items-center gap-2 rounded-full border border-[#d6dade] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-[#5b626d]">
+        <span className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
           <LiveDot />
           Read AI
         </span>
       </div>
 
       {/* Sales-coach persona selector + run */}
-      <div className="flex flex-wrap items-center gap-2 rounded-[10px] border border-[#e4e7eb] bg-[#f6f7f9] p-3">
-        <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+      <div className="flex flex-wrap items-center gap-2 rounded-[10px] border border-border bg-muted p-3">
+        <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
           Sales Coach
         </span>
         <select
           value={selectedPersona}
           onChange={(event) => onSelectPersona(event.target.value)}
-          className="rounded-[8px] border border-[#e4e7eb] bg-white px-3 py-1.5 text-[12.5px] text-[#15171c]"
+          className="rounded-[8px] border border-border bg-card px-3 py-1.5 text-[12.5px] text-foreground"
         >
           {personas.map((persona) => (
             <option key={persona.id} value={persona.name}>
@@ -210,19 +210,19 @@ function AnalysisDetail({
           type="button"
           onClick={onAnalyze}
           disabled={analyzing || !analysis.hasTranscript}
-          className="rounded-md border border-[#15171c] bg-[#15171c] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-white disabled:opacity-50"
+          className="rounded-md border border-foreground bg-foreground px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-background disabled:opacity-50"
         >
           {analyzing ? 'Analyzing…' : analysis.analyzed ? 'Re-analyze' : 'Analyze'}
         </button>
         {analysis.persona ? (
-          <span className="text-[11px] text-[#959ca7]">
-            Lens: <b className="text-[#5b626d]">{analysis.persona}</b>
+          <span className="text-[11px] text-muted-foreground">
+            Lens: <b className="text-foreground">{analysis.persona}</b>
           </span>
         ) : null}
       </div>
 
       {!analysis.analyzed ? (
-        <div className="rounded-lg border border-dashed border-[#d6dade] bg-[#f6f7f9] px-6 py-8 text-center text-[12.5px] font-bold text-[#959ca7]">
+        <div className="rounded-lg border border-dashed border-border bg-muted px-6 py-8 text-center text-[12.5px] font-bold text-muted-foreground">
           {analysis.hasTranscript
             ? `Run the ${selectedPersona || 'sales coach'} analysis to score this call.`
             : 'No transcript stored for this call.'}
@@ -249,7 +249,7 @@ function AnalysisDetail({
 
           <section>
             <SectionTitle>Summary</SectionTitle>
-            <p className="text-[13px] leading-relaxed text-[#5b626d]">{analysis.summary}</p>
+            <p className="text-[13px] leading-relaxed text-muted-foreground">{analysis.summary}</p>
           </section>
 
           {analysis.performance && analysis.performance.length > 0 ? (
@@ -270,19 +270,19 @@ function AnalysisDetail({
                 {analysis.technique.map((item) => (
                   <div
                     key={item.label}
-                    className="rounded-[10px] border border-[#e4e7eb] bg-white p-3"
+                    className="rounded-[10px] border border-border bg-card p-3"
                   >
                     <div className="mb-1.5 flex items-center justify-between">
-                      <span className="text-[12.5px] font-bold text-[#15171c]">
+                      <span className="text-[12.5px] font-bold text-foreground">
                         {item.label}
                       </span>
-                      <span className="text-[12.5px] font-bold text-[#5b626d]">
+                      <span className="text-[12.5px] font-bold text-muted-foreground">
                         {item.score ?? '—'}/10
                       </span>
                     </div>
                     <ScoreBar label="" score={item.score} max={10} compact />
                     {item.recommendation ? (
-                      <p className="mt-2 text-[11.5px] leading-relaxed text-[#5b626d]">
+                      <p className="mt-2 text-[11.5px] leading-relaxed text-muted-foreground">
                         › {item.recommendation}
                       </p>
                     ) : null}
@@ -319,12 +319,12 @@ function AnalysisDetail({
                 {analysis.actionItems.map((item) => (
                   <label
                     key={item.id}
-                    className="flex items-center gap-3 border-b border-dashed border-[#d6dade] py-2.5 text-[12.5px] text-[#5b626d]"
+                    className="flex items-center gap-3 border-b border-dashed border-border py-2.5 text-[12.5px] text-muted-foreground"
                   >
                     <input
                       type="checkbox"
                       defaultChecked={item.done}
-                      className="h-4 w-4 accent-[#15171c]"
+                      className="h-4 w-4 accent-foreground"
                     />
                     {item.label}
                   </label>
@@ -348,13 +348,13 @@ function MetricCard({
   percent: number;
 }) {
   return (
-    <div className="rounded-[10px] border border-[#e4e7eb] bg-white p-3.5">
-      <div className="text-[22px] font-bold text-[#15171c]">{value}</div>
-      <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.08em] text-[#959ca7]">
+    <div className="rounded-[10px] border border-border bg-card p-3.5">
+      <div className="text-[22px] font-bold text-foreground">{value}</div>
+      <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
         {label}
       </div>
-      <div className="mt-2 h-2 overflow-hidden rounded-full border border-[#d6dade] bg-[#eceef1]">
-        <span className="block h-full bg-[#15171c]" style={{ width: `${percent}%` }} />
+      <div className="mt-2 h-2 overflow-hidden rounded-full border border-border bg-muted">
+        <span className="block h-full bg-foreground" style={{ width: `${percent}%` }} />
       </div>
     </div>
   );
@@ -376,19 +376,19 @@ function ScoreBar({
     <div>
       {label ? (
         <div className="mb-1 flex items-center justify-between text-[11.5px]">
-          <span className="text-[#5b626d]">{label}</span>
-          <b className="text-[#15171c]">
+          <span className="text-muted-foreground">{label}</span>
+          <b className="text-foreground">
             {score ?? '—'}/{max}
           </b>
         </div>
       ) : null}
       <div
         className={[
-          'overflow-hidden rounded-full border border-[#d6dade] bg-[#eceef1]',
+          'overflow-hidden rounded-full border border-border bg-muted',
           compact ? 'h-1.5' : 'h-2',
         ].join(' ')}
       >
-        <span className="block h-full bg-[#15171c]" style={{ width: `${pct}%` }} />
+        <span className="block h-full bg-foreground" style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
@@ -409,7 +409,7 @@ function bandPercent(b: CallAnalysis['closeProbability']): number {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[#959ca7]">
+    <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
       {children}
     </h3>
   );
@@ -417,8 +417,8 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 function Bullet({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex gap-2 py-1.5 text-[12.5px] text-[#5b626d]">
-      <span className="font-bold text-[#15171c]">›</span>
+    <div className="flex gap-2 py-1.5 text-[12.5px] text-muted-foreground">
+      <span className="font-bold text-foreground">›</span>
       <span>{children}</span>
     </div>
   );
