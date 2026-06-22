@@ -1,9 +1,14 @@
 'use client';
 
+// The Meeting Booker tab mounts main's rich Google Calendar suite. It is fully
+// self-contained — it owns its own calendar read (useCalendarUpcoming /
+// useCalendarFreeSlots) and takes no props — so we render it directly instead of
+// rework's mock MeetingBookerPanel. Research + After-sales stay on rework's panels.
+import { Calendar as CalendarBooker } from '@/components/activate/calendar/calendar';
+
 import { ActivateTabs } from '../components/activate-tabs';
 import { AfterSalesAnalysisPanel } from '../components/aftersales-analysis-panel';
 import { CompanyResearchPanel } from '../components/company-research-panel';
-import { MeetingBookerPanel } from '../components/meeting-booker-panel';
 import { useActivate } from '../hooks/use-activate';
 
 export function ActivatePage() {
@@ -16,16 +21,7 @@ export function ActivatePage() {
         onChange={activate.setActiveTab}
       />
 
-      {activate.activeTab === 'booker' ? (
-        <MeetingBookerPanel
-          accounts={activate.accounts}
-          accountId={activate.accountId}
-          onSelectAccount={activate.setAccountId}
-          loadingAccounts={activate.loadingAccounts}
-          meetings={activate.meetings}
-          loadingMeetings={activate.loadingMeetings}
-        />
-      ) : null}
+      {activate.activeTab === 'booker' ? <CalendarBooker /> : null}
 
       {activate.activeTab === 'research' ? (
         <CompanyResearchPanel

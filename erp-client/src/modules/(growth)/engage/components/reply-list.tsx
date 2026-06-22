@@ -1,9 +1,14 @@
+import type { CategoryFilter } from '../hooks/use-engage';
 import type { CampaignReply } from '../types';
+import { Spinner } from './spinner';
 
 type ReplyListProps = {
   replies: CampaignReply[];
   selectedReplyId: string;
   onSelectReply: (replyId: string) => void;
+  categoryFilter: CategoryFilter;
+  onSelectCategory: (category: CategoryFilter) => void;
+  loading?: boolean;
   counts: {
     all: number;
     interested: number;
@@ -16,18 +21,43 @@ export function ReplyList({
   replies,
   selectedReplyId,
   onSelectReply,
+  categoryFilter,
+  onSelectCategory,
+  loading = false,
   counts,
 }: ReplyListProps) {
   return (
     <aside className="border-r border-[#e4e7eb]">
       <div className="flex flex-wrap gap-1.5 border-b border-[#e4e7eb] p-3.5">
-        <FilterChip active>All · {counts.all}</FilterChip>
-        <FilterChip>Interested · {counts.interested}</FilterChip>
-        <FilterChip>Unsure · {counts.unsure}</FilterChip>
-        <FilterChip>Not Interested · {counts.notInterested}</FilterChip>
+        <FilterChip
+          active={categoryFilter === 'ALL'}
+          onClick={() => onSelectCategory('ALL')}
+        >
+          All · {counts.all}
+        </FilterChip>
+        <FilterChip
+          active={categoryFilter === 'INTERESTED'}
+          onClick={() => onSelectCategory('INTERESTED')}
+        >
+          Interested · {counts.interested}
+        </FilterChip>
+        <FilterChip
+          active={categoryFilter === 'UNSURE'}
+          onClick={() => onSelectCategory('UNSURE')}
+        >
+          Unsure · {counts.unsure}
+        </FilterChip>
+        <FilterChip
+          active={categoryFilter === 'NOT INTERESTED'}
+          onClick={() => onSelectCategory('NOT INTERESTED')}
+        >
+          Not Interested · {counts.notInterested}
+        </FilterChip>
       </div>
 
-      {replies.length === 0 ? (
+      {loading ? (
+        <Spinner label="Loading replies…" />
+      ) : replies.length === 0 ? (
         <div className="p-6 text-center text-[12.5px] font-bold text-[#959ca7]">
           No replies yet for this campaign.
         </div>
@@ -80,21 +110,25 @@ export function ReplyList({
 function FilterChip({
   children,
   active = false,
+  onClick,
 }: {
   children: React.ReactNode;
   active?: boolean;
+  onClick?: () => void;
 }) {
   return (
-    <span
+    <button
+      type="button"
+      onClick={onClick}
       className={[
-        'rounded-full border px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.06em]',
+        'rounded-full border px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.06em] transition-colors',
         active
           ? 'border-[#15171c] bg-[#15171c] text-white'
-          : 'border-[#c2c7ce] text-[#5b626d]',
+          : 'border-[#c2c7ce] text-[#5b626d] hover:border-[#15171c] hover:text-[#15171c]',
       ].join(' ')}
     >
       {children}
-    </span>
+    </button>
   );
 }
 
