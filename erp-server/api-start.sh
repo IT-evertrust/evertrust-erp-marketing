@@ -6,8 +6,23 @@
 # the org already exists.
 set -e
 
+# Migrations can transiently fail during a deploy: Render keeps the OLD container
+# (still holding its DB pool) alive until the NEW one is healthy, so for a few seconds
+# both share Supabase's session-pooler client budget and `db:migrate` can hit
+# `EMAXCONNSESSION: max clients reached`. Retry with backoff so the migrate self-heals
+# once the old instance releases its connections, instead of crash-looping the deploy.
 echo "[api-start] running DB migrations..."
-corepack pnpm --filter @evertrust/db db:migrate
+attempt=1
+max_attempts="${MIGRATE_MAX_ATTEMPTS:-5}"
+until corepack pnpm --filter @evertrust/db db:migrate; do
+  if [ "$attempt" -ge "$max_attempts" ]; then
+    echo "[api-start] migrations failed after ${attempt} attempts - giving up"
+    exit 1
+  fi
+  echo "[api-start] migration attempt ${attempt}/${max_attempts} failed; retrying in $((attempt * 5))s..."
+  sleep "$((attempt * 5))"
+  attempt=$((attempt + 1))
+done
 
 # The seed plants a SUPER_ADMIN with a fixed dev password when the bootstrap
 # org is missing — fine on a dev DB, dangerous on an empty PRODUCTION DB (the

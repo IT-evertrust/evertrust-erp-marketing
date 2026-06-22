@@ -106,6 +106,14 @@ Slash commands in `.claude/commands/`:
   to migration 0000 and must survive any regeneration.
 - The web image bakes `NEXT_PUBLIC_API_URL` at build time; the api runs under the tsx loader
   because `@evertrust/db`/`@evertrust/shared` ship raw TS (intentional, do not "fix").
+- Supabase session pooler caps TOTAL clients at `pool_size` (15). The db client
+  (`packages/db/src/client.ts`) bounds the pool via `DATABASE_POOL_MAX` (default 5) + an
+  `idle_timeout` so an always-on Render instance plus an overlapping deploy's migration fit
+  under 15 — otherwise `db:migrate` dies with `EMAXCONNSESSION: max clients reached`.
+  `api-start.sh` retries the migrate with backoff to ride out the deploy overlap. Migrations
+  can target a separate `MIGRATION_DATABASE_URL` (Supabase DIRECT) to skip the pooler cap. To
+  use the TRANSACTION pooler (6543) for more headroom, prepared statements must be off — the
+  client auto-disables them for a `:6543`/`pgbouncer=true` URL (or set `DATABASE_PREPARE=false`).
 - Tender roadmap state: Phases 4–6 + most of 7 DONE; Phase 2 (Argus/Scribe intake), Phase 3
   (Sieve shortlist), Phase 7 R32–R33 (TYPE 2 completeness) and Phase 8 are NOT built — see
   `docs/evertrust/08-workflow-canonical.md`.
