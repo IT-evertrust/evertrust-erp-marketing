@@ -13,16 +13,16 @@ import { WorkflowConfigModule } from './arsenal/workflow-config.module';
 import { CampaignsModule } from './campaigns/campaigns.module';
 import { ArsenalModule } from './arsenal/arsenal.module';
 import { ProspectsModule } from './prospects/prospects.module';
+import { OutreachModule } from './outreach/outreach.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { LeadsModule } from './leads/leads.module';
 import { MeetingsModule } from './meetings/meetings.module';
 import { MarketingModule } from './marketing/marketing.module';
 import { PerformanceModule } from './performance/performance.module';
 import { GoogleModule } from './google/google.module';
+import { EngageModule } from './engage/engage.module';
 import { ReachModule } from './reach/reach.module';
 import { ActivateModule } from './activate/activate.module';
-import { EngageGrowthModule } from './engage-growth/engage-growth.module';
-import { OverviewModule } from './overview/overview.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from './auth/guards/permissions.guard';
 import { AuditInterceptor } from './common/audit.interceptor';
@@ -41,16 +41,16 @@ import { AuditInterceptor } from './common/audit.interceptor';
     CampaignsModule,
     ArsenalModule,
     ProspectsModule,
+    OutreachModule,
     NotificationsModule,
     LeadsModule,
     MeetingsModule,
     MarketingModule,
     PerformanceModule,
     GoogleModule,
+    EngageModule,
     ReachModule,
     ActivateModule,
-    EngageGrowthModule,
-    OverviewModule,
   ],
   providers: [
     // Zod DTOs are the contract: validate every request body/param/query.

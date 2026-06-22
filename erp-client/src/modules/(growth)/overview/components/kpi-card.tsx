@@ -28,15 +28,12 @@ export function KpiCard({ kpi, iconIndex }: KpiCardProps) {
   const Icon = icons[iconIndex] ?? Activity;
 
   return (
-    <article
-      className="gc-lift min-w-0 rounded-[10px] border border-[#e4e7eb] bg-white px-[15px] py-3.5 duration-300 animate-in fade-in slide-in-from-bottom-2 fill-mode-both"
-      style={{ animationDelay: `${iconIndex * 50}ms` }}
-    >
+    <article className="min-w-0 rounded-[10px] border border-[#e4e7eb] bg-white px-[15px] py-3.5">
       <div className="flex items-center justify-between gap-3">
         <span className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#959ca7]">
           {kpi.label}
         </span>
-        <Icon className="h-4 w-4 text-[#959ca7] transition-colors" />
+        <Icon className="h-4 w-4 text-[#959ca7]" />
       </div>
 
       <div className="mt-2 text-[24px] font-bold leading-none tracking-[-0.02em] text-[#15171c]">
