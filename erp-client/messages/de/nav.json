@@ -11,9 +11,25 @@
   "general": "Allgemein",
   "configuration": "Konfiguration",
   "userManagement": "Benutzer",
+  "brandTagline": "Growth Engine",
+  "engineLive": "Engine aktiv",
   "group": {
     "rean": "R.E.A.N. Sequenz",
     "insights": "Auswertung",
     "settings": "Einstellungen"
+  },
+  "subtitle": {
+    "dashboard": "Bericht · Alle Phasen · Letzte 30 Tage",
+    "reach": "01 · Akquise — Scraper · Generator · Versand",
+    "engage": "02 · Antworten sortieren",
+    "activate": "03 · Buchung · Recherche · Analyse",
+    "nurture": "04 · Pipeline · Vertrag",
+    "sector": "Segmentierung · Zielgruppen",
+    "analytics": "Leistung · Kennzahlen",
+    "reports": "Exporte · Zusammenfassungen",
+    "general": "Konto · Anzeige · Einstellungen",
+    "configuration": "Versand · Integrationen · Branding",
+    "userManagement": "Rollen · Zugriff",
+    "automation": "Workflows · Auslöser"
   }
 }

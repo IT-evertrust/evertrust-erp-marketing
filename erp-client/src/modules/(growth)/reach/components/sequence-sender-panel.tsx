@@ -1,5 +1,7 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
+
 import { GrowthCard, StatusPill } from '../../shared';
 
 import type { SenderSchedule } from '../types';
@@ -25,10 +27,12 @@ export function SequenceSenderPanel({
   onRunBazooka,
   bazookaRunning = false,
 }: SequenceSenderPanelProps) {
+  const t = useTranslations('reach');
+
   return (
     <div className="flex flex-col gap-4">
       <GrowthCard
-        title="Campaigns"
+        title={t('sender.campaignsTitle')}
         hint={
           <button
             type="button"
@@ -36,7 +40,7 @@ export function SequenceSenderPanel({
             disabled={bazookaRunning}
             className="rounded-md border border-foreground bg-foreground px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-background disabled:opacity-60"
           >
-            {bazookaRunning ? 'Running…' : 'Run Bazooka'}
+            {bazookaRunning ? t('sender.running') : t('sender.runBazooka')}
           </button>
         }
       >
@@ -44,34 +48,34 @@ export function SequenceSenderPanel({
           <thead>
             <tr>
               <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                Campaign
+                {t('sender.col.campaign')}
               </th>
               <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                Niche / Region
+                {t('sender.col.nicheRegion')}
               </th>
               <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                Round
+                {t('sender.col.round')}
               </th>
               <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                Next Send
+                {t('sender.col.nextSend')}
               </th>
               <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                Status
+                {t('sender.col.status')}
               </th>
               <th className="px-3 pb-3 text-right text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                Sent
+                {t('sender.col.sent')}
               </th>
               <th className="px-3 pb-3 text-right text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                Opened
+                {t('sender.col.opened')}
               </th>
               <th className="px-3 pb-3 text-right text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                Replied
+                {t('sender.col.replied')}
               </th>
               <th className="px-3 pb-3 text-right text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                Meetings
+                {t('sender.col.meetings')}
               </th>
               <th className="px-3 pb-3 text-right text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                Bazooka
+                {t('sender.col.bazooka')}
               </th>
             </tr>
           </thead>
@@ -92,11 +96,11 @@ export function SequenceSenderPanel({
                   {item.round}
                 </td>
                 <td className="px-3 py-3 text-[12.5px] text-muted-foreground">
-                  {item.nextSend}
+                  {item.nextSend ?? t('sender.tomorrow')}
                 </td>
                 <td className="px-3 py-3">
                   <StatusPill live={item.status !== 'NEW' && item.status !== 'OVER'}>
-                    {item.status}
+                    {t(`campaignTable.status.${item.status}`)}
                   </StatusPill>
                 </td>
                 <td className="px-3 py-3 text-right text-[12.5px] font-bold text-foreground">
@@ -122,7 +126,7 @@ export function SequenceSenderPanel({
                         : 'border-border text-muted-foreground hover:border-foreground hover:text-foreground',
                     ].join(' ')}
                   >
-                    {item.autoSend ? 'On' : 'Off'}
+                    {item.autoSend ? t('sender.on') : t('sender.off')}
                   </button>
                 </td>
               </tr>
@@ -131,11 +135,11 @@ export function SequenceSenderPanel({
         </table>
       </GrowthCard>
 
-      <GrowthCard title="Emails sent per day" hint="PAST & PROJECTED · LIMIT 120 / DAY">
+      <GrowthCard title={t('sender.chartTitle')} hint={t('sender.chartHint')}>
         <div className="relative h-[220px]">
           <div className="absolute left-0 right-0 top-[28px] border-t border-dashed border-border">
             <span className="absolute right-0 top-[-8px] bg-card px-2 text-[8px] font-bold text-muted-foreground">
-              120 LIMIT
+              {t('sender.limit')}
             </span>
           </div>
 
@@ -165,7 +169,7 @@ export function SequenceSenderPanel({
                     style={{ height: `${height}%` }}
                   />
                   <span className="mt-1 text-[8.5px] font-bold text-muted-foreground">
-                    {day.date}
+                    {isToday ? t('sender.legend.today') : day.date}
                   </span>
                 </div>
               );
@@ -174,9 +178,9 @@ export function SequenceSenderPanel({
         </div>
 
         <div className="mt-3 flex flex-wrap gap-4 text-[9px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
-          <span>■ Sent</span>
-          <span>■ Today</span>
-          <span>□ Projected</span>
+          <span>■ {t('sender.legend.sent')}</span>
+          <span>■ {t('sender.legend.today')}</span>
+          <span>□ {t('sender.legend.projected')}</span>
         </div>
       </GrowthCard>
     </div>

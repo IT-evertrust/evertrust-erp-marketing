@@ -12,6 +12,7 @@ import {
 import { CalendarEventBlock, layoutDayEvents } from '@/components/activate/calendar/event-block';
 import { CalendarSlotBlock } from '@/components/activate/calendar/slot-block';
 import { CATEGORY_STYLE } from '@/components/activate/calendar/event-category';
+import { Skeleton } from '@/components/ui/skeleton';
 import type {
   CalendarGridEvent,
   CalendarGridSlot,
@@ -166,6 +167,7 @@ export function DayColumn({
   onSelectEvent,
   primaryTz,
   secondaryTz,
+  loading = false,
 }: {
   dayKey: string;
   weekend: boolean;
@@ -175,6 +177,7 @@ export function DayColumn({
   onSelectEvent: (event: CalendarGridEvent) => void;
   primaryTz: string;
   secondaryTz: string | null;
+  loading?: boolean;
 }) {
   const laidOutEvents = useMemo(
     () => layoutDayEvents(events, dayKey, primaryTz),
@@ -192,6 +195,19 @@ export function DayColumn({
       {HOURS.map((hour) => (
         <div key={hour} className="shrink-0 border-t" style={{ height: HOUR_HEIGHT }} />
       ))}
+
+      {/* While fetching, overlay a couple of placeholder blocks within the business-
+          hours band so the cells read as "loading" without disturbing the grid frame
+          (the hour rule lines above stay put). */}
+      {loading ? (
+        <div className="pointer-events-none absolute inset-x-1 flex flex-col gap-2"
+          style={{ top: 9 * HOUR_HEIGHT }}
+        >
+          <Skeleton className="h-12 w-full rounded-md" />
+          <Skeleton className="h-16 w-full rounded-md" />
+          <Skeleton className="h-10 w-full rounded-md" />
+        </div>
+      ) : null}
 
       {slots.map((slot) => (
         <CalendarSlotBlock

@@ -11,6 +11,24 @@ import { OrgId } from '../common/tenant';
 import { GoogleCalendarReadService } from './google-calendar-read.service';
 import { CreateCalendarEventBodyDto, UpdateCalendarEventBodyDto } from './google.dto';
 
+// Parse a CSV of weekday numbers (0=Sun..6=Sat) into a de-duplicated number[]; any
+// blank/invalid/out-of-range token is dropped. Returns undefined when the param is
+// absent or yields nothing, so the service falls back to its Mon–Fri default.
+function parseBusinessDays(raw?: string): number[] | undefined {
+  if (raw == null || raw.trim().length === 0) return undefined;
+
+  const days = [
+    ...new Set(
+      raw
+        .split(',')
+        .map((token) => Number(token.trim()))
+        .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6),
+    ),
+  ];
+
+  return days.length > 0 ? days : undefined;
+}
+
 // Activate · live Google Calendar (read). Real upcoming meetings + proposed free
 // slots from the CALLING org's connected default calendar mailbox. JWT-auth +
 // tenant-scoped (@OrgId), gated campaigns:read. Both endpoints degrade to a
@@ -42,12 +60,16 @@ export class GoogleCalendarReadController {
     @Query('timeMax') timeMax?: string,
     @Query('timeZone') timeZone?: string,
     @Query('durationMinutes') durationMinutes?: string,
+    // CSV of allowed weekday numbers (0=Sun..6=Sat), e.g. `?businessDays=1,2,3,4,5`.
+    // Omitted ⇒ the service defaults to Mon–Fri (backward-compatible).
+    @Query('businessDays') businessDays?: string,
   ) {
     return this.calendar.freeSlots(orgId, {
       timeMin,
       timeMax,
       timeZone,
       durationMinutes: durationMinutes ? Number(durationMinutes) : undefined,
+      businessDays: parseBusinessDays(businessDays),
     });
   }
 

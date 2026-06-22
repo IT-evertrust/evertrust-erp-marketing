@@ -1,0 +1,28 @@
+{
+  "loadError": "Could not load live dashboard data. Showing fallback cockpit metrics.",
+  "kpi": {
+    "newLeads": "New leads",
+    "contacted": "Contacted",
+    "replyRate": "Reply rate",
+    "interested": "Interested",
+    "meetings": "Meetings",
+    "pipelineValue": "Pipeline value"
+  },
+  "funnel": {
+    "title": "R.E.A.N Funnel",
+    "hint": "Reach → Nurture",
+    "stage": {
+      "reach": "Reach",
+      "engage": "Engage",
+      "activate": "Activate",
+      "nurture": "Nurture",
+      "won": "Won"
+    }
+  },
+  "activity": {
+    "title": "Engine Activity",
+    "liveLog": "Live log",
+    "alerts": "Alerts",
+    "empty": "No engine activity yet."
+  }
+}

@@ -1,3 +1,7 @@
+'use client';
+
+import { useTranslations } from 'next-intl';
+
 import { GrowthCard, StatusPill } from '../../shared';
 
 import type { Campaign } from '../types';
@@ -18,15 +22,17 @@ export function CampaignTable({
   campaigns,
   selectedCampaignId,
   onSelectCampaign,
-  title = 'Campaigns',
+  title,
   showAction = false,
-  actionLabel = 'Aim',
+  actionLabel,
   onActionClick,
   loading = false,
 }: CampaignTableProps) {
+  const t = useTranslations('reach');
+
   return (
     <GrowthCard
-      title={title}
+      title={title ?? t('campaignTable.title')}
       hint={
         showAction ? (
             <button
@@ -34,16 +40,16 @@ export function CampaignTable({
             onClick={onActionClick}
             className="rounded-md border border-foreground bg-foreground px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-background"
             >
-            {actionLabel}
+            {actionLabel ?? t('campaignTable.aim')}
             </button>
         ) : null
         }
     >
       {loading && campaigns.length === 0 ? (
-        <Spinner label="Loading campaigns…" />
+        <Spinner label={t('campaignTable.loading')} />
       ) : campaigns.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border bg-muted p-6 text-center text-[12.5px] font-bold text-muted-foreground">
-          No campaigns yet. Click Aim to launch one.
+          {t('campaignTable.empty')}
         </div>
       ) : (
       <div className="max-h-[280px] overflow-auto">
@@ -51,19 +57,19 @@ export function CampaignTable({
           <thead>
             <tr>
               <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                Campaign
+                {t('campaignTable.col.campaign')}
               </th>
               <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                Niche
+                {t('campaignTable.col.niche')}
               </th>
               <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                Region
+                {t('campaignTable.col.region')}
               </th>
               <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                Companies
+                {t('campaignTable.col.companies')}
               </th>
               <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                Status
+                {t('campaignTable.col.status')}
               </th>
             </tr>
           </thead>
@@ -95,7 +101,9 @@ export function CampaignTable({
                     {campaign.companies}
                   </td>
                   <td className="px-3 py-3">
-                    <StatusPill live={live}>{campaign.status}</StatusPill>
+                    <StatusPill live={live}>
+                      {t(`campaignTable.status.${campaign.status}`)}
+                    </StatusPill>
                   </td>
                 </tr>
               );

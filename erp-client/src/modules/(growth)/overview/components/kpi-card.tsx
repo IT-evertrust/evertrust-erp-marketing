@@ -1,3 +1,5 @@
+'use client';
+
 import {
   Activity,
   BarChart3,
@@ -7,6 +9,7 @@ import {
   TrendingUp,
   Users,
 } from 'lucide-react';
+import { useTranslations } from 'next-intl';
 
 import type { OverviewKpi } from '../types';
 
@@ -16,6 +19,7 @@ type KpiCardProps = {
 };
 
 export function KpiCard({ kpi, iconIndex }: KpiCardProps) {
+  const t = useTranslations('overview');
   const icons = [
     Users,
     MailCheck,
@@ -34,7 +38,7 @@ export function KpiCard({ kpi, iconIndex }: KpiCardProps) {
     >
       <div className="flex items-center justify-between gap-3">
         <span className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-          {kpi.label}
+          {t(`kpi.${kpi.labelKey}`)}
         </span>
         <Icon className="h-4 w-4 text-muted-foreground transition-colors" />
       </div>

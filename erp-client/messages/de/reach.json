@@ -1,0 +1,138 @@
+{
+  "tabs": {
+    "scraper": "Lead-Scraper",
+    "generator": "E-Mail-Generator",
+    "sender": "Sequenz-Sender"
+  },
+  "campaignTable": {
+    "title": "Kampagnen",
+    "aim": "Zielen",
+    "loading": "Kampagnen werden geladen…",
+    "empty": "Noch keine Kampagnen. Auf „Zielen“ klicken, um eine zu starten.",
+    "col": {
+      "campaign": "Kampagne",
+      "niche": "Nische",
+      "region": "Region",
+      "companies": "Firmen",
+      "status": "Status"
+    },
+    "status": {
+      "NEW": "Neu",
+      "IN CAMPAIGN": "In Kampagne",
+      "OVER": "Beendet"
+    }
+  },
+  "scraper": {
+    "leadsTitle": "Leads · {campaign}",
+    "selectedCampaign": "Gewählte Kampagne",
+    "scrapingHint": "WIRD GESCRAPT…",
+    "companiesHint": "{count} FIRMEN",
+    "scrapingLabel": "Lead Satellite scrapt Leads…",
+    "loadingLeads": "Leads werden geladen…",
+    "empty": "Für diese Kampagne sind noch keine Leads geladen.",
+    "col": {
+      "company": "Firma",
+      "contact": "Kontakt",
+      "location": "Ort",
+      "source": "Quelle",
+      "status": "Status"
+    },
+    "leadStatus": {
+      "New": "Neu",
+      "Cold Outreach": "Erstansprache",
+      "Followed Up": "Nachgefasst",
+      "Interested": "Interessiert",
+      "Unsure": "Unsicher",
+      "Not Interested": "Kein Interesse"
+    }
+  },
+  "generator": {
+    "emailsTitle": "E-Mails · {campaign}",
+    "campaign": "Kampagne",
+    "empty": "Noch keine Vorlagen erstellt. Starten Sie ein Ziel, um Erstansprache, Nachfassen und finalen Push zu erzeugen.",
+    "send": "Senden",
+    "performance": "Leistung",
+    "metric": {
+      "sent": "Gesendet",
+      "opened": "Geöffnet",
+      "clicked": "Geklickt",
+      "replied": "Geantwortet",
+      "bounced": "Unzustellbar",
+      "meetings": "Termine"
+    },
+    "emailStatus": {
+      "DRAFT": "Entwurf",
+      "SENT": "Gesendet",
+      "SCHEDULED": "Geplant"
+    },
+    "step": {
+      "cold": "Erstansprache",
+      "followup": "Nachfassen",
+      "final": "Finaler Push"
+    },
+    "round": {
+      "1": "Runde 1",
+      "2": "Runde 2",
+      "3": "Runde 3"
+    }
+  },
+  "sender": {
+    "campaignsTitle": "Kampagnen",
+    "runBazooka": "Bazooka ausführen",
+    "running": "Läuft…",
+    "col": {
+      "campaign": "Kampagne",
+      "nicheRegion": "Nische / Region",
+      "round": "Runde",
+      "nextSend": "Nächster Versand",
+      "status": "Status",
+      "sent": "Gesendet",
+      "opened": "Geöffnet",
+      "replied": "Geantwortet",
+      "meetings": "Termine",
+      "bazooka": "Bazooka"
+    },
+    "on": "An",
+    "off": "Aus",
+    "tomorrow": "Morgen 09:00",
+    "chartTitle": "Gesendete E-Mails pro Tag",
+    "chartHint": "VERGANGEN & PROGNOSE · LIMIT 120 / TAG",
+    "limit": "LIMIT 120",
+    "legend": {
+      "sent": "Gesendet",
+      "today": "Heute",
+      "projected": "Prognose"
+    }
+  },
+  "modal": {
+    "title": "Neues Reach-Ziel",
+    "description": "Definieren Sie das Kampagnenziel, bevor Leads gescrapt werden.",
+    "close": "Schließen",
+    "cancel": "Abbrechen",
+    "submit": "Ziel starten",
+    "submitting": "Wird gezielt…",
+    "field": {
+      "name": "Kampagnenname",
+      "namePlaceholder": "z. B. Wohnungsgenossenschaften ≥ 500 Einheiten · Bayern",
+      "niche": "Nische",
+      "nichePlaceholder": "z. B. Wohnungswirtschaft, Hausverwaltung, Installateur",
+      "region": "Region",
+      "regionPlaceholder": "z. B. Bayern, NRW, bundesweit DE",
+      "segment": "Segment",
+      "segmentPlaceholder": "z. B. Portfoliohalter, öffentlicher Wohnungsbau, Versorger",
+      "source": "Quelle",
+      "sourcePlaceholder": "z. B. Firmen-DB, iBau, LinkedIn",
+      "sender": "Absender-Postfach",
+      "senderPlaceholder": "info oder hanna"
+    }
+  },
+  "toast": {
+    "launchFailed": "Kampagnenstart fehlgeschlagen",
+    "toggleFailed": "Umschalten fehlgeschlagen",
+    "bazookaNone": "Bazooka: keine Kampagnen fällig (zuerst eine aktivieren).",
+    "bazookaSent": "Bazooka hat {total} E-Mail(s) über {campaigns} Kampagne(n) gesendet. Zustellung wartet auf OAuth.",
+    "bazookaFailed": "Bazooka-Lauf fehlgeschlagen",
+    "roundRecorded": "{count} {round}-Versand(e) erfasst. Gmail-Zustellung wartet auf OAuth.",
+    "sendFailed": "Senden fehlgeschlagen"
+  }
+}

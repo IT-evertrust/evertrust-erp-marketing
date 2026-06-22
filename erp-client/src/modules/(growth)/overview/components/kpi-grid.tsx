@@ -9,7 +9,7 @@ export function KpiGrid({ kpis }: KpiGridProps) {
   return (
     <section className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
       {kpis.map((kpi, index) => (
-        <KpiCard key={kpi.label} kpi={kpi} iconIndex={index} />
+        <KpiCard key={kpi.labelKey} kpi={kpi} iconIndex={index} />
       ))}
     </section>
   );

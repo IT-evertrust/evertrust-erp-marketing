@@ -74,37 +74,37 @@ function buildKpis(
 
   return [
     {
-      label: 'NEW LEADS',
+      labelKey: 'newLeads',
       value: numberFormat(campaigns.length),
       delta: 'live',
       spark: FALLBACK_KPIS[0]?.spark ?? '',
     },
     {
-      label: 'CONTACTED',
+      labelKey: 'contacted',
       value: numberFormat(activeCampaigns),
       delta: 'active',
       spark: FALLBACK_KPIS[1]?.spark ?? '',
     },
     {
-      label: 'REPLY RATE',
+      labelKey: 'replyRate',
       value: `${replyRate}%`,
       delta: 'from meetings',
       spark: FALLBACK_KPIS[2]?.spark ?? '',
     },
     {
-      label: 'INTERESTED',
+      labelKey: 'interested',
       value: numberFormat(meetings.length),
       delta: 'meeting intent',
       spark: FALLBACK_KPIS[3]?.spark ?? '',
     },
     {
-      label: 'MEETINGS',
+      labelKey: 'meetings',
       value: numberFormat(meetings.length),
       delta: `${analyzedMeetings} analyzed`,
       spark: FALLBACK_KPIS[4]?.spark ?? '',
     },
     {
-      label: 'PIPELINE VALUE',
+      labelKey: 'pipelineValue',
       value: '—',
       delta: 'needs deals API',
       spark: FALLBACK_KPIS[5]?.spark ?? '',
@@ -131,31 +131,31 @@ function buildFunnel(
 
   return [
     {
-      name: 'Reach',
+      nameKey: 'reach',
       value: numberFormat(reach),
       width: reach ? 100 : 0,
       conversion: reach ? '100%' : '0%',
     },
     {
-      name: 'Engage',
+      nameKey: 'engage',
       value: numberFormat(engage),
       width: percent(engage, top),
       conversion: `${percent(engage, top)}%`,
     },
     {
-      name: 'Activate',
+      nameKey: 'activate',
       value: numberFormat(activate),
       width: percent(activate, top),
       conversion: `${percent(activate, top)}%`,
     },
     {
-      name: 'Nurture',
+      nameKey: 'nurture',
       value: numberFormat(nurture),
       width: percent(nurture, top),
       conversion: `${percent(nurture, top)}%`,
     },
     {
-      name: 'Won',
+      nameKey: 'won',
       value: '—',
       width: 0,
       conversion: '—',

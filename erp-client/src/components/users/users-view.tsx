@@ -24,7 +24,6 @@ import {
   type Department,
   type UserRole,
 } from '@evertrust/shared';
-import { Users as UsersIcon } from 'lucide-react';
 import { useMe } from '@/hooks/use-auth';
 import {
   useAdminUsers,
@@ -131,20 +130,7 @@ export function UsersView() {
 
   return (
     <main className="px-6 py-5 duration-300 animate-in fade-in">
-      <header className="mb-5 flex flex-wrap items-end justify-between gap-3 border-b border-sidebar-border pb-5">
-        <div className="flex items-center gap-3">
-          <UsersIcon className="h-7 w-7 stroke-[2] text-foreground" />
-          <div>
-            <h1 className="text-[30px] font-bold leading-none tracking-[-0.02em] text-foreground">
-              {t('title')}
-            </h1>
-            <div className="mt-2">
-              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-                {t('description')}
-              </span>
-            </div>
-          </div>
-        </div>
+      <div className="mb-5 flex flex-wrap items-center justify-end gap-2">
         <div className="flex items-center gap-2">
           <div className="inline-flex rounded-[10px] border border-sidebar-border bg-muted p-0.5">
             {(['flat', 'grouped'] as const).map((l) => (
@@ -165,7 +151,7 @@ export function UsersView() {
             {t('addMember')}
           </Button>
         </div>
-      </header>
+      </div>
 
       <div className="flex flex-col gap-5">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

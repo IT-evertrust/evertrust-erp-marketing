@@ -30,6 +30,7 @@ export function WeekView({
   primaryTz,
   secondaryTz,
   freeOnly = false,
+  loading = false,
 }: {
   days: string[];
   weekStartKey: string;
@@ -40,6 +41,7 @@ export function WeekView({
   primaryTz: string;
   secondaryTz: string | null;
   freeOnly?: boolean;
+  loading?: boolean;
 }) {
   const t = useTranslations('activate');
   const format = useFormatter();
@@ -109,11 +111,13 @@ export function WeekView({
                 </span>
 
                 <span className="mt-1 text-[10px] text-muted-foreground">
-                  {freeOnly
-                    ? t('calendar.week.slots', { count: daySlots.length })
-                    : dayEvents.length > 0
-                      ? t('calendar.week.meetings', { count: dayEvents.length })
-                      : t('calendar.week.free')}
+                  {loading
+                    ? '…'
+                    : freeOnly
+                      ? t('calendar.week.slots', { count: daySlots.length })
+                      : dayEvents.length > 0
+                        ? t('calendar.week.meetings', { count: dayEvents.length })
+                        : t('calendar.week.free')}
                 </span>
               </div>
             );
@@ -182,6 +186,7 @@ export function WeekView({
               onSelectEvent={onSelectEvent}
               primaryTz={primaryTz}
               secondaryTz={secondaryTz}
+              loading={loading}
             />
           ))}
         </div>
