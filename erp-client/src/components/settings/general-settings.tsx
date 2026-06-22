@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { useLocale, useTranslations } from 'next-intl';
 import { toast } from 'sonner';
-import { Building2, Languages, Monitor, Moon, Sun, Rows3, Rows4, SlidersHorizontal } from 'lucide-react';
+import { Building2, Languages, Monitor, Moon, Sun, Rows3, Rows4 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useMe } from '@/hooks/use-auth';
 import { GrowthCard } from '@/modules/(growth)/shared';
@@ -195,18 +195,6 @@ export function GeneralSettings() {
 
   return (
     <main className="px-6 py-5 duration-300 animate-in fade-in">
-      <header className="mb-5 flex items-center gap-3 border-b border-sidebar-border pb-5">
-        <SlidersHorizontal className="h-7 w-7 stroke-[2] text-foreground" />
-        <div>
-          <h1 className="text-[30px] font-bold leading-none tracking-[-0.02em] text-foreground">
-            {t('general.header.title')}
-          </h1>
-          <div className="mt-2">
-            <Eyebrow>{t('general.header.description')}</Eyebrow>
-          </div>
-        </div>
-      </header>
-
       <div className="flex flex-col gap-4">
         {/* Organization profile — the org name is REAL (resolved from the signed-in
             session via useMe). There is no org-update API yet, so the name is shown

@@ -51,13 +51,13 @@ export function GrowthSidebar() {
 
   return (
     <aside className="sticky top-0 flex h-screen w-[240px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
-      <div className="flex items-center justify-center border-b border-sidebar-border px-3 py-5">
+      <div className="flex h-20 items-center justify-center border-b border-sidebar-border px-3">
         <div className="text-center">
           <div className="text-[15px] font-bold uppercase tracking-[0.18em] text-sidebar-foreground">
             Evertrust
           </div>
           <div className="mt-1 text-[9px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
-            Growth Engine
+            {t('brandTagline')}
           </div>
         </div>
       </div>

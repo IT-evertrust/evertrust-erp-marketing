@@ -271,25 +271,15 @@ export function NichesView() {
 
   return (
     <main className="flex flex-col gap-6 px-6 py-5 duration-300 animate-in fade-in">
-      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-sidebar-border pb-5">
-        <div className="min-w-0">
-          <h1 className="text-[22px] font-bold leading-none tracking-[-0.01em] text-foreground">
-            {t('header.title')}
-          </h1>
-          <div className="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-            {t('header.description')}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setNicheCreateOpen(true)}>
-            <Plus />
-            {t('niche.new')}
-          </Button>
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus />
-            {t('industry.new')}
-          </Button>
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <Button variant="outline" onClick={() => setNicheCreateOpen(true)}>
+          <Plus />
+          {t('niche.new')}
+        </Button>
+        <Button onClick={() => setCreateOpen(true)}>
+          <Plus />
+          {t('industry.new')}
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">

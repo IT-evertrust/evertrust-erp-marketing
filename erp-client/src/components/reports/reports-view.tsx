@@ -23,23 +23,12 @@ export function ReportsView() {
 
   return (
     <main className="px-6 py-5 duration-300 animate-in fade-in">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3 border-b border-sidebar-border pb-5">
-        <div className="min-w-0">
-          <h1 className="text-[22px] font-bold leading-none tracking-[-0.01em] text-foreground">
-            {t('title')}
-          </h1>
-          <div className="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-            {t('description')}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <ToneBadge tone="muted">{t('comingSoon')}</ToneBadge>
-          <Button disabled title={t('generateHint')}>
-            <Plus />
-            {t('generate')}
-          </Button>
-        </div>
+      <div className="mb-5 flex flex-wrap items-center justify-end gap-2">
+        <ToneBadge tone="muted">{t('comingSoon')}</ToneBadge>
+        <Button disabled title={t('generateHint')}>
+          <Plus />
+          {t('generate')}
+        </Button>
       </div>
 
       {rows.length === 0 ? (

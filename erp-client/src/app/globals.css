@@ -97,10 +97,9 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  /* Font families. --font-sans drives the app shell; --font-display and
-     --font-mono are wired up by the layout and used by the marketing landing. */
+  /* Font families. --font-sans (Geist) drives the whole app; --font-mono
+     (Geist Mono) backs code / ID / permission chips. Both wired by the layout. */
   --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-display), ui-serif, Georgia, serif;
   --font-mono: var(--font-mono), ui-monospace, SFMono-Regular, monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);

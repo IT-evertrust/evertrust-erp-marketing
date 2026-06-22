@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Fraunces, IBM_Plex_Mono, Inter } from 'next/font/google';
+import { Geist, Geist_Mono } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages } from 'next-intl/server';
 import './globals.css';
@@ -7,21 +7,11 @@ import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { Providers } from './providers';
 
-const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
-
-// Display + mono are used by the marketing landing for a distinctive, "operations
-// console" character. They expose CSS variables only; the app shell keeps Inter,
-// so loading these adds two fonts to the landing without restyling the product.
-const fraunces = Fraunces({
-  subsets: ['latin'],
-  variable: '--font-display',
-  axes: ['opsz', 'SOFT', 'WONK'],
-});
-const plexMono = IBM_Plex_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
-  variable: '--font-mono',
-});
+// The whole app runs on Geist (matches Kobe's GrowthShell design): --font-sans
+// drives the shell + every page, --font-mono backs code/ID/permission chips. One
+// type system everywhere — no per-page font overrides.
+const geist = Geist({ subsets: ['latin'], variable: '--font-sans' });
+const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-mono' });
 
 export const metadata: Metadata = {
   title: 'Evertrust ERP — Tender operations, automated',
@@ -42,7 +32,7 @@ export default async function RootLayout({
   return (
     <html lang={locale} suppressHydrationWarning>
       <body
-        className={`${inter.variable} ${fraunces.variable} ${plexMono.variable} font-sans antialiased`}
+        className={`${geist.variable} ${geistMono.variable} font-sans antialiased`}
       >
         <NextIntlClientProvider locale={locale} messages={messages}>
           <Providers>{children}</Providers>

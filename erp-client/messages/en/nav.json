@@ -11,9 +11,25 @@
   "general": "General",
   "configuration": "Configuration",
   "userManagement": "User management",
+  "brandTagline": "Growth Engine",
+  "engineLive": "Engine live",
   "group": {
     "rean": "R.E.A.N. Sequence",
     "insights": "Insights",
     "settings": "Settings"
+  },
+  "subtitle": {
+    "dashboard": "Report · All phases · Last 30 days",
+    "reach": "01 · Acquisition — Scraper · Generator · Sender",
+    "engage": "02 · Sort replies",
+    "activate": "03 · Booker · Research · Analysis",
+    "nurture": "04 · Pipeline · Contract",
+    "sector": "Segmentation · Targeting",
+    "analytics": "Performance · Metrics",
+    "reports": "Exports · Summaries",
+    "general": "Account · Display · Preferences",
+    "configuration": "Sending · Integrations · Branding",
+    "userManagement": "Roles · Access",
+    "automation": "Workflows · Triggers"
   }
 }

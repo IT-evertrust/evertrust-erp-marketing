@@ -85,26 +85,14 @@ export function AutomationView() {
 
   return (
     <main className="px-6 py-5 duration-300 animate-in fade-in">
-      {/* Header */}
-      <header className="mb-5 flex flex-wrap items-start justify-between gap-3 border-b border-sidebar-border pb-5">
-        <div className="flex items-center gap-3">
-          <Cpu className="h-7 w-7 stroke-[2] text-foreground" />
-          <div>
-            <h1 className="text-[30px] font-bold leading-none tracking-[-0.02em] text-foreground">
-              Automation
-            </h1>
-            <p className="mt-2 max-w-2xl text-xs text-muted-foreground">
-              The agents that run your growth engine — orchestrated by the ERP. Gmail
-              and Calendar use this org&apos;s connected Google account.
-            </p>
-          </div>
-        </div>
+      {/* Page title lives in the GrowthTopbar — only the action stays here. */}
+      <div className="mb-5 flex flex-wrap items-center justify-end gap-2">
         <Button asChild variant="outline" size="sm">
           <Link href="/settings/configuration">
             <Cpu /> Configure agents
           </Link>
         </Button>
-      </header>
+      </div>
 
       <div className="flex flex-col gap-4">
         {/* Summary strip */}

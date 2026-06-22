@@ -180,25 +180,30 @@ export function getActiveGrowthNavItem(pathname: string) {
 export function getGrowthPageMeta(pathname: string) {
   const active = getActiveGrowthNavItem(pathname);
 
-  const subtitles: Record<string, string> = {
-    Overview: 'REPORT · LAST 30 DAYS',
-    Reach: '01 · ACQUISITION — SCRAPER · GENERATOR · SENDER',
-    Engage: '02 · SORT REPLIES',
-    Activate: '03 · BOOKER · RESEARCH · ANALYSIS',
-    Nurture: '04 · PIPELINE · CONTRACT',
-    Sector: 'SEGMENTATION · TARGETING',
-    Analytics: 'PERFORMANCE · METRICS',
-    Reports: 'EXPORTS · SUMMARIES',
-    General: 'ACCOUNT · DISPLAY · PREFERENCES',
-    Configuration: 'SENDING · INTEGRATIONS · BRANDING',
-    'User management': 'ROLES · ACCESS',
-    Automation: 'WORKFLOWS · TRIGGERS',
+  // English fallbacks for the topbar subtitle, keyed by the item's i18nKey. The
+  // live values come from messages/*/nav.json under `subtitle.<i18nKey>`; the
+  // topbar uppercases them via CSS, so these stay readable title-case here.
+  const subtitleFallback: Record<string, string> = {
+    dashboard: 'Report · All phases · Last 30 days',
+    reach: '01 · Acquisition — Scraper · Generator · Sender',
+    engage: '02 · Sort replies',
+    activate: '03 · Booker · Research · Analysis',
+    nurture: '04 · Pipeline · Contract',
+    sector: 'Segmentation · Targeting',
+    analytics: 'Performance · Metrics',
+    reports: 'Exports · Summaries',
+    general: 'Account · Display · Preferences',
+    configuration: 'Sending · Integrations · Branding',
+    userManagement: 'Roles · Access',
+    automation: 'Workflows · Triggers',
   };
 
   return {
     title: active.label,
     i18nKey: active.i18nKey,
-    subtitle: subtitles[active.label] ?? '',
+    // Key into the `nav` namespace for the topbar subtitle.
+    subtitleKey: `subtitle.${active.i18nKey}`,
+    subtitle: subtitleFallback[active.i18nKey] ?? '',
     icon: active.icon,
   };
 }
