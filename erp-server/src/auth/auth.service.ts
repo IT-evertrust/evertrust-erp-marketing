@@ -1,7 +1,12 @@
-import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 import { effectivePermissions } from '@evertrust/shared';
 import type { LoginDto, LoginResponseDto, MeDto } from '@evertrust/shared';
@@ -113,6 +118,59 @@ export class AuthService {
       permissions: effectivePermissions(row.role, row.permissions),
       organizationId: row.organizationId,
       organizationName: row.organizationName,
+    };
+  }
+
+  // Auto-provision a brand-new user for the Google sign-in flow. Used when a Google
+  // account on the allowed company domain has no EVERTRUST user yet: create an active
+  // EMPLOYEE in the (single-tenant) default organization. No authCredentials row is
+  // created — these users authenticate via Google only, never a password. Concurrent
+  // first-logins are made safe by the users_email unique index (onConflictDoNothing
+  // then re-read the winner).
+  async provisionGoogleUser(email: string, name: string): Promise<MeDto> {
+    const orgRows = await this.db
+      .select({ id: schema.organizations.id, name: schema.organizations.name })
+      .from(schema.organizations)
+      .orderBy(asc(schema.organizations.createdAt))
+      .limit(1);
+    const org = orgRows[0];
+    if (!org) {
+      throw new ServiceUnavailableException(
+        'No organization exists to attach the new user to.',
+      );
+    }
+
+    const inserted = await this.db
+      .insert(schema.users)
+      .values({
+        organizationId: org.id,
+        email,
+        name,
+        role: 'EMPLOYEE',
+        active: true,
+      })
+      .onConflictDoNothing({ target: schema.users.email })
+      .returning({ id: schema.users.id });
+
+    // Lost the insert race (a concurrent first-login created the row) — re-read it.
+    if (!inserted[0]) {
+      const existing = await this.findActiveUserByEmail(email);
+      if (!existing) {
+        throw new ServiceUnavailableException('Failed to provision Google user.');
+      }
+      return existing;
+    }
+
+    return {
+      id: inserted[0].id,
+      email,
+      name,
+      role: 'EMPLOYEE',
+      department: null,
+      position: null,
+      permissions: effectivePermissions('EMPLOYEE', null),
+      organizationId: org.id,
+      organizationName: org.name,
     };
   }
 

@@ -87,7 +87,9 @@ export class AuthController {
       }
       const { accessToken } = await this.google.handleCallback(code);
       this.setSessionCookie(res, accessToken);
-      res.redirect(this.frontendUrl());
+      // Hand off to the client so it can mirror the session onto the WEB origin
+      // (the edge middleware can't see this API-origin cookie). See GET /auth/token.
+      res.redirect(`${this.frontendUrl()}/auth/callback`);
     } catch (err) {
       const reason =
         err instanceof HttpException
@@ -102,6 +104,32 @@ export class AuthController {
   @Get('me')
   me(@CurrentUser() user: AuthUser): Promise<MeDto> {
     return this.auth.me(user.id);
+  }
+
+  // Authenticated. Hands the current session JWT back to the browser so the Google
+  // OAuth flow — a server-side redirect with no JSON body — can set the SAME web-origin
+  // mirror cookie that password login sets from its response body via /api/session.
+  // Same token exposure as the password login response; no new surface. The guard has
+  // already verified the cookie before this runs.
+  @Get('token')
+  token(@Req() req: Request): { accessToken: string } {
+    const cookies = req.cookies as Record<string, string> | undefined;
+    return { accessToken: cookies?.['access_token'] ?? '' };
+  }
+
+  // Public so an already-expired/invalid session can still clear its cookie. Clears the
+  // API-origin httpOnly access_token; the client clears its web-origin mirror via /api/logout.
+  @Public()
+  @Post('logout')
+  logout(@Res({ passthrough: true }) res: Response): { ok: true } {
+    const sameSite = this.config.get('COOKIE_SAMESITE');
+    res.clearCookie('access_token', {
+      httpOnly: true,
+      sameSite,
+      secure: this.config.get('COOKIE_SECURE') || sameSite === 'none',
+      path: '/',
+    });
+    return { ok: true };
   }
 
   private setSessionCookie(res: Response, token: string): void {

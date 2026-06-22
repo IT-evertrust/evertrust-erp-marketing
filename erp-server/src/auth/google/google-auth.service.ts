@@ -35,9 +35,15 @@ interface GoogleUserInfo {
   name?: string;
 }
 
-// Google OAuth: "Sign in with Google" for EXISTING users (matched by email — no rogue
-// org creation), persisting the refresh token so the backend can later act on the
-// user's behalf (Gmail send, Calendar). The agent stays brain-only; tokens live here.
+// Domain whose Google accounts may self-provision an EVERTRUST user on first sign-in.
+// Any other domain is rejected even with a valid Google login.
+const ALLOWED_SIGNUP_DOMAIN = 'evertrust-germany.de';
+
+// Google OAuth: "Sign in with Google". Existing users (matched by email) sign straight
+// in; a Google account on ALLOWED_SIGNUP_DOMAIN with no user yet is auto-provisioned as
+// an EMPLOYEE; every other domain is refused. Each login persists the refresh token so
+// the backend can later act on the user's behalf (Gmail send, Calendar). The agent
+// stays brain-only; tokens live here.
 @Injectable()
 export class GoogleAuthService {
   private readonly logger = new Logger(GoogleAuthService.name);
@@ -81,10 +87,18 @@ export class GoogleAuthService {
       throw new UnauthorizedException('Google account has no email');
     }
 
-    const user = await this.auth.findActiveUserByEmail(info.email);
+    let user = await this.auth.findActiveUserByEmail(info.email);
     if (!user) {
-      throw new ForbiddenException(
-        `No EVERTRUST account for ${info.email}. Ask an admin to create one first.`,
+      // No EVERTRUST user yet: self-provision only for the company domain.
+      const domain = info.email.split('@')[1]?.toLowerCase();
+      if (domain !== ALLOWED_SIGNUP_DOMAIN) {
+        throw new ForbiddenException(
+          `Google sign-in is restricted to @${ALLOWED_SIGNUP_DOMAIN} accounts.`,
+        );
+      }
+      user = await this.auth.provisionGoogleUser(
+        info.email,
+        info.name ?? info.email,
       );
     }
 

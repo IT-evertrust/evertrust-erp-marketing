@@ -44,12 +44,19 @@ export class ActivateService {
     return this.repo.listMeetingOwners(orgId);
   }
 
-  // Upcoming events for one connected mailbox's calendar. accountId is a google_accounts id;
-  // empty selects the newest grant. Falls back to DB-seeded meetings with no Google account.
-  async listMeetings(orgId: string, accountId: string): Promise<ActivateMeeting[]> {
+  // Events for one connected mailbox's calendar across a window. accountId is a
+  // google_accounts id; empty selects the newest grant. Defaults to the Booker's rolling
+  // year so the UI can page week/month; callers can narrow it. Falls back to DB-seeded
+  // meetings with no Google account.
+  async listMeetings(
+    orgId: string,
+    accountId: string,
+    fromDays?: number,
+    toDays?: number,
+  ): Promise<ActivateMeeting[]> {
     const account = await this.resolveAccountId(orgId, accountId);
     if (!account) return this.repo.listUpcomingMeetings(orgId, accountId || undefined);
-    return this.calendar.listUpcoming(orgId, account);
+    return this.calendar.listUpcoming(orgId, account, fromDays, toDays);
   }
 
   async getMeeting(
@@ -164,7 +171,9 @@ export class ActivateService {
   // Upcoming meetings (DB-seeded) as research targets. Each carries a cached dossier if we've
   // generated one, else 'Being generated' until the user opens it.
   async listDossiers(orgId: string, accountId: string): Promise<ActivateDossier[]> {
-    const meetings = await this.listMeetings(orgId, accountId);
+    // Research targets are NEAR-TERM upcoming meetings — keep the narrow window the Booker's
+    // year-wide default would otherwise blow past.
+    const meetings = await this.listMeetings(orgId, accountId, -1, 70);
     // Research targets are UPCOMING meetings only (the calendar window also returns recent
     // past meetings for the Booker's week-nav, which aren't research targets).
     const now = Date.now();

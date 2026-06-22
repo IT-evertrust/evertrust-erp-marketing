@@ -7,6 +7,7 @@ plan_search_queries and dedup_leads are reused by both the LLM and offline paths
 
 import re
 
+from erp_agents.workflows.reach.lead_satellite.locale import LocaleProfile
 from erp_agents.workflows.reach.lead_satellite.models import (
     LeadCandidate,
     LeadSatelliteInput,
@@ -26,13 +27,44 @@ def slugify(value: str) -> str:
     return s or "company"
 
 
-def plan_search_queries(data: LeadSatelliteInput) -> list[str]:
+def plan_search_queries(
+    data: LeadSatelliteInput, locale: LocaleProfile | None = None
+) -> list[str]:
+    """Build a locale-aware query plan from the AIM config.
+
+    Geography/language come from `locale` (resolved from the AIM's country): native
+    connective words and country-specific B2B directories, so we surface local SMEs
+    instead of only English-ranked results. Deduped, order-preserving.
+    """
     seg = f" {data.segment}" if data.segment else ""
-    return [
+    where = f"{data.region} {data.country}".strip()
+    queries: list[str] = [
         f"{data.niche}{seg} {data.region}",
-        f"{data.niche} companies {data.region} {data.country}",
-        f"{data.segment or data.niche} {data.region} contact email",
+        f"{data.niche} {data.region}",
     ]
+    if locale is not None:
+        queries += [
+            f"{data.niche}{seg} {locale.kw_company} {where}",
+            f"{data.niche} {locale.kw_supplier} {data.region}",
+            f"{data.segment or data.niche} {data.region} {locale.kw_contact}",
+        ]
+        # Bias a couple of queries toward structured B2B directories for that country.
+        for directory in locale.directories[:2]:
+            queries.append(f"{data.niche} {data.region} site:{directory}")
+    else:
+        queries.append(f"{data.niche} companies {where}")
+    # Honor an explicit preferred source from the AIM, if any.
+    if data.source:
+        queries.append(f"{data.niche} {data.region} {data.source}")
+
+    seen: set[str] = set()
+    out: list[str] = []
+    for q in queries:
+        key = re.sub(r"\s+", " ", q).strip()
+        if key and key.lower() not in seen:
+            seen.add(key.lower())
+            out.append(key)
+    return out
 
 
 def offline_leads(data: LeadSatelliteInput) -> list[LeadCandidate]:

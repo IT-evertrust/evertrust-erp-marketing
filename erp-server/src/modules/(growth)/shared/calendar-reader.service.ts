@@ -39,13 +39,14 @@ export class CalendarReaderService {
 
   constructor(private readonly google: GoogleAuthService) {}
 
-  // Events for an account across a window (default: last 2 weeks → next 10 weeks, so the
-  // Booker can page prev/next weeks). [] if the grant is unusable.
+  // Events for an account across a window (default: last month → next year, so the Booker
+  // can page week-by-week and month-by-month across a rolling year). Callers that only want
+  // near-term events (e.g. research dossiers) pass a narrower window. [] if grant unusable.
   async listUpcoming(
     orgId: string,
     accountId: string,
-    fromDays = -14,
-    toDays = 70,
+    fromDays = -31,
+    toDays = 365,
   ): Promise<ActivateMeeting[]> {
     const token = await this.google.getAccessTokenForAccountId(orgId, accountId);
     if (!token) return [];
@@ -55,7 +56,8 @@ export class CalendarReaderService {
       timeMax: new Date(now + toDays * 86_400_000).toISOString(),
       singleEvents: 'true',
       orderBy: 'startTime',
-      maxResults: '50',
+      // High cap so a full-year window isn't truncated for the Booker's month nav.
+      maxResults: '2500',
     });
     try {
       const res = await fetch(

@@ -4,13 +4,14 @@ import { useRouter } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { LoginDto, LoginResponseDto, MeDto, UpdateMyNameDto } from '@evertrust/shared';
 import { ApiError, api } from '@/lib/api';
+import { API_URL } from '@/lib/env';
 import { getLandingPath } from '@/lib/preferences';
 import { queryKeys } from '@/lib/query-keys';
 
 // Login: verify credentials against the API, then hand the returned token to our
 // own route handler so a web-origin mirror cookie exists for middleware gating.
 // On success we seed the user cache and navigate to the user's chosen landing
-// page (Settings → General → Display; defaults to /dashboard).
+// page (Settings → General → Display; defaults to /overview).
 export function useLogin() {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -60,14 +61,18 @@ export function useUpdateMyName() {
   });
 }
 
-// Logout clears the httpOnly cookie via the Next route handler (the cookie is not
-// readable from JS), drops cached user state, then returns to /login.
+// Logout clears BOTH httpOnly cookies — the web-origin mirror (via the Next route
+// handler) and the API-origin session (via /auth/logout) — drops cached user state,
+// then returns to /login. Neither cookie is readable from JS, so both need a request.
 export function useLogout() {
   const router = useRouter();
   const queryClient = useQueryClient();
   return useMutation<void, Error, void>({
     mutationFn: async () => {
-      await fetch('/api/logout', { method: 'POST' });
+      await Promise.allSettled([
+        fetch('/api/logout', { method: 'POST' }),
+        fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' }),
+      ]);
     },
     onSettled: () => {
       queryClient.clear();

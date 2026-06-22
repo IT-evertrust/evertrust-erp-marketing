@@ -62,8 +62,26 @@ class Settings(BaseSettings):
     read_ai_base_url: str | None = None
 
     # ---- Search ----
-    search_provider: str = "serper"
-    search_api_key: str | None = None
+    # "auto" picks the best available at runtime: SearXNG if SEARXNG_URL is set,
+    # else keyless DuckDuckGo, else the deterministic offline generator. Force a
+    # specific one with "searxng" | "duckduckgo" | "serper".
+    search_provider: str = "auto"
+    search_api_key: str | None = None  # only needed for serper
+    searxng_url: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("SEARXNG_URL", "SEARX_URL"),
+    )
+    search_results_per_query: int = 10
+
+    # ---- Lead Satellite scraping ----
+    scrape_max_sites: int = 40  # cap sites fetched per run (politeness + speed)
+    scrape_concurrency: int = 8  # parallel fetches (I/O-bound; safe to be high)
+    scrape_timeout: float = 10.0  # per-request seconds
+    scrape_user_agent: str = (
+        "EvertrustLeadBot/1.0 (+https://evertrust-germany.de; B2B prospecting)"
+    )
+    verify_email_mx: bool = True  # MX check via DNS-over-HTTPS before keeping an email
+    lead_min_confidence: float = 0.35  # drop leads the qualifier scores below this
 
     model_config = SettingsConfigDict(
         env_file=".env",

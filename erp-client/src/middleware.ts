@@ -2,19 +2,16 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { AUTH_COOKIE } from '@/lib/env';
 
-// Route prefixes that require an authenticated session. Add future ERP modules
-// here. Everything NOT matched is public — notably `/` (the marketing landing)
-// and `/login`. There is intentionally no `/` -> `/dashboard` redirect: the
-// landing page is public for everyone, signed in or not.
+// Route prefixes that require an authenticated session — the Growth (R-E-A-N)
+// surface. Add future modules (e.g. /nurture) here. Everything NOT matched is
+// public — notably `/` (the marketing landing), `/login`, and `/auth/callback`
+// (which finishes Google sign-in before a session cookie exists). There is
+// intentionally no `/` -> app redirect: the landing page is public for everyone.
 const PROTECTED_PREFIXES = [
-  '/dashboard',
-  '/tenders',
-  '/suppliers',
-  '/customers',
-  '/marketing',
-  '/key-account',
-  '/sales',
-  '/users',
+  '/overview',
+  '/reach',
+  '/engage',
+  '/activate',
   '/settings',
 ];
 

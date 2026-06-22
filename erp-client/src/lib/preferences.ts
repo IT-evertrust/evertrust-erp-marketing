@@ -16,16 +16,15 @@ const DENSITY_KEY = 'pref:density';
 // the Display card is seeded from this list, and getLandingPath validates the
 // stored value against it (so a stale/garbage key can never redirect off-app).
 export const LANDING_OPTIONS: { label: string; path: string }[] = [
-  { label: 'Dashboard', path: '/dashboard' },
-  { label: 'Marketing', path: '/marketing' },
-  { label: 'Tenders', path: '/tenders' },
-  { label: 'Performance', path: '/performance' },
-  { label: 'Users', path: '/users' },
+  { label: 'Overview', path: '/overview' },
+  { label: 'Reach', path: '/reach' },
+  { label: 'Engage', path: '/engage' },
+  { label: 'Activate', path: '/activate' },
 ];
 
-const DEFAULT_LANDING = '/dashboard';
+const DEFAULT_LANDING = '/overview';
 
-// Read the stored landing path, defaulting to /dashboard and validating that it
+// Read the stored landing path, defaulting to /overview and validating that it
 // is one of the known routes. Safe to call on the server (returns the default).
 export function getLandingPath(): string {
   if (typeof window === 'undefined') return DEFAULT_LANDING;

@@ -30,9 +30,11 @@ class LeadCandidate(BaseModel):
     contact_name: str | None = None
     contact_title: str | None = None
     email: str | None = None
+    email_verified: bool = False  # passed MX/syntax verification
     phone: str | None = None
     location: str | None = None
     source: str | None = None
+    contact_page: str | None = None  # where the contact data was scraped from
     qualification_reason: str
     confidence: float = Field(ge=0, le=1)
 
