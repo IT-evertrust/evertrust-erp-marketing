@@ -109,7 +109,7 @@ export function DayView({
   return (
     <div className="overflow-x-auto">
       <div className="flex h-[calc(100vh-300px)] min-h-[480px] min-w-[520px] flex-col">
-        <div className="flex items-stretch border-b pr-2">
+        <div className="flex items-stretch overflow-hidden border-b [scrollbar-gutter:stable]">
           <TimeScaleHeader primaryTz={primaryTz} secondaryTz={secondaryTz} />
 
           <div
@@ -131,7 +131,7 @@ export function DayView({
         </div>
 
         {hasAllDay ? (
-          <div className="flex border-b bg-muted/30 pr-2">
+          <div className="flex overflow-hidden border-b bg-muted/30 [scrollbar-gutter:stable]">
             <div
               className={`flex shrink-0 items-center justify-end border-r px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground ${
                 secondaryTz ? 'w-32' : 'w-16'
@@ -154,7 +154,7 @@ export function DayView({
 
         <div
           ref={scrollRef}
-          className="flex flex-1 items-start overflow-y-auto overflow-x-hidden"
+          className="flex flex-1 items-start overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]"
         >
           <TimeScaleColumns
             sampleDayKey={dayKey}
