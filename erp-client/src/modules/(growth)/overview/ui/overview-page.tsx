@@ -15,10 +15,10 @@ export function OverviewUI() {
 
   return (
       <main
-        className="min-h-[calc(100vh-64px)] bg-[#eef0f3] px-6 py-5 text-[#15171c] duration-300 animate-in fade-in"
+        className="min-h-[calc(100vh-64px)] bg-background px-6 py-5 text-foreground duration-300 animate-in fade-in"
         style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
       >
-        <div className="mb-5 flex items-center justify-between border-b border-[#e4e7eb] pb-5">
+        <div className="mb-5 flex items-center justify-between border-b border-border pb-5">
           <div className="flex items-center gap-3">
             <LayoutGrid className="h-7 w-7 stroke-[2]" />
 
@@ -26,20 +26,20 @@ export function OverviewUI() {
               <h1 className="text-[30px] font-bold leading-none tracking-[-0.02em]">
                 Overview
               </h1>
-              <div className="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[#959ca7]">
+              <div className="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
                 Report · All phases · Last 30 days
               </div>
             </div>
           </div>
 
-          <div className="hidden items-center gap-2 rounded-full border border-[#d6dade] bg-white px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#5b626d] md:flex">
+          <div className="hidden items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground md:flex">
             <LiveDot />
             Engine live
           </div>
         </div>
 
         {overview.isError ? (
-          <div className="mb-4 rounded-[10px] border border-[#d6dade] bg-white px-4 py-3 text-[12.5px] font-bold text-[#5b626d]">
+          <div className="mb-4 rounded-[10px] border border-border bg-card px-4 py-3 text-[12.5px] font-bold text-muted-foreground">
             Could not load live dashboard data. Showing fallback cockpit metrics.
           </div>
         ) : null}

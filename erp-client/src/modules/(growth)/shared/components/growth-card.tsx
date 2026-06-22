@@ -16,17 +16,17 @@ export function GrowthCard({
   return (
     <section
       className={[
-        'min-w-0 rounded-[10px] border border-[#e4e7eb] bg-white',
+        'min-w-0 rounded-[10px] border border-sidebar-border bg-card',
         className,
       ].join(' ')}
     >
-      <div className="flex items-center justify-between border-b border-[#e4e7eb] px-4 py-[15px]">
-        <h2 className="text-[13.5px] font-bold leading-none text-[#15171c]">
+      <div className="flex items-center justify-between border-b border-sidebar-border px-4 py-[15px]">
+        <h2 className="text-[13.5px] font-bold leading-none text-foreground">
           {title}
         </h2>
 
         {hint ? (
-          <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-[#959ca7]">
+          <div className="text-[10px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
             {hint}
           </div>
         ) : null}
