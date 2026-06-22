@@ -111,6 +111,7 @@
     "cancel": "Abbrechen",
     "submit": "Ziel starten",
     "submitting": "Wird gezielt…",
+    "validation": "Kampagnenname, Nische und Region sind erforderlich.",
     "field": {
       "name": "Kampagnenname",
       "namePlaceholder": "z. B. Wohnungsgenossenschaften ≥ 500 Einheiten · Bayern",

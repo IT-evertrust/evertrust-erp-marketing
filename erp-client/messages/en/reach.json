@@ -111,6 +111,7 @@
     "cancel": "Cancel",
     "submit": "Start Aim",
     "submitting": "Aiming…",
+    "validation": "Campaign name, niche and region are required.",
     "field": {
       "name": "Campaign Name",
       "namePlaceholder": "e.g. Housing Co-ops ≥ 500 units · Bavaria",

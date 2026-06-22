@@ -1,7 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { toast } from 'sonner';
+
+import { useOrgSenders } from '@/hooks/use-arsenal';
+import { useNiches } from '@/hooks/use-niches';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 import type { NewCampaignFormValues } from '../types';
 
@@ -12,6 +34,34 @@ type NewCampaignModalProps = {
   submitting?: boolean;
 };
 
+// AIM Region zones — the same strict set as main's "Lock & Load" launcher. The
+// Lead Satellite seeds its city searches from these, so the values stay stable
+// English strings ("Anywhere" is the catch-all default).
+const REGION_OPTIONS = [
+  'Anywhere',
+  'North',
+  'South',
+  'East',
+  'West',
+  'Central',
+  'Near border (DE-PL)',
+] as const;
+
+const EMPTY_FORM: NewCampaignFormValues = {
+  name: '',
+  niche: '',
+  region: 'Anywhere',
+  segment: '',
+  source: '',
+  // Seeded from the org's default sender once the list loads (see effect); 'info'
+  // is the safe initial/fallback so the Select shows a valid choice meanwhile.
+  sender: 'info',
+};
+
+// Reach "New Aim" modal — adopts main's AIM "Lock & Load" design (org-aware shadcn
+// Dialog: Niche picked from the org's Sectors, Region zone dropdown, Sender select
+// from the org's resolved senders) but submits the lean Reach aim shape so the
+// existing create-aim endpoint (reach_aims) is untouched.
 export function NewCampaignModal({
   open,
   onClose,
@@ -19,166 +69,244 @@ export function NewCampaignModal({
   submitting = false,
 }: NewCampaignModalProps) {
   const t = useTranslations('reach');
-  const [values, setValues] = useState<NewCampaignFormValues>({
-    name: '',
-    niche: 'Housing',
-    region: 'Bavaria',
-    segment: '',
-    source: 'Company DB',
-    sender: 'info',
-  });
+  const fieldId = useId();
+  const [form, setForm] = useState<NewCampaignFormValues>(EMPTY_FORM);
+  const [senderEdited, setSenderEdited] = useState(false);
 
-  if (!open) return null;
+  // Existing org niches power the Niche picker (gated on open); the org's resolved
+  // senders drive the From-alias picker.
+  const niches = useNiches(open);
+  const senders = useOrgSenders();
 
-  function updateValue<K extends keyof NewCampaignFormValues>(
+  const set = <K extends keyof NewCampaignFormValues>(
     key: K,
     value: NewCampaignFormValues[K],
-  ) {
-    setValues((current) => ({
-      ...current,
-      [key]: value,
-    }));
-  }
+  ) => setForm((f) => ({ ...f, [key]: value }));
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  // Reset whenever the dialog closes — whether the user cancelled or the parent
+  // closed it after a successful create. On error the parent keeps it open, so the
+  // typed input is preserved (unlike the old modal, which wiped on submit).
+  useEffect(() => {
+    if (!open) {
+      setForm(EMPTY_FORM);
+      setSenderEdited(false);
+    }
+  }, [open]);
 
-    if (!values.name.trim()) return;
+  // The org default sender key (the isDefault row, else the first, else 'info').
+  const defaultSenderKey = useMemo(() => {
+    const list = senders.data ?? [];
+    return (list.find((s) => s.isDefault) ?? list[0])?.key ?? 'info';
+  }, [senders.data]);
 
+  // Sender options labelled "Label (email)"; always includes the current value so a
+  // legacy key still renders, and falls back to a single 'info' option when empty.
+  const senderOptions = useMemo(() => {
+    const list = senders.data ?? [];
+    const opts =
+      list.length > 0
+        ? list.map((s) => ({
+            key: s.key,
+            label: s.label?.trim() ? `${s.label} (${s.email})` : s.email,
+          }))
+        : [{ key: 'info', label: 'info' }];
+    if (!opts.some((o) => o.key === form.sender)) {
+      opts.push({ key: form.sender, label: form.sender });
+    }
+    return opts;
+  }, [senders.data, form.sender]);
+
+  // Seed the sender from the org default once the list loads, until the user picks.
+  useEffect(() => {
+    if (senderEdited) return;
+    setForm((f) =>
+      f.sender === defaultSenderKey ? f : { ...f, sender: defaultSenderKey },
+    );
+  }, [defaultSenderKey, senderEdited]);
+
+  // Niche options grouped "Industry ▸ Niche": industries first (alphabetical),
+  // Unassigned last; niches alphabetical within each.
+  const nicheOptions = useMemo(() => {
+    return [...(niches.data ?? [])]
+      .map((n) => ({
+        id: n.id,
+        name: n.name,
+        industry: n.industryName,
+        optionLabel: n.industryName ? `${n.industryName} ▸ ${n.name}` : n.name,
+      }))
+      .sort((a, b) => {
+        if (a.industry !== b.industry) {
+          if (a.industry === null) return 1;
+          if (b.industry === null) return -1;
+          return (a.industry ?? '').localeCompare(b.industry ?? '');
+        }
+        return a.name.localeCompare(b.name);
+      });
+  }, [niches.data]);
+
+  // The chosen niche's id, derived from the stored name (the Select value). We still
+  // submit the niche NAME (free-text on reach_aims).
+  const selectedNicheId = useMemo(
+    () => (niches.data ?? []).find((n) => n.name === form.niche)?.id,
+    [niches.data, form.niche],
+  );
+
+  function submit() {
+    if (!form.name.trim() || !form.niche.trim() || !form.region.trim()) {
+      toast.error(t('modal.validation'));
+      return;
+    }
     onSubmit({
-      ...values,
-      name: values.name.trim(),
-      segment: values.segment.trim(),
-    });
-
-    setValues({
-      name: '',
-      niche: 'Housing',
-      region: 'Bavaria',
-      segment: '',
-      source: 'Company DB',
-      sender: 'info',
+      name: form.name.trim(),
+      niche: form.niche.trim(),
+      region: form.region.trim(),
+      segment: form.segment.trim(),
+      source: form.source.trim(),
+      sender: form.sender,
     });
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-5">
-      <div className="w-full max-w-[560px] overflow-hidden rounded-[12px] border border-border bg-card shadow-xl">
-        <div className="flex items-center justify-between border-b border-border px-5 py-4">
-          <div>
-            <h2 className="text-[14px] font-bold text-foreground">
-              {t('modal.title')}
-            </h2>
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              {t('modal.description')}
-            </p>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) onClose();
+      }}
+    >
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{t('modal.title')}</DialogTitle>
+          <DialogDescription>{t('modal.description')}</DialogDescription>
+        </DialogHeader>
+
+        <div className="grid items-start gap-x-6 gap-y-5 sm:grid-cols-2">
+          {/* Campaign name — full width above the paired fields. */}
+          <div className="grid gap-2 sm:col-span-2">
+            <Label htmlFor={`${fieldId}-name`}>{t('modal.field.name')}</Label>
+            <Input
+              id={`${fieldId}-name`}
+              value={form.name}
+              placeholder={t('modal.field.namePlaceholder')}
+              maxLength={120}
+              onChange={(e) => set('name', e.target.value)}
+            />
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-[12px] font-bold uppercase tracking-[0.08em] text-muted-foreground hover:text-foreground"
-          >
-            {t('modal.close')}
-          </button>
+          {/* Niche — pick from the org's Sectors; free-text fallback when none exist
+              yet so aim creation is never blocked. */}
+          <div className="grid gap-2">
+            <Label htmlFor={`${fieldId}-niche`}>{t('modal.field.niche')}</Label>
+            {nicheOptions.length > 0 ? (
+              <Select
+                value={selectedNicheId}
+                onValueChange={(id) =>
+                  set(
+                    'niche',
+                    (niches.data ?? []).find((n) => n.id === id)?.name ?? '',
+                  )
+                }
+              >
+                <SelectTrigger id={`${fieldId}-niche`} className="w-full">
+                  <SelectValue placeholder={t('modal.field.nichePlaceholder')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {nicheOptions.map((n) => (
+                    <SelectItem key={n.id} value={n.id}>
+                      {n.optionLabel}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                id={`${fieldId}-niche`}
+                value={form.niche}
+                placeholder={t('modal.field.nichePlaceholder')}
+                maxLength={120}
+                onChange={(e) => set('niche', e.target.value)}
+              />
+            )}
+          </div>
+
+          {/* Region — fixed zone the Lead Satellite seeds city searches from. */}
+          <div className="grid gap-2">
+            <Label htmlFor={`${fieldId}-region`}>{t('modal.field.region')}</Label>
+            <Select value={form.region} onValueChange={(v) => set('region', v)}>
+              <SelectTrigger id={`${fieldId}-region`} className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {REGION_OPTIONS.map((opt) => (
+                  <SelectItem key={opt} value={opt}>
+                    {opt}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Segment */}
+          <div className="grid gap-2">
+            <Label htmlFor={`${fieldId}-segment`}>{t('modal.field.segment')}</Label>
+            <Input
+              id={`${fieldId}-segment`}
+              value={form.segment}
+              placeholder={t('modal.field.segmentPlaceholder')}
+              maxLength={200}
+              onChange={(e) => set('segment', e.target.value)}
+            />
+          </div>
+
+          {/* Source */}
+          <div className="grid gap-2">
+            <Label htmlFor={`${fieldId}-source`}>{t('modal.field.source')}</Label>
+            <Input
+              id={`${fieldId}-source`}
+              value={form.source}
+              placeholder={t('modal.field.sourcePlaceholder')}
+              maxLength={120}
+              onChange={(e) => set('source', e.target.value)}
+            />
+          </div>
+
+          {/* Sender alias — which org mailbox sends from. Full width. */}
+          <div className="grid gap-2 sm:col-span-2">
+            <Label htmlFor={`${fieldId}-sender`}>{t('modal.field.sender')}</Label>
+            <Select
+              value={form.sender}
+              onValueChange={(v) => {
+                setSenderEdited(true);
+                set('sender', v);
+              }}
+            >
+              <SelectTrigger id={`${fieldId}-sender`} className="w-full">
+                <SelectValue placeholder="info" />
+              </SelectTrigger>
+              <SelectContent>
+                {senderOptions.map((opt) => (
+                  <SelectItem key={opt.key} value={opt.key}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="space-y-4 px-5 py-5">
-            <Field label={t('modal.field.name')}>
-              <input
-                value={values.name}
-                onChange={(event) => updateValue('name', event.target.value)}
-                placeholder={t('modal.field.namePlaceholder')}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-[13px] text-foreground outline-none focus:border-foreground focus:bg-card"
-              />
-            </Field>
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <Field label={t('modal.field.niche')}>
-                <input
-                  value={values.niche}
-                  onChange={(event) => updateValue('niche', event.target.value)}
-                  placeholder={t('modal.field.nichePlaceholder')}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-[13px] text-foreground outline-none focus:border-foreground focus:bg-card"
-                />
-              </Field>
-
-              <Field label={t('modal.field.region')}>
-                <input
-                  value={values.region}
-                  onChange={(event) => updateValue('region', event.target.value)}
-                  placeholder={t('modal.field.regionPlaceholder')}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-[13px] text-foreground outline-none focus:border-foreground focus:bg-card"
-                />
-              </Field>
-            </div>
-
-            <Field label={t('modal.field.segment')}>
-              <input
-                value={values.segment}
-                onChange={(event) => updateValue('segment', event.target.value)}
-                placeholder={t('modal.field.segmentPlaceholder')}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-[13px] text-foreground outline-none focus:border-foreground focus:bg-card"
-              />
-            </Field>
-
-            <Field label={t('modal.field.source')}>
-              <input
-                value={values.source}
-                onChange={(event) => updateValue('source', event.target.value)}
-                placeholder={t('modal.field.sourcePlaceholder')}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-[13px] text-foreground outline-none focus:border-foreground focus:bg-card"
-              />
-            </Field>
-
-            <Field label={t('modal.field.sender')}>
-              <input
-                value={values.sender}
-                onChange={(event) => updateValue('sender', event.target.value)}
-                placeholder={t('modal.field.senderPlaceholder')}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-[13px] text-foreground outline-none focus:border-foreground focus:bg-card"
-              />
-            </Field>
-          </div>
-
-          <div className="flex justify-end gap-2 border-t border-border px-5 py-4">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={submitting}
-              className="rounded-md border border-border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-foreground disabled:opacity-50"
-            >
-              {t('modal.cancel')}
-            </button>
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="rounded-md border border-foreground bg-foreground px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-background disabled:opacity-60"
-            >
-              {submitting ? t('modal.submitting') : t('modal.submit')}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block">
-      <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-        {label}
-      </div>
-      {children}
-    </label>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={submitting}
+          >
+            {t('modal.cancel')}
+          </Button>
+          <Button type="button" onClick={submit} disabled={submitting}>
+            {submitting ? t('modal.submitting') : t('modal.submit')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
