@@ -4,7 +4,7 @@ import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 
-import { useOrgSenders } from '@/hooks/use-arsenal';
+import { useOrgCalendars, useOrgSenders } from '@/hooks/use-arsenal';
 import { useNiches } from '@/hooks/use-niches';
 import { Button } from '@/components/ui/button';
 import {
@@ -34,45 +34,62 @@ type NewCampaignModalProps = {
   submitting?: boolean;
 };
 
-// Region options — REAL places the lead_satellite can resolve (satellite/domain/
-// geo.cities_for): "Anywhere" → nationwide via the LLM country profiler; a German
-// Bundesland name → a literal geo search term. NOT the n8n zone words
-// (North/South/…), which aren't real places and would scrape garbage here.
+// AIM Region zones (strict dropdown). Values are sent to the Reach create-aim
+// endpoint as-is and seed the Lead Satellite's city searches, so they stay stable
+// English strings. "Anywhere" is the catch-all default (omitted from the Gmail
+// label). "Border-DE" targets the German border regions.
 const REGION_OPTIONS = [
   'Anywhere',
-  'Baden-Württemberg',
-  'Bayern',
-  'Berlin',
-  'Brandenburg',
-  'Bremen',
-  'Hamburg',
-  'Hessen',
-  'Mecklenburg-Vorpommern',
-  'Niedersachsen',
-  'Nordrhein-Westfalen',
-  'Rheinland-Pfalz',
-  'Saarland',
-  'Sachsen',
-  'Sachsen-Anhalt',
-  'Schleswig-Holstein',
-  'Thüringen',
+  'North',
+  'South',
+  'East',
+  'West',
+  'Border-DE',
 ] as const;
+
+// Default country for new aims (free-text, editable).
+const DEFAULT_COUNTRY = 'Germany';
 
 const EMPTY_FORM: NewCampaignFormValues = {
   name: '',
   niche: '',
+  country: DEFAULT_COUNTRY,
   region: 'Anywhere',
-  segment: '',
-  source: '',
+  project: '',
+  gmailLabel: '',
+  whatsappNumber: '',
   // Seeded from the org's default sender once the list loads (see effect); 'info'
   // is the safe initial/fallback so the Select shows a valid choice meanwhile.
   sender: 'info',
+  // Seeded from the org's primary calendar once the scan loads (see effect); ''
+  // means "use the org default" (Google not connected).
+  salesCalendarId: '',
 };
 
-// Reach "New Aim" modal — adopts main's AIM "Lock & Load" design (org-aware shadcn
-// Dialog: Niche picked from the org's Sectors, Region zone dropdown, Sender select
-// from the org's resolved senders) but submits the lean Reach aim shape so the
-// existing create-aim endpoint (reach_aims) is untouched.
+// Keep only letters/digits in a label token (drops spaces + punctuation), so
+// "Border-DE" -> "BorderDE", "LED Retrofit" -> "LEDRetrofit".
+function slugToken(s: string): string {
+  return (s ?? '').trim().replace(/[^a-zA-Z0-9]+/g, '');
+}
+
+// Auto-build the Gmail label from the AIM inputs: niche · country · zone · year
+// (e.g. "LED-Germany-North-2026"). Empty until a niche is entered; the generic
+// "Anywhere" zone is omitted.
+function deriveGmailLabel(form: NewCampaignFormValues): string {
+  const niche = slugToken(form.niche);
+  if (!niche) return '';
+  const country = slugToken(form.country);
+  const zone =
+    form.region && form.region !== 'Anywhere' ? slugToken(form.region) : '';
+  const year = String(new Date().getFullYear());
+  return [niche, country, zone, year].filter(Boolean).join('-');
+}
+
+// Reach "New Aim" modal — the AIM "Lock & Load" form (mirrors main's
+// aim-launch-dialog field-for-field: Niche picked from the org's Sectors, Country
+// free-text, Region zone dropdown, auto-derived Gmail label, Sender select from the
+// org's resolved senders, Calendar select from the org's Google scan) but submits
+// the Reach aim shape so the existing create-aim endpoint (reach_aims) is untouched.
 export function NewCampaignModal({
   open,
   onClose,
@@ -82,12 +99,17 @@ export function NewCampaignModal({
   const t = useTranslations('reach');
   const fieldId = useId();
   const [form, setForm] = useState<NewCampaignFormValues>(EMPTY_FORM);
+  // The Gmail label auto-fills from the other inputs until the user edits it.
+  const [labelEdited, setLabelEdited] = useState(false);
   const [senderEdited, setSenderEdited] = useState(false);
+  const [calendarEdited, setCalendarEdited] = useState(false);
 
   // Existing org niches power the Niche picker (gated on open); the org's resolved
-  // senders drive the From-alias picker.
+  // senders drive the From-alias picker; the org's Google calendars (gated on open)
+  // drive the calendar picker.
   const niches = useNiches(open);
   const senders = useOrgSenders();
+  const calendars = useOrgCalendars(open);
 
   const set = <K extends keyof NewCampaignFormValues>(
     key: K,
@@ -96,11 +118,13 @@ export function NewCampaignModal({
 
   // Reset whenever the dialog closes — whether the user cancelled or the parent
   // closed it after a successful create. On error the parent keeps it open, so the
-  // typed input is preserved (unlike the old modal, which wiped on submit).
+  // typed input is preserved.
   useEffect(() => {
     if (!open) {
       setForm(EMPTY_FORM);
+      setLabelEdited(false);
       setSenderEdited(false);
+      setCalendarEdited(false);
     }
   }, [open]);
 
@@ -135,6 +159,32 @@ export function NewCampaignModal({
     );
   }, [defaultSenderKey, senderEdited]);
 
+  // True only when the org has a Google token wired AND the live scan succeeded.
+  const calendarsConfigured = calendars.data?.configured ?? false;
+
+  // The calendar Select options (label = calendar summary, value = its id).
+  const calendarOptions = useMemo(
+    () =>
+      (calendars.data?.calendars ?? []).map((c) => ({
+        value: c.id,
+        label: c.summary,
+      })),
+    [calendars.data],
+  );
+
+  // Seed the calendar from the org's primary calendar once the scan loads (else the
+  // first calendar), until the user picks one themselves.
+  useEffect(() => {
+    if (calendarEdited) return;
+    const list = calendars.data?.calendars ?? [];
+    const pick = list.find((c) => c.primary) ?? list[0];
+    if (!pick) return;
+    const seed = pick.id;
+    setForm((f) =>
+      f.salesCalendarId === seed ? f : { ...f, salesCalendarId: seed },
+    );
+  }, [calendars.data, calendarEdited]);
+
   // Niche options grouped "Industry ▸ Niche": industries first (alphabetical),
   // Unassigned last; niches alphabetical within each.
   const nicheOptions = useMemo(() => {
@@ -162,6 +212,16 @@ export function NewCampaignModal({
     [niches.data, form.niche],
   );
 
+  // Keep the Gmail label in sync with niche/country/zone (+ year) until the user
+  // types their own.
+  useEffect(() => {
+    if (labelEdited) return;
+    setForm((f) => {
+      const next = deriveGmailLabel(f);
+      return f.gmailLabel === next ? f : { ...f, gmailLabel: next };
+    });
+  }, [form.niche, form.country, form.region, labelEdited]);
+
   function submit() {
     if (!form.name.trim() || !form.niche.trim() || !form.region.trim()) {
       toast.error(t('modal.validation'));
@@ -170,10 +230,13 @@ export function NewCampaignModal({
     onSubmit({
       name: form.name.trim(),
       niche: form.niche.trim(),
+      country: form.country.trim(),
       region: form.region.trim(),
-      segment: form.segment.trim(),
-      source: form.source.trim(),
+      project: form.project.trim(),
+      gmailLabel: form.gmailLabel.trim(),
+      whatsappNumber: form.whatsappNumber.trim(),
       sender: form.sender,
+      salesCalendarId: form.salesCalendarId.trim(),
     });
   }
 
@@ -184,7 +247,7 @@ export function NewCampaignModal({
         if (!o) onClose();
       }}
     >
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{t('modal.title')}</DialogTitle>
           <DialogDescription>{t('modal.description')}</DialogDescription>
@@ -203,8 +266,9 @@ export function NewCampaignModal({
             />
           </div>
 
-          {/* Niche — pick from the org's Sectors; free-text fallback when none exist
-              yet so aim creation is never blocked. */}
+          {/* Niche — pick from the org's Sectors, grouped/labelled by industry;
+              free-text fallback when none exist yet so aim creation is never blocked.
+              Stores the niche NAME (free-text on reach_aims). */}
           <div className="grid gap-2">
             <Label htmlFor={`${fieldId}-niche`}>{t('modal.field.niche')}</Label>
             {nicheOptions.length > 0 ? (
@@ -239,8 +303,22 @@ export function NewCampaignModal({
             )}
           </div>
 
-          {/* Region — dropdown of REAL places the lead_satellite resolves
-              ("Anywhere" → nationwide, a Bundesland → literal geo term). */}
+          {/* Country — free-text, defaults to Germany. */}
+          <div className="grid gap-2">
+            <Label htmlFor={`${fieldId}-country`}>
+              {t('modal.field.country')}
+            </Label>
+            <Input
+              id={`${fieldId}-country`}
+              value={form.country}
+              placeholder={t('modal.field.countryPlaceholder')}
+              maxLength={120}
+              onChange={(e) => set('country', e.target.value)}
+            />
+          </div>
+
+          {/* Region — a fixed zone the Lead Satellite seeds its city searches
+              from. "Anywhere" → nationwide; "Border-DE" → the German border. */}
           <div className="grid gap-2">
             <Label htmlFor={`${fieldId}-region`}>{t('modal.field.region')}</Label>
             <Select value={form.region} onValueChange={(v) => set('region', v)}>
@@ -257,32 +335,59 @@ export function NewCampaignModal({
             </Select>
           </div>
 
-          {/* Segment */}
+          {/* Project */}
           <div className="grid gap-2">
-            <Label htmlFor={`${fieldId}-segment`}>{t('modal.field.segment')}</Label>
+            <Label htmlFor={`${fieldId}-project`}>
+              {t('modal.field.project')}
+            </Label>
             <Input
-              id={`${fieldId}-segment`}
-              value={form.segment}
-              placeholder={t('modal.field.segmentPlaceholder')}
+              id={`${fieldId}-project`}
+              value={form.project}
+              placeholder={t('modal.field.projectPlaceholder')}
               maxLength={200}
-              onChange={(e) => set('segment', e.target.value)}
+              onChange={(e) => set('project', e.target.value)}
             />
           </div>
 
-          {/* Source */}
+          {/* Gmail label — auto-derived until edited. */}
           <div className="grid gap-2">
-            <Label htmlFor={`${fieldId}-source`}>{t('modal.field.source')}</Label>
+            <Label htmlFor={`${fieldId}-gmailLabel`}>
+              {t('modal.field.gmailLabel')}
+            </Label>
             <Input
-              id={`${fieldId}-source`}
-              value={form.source}
-              placeholder={t('modal.field.sourcePlaceholder')}
+              id={`${fieldId}-gmailLabel`}
+              value={form.gmailLabel}
+              placeholder={t('modal.field.gmailLabelPlaceholder')}
               maxLength={120}
-              onChange={(e) => set('source', e.target.value)}
+              onChange={(e) => {
+                setLabelEdited(true);
+                set('gmailLabel', e.target.value);
+              }}
+            />
+            {!labelEdited ? (
+              <p className="text-xs text-muted-foreground">
+                {t('modal.field.gmailLabelHint')}
+              </p>
+            ) : null}
+          </div>
+
+          {/* WhatsApp number */}
+          <div className="grid gap-2">
+            <Label htmlFor={`${fieldId}-whatsappNumber`}>
+              {t('modal.field.whatsapp')}
+            </Label>
+            <Input
+              id={`${fieldId}-whatsappNumber`}
+              value={form.whatsappNumber}
+              placeholder={t('modal.field.whatsappPlaceholder')}
+              maxLength={40}
+              onChange={(e) => set('whatsappNumber', e.target.value)}
             />
           </div>
 
-          {/* Sender alias — which org mailbox sends from. Full width. */}
-          <div className="grid gap-2 sm:col-span-2">
+          {/* Sender alias — which org mailbox sends from. Options come from the
+              org's resolved senders; the default-flagged one is pre-selected. */}
+          <div className="grid gap-2">
             <Label htmlFor={`${fieldId}-sender`}>{t('modal.field.sender')}</Label>
             <Select
               value={form.sender}
@@ -302,6 +407,42 @@ export function NewCampaignModal({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Sales calendar — which Google calendar meetings book into. Rendered
+              only when the org's Google token is wired and the scan returned
+              calendars; otherwise a helper note says the org-default is used. */}
+          <div className="grid gap-2">
+            <Label htmlFor={`${fieldId}-salesCalendarId`}>
+              {t('modal.field.calendar')}
+            </Label>
+            {calendarsConfigured && calendarOptions.length > 0 ? (
+              <Select
+                value={form.salesCalendarId}
+                onValueChange={(v) => {
+                  setCalendarEdited(true);
+                  set('salesCalendarId', v);
+                }}
+              >
+                <SelectTrigger
+                  id={`${fieldId}-salesCalendarId`}
+                  className="w-full"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {calendarOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {t('modal.field.calendarNotConnected')}
+              </p>
+            )}
           </div>
         </div>
 

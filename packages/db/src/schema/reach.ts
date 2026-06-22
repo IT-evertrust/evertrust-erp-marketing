@@ -72,11 +72,17 @@ export const reachAims = pgTable(
     name: text('name').notNull(),
     niche: text('niche').notNull(),
     region: text('region').notNull(),
+    country: text('country'),
+    project: text('project'),
     segment: text('segment'),
     source: text('source'),
     // Which mailbox the campaign sends from (info | hanna) -> a connected
     // google_accounts row (resolved by email) for real Gmail delivery.
     sender: text('sender').notNull().default('info'),
+    // Per-aim delivery config (nullable; resolved per-org otherwise).
+    gmailLabel: text('gmail_label'),
+    whatsappNumber: text('whatsapp_number'),
+    salesCalendarId: text('sales_calendar_id'),
     // ---- generated assets ----
     status: reachAimStatusEnum('status').notNull().default('DRAFT'),
     // Ammo Forge output: cold / follow-up / final-push email blocks.

@@ -49,6 +49,13 @@ export type ReachAim = {
   name: string;
   niche: string;
   region: string;
+  // AIM config (mirrors the old Lock & Load fields; nullable on legacy rows).
+  country?: string;
+  project?: string;
+  gmailLabel?: string;
+  whatsappNumber?: string;
+  salesCalendarId?: string;
+  // Legacy reach fields (no longer collected by the AIM modal).
   segment?: string;
   source?: string;
   status: AimStatus;

@@ -31,6 +31,7 @@ from erp_agents.core.job import AgentJob
 from erp_agents.core.result import AgentResult, AgentTraceStep
 from erp_agents.core.workflow import Workflow
 from erp_agents.workflows.reach import _agents_path  # noqa: F401  (sys.path shim)
+from erp_agents.workflows.reach._inject import ConfigInjectingErp, ammoforge_config
 
 # MAIN's standalone agent (resolved via the _agents_path shim).
 from ammoforge.clients.erp import ErpClient  # type: ignore
@@ -106,8 +107,15 @@ class AmmoForgeWorkflow(Workflow):
             )
 
         live = job.mode == "live"
-        persist = bool(inp.get("persist", live))
         use_llm = bool(inp.get("use_llm", inp.get("useLlm", True)))
+
+        # INJECTED config (Reach flow): the reach_aim has no GET /campaigns/:id/config, so the
+        # NestJS server hands the agent its config in `input.config`. In that mode the agent is
+        # RETURN-ONLY — it never fetches and never writes (persist forced off, ERP wrapped so every
+        # write is a no-op). Absent `config` keeps the original campaigns flow (fetch + persist).
+        cfg_in = inp.get("config")
+        injected = isinstance(cfg_in, dict) and bool(cfg_in)
+        persist = False if injected else bool(inp.get("persist", live))
 
         settings = load_settings()
         llm = inp.get("llm") or {}
@@ -126,7 +134,10 @@ class AmmoForgeWorkflow(Workflow):
             )
         )
 
-        erp = ErpClient(settings.erp_base_url, settings.arsenal_token)
+        # ERP gateway: real client for the campaigns flow; for the Reach flow wrap a
+        # ConfigInjectingErp that serves the injected config and no-ops every write (return-only).
+        real_erp = ErpClient(settings.erp_base_url, settings.arsenal_token)
+        erp = ConfigInjectingErp(ammoforge_config(cfg_in), real=real_erp) if injected else real_erp
         opts = RunOptions(
             campaign_id=campaign_id, live=live, persist=persist, use_llm=use_llm
         )
@@ -141,7 +152,7 @@ class AmmoForgeWorkflow(Workflow):
                 trace=trace,
             )
         finally:
-            _close(erp)
+            _close(real_erp)  # the underlying httpx client (erp may be the no-op wrapper)
 
         if result.get("status") != "ok":
             return AgentResult(

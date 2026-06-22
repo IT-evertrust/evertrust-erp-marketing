@@ -68,10 +68,13 @@ export type SenderSchedule = {
 export type NewCampaignFormValues = {
     name: string;
     niche: string;
+    country: string;
     region: string;
-    segment: string;
-    source: string;
+    project: string;
+    gmailLabel: string;
+    whatsappNumber: string;
     sender: string;
+    salesCalendarId: string;
 }
 
 // A campaign enriched with the Ammo Forge output (templates + news brief) and the

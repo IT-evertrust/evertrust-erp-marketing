@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { GoogleModule } from '../google/google.module';
+import { NichesModule } from '../niches/niches.module';
 import { ReachController } from './reach.controller';
 import { ReachService } from './reach.service';
 import { ReachRepository } from './reach.repository';
@@ -10,7 +11,7 @@ import { GmailSenderService } from './gmail-sender.service';
 // resolve a live access token for the org's connected Gmail mailbox (every Google call
 // funnels through GoogleAccountsService).
 @Module({
-  imports: [GoogleModule],
+  imports: [GoogleModule, NichesModule],
   controllers: [ReachController],
   providers: [ReachService, ReachRepository, ReachAgentClient, GmailSenderService],
 })
