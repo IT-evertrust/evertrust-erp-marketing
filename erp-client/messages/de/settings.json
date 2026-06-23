@@ -208,6 +208,8 @@
       "maxQueriesHint": "Max. Suchanfragen pro Lauf — höher = mehr Abdeckung, aber langsamer. Leer = Serverstandard.",
       "minScoreLabel": "Mindest-Qualitätswert (0–100)",
       "minScoreHint": "Verwirft Leads unter diesem Wert — höher = strenger. Leer = Serverstandard.",
+      "timeoutLabel": "Scrape-Timeout (Minuten)",
+      "timeoutHint": "Wie lange ein Scrape laufen darf, bevor er abgebrochen wird (1–120). Leer = Serverstandard (30).",
       "save": "Speichern",
       "saving": "Speichern…",
       "toastSaved": "Konfiguration gespeichert.",

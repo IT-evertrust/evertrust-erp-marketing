@@ -168,10 +168,15 @@ export class ReachService {
     const aims = await this.repo.findAims(orgId);
     // Self-heal: a background scrape whose process died (e.g. a Render redeploy
     // mid-run) leaves the aim stuck at RUNNING. If it's older than the hard cap,
-    // flip it to FAILED so the UI's countdown ends instead of hanging forever.
+    // flip it to FAILED so the UI's countdown ends instead of hanging forever. The
+    // cap uses the org's configured scrape timeout (resolved once, only when needed).
+    if (!aims.some((a) => a.status === 'RUNNING')) return aims;
+    const timeoutMs = this.resolveScrapeTimeoutMs(
+      await this.workflowConfig.getLeadScraper(orgId),
+    );
     return Promise.all(
       aims.map(async (a) =>
-        a.status === 'RUNNING' && this.isScrapeStale(a)
+        a.status === 'RUNNING' && this.isScrapeStale(a, timeoutMs)
           ? (await this.repo.markScrapeFailed(orgId, a.id)) ?? {
               ...a,
               status: 'FAILED' as const,
@@ -195,11 +200,12 @@ export class ReachService {
   // countdown from scrapeStartedAt + scrapeEtaSeconds (so it survives navigation).
   async scrapeAim(orgId: string, aimId: string): Promise<ReachAim> {
     const aim = await this.getAim(orgId, aimId);
+    const scraper = await this.workflowConfig.getLeadScraper(orgId);
+    const timeoutMs = this.resolveScrapeTimeoutMs(scraper);
     // Idempotent: a scrape already in flight (and not stale) — return it as-is so a
     // double-click / re-aim never launches a second concurrent run for the same aim.
-    if (aim.status === 'RUNNING' && !this.isScrapeStale(aim)) return aim;
+    if (aim.status === 'RUNNING' && !this.isScrapeStale(aim, timeoutMs)) return aim;
 
-    const scraper = await this.workflowConfig.getLeadScraper(orgId);
     const etaSeconds = aim.scrapeLastSeconds ?? this.estimateScrapeSeconds(scraper);
     const running = (await this.repo.markScrapeStarted(orgId, aimId, etaSeconds)) ?? {
       ...aim,
@@ -207,7 +213,7 @@ export class ReachService {
     };
     // Fire-and-forget: the request returns now; the scrape runs server-side. The
     // catch is inside runScrapeInBackground, so this never rejects unhandled.
-    void this.runScrapeInBackground(orgId, aim, scraper);
+    void this.runScrapeInBackground(orgId, aim, scraper, timeoutMs);
     return running;
   }
 
@@ -217,6 +223,7 @@ export class ReachService {
     orgId: string,
     aim: ReachAim,
     scraper: { leadTarget: number | null; maxQueries: number | null; minScore: number | null },
+    timeoutMs: number,
   ): Promise<void> {
     const startedMs = Date.now();
     try {
@@ -238,7 +245,7 @@ export class ReachService {
           },
         },
         'live',
-        this.config.get('REACH_SCRAPE_TIMEOUT_MS'),
+        timeoutMs,
       );
       const leads = sanitizeLeads(result.output);
       const elapsed = Math.round((Date.now() - startedMs) / 1000);
@@ -257,12 +264,21 @@ export class ReachService {
     return Math.min(7200, Math.max(120, 60 + target * 4));
   }
 
+  // The effective background-scrape timeout (ms): the org's configured value (in
+  // minutes, from the Configuration page) ?? the REACH_SCRAPE_TIMEOUT_MS env default.
+  private resolveScrapeTimeoutMs(scraper: {
+    timeoutMinutes: number | null;
+  }): number {
+    return scraper.timeoutMinutes != null
+      ? scraper.timeoutMinutes * 60_000
+      : this.config.get('REACH_SCRAPE_TIMEOUT_MS');
+  }
+
   // A RUNNING aim is "stale" once it has outlived the background agent's hard
   // timeout (+ buffer) — i.e. its process is gone and it will never complete.
-  private isScrapeStale(aim: ReachAim): boolean {
+  private isScrapeStale(aim: ReachAim, timeoutMs: number): boolean {
     if (!aim.scrapeStartedAt) return true;
-    const capMs = this.config.get('REACH_SCRAPE_TIMEOUT_MS') + 120_000;
-    return Date.now() - new Date(aim.scrapeStartedAt).getTime() > capMs;
+    return Date.now() - new Date(aim.scrapeStartedAt).getTime() > timeoutMs + 120_000;
   }
 
   async getAimLeads(orgId: string, aimId: string) {

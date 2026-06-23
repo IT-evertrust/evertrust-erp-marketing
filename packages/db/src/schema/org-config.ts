@@ -86,6 +86,9 @@ export const orgConfig = pgTable(
     // agent's own env default (LEAD_TARGET / LEAD_MAX_QUERIES / LEAD_MIN_KEEP_SCORE).
     // scrapeLeadTarget: how many leads to hunt for; scrapeMaxQueries: search budget
     // (speed vs coverage); scrapeMinScore: the tier-floor (drops leads scoring below it).
+    // scrapeTimeoutMinutes: how long a background Reach scrape may run before the ERP
+    // aborts it (null = the REACH_SCRAPE_TIMEOUT_MS env default); set on the config page.
+    scrapeTimeoutMinutes: integer('scrape_timeout_minutes'),
     scrapeLeadTarget: integer('scrape_lead_target'),
     scrapeMaxQueries: integer('scrape_max_queries'),
     scrapeMinScore: integer('scrape_min_score'),

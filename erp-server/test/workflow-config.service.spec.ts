@@ -40,6 +40,7 @@ const PREF_KEYS = new Set([
   'scrapeLeadTarget',
   'scrapeMaxQueries',
   'scrapeMinScore',
+  'scrapeTimeoutMinutes',
   'maxLeadsPerRun',
   'maxPerNiche',
   'dailySendCap',
@@ -500,6 +501,7 @@ describe('WorkflowConfigService — Lead Scraper config (org override ?? agent d
       leadTarget: null,
       maxQueries: null,
       minScore: null,
+      timeoutMinutes: null,
     });
   });
 
@@ -509,6 +511,7 @@ describe('WorkflowConfigService — Lead Scraper config (org override ?? agent d
       leadTarget: null,
       maxQueries: null,
       minScore: null,
+      timeoutMinutes: null,
     });
   });
 
@@ -517,11 +520,13 @@ describe('WorkflowConfigService — Lead Scraper config (org override ?? agent d
       scrapeLeadTarget: 20,
       scrapeMaxQueries: 40,
       scrapeMinScore: 55,
+      scrapeTimeoutMinutes: 45,
     });
     expect(await service.getLeadScraper(ORG)).toEqual({
       leadTarget: 20,
       maxQueries: 40,
       minScore: 55,
+      timeoutMinutes: 45,
     });
   });
 
@@ -531,17 +536,30 @@ describe('WorkflowConfigService — Lead Scraper config (org override ?? agent d
       leadTarget: 25,
       maxQueries: 50,
       minScore: 60,
+      timeoutMinutes: 45,
     });
-    expect(cfg).toEqual({ leadTarget: 25, maxQueries: 50, minScore: 60 });
+    expect(cfg).toEqual({
+      leadTarget: 25,
+      maxQueries: 50,
+      minScore: 60,
+      timeoutMinutes: 45,
+    });
     // Re-read confirms persistence on org_config(ORG).
     expect((await service.getLeadScraper(ORG)).leadTarget).toBe(25);
+    expect((await service.getLeadScraper(ORG)).timeoutMinutes).toBe(45);
 
     cfg = await service.updateLeadScraper(ORG, {
       leadTarget: null,
       maxQueries: null,
       minScore: null,
+      timeoutMinutes: null,
     });
-    expect(cfg).toEqual({ leadTarget: null, maxQueries: null, minScore: null });
+    expect(cfg).toEqual({
+      leadTarget: null,
+      maxQueries: null,
+      minScore: null,
+      timeoutMinutes: null,
+    });
   });
 });
 

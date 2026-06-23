@@ -594,12 +594,16 @@ function LeadScraperCard() {
   const [leadTarget, setLeadTarget] = useState<string>('');
   const [maxQueries, setMaxQueries] = useState<string>('');
   const [minScore, setMinScore] = useState<string>('');
+  const [timeoutMinutes, setTimeoutMinutes] = useState<string>('');
 
   useEffect(() => {
     if (!data) return;
     setLeadTarget(data.leadTarget == null ? '' : String(data.leadTarget));
     setMaxQueries(data.maxQueries == null ? '' : String(data.maxQueries));
     setMinScore(data.minScore == null ? '' : String(data.minScore));
+    setTimeoutMinutes(
+      data.timeoutMinutes == null ? '' : String(data.timeoutMinutes),
+    );
   }, [data]);
 
   // '' (or unparseable) → null clears the override; otherwise the integer value.
@@ -616,6 +620,7 @@ function LeadScraperCard() {
         leadTarget: toNullableInt(leadTarget),
         maxQueries: toNullableInt(maxQueries),
         minScore: toNullableInt(minScore),
+        timeoutMinutes: toNullableInt(timeoutMinutes),
       },
       {
         onSuccess: () => toast.success(t('config.leadScraper.toastSaved')),
@@ -631,7 +636,7 @@ function LeadScraperCard() {
         <Skeleton className="h-32 w-full rounded-lg" />
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="lead-target">
                 <Eyebrow>{t('config.leadScraper.leadTargetLabel')}</Eyebrow>
@@ -687,6 +692,25 @@ function LeadScraperCard() {
               />
               <p className="text-xs text-muted-foreground">
                 {t('config.leadScraper.minScoreHint')}
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="scrape-timeout">
+                <Eyebrow>{t('config.leadScraper.timeoutLabel')}</Eyebrow>
+              </Label>
+              <Input
+                id="scrape-timeout"
+                type="number"
+                min={1}
+                max={120}
+                inputMode="numeric"
+                autoComplete="off"
+                spellCheck={false}
+                value={timeoutMinutes}
+                onChange={(e) => setTimeoutMinutes(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                {t('config.leadScraper.timeoutHint')}
               </p>
             </div>
           </div>
