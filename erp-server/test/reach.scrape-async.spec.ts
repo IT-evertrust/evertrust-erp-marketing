@@ -57,6 +57,7 @@ function build(agentRun: ReachAgentClient['run']) {
       leadTarget: null,
       maxQueries: null,
       minScore: null,
+      timeoutMinutes: null,
     })),
   } as unknown as WorkflowConfigService;
   const service = new ReachService(

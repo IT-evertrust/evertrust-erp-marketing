@@ -930,10 +930,14 @@ export type UpdateAiEngineDto = z.infer<typeof UpdateAiEngineDto>;
 // unset). Returned by GET /arsenal/config/lead-scraper. leadTarget = how many leads to
 // hunt; maxQueries = search budget (speed vs coverage); minScore = the tier-floor that
 // drops low-relevance leads (0..100). Bounds keep a single run sane.
+// timeoutMinutes = how long a background Reach scrape may run before the ERP aborts
+// it (null = the REACH_SCRAPE_TIMEOUT_MS env default). It's ERP-side only (not sent to
+// the agent); exposed in MINUTES because a big targets×cities scrape runs for many.
 export const LeadScraperConfigDto = z.object({
   leadTarget: z.number().int().nullable(),
   maxQueries: z.number().int().nullable(),
   minScore: z.number().int().nullable(),
+  timeoutMinutes: z.number().int().nullable(),
 });
 export type LeadScraperConfigDto = z.infer<typeof LeadScraperConfigDto>;
 
@@ -943,6 +947,7 @@ export const UpdateLeadScraperDto = z.object({
   leadTarget: z.number().int().min(1).max(1000).nullable().optional(),
   maxQueries: z.number().int().min(1).max(1000).nullable().optional(),
   minScore: z.number().int().min(0).max(100).nullable().optional(),
+  timeoutMinutes: z.number().int().min(1).max(120).nullable().optional(),
 });
 export type UpdateLeadScraperDto = z.infer<typeof UpdateLeadScraperDto>;
 

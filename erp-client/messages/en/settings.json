@@ -208,6 +208,8 @@
       "maxQueriesHint": "Max searches per run — higher = wider coverage but slower. Blank = server default.",
       "minScoreLabel": "Min quality score (0–100)",
       "minScoreHint": "Drops leads scoring below this — higher = stricter. Blank = server default.",
+      "timeoutLabel": "Scrape timeout (minutes)",
+      "timeoutHint": "How long a scrape may run before it's aborted (1–120). Blank = server default (30).",
       "save": "Save",
       "saving": "Saving…",
       "toastSaved": "Configuration saved.",

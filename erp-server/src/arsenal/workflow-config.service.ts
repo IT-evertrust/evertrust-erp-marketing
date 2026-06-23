@@ -580,6 +580,7 @@ export class WorkflowConfigService {
       leadTarget: orgRow?.scrapeLeadTarget ?? null,
       maxQueries: orgRow?.scrapeMaxQueries ?? null,
       minScore: orgRow?.scrapeMinScore ?? null,
+      timeoutMinutes: orgRow?.scrapeTimeoutMinutes ?? null,
     };
   }
 
@@ -593,6 +594,8 @@ export class WorkflowConfigService {
     if ('leadTarget' in patch) set.scrapeLeadTarget = patch.leadTarget ?? null;
     if ('maxQueries' in patch) set.scrapeMaxQueries = patch.maxQueries ?? null;
     if ('minScore' in patch) set.scrapeMinScore = patch.minScore ?? null;
+    if ('timeoutMinutes' in patch)
+      set.scrapeTimeoutMinutes = patch.timeoutMinutes ?? null;
     if (Object.keys(set).length > 0) {
       await this.persistOrg(orgId, set);
     }
