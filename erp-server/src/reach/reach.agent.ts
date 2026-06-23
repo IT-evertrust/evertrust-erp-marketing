@@ -3,6 +3,7 @@ import {
   Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { request } from 'undici';
 
 import { AppConfigService } from '../config/app-config.service';
 
@@ -43,27 +44,29 @@ export class ReachAgentClient {
       );
     }
 
-    const controller = new AbortController();
-    // Per-call timeout override (the background Reach scrape passes a long one);
-    // falls back to the global AGENT_TIMEOUT_MS for the quick foreground calls.
-    const timeout = setTimeout(
-      () => controller.abort(),
-      timeoutMs ?? this.config.get('AGENT_TIMEOUT_MS'),
-    );
+    // Per-call cap (the background Reach scrape passes a long one); falls back to the
+    // global AGENT_TIMEOUT_MS for the quick foreground calls. We use undici.request
+    // (NOT global fetch) and set headersTimeout/bodyTimeout to this cap: a Reach scrape
+    // is a SINGLE long synchronous request — the agent sends no response headers until
+    // the whole run finishes — and Node's global fetch hard-caps that at a 300s
+    // headersTimeout, aborting any >5min scrape as "fetch failed" no matter what
+    // AbortController we set. undici.request lets the cap be the real limit.
+    const cap = timeoutMs ?? this.config.get('AGENT_TIMEOUT_MS');
     try {
-      const res = await fetch(`${base}/run`, {
+      const { statusCode, body } = await request(`${base}/run`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workflow, mode, input }),
-        signal: controller.signal,
+        headersTimeout: cap,
+        bodyTimeout: cap,
       });
-      if (!res.ok) {
-        const text = await res.text().catch(() => '');
+      if (statusCode < 200 || statusCode >= 300) {
+        const text = await body.text().catch(() => '');
         throw new ServiceUnavailableException(
-          `Agent ${workflow} HTTP ${res.status}: ${text.slice(0, 200)}`,
+          `Agent ${workflow} HTTP ${statusCode}: ${text.slice(0, 200)}`,
         );
       }
-      const result = (await res.json()) as AgentRunResult;
+      const result = (await body.json()) as AgentRunResult;
       if (result.status === 'failed') {
         throw new ServiceUnavailableException(
           `Agent ${workflow} failed: ${result.errors?.[0] ?? 'unknown error'}`,
@@ -77,8 +80,6 @@ export class ReachAgentClient {
       throw new ServiceUnavailableException(
         `Agent ${workflow} call failed: ${msg}`,
       );
-    } finally {
-      clearTimeout(timeout);
     }
   }
 }
