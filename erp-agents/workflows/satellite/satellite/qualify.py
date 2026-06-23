@@ -15,6 +15,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 
 from .domain import icp as I
+from .domain import tender
 from .domain.scrape import registrable_domain
 
 _TAG = re.compile(r"<[^>]+>")
@@ -84,8 +85,8 @@ def _tier_from_llm_fit(fit: str | None, evidence_ok: bool):
     return None
 
 
-def qualify(prospects: list[dict], fetcher, icp: I.ICP, *, country: str = "", market_tld: str = "",
-            workers: int = 10, classifier=None, use_revenue: bool = False) -> dict:
+def qualify(prospects: list[dict], fetcher, icp: I.ICP, *, country: str = "", niche: str = "",
+            market_tld: str = "", workers: int = 10, classifier=None, use_revenue: bool = False) -> dict:
     """Crawl + classify + tier + bucket.
 
     Entity + niche-fit are decided LANGUAGE-AGNOSTICALLY: universal structural signals (gov/edu TLDs,
@@ -121,20 +122,29 @@ def qualify(prospects: list[dict], fetcher, icp: I.ICP, *, country: str = "", ma
         if entity is None:
             entity = I.classify_entity(name, "", website, text)
 
+        email = p.get("email", "")
         if entity != I.COMPANY:
             tier, reason = I.EXCLUDE, f"not-a-company:{entity}"
         elif not in_geo:
             tier, reason = I.EXCLUDE, "out-of-geo"
         else:
-            decided = _tier_from_llm_fit(fit, evidence_ok)    # LLM verdict authoritative when present
-            tier, reason = decided if decided else I.assign_tier(
-                entity=I.COMPANY, core_hits=core, peri_hits=peri, in_geo=True,
-                evidence_ok=evidence_ok, use_revenue=use_revenue, icp=icp)
-
-        email = p.get("email", "")
+            # niche GATE: off-niche -> EXCLUDE (LLM verdict authoritative; else keyword evidence)
+            off_niche = (fit == "none") if fit else (core == 0 and peri == 0 and evidence_ok)
+            if off_niche:
+                tier, reason = I.EXCLUDE, ("llm:off-niche" if fit else "off-niche")
+            else:
+                # TIER like the 15:23 run: relevance score -> AAA/A/B/C, driven by a reachable email,
+                # on-niche page text, and an on-market (.de/.pl) domain. (entity gate already filtered
+                # the non-companies; this just RANKS the survivors the way that run did.)
+                score = tender.score_lead(
+                    name=name, snippet=(text[:800] or name), url=website, country=country,
+                    niche=niche or icp.name, has_email=bool(email), verified=bool(email),
+                    cities=[], market_tld=market_tld)
+                tier, reason = tender.rank_label(score, 40), f"score={score}"
+                p["score"] = score
         est = I.email_status(email, source="website" if email else "")
         p.update(entity=entity, tier=tier, tierReason=reason, nicheHits=core,
-                 evidenceChars=len(text), emailStatus=est)
+                 nicheFit=fit, evidenceChars=len(text), emailStatus=est)
 
         if entity in I.NON_COMPANY:
             out[SOURCE_REF].append(p)

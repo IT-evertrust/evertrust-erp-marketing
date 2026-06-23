@@ -283,6 +283,31 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
     leads.sort(key=lambda l: l.score, reverse=True)
 
     prospects = leads_to_prospects(leads, settings.min_keep_score)
+
+    # 7b) QUALITY STAGE (LLM-driven, niche/country-agnostic) — only when an LLM is available, so the
+    #     offline/test path keeps its raw behaviour. Replaces the raw prospect list with QUALIFIED,
+    #     on-niche, tiered companies AND mines on-niche directories/associations for their member
+    #     companies (with a headless-render fallback for JS member lists). Same code as the local
+    #     dev driver, so web runs match what we validate locally. Defensive: any failure leaves the
+    #     raw prospects untouched.
+    if opts.use_llm and settings.llm_base_url:
+        from .clients.render import PlaywrightRenderer
+        from .refine import refine_prospects
+        renderer = PlaywrightRenderer()
+        try:
+            ref = refine_prospects(
+                prospects, settings=settings, fetcher=fetcher, renderer=renderer,
+                niche=cfg.niche, country=country, market_tld=market_tld, buzz=result.get("buzzList"))
+            prospects = ref["qualified"]
+            result["qualified"] = len(prospects)
+            result["hubsMined"] = ref["hubsMined"]
+            result["hubCompanies"] = ref["hubCompanies"]
+            result["excludedByQualify"] = ref["excluded"]
+        except Exception as e:  # noqa: BLE001 — never let the quality stage abort a run
+            result["qualifyError"] = str(e)[:200]
+        finally:
+            renderer.close()
+
     # QUALITY FLOOR — drop tier C (score below settings.min_keep_score = noise). Keep B and above
     # only; the dropped count is reported so a sweep that yields all-C is visible.
     dropped_c = sum(1 for p in prospects if p.get("tier") == "C")

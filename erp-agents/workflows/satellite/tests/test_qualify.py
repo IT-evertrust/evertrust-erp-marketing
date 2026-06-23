@@ -42,8 +42,9 @@ def test_qualify_buckets():
     ]
     out = qualify(prospects, FakeFetcher(pages), _icp(), country="Germany", market_tld=".de")
 
-    assert prospects[0]["tier"] in (AAA, AA) and prospects[0] in out[CONTACTS]
-    assert prospects[1]["tier"] == A and prospects[1] in out[GENERIC]
+    # tier now follows the 15:23 score logic (email + on-niche + market TLD); buckets unchanged
+    assert prospects[0]["tier"] in (AAA, AA, A) and prospects[0] in out[CONTACTS]
+    assert prospects[1]["tier"] in (AAA, AA, A) and prospects[1] in out[GENERIC]
     assert prospects[2] in out[REJECTED] and prospects[2]["tierReason"] == "off-niche"
     assert prospects[3] in out[SOURCE_REF]
     assert prospects[4] in out[REJECTED] and prospects[4]["tierReason"] == "out-of-geo"
@@ -84,4 +85,4 @@ def test_qualify_no_email_bucket():
     prospects = [{"companyName": "Sec GmbH", "website": "https://sec.de", "email": ""}]
     out = qualify(prospects, FakeFetcher(pages), _icp(), country="Germany", market_tld=".de")
     assert prospects[0] in out[QUALIFIED_NO_EMAIL]      # qualified niche, but no email -> its own bucket
-    assert prospects[0]["tier"] in (AAA, AA)
+    assert prospects[0]["tier"] in (AAA, AA, A, "B")    # scored (no email lowers it), still qualified
