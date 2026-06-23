@@ -12,6 +12,7 @@ import { ReachAgentClient } from './reach.agent';
 import { GmailSenderService } from './gmail-sender.service';
 import { ReachRepository, type LeadInsert } from './reach.repository';
 import { NichesService } from '../niches/niches.service';
+import { WorkflowConfigService } from '../arsenal/workflow-config.service';
 import type {
   BazookaRunSummary,
   EmailBlock,
@@ -64,7 +65,9 @@ function sanitizeNews(output: Record<string, unknown>): ReachNewsBrief {
 function sanitizeLeads(output: Record<string, unknown>): LeadInsert[] {
   const raw = Array.isArray(output.leads) ? output.leads : [];
   const leads: LeadInsert[] = [];
-  for (const item of raw.slice(0, 200)) {
+  // Runaway guard only — the real count is governed by the org's Lead Scraper config
+  // (leadTarget). Kept generous so configured tender targets (hundreds) aren't clipped.
+  for (const item of raw.slice(0, 1000)) {
     const o = (item ?? {}) as Record<string, unknown>;
     const company = asString(o.company);
     if (!company) continue; // company is required — skip junk rows
@@ -98,6 +101,7 @@ export class ReachService {
     private readonly gmail: GmailSenderService,
     private readonly config: AppConfigService,
     private readonly niches: NichesService,
+    private readonly workflowConfig: WorkflowConfigService,
   ) {}
 
   // Build the agent CampaignConfig from a reach aim: resolve the niche (find-or-
@@ -178,11 +182,20 @@ export class ReachService {
     await this.repo.setStatus(orgId, aimId, 'RUNNING');
     try {
       const config = await this.buildAgentConfig(orgId, aim);
+      // Per-org Lead Scraper tuning from the Configuration page (org_config.scrape_*).
+      // Null fields fall back to the satellite's env defaults — the agent only applies
+      // explicit overrides. This is what makes "Leads per run / Search budget / Min
+      // score" on the config page actually control how many companies a scrape returns.
+      const scraper = await this.workflowConfig.getLeadScraper(orgId);
       const result = await this.agent.run('reach.lead_satellite', {
         campaign_id: aim.id,
         returnOnly: true,
         config,
-        max_leads: 12,
+        scraper: {
+          leadTarget: scraper.leadTarget,
+          maxQueries: scraper.maxQueries,
+          minScore: scraper.minScore,
+        },
       });
       const leads = sanitizeLeads(result.output);
       return this.repo.replaceLeads(orgId, aimId, leads);
