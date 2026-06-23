@@ -51,6 +51,18 @@ export type ResearchDossier = {
   }>;
   signals: string[];
   talkingPoints: string[];
+  // ---- richer client research (internal-data-grounded) ----
+  interactionContext?: string;
+  history?: Array<{ date?: string | null; kind: string; summary: string }>;
+  mbti?: string | null;
+  mbtiConfidence?: number | null;
+  mbtiReasoning?: string;
+  personality?: {
+    tone?: string;
+    decisiveness?: string;
+    formality?: string;
+    detail?: string;
+  } | null;
 };
 
 // A coaching persona (the After-Sales analysis lens).

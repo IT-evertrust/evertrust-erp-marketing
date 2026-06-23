@@ -110,6 +110,50 @@ function DossierDetail({ dossier }: { dossier: ResearchDossier }) {
         </span>
       </div>
 
+      {dossier.mbti || dossier.personality || dossier.mbtiReasoning ? (
+        <section className="rounded-[10px] border border-[#e4e7eb] bg-[#f6f7f9] p-4">
+          <SectionTitle>Client Read · Personality</SectionTitle>
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            {dossier.mbti ? (
+              <span className="rounded-md bg-[#15171c] px-2.5 py-1 text-[12px] font-bold tracking-[0.12em] text-white">
+                {dossier.mbti}
+              </span>
+            ) : null}
+            {typeof dossier.mbtiConfidence === 'number' ? (
+              <span className="text-[10px] font-bold uppercase tracking-[0.06em] text-[#959ca7]">
+                {Math.round((dossier.mbtiConfidence ?? 0) * 100)}% confidence
+              </span>
+            ) : null}
+            {dossier.personality ? (
+              <span className="text-[11.5px] text-[#5b626d]">
+                {[
+                  dossier.personality.tone,
+                  dossier.personality.decisiveness,
+                  dossier.personality.formality,
+                  dossier.personality.detail,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </span>
+            ) : null}
+          </div>
+          {dossier.mbtiReasoning ? (
+            <p className="text-[11.5px] leading-relaxed text-[#5b626d]">
+              {dossier.mbtiReasoning}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
+      {dossier.interactionContext ? (
+        <section>
+          <SectionTitle>Where it stands</SectionTitle>
+          <p className="text-[12.5px] leading-relaxed text-[#5b626d]">
+            {dossier.interactionContext}
+          </p>
+        </section>
+      ) : null}
+
       {dossier.profile.length > 0 ? (
         <section>
           <SectionTitle>Company Profile</SectionTitle>
@@ -139,6 +183,23 @@ function DossierDetail({ dossier }: { dossier: ResearchDossier }) {
           <SectionTitle>Talking Points</SectionTitle>
           {dossier.talkingPoints.map((point) => (
             <Bullet key={point}>{point}</Bullet>
+          ))}
+        </section>
+      ) : null}
+
+      {dossier.history && dossier.history.length > 0 ? (
+        <section>
+          <SectionTitle>Interaction History</SectionTitle>
+          {dossier.history.map((h, i) => (
+            <div
+              key={`${h.date ?? ''}-${i}`}
+              className="flex gap-2 border-b border-dashed border-[#d6dade] py-2 text-[12.5px] text-[#5b626d]"
+            >
+              <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.06em] text-[#959ca7]">
+                {h.date || h.kind}
+              </span>
+              <span>{h.summary}</span>
+            </div>
           ))}
         </section>
       ) : null}

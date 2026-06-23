@@ -1,18 +1,15 @@
 'use client';
 
-// Step 4 of R.E.A.N. — Nurture. Move deals through the pipeline + assist with
-// contracts. Rendered INSIDE the growth shell (the (growth)/layout provides the
-// sidebar + topbar), so unlike the legacy advanced /nurture page this view does
-// NOT wrap itself in <AppShell> and does NOT render its own title — the shared
-// GrowthTopbar owns the "Nurture" header (matches Activate/Reach/Engage).
+// Step 4 of R.E.A.N. — Nurture. Rebuilt to follow the marketing department's final
+// UI/UX design (the saloot cockpit mock): white-themed, with two subtabs —
+// Sales Pipeline (a six-stage kanban) and Contract Assist. Rendered INSIDE the
+// growth shell (the (growth)/layout provides the sidebar + topbar), so this view
+// owns neither the page title nor an <AppShell> — the shared GrowthTopbar renders
+// the "Nurture" header (matches Activate/Reach/Engage).
 import { useEffect, useMemo, useState } from 'react';
-import { useTranslations } from 'next-intl';
-import { Columns3, FileSignature, Inbox } from 'lucide-react';
 import type { CampaignDto } from '@evertrust/shared';
 import { useRequirePermission } from '@/lib/permissions';
 import { useCampaigns } from '@/hooks/use-campaigns';
-import { EmptyState } from '@/components/common/empty-state';
-import { SegmentedTabs } from '@/components/rean/segmented-tabs';
 import {
   Select,
   SelectContent,
@@ -20,43 +17,40 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Skeleton } from '@/components/ui/skeleton';
-import { ProspectsBoard } from '@/components/growth/prospects-board';
-import { ContractsCard } from '@/components/growth/contracts-card';
+import { PipelineBoard } from './pipeline-board';
+import { ContractAssist } from './contract-assist';
 
-type Tab = 'pipeline' | 'contracts';
+type Tab = 'pipeline' | 'contract';
 
 function campaignLabel(c: CampaignDto): string {
   return c.name || c.project || c.nicheName || c.region;
 }
 
 export function NurtureUI() {
-  const t = useTranslations('common');
   const { allowed, isLoading } = useRequirePermission('campaigns:read');
 
   return (
     <main className="px-6 py-5 duration-300 animate-in fade-in">
       {isLoading ? (
-        <Skeleton className="h-64 w-full rounded-lg" />
+        <div className="h-64 w-full animate-pulse rounded-[10px] border border-[#e4e7eb] bg-[#f6f7f9]" />
       ) : allowed ? (
         <NurtureView />
       ) : (
-        <p className="text-sm text-muted-foreground">{t('redirecting')}</p>
+        <p className="text-[13px] font-bold text-[#959ca7]">Redirecting…</p>
       )}
     </main>
   );
 }
 
 function NurtureView() {
-  const tn = useTranslations('nurture');
   const campaignsQ = useCampaigns();
   const campaigns = useMemo(() => campaignsQ.data ?? [], [campaignsQ.data]);
 
   const [tab, setTab] = useState<Tab>('pipeline');
   const [campaignId, setCampaignId] = useState<string | null>(null);
 
-  // Default to the first ACTIVE campaign (or the first overall) once loaded, and
-  // keep the selection valid if it disappears from the list.
+  // Default to the first ACTIVE campaign (or the first overall), keeping the
+  // selection valid if it disappears from the list.
   useEffect(() => {
     const first = campaigns[0];
     if (!first) return;
@@ -65,72 +59,96 @@ function NurtureView() {
     setCampaignId((active ?? first).id);
   }, [campaigns, campaignId]);
 
-  const tabs = [
-    {
-      value: 'pipeline' as const,
-      label: tn('tabs.pipeline'),
-      icon: <Columns3 className="size-3.5" />,
-    },
-    {
-      value: 'contracts' as const,
-      label: tn('tabs.contracts'),
-      icon: <FileSignature className="size-3.5" />,
-    },
-  ];
-
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between gap-3">
-        <SegmentedTabs
-          tabs={tabs}
-          value={tab}
-          onValueChange={(v) => setTab(v as Tab)}
-        />
+    <div className="flex flex-col gap-4">
+      {/* subtabs (design `.subtabs`) + campaign selector */}
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[#e4e7eb]">
+        <div className="flex flex-wrap gap-0.5">
+          <SubTab active={tab === 'pipeline'} onClick={() => setTab('pipeline')}>
+            Sales Pipeline
+          </SubTab>
+          <SubTab active={tab === 'contract'} onClick={() => setTab('contract')}>
+            Contract Assist
+          </SubTab>
+        </div>
 
         {campaigns.length > 0 ? (
-          <Select value={campaignId ?? undefined} onValueChange={setCampaignId}>
-            <SelectTrigger className="w-[260px]">
-              <SelectValue placeholder={tn('campaignPlaceholder')} />
-            </SelectTrigger>
-            <SelectContent>
-              {campaigns.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {campaignLabel(c)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="pb-2">
+            <Select
+              value={campaignId ?? undefined}
+              onValueChange={setCampaignId}
+            >
+              <SelectTrigger className="h-8 w-[260px] border-[#d6dade] text-[12.5px]">
+                <SelectValue placeholder="Select a campaign" />
+              </SelectTrigger>
+              <SelectContent>
+                {campaigns.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {campaignLabel(c)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         ) : null}
       </div>
 
       {campaignsQ.isLoading ? (
-        <Skeleton className="h-72 w-full rounded-lg" />
+        <div className="h-72 w-full animate-pulse rounded-[10px] border border-[#e4e7eb] bg-[#f6f7f9]" />
       ) : campaignsQ.isError ? (
-        <p className="text-sm text-destructive">
-          {tn('loadError', { message: campaignsQ.error.message })}
+        <p className="text-[13px] font-bold text-[#b91c1c]">
+          Couldn’t load campaigns. {campaignsQ.error.message}
         </p>
       ) : campaigns.length === 0 ? (
-        <EmptyState
-          icon={<Inbox />}
-          title={tn('noCampaigns.title')}
-          description={tn('noCampaigns.body')}
+        <EmptyPanel
+          title="No campaigns yet"
+          body="Create a campaign in Reach to start nurturing its pipeline."
         />
       ) : !campaignId ? (
-        <EmptyState
-          icon={<Inbox />}
-          title={tn('pickCampaign.title')}
-          description={tn('pickCampaign.body')}
+        <EmptyPanel
+          title="Pick a campaign"
+          body="Choose a campaign above to see its pipeline."
         />
       ) : tab === 'pipeline' ? (
-        <ProspectsBoard campaignId={campaignId} />
+        <PipelineBoard campaignId={campaignId} />
       ) : (
-        <ContractsCard
-          filters={{ campaignId }}
-          title={tn('contracts.listTitle')}
-          emptyHint={tn('contracts.listEmpty')}
-          showDraftForm
-        />
+        <ContractAssist campaignId={campaignId} />
       )}
+    </div>
+  );
+}
+
+// Design `.subtabs button` — underline tab, white-themed.
+function SubTab({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        '-mb-px border-b-2 px-4 py-[11px] text-[13px] font-bold transition-colors',
+        active
+          ? 'border-[#15171c] text-[#15171c]'
+          : 'border-transparent text-[#959ca7] hover:text-[#5b626d]',
+      ].join(' ')}
+    >
+      {children}
+    </button>
+  );
+}
+
+function EmptyPanel({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="rounded-[10px] border border-dashed border-[#d6dade] bg-[#f6f7f9] px-6 py-12 text-center">
+      <div className="text-[13px] font-bold text-[#15171c]">{title}</div>
+      <div className="mt-1 text-[12.5px] text-[#959ca7]">{body}</div>
     </div>
   );
 }

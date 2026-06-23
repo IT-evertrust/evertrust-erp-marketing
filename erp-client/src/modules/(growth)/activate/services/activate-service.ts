@@ -125,6 +125,57 @@ export function generateDossier(
   );
 }
 
+// ---- Client Research (internal-data dossier + MBTI, persisted per company) ----
+// The persisted client_research row as returned by the server.
+export type ClientResearch = {
+  company: string;
+  clientEmail: string | null;
+  profile: Array<{ label: string; value: string }> | null;
+  signals: string[] | null;
+  talkingPoints: string[] | null;
+  interactionContext: string | null;
+  history: Array<{ date?: string | null; kind: string; summary: string }> | null;
+  mbti: string | null;
+  mbtiConfidence: number | null;
+  mbtiReasoning: string | null;
+  personality: ResearchDossier['personality'];
+  status: string;
+};
+
+export function getClientResearch(): Promise<ClientResearch[]> {
+  return getJson<ClientResearch[]>('/growth/activate/research');
+}
+
+export function generateClientResearch(company: string): Promise<ClientResearch> {
+  return postJson<ClientResearch>('/growth/activate/research/generate', {
+    company,
+  });
+}
+
+// Merge a meeting + (optional) persisted research into the dossier the UI renders.
+// Without research yet, the dossier shows as "Being generated".
+export function mapDossier(
+  meeting: { company: string; contact: string; meetingTime: string },
+  research?: ClientResearch | null,
+): ResearchDossier {
+  return {
+    id: meeting.company,
+    company: meeting.company,
+    contact: meeting.contact,
+    meetingTime: meeting.meetingTime,
+    status: research ? 'Dossier ready' : 'Being generated',
+    profile: research?.profile ?? [],
+    signals: research?.signals ?? [],
+    talkingPoints: research?.talkingPoints ?? [],
+    interactionContext: research?.interactionContext ?? undefined,
+    history: research?.history ?? undefined,
+    mbti: research?.mbti ?? undefined,
+    mbtiConfidence: research?.mbtiConfidence ?? undefined,
+    mbtiReasoning: research?.mbtiReasoning ?? undefined,
+    personality: research?.personality ?? undefined,
+  };
+}
+
 // ---- After-Sales Analysis ----
 export function getPersonas(): Promise<Persona[]> {
   return getJson<Persona[]>('/growth/activate/personas');

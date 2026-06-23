@@ -5,13 +5,14 @@ import { toast } from 'sonner';
 
 import {
   analyzeMeeting,
-  generateDossier,
+  generateClientResearch,
   getCallAnalyses,
   getCalendarMeetings,
+  getClientResearch,
   getMeetingAccounts,
   getPersonas,
-  getResearchDossiers,
   harvestReadAiMeetings,
+  mapDossier,
 } from '../services/activate-service';
 import type {
   ActivateTab,
@@ -88,26 +89,77 @@ export function useActivate() {
       .then((data) => active && setMeetings(data))
       .catch(() => active && setMeetings([]))
       .finally(() => active && setLoadingMeetings(false));
-
-    setLoadingDossiers(true);
-    getResearchDossiers(accountId)
-      .then((data) => {
-        if (!active) return;
-        setDossiers(data);
-        setSelectedDossierId((prev) =>
-          data.some((d) => d.id === prev) ? prev : (data[0]?.id ?? ''),
-        );
-      })
-      .catch(() => {
-        if (!active) return;
-        setDossiers([]);
-        setSelectedDossierId('');
-      })
-      .finally(() => active && setLoadingDossiers(false));
     return () => {
       active = false;
     };
   }, [accountId, refreshTick]);
+
+  // Company Research = the visible meetings' companies, backed by persisted
+  // client_research (MBTI + interaction context). When meetings load we build the
+  // dossier list, then AUTO-KICKSTART research (Phase E) for any company without a
+  // dossier yet — one at a time (each is a slow LLM run), updating as they land.
+  useEffect(() => {
+    if (meetings.length === 0) {
+      setDossiers([]);
+      setSelectedDossierId('');
+      return;
+    }
+    let active = true;
+    setLoadingDossiers(true);
+    (async () => {
+      const research = await getClientResearch().catch(() => []);
+      if (!active) return;
+      const byCompany = new Map(
+        research.map((r) => [r.company.toLowerCase(), r]),
+      );
+      const seen = new Set<string>();
+      const list: ResearchDossier[] = [];
+      for (const m of meetings) {
+        const key = m.company.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        list.push(
+          mapDossier(
+            { company: m.company, contact: m.contact, meetingTime: `${m.day} · ${m.time}` },
+            byCompany.get(key),
+          ),
+        );
+      }
+      setDossiers(list);
+      setSelectedDossierId((prev) =>
+        list.some((d) => d.id === prev) ? prev : (list[0]?.id ?? ''),
+      );
+      setLoadingDossiers(false);
+
+      // Phase E: generate the missing dossiers in the background, sequentially.
+      for (const d of list) {
+        if (!active) break;
+        if (d.status === 'Dossier ready') continue;
+        setGenerating(true);
+        try {
+          const r = await generateClientResearch(d.company);
+          if (!active) break;
+          setDossiers((prev) =>
+            prev.map((x) =>
+              x.company.toLowerCase() === d.company.toLowerCase()
+                ? mapDossier(
+                    { company: d.company, contact: d.contact, meetingTime: d.meetingTime },
+                    r,
+                  )
+                : x,
+            ),
+          );
+        } catch {
+          // leave it "Being generated"; a later load can retry
+        }
+      }
+      if (active) setGenerating(false);
+    })();
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meetings]);
 
   // Load personas once.
   useEffect(() => {
@@ -148,27 +200,6 @@ export function useActivate() {
 
   const selectedDossier = dossiers.find((d) => d.id === selectedDossierId);
   const selectedCallAnalysis = callAnalyses.find((c) => c.id === selectedCallAnalysisId);
-
-  // Generate the dossier for the selected upcoming meeting (lazy — only when opened).
-  useEffect(() => {
-    if (!accountId || !selectedDossier) return;
-    if (selectedDossier.status === 'Dossier ready') return;
-    let active = true;
-    setGenerating(true);
-    generateDossier(accountId, selectedDossier.id)
-      .then((full) => {
-        if (!active) return;
-        setDossiers((prev) => prev.map((d) => (d.id === full.id ? full : d)));
-      })
-      .catch((err) => {
-        if (active) toast.error(err instanceof Error ? err.message : 'Could not build dossier.');
-      })
-      .finally(() => active && setGenerating(false));
-    return () => {
-      active = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountId, selectedDossierId]);
 
   // Harvest Read AI report emails (Gmail) into the after-sales list, then reload.
   const [syncingReadAi, setSyncingReadAi] = useState(false);
