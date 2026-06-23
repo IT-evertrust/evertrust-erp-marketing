@@ -1,6 +1,6 @@
 export type ReachTab = 'scraper' | 'generator' | 'sender';
 
-export type CampaignStatus = 'NEW' | 'IN CAMPAIGN' | 'OVER';
+export type CampaignStatus = 'NEW' | 'SCRAPING' | 'IN CAMPAIGN' | 'OVER';
 
 export type Campaign = {
   id: string;
@@ -111,4 +111,8 @@ export type ReachCampaignView = Campaign & {
   stats: ReachStats;
   autoSend: boolean;
   sender: string;
+  // Async scrape tracking — server-seeded so the ETA countdown is correct even
+  // after navigating away and back (null unless the aim is/has been scraping).
+  scrapeStartedAt: string | null;
+  scrapeEtaSeconds: number | null;
 };

@@ -18,6 +18,7 @@
     },
     "status": {
       "NEW": "New",
+      "SCRAPING": "Scraping",
       "IN CAMPAIGN": "In campaign",
       "OVER": "Over"
     }
@@ -28,6 +29,9 @@
     "scrapingHint": "SCRAPING…",
     "companiesHint": "{count} COMPANIES",
     "scrapingLabel": "Lead Satellite is scraping leads…",
+    "eta": "Estimated time remaining",
+    "finishing": "Finishing up…",
+    "finishingHint": "Almost there — wrapping up the scrape.",
     "loadingLeads": "Loading leads…",
     "empty": "No leads loaded for this campaign yet.",
     "col": {
@@ -139,6 +143,8 @@
     "bazookaSent": "Bazooka sent {total} email(s) across {campaigns} campaign(s). Delivery pending OAuth.",
     "bazookaFailed": "Bazooka run failed",
     "roundRecorded": "Recorded {count} {round} send(s). Gmail delivery pending OAuth.",
-    "sendFailed": "Send failed"
+    "sendFailed": "Send failed",
+    "scrapeDone": "Scrape complete — {count} companies found.",
+    "scrapeFailed": "Lead scrape failed."
   }
 }

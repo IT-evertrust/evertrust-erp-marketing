@@ -77,7 +77,9 @@ export function CampaignTable({
           <tbody>
             {campaigns.map((campaign) => {
               const selected = selectedCampaignId === campaign.id;
-              const live = campaign.status === 'IN CAMPAIGN';
+              const live =
+                campaign.status === 'IN CAMPAIGN' ||
+                campaign.status === 'SCRAPING';
 
               return (
                 <tr

@@ -75,6 +75,9 @@ function rowToAim(row: AimRow): ReachAim {
     source: row.source ?? undefined,
     status: row.status,
     companies: row.companies,
+    scrapeStartedAt: row.scrapeStartedAt ? row.scrapeStartedAt.toISOString() : null,
+    scrapeEtaSeconds: row.scrapeEtaSeconds ?? null,
+    scrapeLastSeconds: row.scrapeLastSeconds ?? null,
     sender: row.sender,
     templates: (row.templates as ReachTemplates | null) ?? null,
     newsBrief: (row.newsBrief as ReachNewsBrief | null) ?? null,
@@ -184,6 +187,43 @@ export class ReachRepository {
     return row ? rowToAim(row) : undefined;
   }
 
+  // Mark a scrape as started: status RUNNING + stamp the start time and the ETA
+  // estimate (so the UI can render a server-seeded countdown that survives reloads).
+  async markScrapeStarted(
+    orgId: string,
+    aimId: string,
+    etaSeconds: number,
+  ): Promise<ReachAim | undefined> {
+    const [row] = await this.db
+      .update(schema.reachAims)
+      .set({
+        status: 'RUNNING',
+        scrapeStartedAt: new Date(),
+        scrapeEtaSeconds: etaSeconds,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(eq(schema.reachAims.id, aimId), tenantScope(orgId, schema.reachAims)),
+      )
+      .returning();
+    return row ? rowToAim(row) : undefined;
+  }
+
+  // Mark a background scrape as FAILED (the agent errored or the run went stale).
+  async markScrapeFailed(
+    orgId: string,
+    aimId: string,
+  ): Promise<ReachAim | undefined> {
+    const [row] = await this.db
+      .update(schema.reachAims)
+      .set({ status: 'FAILED', updatedAt: new Date() })
+      .where(
+        and(eq(schema.reachAims.id, aimId), tenantScope(orgId, schema.reachAims)),
+      )
+      .returning();
+    return row ? rowToAim(row) : undefined;
+  }
+
   async findAims(orgId: string): Promise<ReachAim[]> {
     const rows = await this.db
       .select()
@@ -206,10 +246,12 @@ export class ReachRepository {
 
   // Replace this aim's leads with a fresh scrape, then update the companies count
   // and mark the aim COMPLETED. Done in one transaction so the count never drifts.
+  // `lastSeconds` (when given) records the run duration to seed the next ETA.
   async replaceLeads(
     orgId: string,
     aimId: string,
     leads: LeadInsert[],
+    lastSeconds?: number,
   ): Promise<ReachLead[]> {
     return this.db.transaction(async (tx) => {
       await tx
@@ -250,6 +292,7 @@ export class ReachRepository {
         .set({
           companies: inserted.length,
           status: 'COMPLETED',
+          ...(lastSeconds != null ? { scrapeLastSeconds: lastSeconds } : {}),
           updatedAt: new Date(),
         })
         .where(

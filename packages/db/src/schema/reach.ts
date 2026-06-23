@@ -99,6 +99,14 @@ export const reachAims = pgTable(
     autoSend: boolean('auto_send').notNull().default(false),
     // Count of leads found (denormalized for the campaign table).
     companies: integer('companies').notNull().default(0),
+    // --- async scrape tracking (Lead Satellite runs in the background) ---
+    // When the current/last scrape started (drives the ETA countdown + the
+    // stale-run self-heal). scrapeEtaSeconds: the estimate computed at start.
+    // scrapeLastSeconds: the actual duration of the last successful scrape, used
+    // to seed the next ETA (self-improving). All nullable: never scraped = null.
+    scrapeStartedAt: timestamp('scrape_started_at', { withTimezone: true }),
+    scrapeEtaSeconds: integer('scrape_eta_seconds'),
+    scrapeLastSeconds: integer('scrape_last_seconds'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

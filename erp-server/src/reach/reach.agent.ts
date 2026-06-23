@@ -34,6 +34,7 @@ export class ReachAgentClient {
     workflow: string,
     input: Record<string, unknown>,
     mode: 'dry_run' | 'live' = 'live',
+    timeoutMs?: number,
   ): Promise<AgentRunResult> {
     const base = this.config.get('AGENTS_BASE_URL').trim().replace(/\/+$/, '');
     if (!base) {
@@ -43,9 +44,11 @@ export class ReachAgentClient {
     }
 
     const controller = new AbortController();
+    // Per-call timeout override (the background Reach scrape passes a long one);
+    // falls back to the global AGENT_TIMEOUT_MS for the quick foreground calls.
     const timeout = setTimeout(
       () => controller.abort(),
-      this.config.get('AGENT_TIMEOUT_MS'),
+      timeoutMs ?? this.config.get('AGENT_TIMEOUT_MS'),
     );
     try {
       const res = await fetch(`${base}/run`, {

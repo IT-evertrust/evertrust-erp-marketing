@@ -36,7 +36,6 @@ export function useReach() {
   const [loadingCampaigns, setLoadingCampaigns] = useState(true);
   const [loadingLeads, setLoadingLeads] = useState(false);
   const [creatingAim, setCreatingAim] = useState(false);
-  const [scrapingLeads, setScrapingLeads] = useState(false);
   const [bazookaRunning, setBazookaRunning] = useState(false);
 
   // When a freshly-created campaign is auto-scraped, we manage its leads directly
@@ -90,9 +89,65 @@ export function useReach() {
     };
   }, [selectedCampaignId]);
 
+  // Keep a ref to the latest campaigns so the poller can diff prev→next without
+  // re-subscribing its interval on every campaigns change.
+  const campaignsRef = useRef<ReachCampaignView[]>(campaigns);
+  useEffect(() => {
+    campaignsRef.current = campaigns;
+  }, [campaigns]);
+
+  // Poll while ANY campaign is scraping. The scrape runs server-side, so this is a
+  // pure status mirror: refresh the campaign list (drives the ETA countdown + the
+  // SCRAPING badge) and, when the selected campaign finishes, pull its leads + toast.
+  // Because it keys off server status, leaving the page and returning re-detects the
+  // RUNNING aim and re-attaches the countdown — no local "is scraping" flag needed.
+  const anyRunning = useMemo(
+    () => campaigns.some((c) => c.aimStatus === 'RUNNING'),
+    [campaigns],
+  );
+  useEffect(() => {
+    if (!anyRunning) return;
+    let cancelled = false;
+    const id = setInterval(async () => {
+      const fresh = await getReachCampaigns().catch(() => null);
+      if (!fresh || cancelled) return;
+      const before = campaignsRef.current.find((c) => c.id === selectedCampaignId);
+      const after = fresh.find((c) => c.id === selectedCampaignId);
+      setCampaigns(fresh);
+      if (before?.aimStatus === 'RUNNING' && after && after.aimStatus !== 'RUNNING') {
+        if (after.aimStatus === 'COMPLETED') {
+          const ls = await getCampaignLeads(selectedCampaignId).catch(() => []);
+          if (!cancelled) {
+            setLeads(ls);
+            toast.success(t('toast.scrapeDone', { count: ls.length }));
+          }
+        } else if (after.aimStatus === 'FAILED' && !cancelled) {
+          toast.error(t('toast.scrapeFailed'));
+        }
+      }
+    }, 6000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [anyRunning, selectedCampaignId, t]);
+
   const selectedCampaign = useMemo(
     () => campaigns.find((c) => c.id === selectedCampaignId),
     [campaigns, selectedCampaignId],
+  );
+
+  // The in-flight scrape for the SELECTED campaign (server-seeded), or null. Drives
+  // the ETA countdown in the Lead Scraper panel.
+  const selectedScrape = useMemo(
+    () =>
+      selectedCampaign?.aimStatus === 'RUNNING' && selectedCampaign.scrapeStartedAt
+        ? {
+            startedAt: selectedCampaign.scrapeStartedAt,
+            etaSeconds: selectedCampaign.scrapeEtaSeconds ?? 0,
+          }
+        : null,
+    [selectedCampaign],
   );
 
   const emails = useMemo(
@@ -130,30 +185,19 @@ export function useReach() {
       setActiveTab('scraper');
       setIsCampaignFormOpen(false);
       setLeads([]);
-      setCreatingAim(false);
 
-      // Lead Satellite runs right away.
-      setScrapingLeads(true);
-      const scraped = await scrapeReachAim(view.id);
-      setLeads(scraped);
+      // Lead Satellite runs in the BACKGROUND: this returns the campaign marked
+      // RUNNING (with the server-seeded ETA) immediately. The polling effect below
+      // picks up the leads + flips the status when the scrape finishes.
+      const running = await scrapeReachAim(view.id);
       setCampaigns((current) =>
-        current.map((c) =>
-          c.id === view.id
-            ? {
-                ...c,
-                companies: scraped.length,
-                status: 'IN CAMPAIGN',
-                aimStatus: 'COMPLETED',
-              }
-            : c,
-        ),
+        current.map((c) => (c.id === view.id ? running : c)),
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : t('toast.launchFailed');
       toast.error(msg);
     } finally {
       setCreatingAim(false);
-      setScrapingLeads(false);
     }
   }
 
@@ -231,7 +275,7 @@ export function useReach() {
     loadingCampaigns,
     loadingLeads,
     creatingAim,
-    scrapingLeads,
+    selectedScrape,
 
     bazookaRunning,
     toggleAutoSend,

@@ -164,8 +164,21 @@ export class ReachService {
     }
   }
 
-  getAims(orgId: string): Promise<ReachAim[]> {
-    return this.repo.findAims(orgId);
+  async getAims(orgId: string): Promise<ReachAim[]> {
+    const aims = await this.repo.findAims(orgId);
+    // Self-heal: a background scrape whose process died (e.g. a Render redeploy
+    // mid-run) leaves the aim stuck at RUNNING. If it's older than the hard cap,
+    // flip it to FAILED so the UI's countdown ends instead of hanging forever.
+    return Promise.all(
+      aims.map(async (a) =>
+        a.status === 'RUNNING' && this.isScrapeStale(a)
+          ? (await this.repo.markScrapeFailed(orgId, a.id)) ?? {
+              ...a,
+              status: 'FAILED' as const,
+            }
+          : a,
+      ),
+    );
   }
 
   async getAim(orgId: string, aimId: string): Promise<ReachAim> {
@@ -174,39 +187,82 @@ export class ReachService {
     return aim;
   }
 
-  // Lead Satellite: activated with the aim's config; scrapes leads and stores them
-  // tied to the aim. Returns the stored leads. Marks the aim RUNNING -> COMPLETED
-  // (or FAILED if the agent is unavailable).
-  async scrapeAim(orgId: string, aimId: string) {
+  // Lead Satellite (ASYNC): a Reach scrape can take many minutes, so we DON'T hold
+  // the HTTP request open for it (that's what caused the 5-min "Agent abort"). This
+  // returns immediately with the aim marked RUNNING + a server-seeded ETA; the
+  // actual run continues in the background (runScrapeInBackground) and flips the aim
+  // to COMPLETED (leads saved) or FAILED. The FE polls getAims and renders the ETA
+  // countdown from scrapeStartedAt + scrapeEtaSeconds (so it survives navigation).
+  async scrapeAim(orgId: string, aimId: string): Promise<ReachAim> {
     const aim = await this.getAim(orgId, aimId);
-    await this.repo.setStatus(orgId, aimId, 'RUNNING');
+    // Idempotent: a scrape already in flight (and not stale) — return it as-is so a
+    // double-click / re-aim never launches a second concurrent run for the same aim.
+    if (aim.status === 'RUNNING' && !this.isScrapeStale(aim)) return aim;
+
+    const scraper = await this.workflowConfig.getLeadScraper(orgId);
+    const etaSeconds = aim.scrapeLastSeconds ?? this.estimateScrapeSeconds(scraper);
+    const running = (await this.repo.markScrapeStarted(orgId, aimId, etaSeconds)) ?? {
+      ...aim,
+      status: 'RUNNING' as const,
+    };
+    // Fire-and-forget: the request returns now; the scrape runs server-side. The
+    // catch is inside runScrapeInBackground, so this never rejects unhandled.
+    void this.runScrapeInBackground(orgId, aim, scraper);
+    return running;
+  }
+
+  // The actual scrape, run OFF the request thread. On success: save leads + record
+  // the real duration (seeds the next ETA). On any error: mark FAILED. Never throws.
+  private async runScrapeInBackground(
+    orgId: string,
+    aim: ReachAim,
+    scraper: { leadTarget: number | null; maxQueries: number | null; minScore: number | null },
+  ): Promise<void> {
+    const startedMs = Date.now();
     try {
       const config = await this.buildAgentConfig(orgId, aim);
       // Per-org Lead Scraper tuning from the Configuration page (org_config.scrape_*).
       // Null fields fall back to the satellite's env defaults — the agent only applies
       // explicit overrides. This is what makes "Leads per run / Search budget / Min
       // score" on the config page actually control how many companies a scrape returns.
-      const scraper = await this.workflowConfig.getLeadScraper(orgId);
-      const result = await this.agent.run('reach.lead_satellite', {
-        campaign_id: aim.id,
-        returnOnly: true,
-        config,
-        scraper: {
-          leadTarget: scraper.leadTarget,
-          maxQueries: scraper.maxQueries,
-          minScore: scraper.minScore,
+      const result = await this.agent.run(
+        'reach.lead_satellite',
+        {
+          campaign_id: aim.id,
+          returnOnly: true,
+          config,
+          scraper: {
+            leadTarget: scraper.leadTarget,
+            maxQueries: scraper.maxQueries,
+            minScore: scraper.minScore,
+          },
         },
-      });
+        'live',
+        this.config.get('REACH_SCRAPE_TIMEOUT_MS'),
+      );
       const leads = sanitizeLeads(result.output);
-      return this.repo.replaceLeads(orgId, aimId, leads);
+      const elapsed = Math.round((Date.now() - startedMs) / 1000);
+      await this.repo.replaceLeads(orgId, aim.id, leads, elapsed);
     } catch (err) {
-      await this.repo.setStatus(orgId, aimId, 'FAILED');
       const msg = err instanceof Error ? err.message : 'lead_satellite failed';
-      this.logger.warn(`Lead Satellite failed for aim ${aimId}: ${msg}`);
-      throw err instanceof ServiceUnavailableException
-        ? err
-        : new ServiceUnavailableException(`Lead scrape failed: ${msg}`);
+      this.logger.warn(`Lead Satellite failed for aim ${aim.id}: ${msg}`);
+      await this.repo.markScrapeFailed(orgId, aim.id).catch(() => undefined);
     }
+  }
+
+  // Estimate a scrape's duration (seconds) from the org's Lead Scraper config — a
+  // rough seed for the FIRST run's countdown; later runs use the real last duration.
+  private estimateScrapeSeconds(scraper: { leadTarget: number | null }): number {
+    const target = scraper.leadTarget ?? 100; // matches the satellite's env default
+    return Math.min(7200, Math.max(120, 60 + target * 4));
+  }
+
+  // A RUNNING aim is "stale" once it has outlived the background agent's hard
+  // timeout (+ buffer) — i.e. its process is gone and it will never complete.
+  private isScrapeStale(aim: ReachAim): boolean {
+    if (!aim.scrapeStartedAt) return true;
+    const capMs = this.config.get('REACH_SCRAPE_TIMEOUT_MS') + 120_000;
+    return Date.now() - new Date(aim.scrapeStartedAt).getTime() > capMs;
   }
 
   async getAimLeads(orgId: string, aimId: string) {

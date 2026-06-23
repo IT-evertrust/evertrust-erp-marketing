@@ -42,6 +42,8 @@ interface BackendAim {
   salesCalendarId?: string;
   status: AimStatus;
   companies: number;
+  scrapeStartedAt?: string | null;
+  scrapeEtaSeconds?: number | null;
   templates: ReachTemplates | null;
   newsBrief: { title: string; body: string } | null;
   generatedBy: string | null;
@@ -135,13 +137,15 @@ export async function createReachAim(
   return mapAim(aim);
 }
 
-// Activate Lead Satellite for an aim; returns the stored leads.
-export async function scrapeReachAim(aimId: string): Promise<Lead[]> {
-  const data = await mutate<BackendLead[]>(
+// Trigger Lead Satellite for an aim. The scrape now runs in the BACKGROUND, so this
+// returns the campaign marked RUNNING (with the server-seeded ETA) immediately — the
+// leads arrive later and are picked up by the campaign-status polling in useReach.
+export async function scrapeReachAim(aimId: string): Promise<ReachCampaignView> {
+  const aim = await mutate<BackendAim>(
     'POST',
     `/growth/reach/aims/${aimId}/scrape`,
   );
-  return data.map(mapLead);
+  return mapAim(aim);
 }
 
 export async function getCampaignLeads(aimId: string): Promise<Lead[]> {
@@ -227,7 +231,8 @@ export function getDailySends() {
 function mapAimStatus(status: AimStatus): CampaignStatus {
   if (status === 'COMPLETED') return 'IN CAMPAIGN';
   if (status === 'FAILED') return 'OVER';
-  return 'NEW'; // DRAFT | READY | RUNNING
+  if (status === 'RUNNING') return 'SCRAPING';
+  return 'NEW'; // DRAFT | READY
 }
 
 function mapAim(a: BackendAim): ReachCampaignView {
@@ -244,6 +249,8 @@ function mapAim(a: BackendAim): ReachCampaignView {
     stats: a.stats ?? EMPTY_STATS,
     autoSend: a.autoSend,
     sender: a.sender,
+    scrapeStartedAt: a.scrapeStartedAt ?? null,
+    scrapeEtaSeconds: a.scrapeEtaSeconds ?? null,
   };
 }
 
