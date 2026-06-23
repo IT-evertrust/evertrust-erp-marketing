@@ -111,19 +111,25 @@
     "cancel": "Abbrechen",
     "submit": "Ziel starten",
     "submitting": "Wird gezielt…",
+    "validation": "Kampagnenname, Nische und Region sind erforderlich.",
     "field": {
       "name": "Kampagnenname",
       "namePlaceholder": "z. B. Wohnungsgenossenschaften ≥ 500 Einheiten · Bayern",
       "niche": "Nische",
       "nichePlaceholder": "z. B. Wohnungswirtschaft, Hausverwaltung, Installateur",
+      "country": "Land",
+      "countryPlaceholder": "z. B. Deutschland",
       "region": "Region",
-      "regionPlaceholder": "z. B. Bayern, NRW, bundesweit DE",
-      "segment": "Segment",
-      "segmentPlaceholder": "z. B. Portfoliohalter, öffentlicher Wohnungsbau, Versorger",
-      "source": "Quelle",
-      "sourcePlaceholder": "z. B. Firmen-DB, iBau, LinkedIn",
-      "sender": "Absender-Postfach",
-      "senderPlaceholder": "info oder hanna"
+      "project": "Projekt",
+      "projectPlaceholder": "z. B. PV-Ausbau, LED-Umrüstung, Wärmepumpen",
+      "gmailLabel": "Gmail-Label",
+      "gmailLabelPlaceholder": "z. B. LED-Germany-North-2026",
+      "gmailLabelHint": "Automatisch aus Nische, Land, Zone und Jahr erstellt. Zum Überschreiben bearbeiten.",
+      "whatsapp": "WhatsApp-Nummer",
+      "whatsappPlaceholder": "z. B. +49 151 23456789",
+      "sender": "Gmail",
+      "calendar": "Kalender",
+      "calendarNotConnected": "Google nicht verbunden — der Standardkalender der Organisation wird verwendet."
     }
   },
   "toast": {

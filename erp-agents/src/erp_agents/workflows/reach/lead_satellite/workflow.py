@@ -27,10 +27,12 @@ from erp_agents.core.job import AgentJob
 from erp_agents.core.result import AgentResult, AgentTraceStep
 from erp_agents.core.workflow import Workflow
 from erp_agents.workflows.reach import _agents_path  # noqa: F401  (sys.path shim)
+from erp_agents.workflows.reach._inject import ConfigInjectingErp, satellite_config
 
 # MAIN's standalone agent (resolved via the _agents_path shim).
 from satellite.clients.erp import ErpClient  # type: ignore
 from satellite.clients.search import HttpFetcher, WebSearch  # type: ignore
+from satellite.domain import geo  # type: ignore
 from satellite.pipeline import RunOptions, run as satellite_run  # type: ignore
 from satellite.settings import (  # type: ignore
     load_settings,
@@ -106,9 +108,19 @@ class LeadSatelliteWorkflow(Workflow):
             )
 
         live = job.mode == "live"
-        persist = bool(inp.get("persist", live))
         use_llm = bool(inp.get("use_llm", inp.get("useLlm", True)))
         max_segments = inp.get("max_segments", inp.get("maxSegments"))
+
+        # INJECTED config (Reach flow): the reach_aim has no GET /campaigns/:id/config, so the
+        # NestJS server hands the agent its config in `input.config`. In that mode the agent is
+        # RETURN-ONLY — it never fetches and never writes (persist forced off, ERP wrapped so every
+        # write is a no-op). Absent `config` keeps the original campaigns flow (fetch + persist).
+        cfg_in = inp.get("config")
+        injected = isinstance(cfg_in, dict) and bool(cfg_in)
+        if injected:
+            persist = False
+        else:
+            persist = bool(inp.get("persist", live))
 
         # Settings: env defaults, then per-org overrides (request value ?? env).
         settings = load_settings()
@@ -139,7 +151,20 @@ class LeadSatelliteWorkflow(Workflow):
             )
         )
 
-        erp = ErpClient(settings.erp_base_url, settings.arsenal_token)
+        # ERP gateway: real client for the campaigns flow; for the Reach flow wrap a
+        # ConfigInjectingErp that serves the injected config and no-ops every write (return-only).
+        # Region is a ZONE word (North/South/…) in the Reach flow — pass it to the pipeline as
+        # region_focus (resolved via the LLM profiler), NOT as a literal city list.
+        real_erp = ErpClient(settings.erp_base_url, settings.arsenal_token)
+        region_focus = None
+        if injected:
+            cfg = satellite_config(cfg_in)
+            erp = ConfigInjectingErp(cfg, real=real_erp)
+            zone = (cfg.region or "").strip()
+            if zone and not geo.is_nationwide(zone):
+                region_focus = zone
+        else:
+            erp = real_erp
         search = WebSearch(
             settings.searxng_url,
             settings.searxng_api_key,
@@ -153,6 +178,7 @@ class LeadSatelliteWorkflow(Workflow):
             persist=persist,
             use_llm=use_llm,
             max_segments=max_segments,
+            region_focus=region_focus,
         )
         try:
             result = satellite_run(settings, opts, erp, search, fetcher)
@@ -165,7 +191,7 @@ class LeadSatelliteWorkflow(Workflow):
                 trace=trace,
             )
         finally:
-            _close(erp)
+            _close(real_erp)  # the underlying httpx client (erp may be the no-op wrapper)
             _close(search)
             _close(fetcher)
 

@@ -44,6 +44,12 @@ class RunOptions:
     persist: bool = False
     use_llm: bool = True
     max_segments: int | None = None  # cap segments this run (testing / training wheels)
+    # region_focus: a ZONE word ("North"/"South"/"East"/"West"/"Border-DE"…) — a relative part of
+    # the country, NOT a real place. It is never passed to geo.cities_for as a literal (that would
+    # search a garbage term); instead it is fed to the LLM country profiler ("focus on the {zone} of
+    # {country}") and treated like nationwide-within-zone (use the profiler's cities). Empty / None /
+    # "Anywhere" => whole country (the normal nationwide path). Set by the Reach adapter only.
+    region_focus: str | None = None
 
 
 def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetcher: UrlFetcher) -> dict:
@@ -74,7 +80,18 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
     # keywords (local script + English). There are NO hardcoded country tables — discovery + the
     # niche gate work in the country's own language and find native-named firms. Needs a capable
     # model; with no LLM the run degrades to the country name as a single geo term.
-    profile = llm.profile_country(settings, cfg.country, cfg.niche, cfg.industry) if (opts.use_llm and settings.llm_base_url) else {}
+    # A ZONE focus ("North"/"South"/…) narrows the profiler to a part of the country; it is NOT a
+    # real place name, so it never reaches geo.cities_for as a literal. Empty / "Anywhere" => whole
+    # country. The zone is resolved by the LLM profiler (which returns real cities in that zone).
+    zone_focus = (opts.region_focus or "").strip()
+    if zone_focus and geo.is_nationwide(zone_focus):
+        zone_focus = ""
+    profile = (
+        llm.profile_country(settings, cfg.country, cfg.niche, cfg.industry, region_focus=zone_focus)
+        if (opts.use_llm and settings.llm_base_url) else {}
+    )
+    if zone_focus:
+        result["regionFocus"] = zone_focus
     iso2 = (profile.get("iso2") or "").lower()
     market_tld = ("." + iso2) if iso2 else ""
     if profile:
@@ -113,8 +130,12 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
     # 2) REGION BATCHES — "Anywhere" loops EVERY region of the AIM country (count = whatever the
     #    country has: 16 / 28 / 63…), one batch at a time with a cooldown, so each region gets its own
     #    query budget and the search backend isn't overloaded. A specific region/city list = 1 batch.
+    # A ZONE focus is "nationwide within the zone": the profiler already returned only the zone's
+    # cities, so use the profiler geography exactly as we do for "Anywhere" (never expand the zone
+    # word as a literal via cities_for).
+    use_profile_geo = geo.is_nationwide(cfg.region) or bool(zone_focus)
     region_batches = []
-    if geo.is_nationwide(cfg.region):
+    if use_profile_geo:
         if profile.get("regions"):     # model gave real regions -> use them
             region_batches = [(str(r.get("name") or f"region {i + 1}"), list(r.get("cities") or []))
                               for i, r in enumerate(profile["regions"]) if r.get("cities")]
@@ -122,7 +143,13 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
             cs, n = profile["cities"], max(1, settings.region_chunk)
             region_batches = [(f"batch {i // n + 1}", cs[i:i + n]) for i in range(0, len(cs), n)]
     if not region_batches:
-        cities0 = geo.cities_for(cfg.country, cfg.region, cfg.default_regions) or ([country] if country else [])
+        if use_profile_geo:
+            # Anywhere / zone with no profiler geography (no LLM, or it failed): degrade to the
+            # country as a single geo term. NEVER pass a zone word ("North") to cities_for — it
+            # would be searched as a literal place. The zone already steered the (skipped) profiler.
+            cities0 = [country] if country else []
+        else:
+            cities0 = geo.cities_for(cfg.country, cfg.region, cfg.default_regions) or ([country] if country else [])
         region_batches = [("all", cities0)]
     # max_regions caps how many region batches one run sweeps (bounds time + SearXNG load). 0 = no
     # cap = cover EVERY region the country has (paired with the per-region cooldown so it stays kind
@@ -184,7 +211,7 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
     hits_total = dropped_blocked = dropped_offniche = queries_run = regions_scanned = 0
     # Anywhere/nationwide + exhaust flag: keep sweeping ALL regions for full coverage instead of
     # stopping once lead_target is hit (a specific region/city list is one batch, unaffected).
-    exhaust = geo.is_nationwide(cfg.region) and settings.exhaust_anywhere_regions
+    exhaust = use_profile_geo and settings.exhaust_anywhere_regions
     for _rname, rcities in region_batches:
         segs, lm, ht, blk, off, nq = _discover(rcities)
         all_segments.extend(segs)

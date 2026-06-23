@@ -9,11 +9,18 @@ import { z } from 'zod';
 export const createAimSchema = z.object({
   name: z.string().min(1),
   niche: z.string().min(1),
-  region: z.string().min(1),
+  region: z.string().min(1), // AIM zone: Anywhere | North | South | East | West | Border-DE
+  country: z.string().optional(), // free text, default 'Germany' server-side
+  project: z.string().optional(),
+  gmailLabel: z.string().optional(),
+  whatsappNumber: z.string().optional(),
+  // The sending mailbox key (org sender). Defaults to info.
+  sender: z.string().optional(),
+  salesCalendarId: z.string().optional(),
+  // segment/source are legacy reach fields, no longer collected by the AIM modal
+  // (targeting comes from the niche's Sector targets). Kept optional for back-compat.
   segment: z.string().optional(),
   source: z.string().optional(),
-  // The sending mailbox (info | hanna). Defaults to info.
-  sender: z.string().optional(),
 });
 
 export type CreateAimDto = z.infer<typeof createAimSchema>;

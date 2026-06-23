@@ -34,9 +34,12 @@ interface BackendAim {
   id: string;
   name: string;
   niche: string;
+  country?: string;
   region: string;
-  segment?: string;
-  source?: string;
+  project?: string;
+  gmailLabel?: string;
+  whatsappNumber?: string;
+  salesCalendarId?: string;
   status: AimStatus;
   companies: number;
   templates: ReachTemplates | null;
@@ -121,10 +124,13 @@ export async function createReachAim(
   const aim = await mutate<BackendAim>('POST', '/growth/reach/aims', {
     name: values.name,
     niche: values.niche,
+    country: values.country || undefined,
     region: values.region,
-    segment: values.segment || undefined,
-    source: values.source || undefined,
+    project: values.project || undefined,
+    gmailLabel: values.gmailLabel || undefined,
+    whatsappNumber: values.whatsappNumber || undefined,
     sender: values.sender || undefined,
+    salesCalendarId: values.salesCalendarId || undefined,
   });
   return mapAim(aim);
 }

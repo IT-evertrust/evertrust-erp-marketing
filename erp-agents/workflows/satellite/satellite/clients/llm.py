@@ -115,15 +115,18 @@ def _chat_json(settings, system: str, user: str, timeout: float = 90.0) -> dict:
         return {}
 
 
-def _simple_cities(settings, country: str, want: int = 40) -> dict:
+def _simple_cities(settings, country: str, want: int = 40, region_focus: str = "") -> dict:
     """8B-friendly fallback: a FLAT city list + iso2/langCode. Small models choke on the big nested
-    region->cities->keywords JSON but handle this simple shape, so the satellite still gets cities."""
+    region->cities->keywords JSON but handle this simple shape, so the satellite still gets cities.
+    region_focus narrows the list to a part of the country (a zone like 'North'), if given."""
+    zone = (region_focus or "").strip()
+    scope = f"the {zone} of {country}" if zone else country
     d = _chat_json(
         settings,
         "Respond with ONE valid JSON object and nothing else. Use only well-known facts.",
-        f'List the largest cities of {country}. Return JSON exactly: '
+        f'List the largest cities of {scope}. Return JSON exactly: '
         f'{{"iso2":"2-letter code","langCode":"ISO 639-1 code","cities":["city1","city2"]}} — the '
-        f'{want} largest cities and business towns of {country}, LOCAL spelling, largest first. Only '
+        f'{want} largest cities and business towns of {scope}, LOCAL spelling, largest first. Only '
         f'cities of {country}. JSON only.')
     cities = [str(x).strip() for x in (d.get("cities") or []) if str(x).strip()]
     return {"iso2": str(d.get("iso2") or "").upper()[:2],
@@ -145,18 +148,32 @@ def _simple_keywords(settings, country: str, niche: str, industry: str = "") -> 
             "keywordsEnglish": [str(x).strip() for x in (d.get("english") or []) if str(x).strip()]}
 
 
-def profile_country(settings, country: str, niche: str, industry: str = "", want_cities: int = 80) -> dict:
+def profile_country(settings, country: str, niche: str, industry: str = "", want_cities: int = 80,
+                    region_focus: str = "") -> dict:
     """Country profiler (port of the n8n 'Country Profiler' node). For ANY country + niche, ask the
     model for that country's real ADMINISTRATIVE REGIONS each with its cities (local spelling) +
     BILINGUAL niche keywords (local script + English). The regions drive the nationwide per-region
     sweep, so the satellite is fully country-agnostic with NO hardcoded geography. Returns {} on any
-    failure so callers fall back to the offline PL/DE fixtures + deterministic keywords."""
+    failure so callers fall back to the offline PL/DE fixtures + deterministic keywords.
+
+    region_focus is an optional ZONE word ("North"/"South"/"East"/"West"/"Border-DE"…) — a relative
+    PART of the country, not a real place. When given, the profiler is asked to return only the
+    administrative regions + cities that lie in that zone of the country (geography stays in the LLM;
+    no hardcoded zone->region tables). Empty => the whole country (unchanged)."""
     if not settings.llm_base_url:
         return {}
+    zone = (region_focus or "").strip()
+    zone_line = (
+        f"Geographic focus: the {zone} of {country}. Return ONLY the administrative regions and "
+        f"cities that lie in the {zone} part of {country} (still in {country}, local spelling); "
+        f"omit regions in other parts of the country.\n"
+        if zone else ""
+    )
     system = ("You are a geography and B2B market research assistant. Respond with ONE valid JSON "
               "object and NOTHING ELSE. No markdown fences, no prose. Use only well-known facts.")
     user = (
         f"Country: {country}\nParent industry: {industry or '(infer from the niche)'}\nNiche: {niche}\n"
+        f"{zone_line}"
         'Return JSON exactly in this shape: {"countryName":"English country name",'
         '"iso2":"two-letter country code","language":"main business language (English name)",'
         '"langCode":"ISO 639-1 code",'
@@ -165,12 +182,21 @@ def profile_country(settings, country: str, niche: str, industry: str = "", want
         '"nicheKeywordsEnglish":"10-14 comma-separated keywords"}\nRules:\n'
         "- regions = the FIRST-LEVEL administrative divisions of THIS specific country (states / "
         "provinces / voivodeships / Bundesländer / counties / regions / prefectures / oblasts — "
-        "whatever THIS country actually uses). List the COMPLETE set (most countries have 5-30; do "
-        "NOT stop after a few), in LOCAL spelling. This MUST work for ANY country on earth: never "
-        "restrict to a fixed set, never include divisions of another country, and never invent a "
-        "region that does not exist.\n"
+        "whatever THIS country actually uses). " + (
+            f"List ONLY the divisions that lie in the {zone} part of {country} (do NOT list the "
+            "rest of the country), in LOCAL spelling. Never include divisions of another country, "
+            "and never invent a region that does not exist.\n"
+            if zone else
+            "List the COMPLETE set (most countries have 5-30; do NOT stop after a few), in LOCAL "
+            "spelling. This MUST work for ANY country on earth: never restrict to a fixed set, "
+            "never include divisions of another country, and never invent a region that does not "
+            "exist.\n"
+        ) +
         "- For EACH region: cities = 3 to 10 of its largest cities / business towns (local spelling, "
-        "largest first). Together the regions should cover the whole country.\n"
+        "largest first). " + (
+            f"Together the regions should cover the {zone} of {country}.\n" if zone
+            else "Together the regions should cover the whole country.\n"
+        ) +
         "- BOTH keyword lists EXPAND the niche WIDE but stay ON-NICHE and COMMERCIAL. Within the "
         "parent industry, include sub-niches, adjacent product/service categories, the core "
         "technologies, and the exact words a COMPANY/VENDOR uses to describe what it BUILDS or SELLS "
@@ -232,7 +258,7 @@ def profile_country(settings, country: str, niche: str, industry: str = "", want
     # SMALL-MODEL FALLBACK (hermes-mini 8B chokes on the big nested JSON above). If the rich call
     # produced no geography / no keywords, recover them with SIMPLE flat calls the 8B can answer.
     if not out["regions"] and not out["cities"]:
-        sc = _simple_cities(settings, country, want_cities)
+        sc = _simple_cities(settings, country, want_cities, region_focus=zone)
         if sc.get("cities"):
             out["cities"] = sc["cities"]
             out["iso2"] = out["iso2"] or sc.get("iso2", "")

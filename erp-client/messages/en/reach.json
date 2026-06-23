@@ -111,19 +111,25 @@
     "cancel": "Cancel",
     "submit": "Start Aim",
     "submitting": "Aiming…",
+    "validation": "Campaign name, niche and region are required.",
     "field": {
       "name": "Campaign Name",
       "namePlaceholder": "e.g. Housing Co-ops ≥ 500 units · Bavaria",
       "niche": "Niche",
       "nichePlaceholder": "e.g. Housing, Property Mgmt, Installer",
+      "country": "Country",
+      "countryPlaceholder": "e.g. Germany",
       "region": "Region",
-      "regionPlaceholder": "e.g. Bavaria, NRW, Nationwide DE",
-      "segment": "Segment",
-      "segmentPlaceholder": "e.g. Portfolio holders, public housing, utilities",
-      "source": "Source",
-      "sourcePlaceholder": "e.g. Company DB, iBau, LinkedIn",
-      "sender": "Sender mailbox",
-      "senderPlaceholder": "info or hanna"
+      "project": "Project",
+      "projectPlaceholder": "e.g. PV rollout, LED retrofit, heat pumps",
+      "gmailLabel": "Gmail Label",
+      "gmailLabelPlaceholder": "e.g. LED-Germany-North-2026",
+      "gmailLabelHint": "Auto-built from niche, country, zone and year. Edit to override.",
+      "whatsapp": "WhatsApp Number",
+      "whatsappPlaceholder": "e.g. +49 151 23456789",
+      "sender": "Gmail",
+      "calendar": "Calendar",
+      "calendarNotConnected": "Google not connected — the org default calendar is used."
     }
   },
   "toast": {
