@@ -15,6 +15,10 @@ import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { OrgId } from '../common/tenant';
 import { CreateAimBodyDto, SetAutoSendBodyDto } from './dto/create-aim.dto';
+import {
+  ReachTestSendBodyDto,
+  UpdateReachSettingsBodyDto,
+} from './dto/reach-settings.dto';
 import type { ReachRound } from './reach.model';
 import { ReachService } from './reach.service';
 
@@ -104,6 +108,33 @@ export class ReachController {
   @Post('bazooka/run')
   runBazooka(@OrgId() orgId: string) {
     return this.reachService.runBazooka(orgId);
+  }
+
+  // ---- Reach send-policy settings (Settings page) ----
+
+  // The org's effective Reach send policy + env defaults + mailbox status.
+  @RequirePermissions('campaigns:read')
+  @Get('settings')
+  getSettings(@OrgId() orgId: string) {
+    return this.reachService.getReachSendSettings(orgId);
+  }
+
+  // Update the per-org send policy (test/live, test recipient, cap). Body validated
+  // by the global ZodValidationPipe against UpdateReachSettingsBodyDto.
+  @RequirePermissions('campaigns:write')
+  @Patch('settings')
+  updateSettings(
+    @OrgId() orgId: string,
+    @Body() body: UpdateReachSettingsBodyDto,
+  ) {
+    return this.reachService.updateReachSendSettings(orgId, body);
+  }
+
+  // Send a one-off sample email to the given inbox to verify outbound sending.
+  @RequirePermissions('campaigns:write')
+  @Post('settings/test-send')
+  testSend(@OrgId() orgId: string, @Body() body: ReachTestSendBodyDto) {
+    return this.reachService.sendTestEmail(orgId, body.to);
   }
 
   // ---- tracking (public; hit by email clients / links, no auth) ----

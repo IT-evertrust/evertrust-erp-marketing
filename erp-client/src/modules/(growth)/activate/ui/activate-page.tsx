@@ -1,13 +1,9 @@
 'use client';
 
-// The blend: rework's Activate tabbed UI, but the Meeting Booker tab renders
-// MAIN's self-contained Google-Calendar component instead of rework's
-// MeetingBookerPanel. Research + After-Sales stay as rework's panels.
-import { Calendar } from '@/components/activate/calendar/calendar';
-
 import { ActivateTabs } from '../components/activate-tabs';
 import { AfterSalesAnalysisPanel } from '../components/aftersales-analysis-panel';
 import { CompanyResearchPanel } from '../components/company-research-panel';
+import { MeetingBookerPanel } from '../components/meeting-booker-panel';
 import { useActivate } from '../hooks/use-activate';
 
 export function ActivatePage() {
@@ -20,7 +16,16 @@ export function ActivatePage() {
         onChange={activate.setActiveTab}
       />
 
-      {activate.activeTab === 'booker' ? <Calendar /> : null}
+      {activate.activeTab === 'booker' ? (
+        <MeetingBookerPanel
+          accounts={activate.accounts}
+          accountId={activate.accountId}
+          onSelectAccount={activate.setAccountId}
+          loadingAccounts={activate.loadingAccounts}
+          meetings={activate.meetings}
+          loadingMeetings={activate.loadingMeetings}
+        />
+      ) : null}
 
       {activate.activeTab === 'research' ? (
         <CompanyResearchPanel

@@ -5,6 +5,7 @@ import Script from 'next/script';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { Loader2 } from 'lucide-react';
+import { GOOGLE_CONNECT_SCOPES } from '@evertrust/shared';
 import { ApiError } from '@/lib/api';
 import { useGoogleCodeLogin } from '@/hooks/use-auth';
 import { GOOGLE_CLIENT_ID } from '@/lib/env';
@@ -107,7 +108,17 @@ export function GoogleSignInButton() {
 
     clientRef.current = oauth2.initCodeClient({
       client_id: GOOGLE_CLIENT_ID,
-      scope: 'openid email profile',
+      // SINGLE-PATH AUTH: request the full Gmail/Calendar scopes at login so the one
+      // sign-in grants everything and the server can persist the refresh token — no
+      // separate "connect mailbox" step. (Was 'openid email profile' identity-only.)
+      scope: GOOGLE_CONNECT_SCOPES.join(' '),
+      // Force the consent screen so the code exchange ALWAYS returns a refresh_token.
+      // Google omits the refresh token on a repeat login for already-granted scopes,
+      // which would leave the server unable to (re)store an offline grant — e.g. after
+      // the token-encryption key is rotated, the old stored token becomes unusable and
+      // a plain re-login could never replace it. With prompt:'consent' a logout→login
+      // reliably re-mints and re-encrypts the grant under the current key.
+      prompt: 'consent',
       ux_mode: 'popup',
       callback: (response) => {
         if (response.code) {

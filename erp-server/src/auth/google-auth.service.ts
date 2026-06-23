@@ -2,13 +2,15 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { OAuth2Client } from 'google-auth-library';
+import { OAuth2Client, type Credentials } from 'google-auth-library';
 import { and, eq } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
+import { GoogleAccountsService } from '../google/google-accounts.service';
 import {
   companyEmailDomain,
   effectivePermissions,
@@ -51,11 +53,14 @@ import {
 // Google users have NO password, so we NEVER write an auth_credentials row.
 @Injectable()
 export class GoogleAuthService {
+  private readonly logger = new Logger(GoogleAuthService.name);
+
   constructor(
     @Inject(DB) private readonly db: DbClient,
     private readonly jwt: JwtService,
     private readonly config: AppConfigService,
     @Inject(TOKEN_VERIFIER) private readonly verifier: TokenVerifier,
+    private readonly accounts: GoogleAccountsService,
   ) {}
 
   // GIS ID-token path: the client posts the Google ID token (rendered button /
@@ -96,15 +101,14 @@ export class GoogleAuthService {
       throw new ServiceUnavailableException('Google login is not configured');
     }
 
-    let verified;
+    let verified: VerifiedGoogleUser;
+    let tokens: Credentials;
+    let idToken: string;
     try {
       const oauth = new OAuth2Client(clientId, clientSecret, 'postmessage');
-      const { tokens } = await oauth.getToken({
-        code,
-        redirect_uri: 'postmessage',
-      });
-      const idToken = tokens.id_token;
-      if (!idToken) throw new Error('No id_token in token response');
+      ({ tokens } = await oauth.getToken({ code, redirect_uri: 'postmessage' }));
+      if (!tokens.id_token) throw new Error('No id_token in token response');
+      idToken = tokens.id_token;
       // Verify the exchanged ID token exactly as the idToken path does.
       verified = await this.verifier.verify(idToken);
     } catch {
@@ -113,7 +117,60 @@ export class GoogleAuthService {
       throw new UnauthorizedException('Invalid Google token');
     }
 
-    return this.provisionAndIssue(verified);
+    const result = await this.provisionAndIssue(verified);
+
+    // SINGLE-PATH AUTH: the same login also persists the user's Gmail/Calendar grant
+    // (refresh token, encrypted) so the Activate calendar / Engage inbox work right
+    // after sign-in — no separate "connect mailbox" step. The login button now
+    // requests the full GOOGLE_CONNECT_SCOPES, so the code exchange returns a
+    // refresh_token (on first consent / re-consent). Best-effort: a storage failure
+    // must NEVER block login. Google omits refresh_token on a repeat login with no
+    // scope change — when it's absent we keep any previously stored grant.
+    if (tokens.refresh_token) {
+      try {
+        const sub = this.subFromIdToken(idToken);
+        if (sub) {
+          await this.accounts.upsertFromCallback(
+            result.user.organizationId,
+            result.user.id,
+            {
+              sub,
+              email: result.user.email,
+              name: result.user.name,
+              refreshToken: tokens.refresh_token,
+              accessToken: tokens.access_token ?? null,
+              expiryDate: tokens.expiry_date ?? null,
+              scopes: tokens.scope ? tokens.scope.split(' ').filter(Boolean) : [],
+            },
+          );
+        }
+      } catch (err) {
+        this.logger.warn(
+          `Failed to persist Google grant on login for ${result.user.email}: ${
+            err instanceof Error ? err.message : 'error'
+          }`,
+        );
+      }
+    }
+
+    return result;
+  }
+
+  // Extract the Google `sub` (stable account id) from an ALREADY-VERIFIED id_token.
+  // The token was just verified by this.verifier, so decoding the payload for `sub`
+  // (the google_accounts dedup key) needs no re-verification. Returns null on any
+  // malformed token so grant persistence is skipped rather than crashing login.
+  private subFromIdToken(idToken: string): string | null {
+    try {
+      const part = idToken.split('.')[1];
+      if (!part) return null;
+      const payload = JSON.parse(
+        Buffer.from(part, 'base64url').toString('utf8'),
+      ) as { sub?: string };
+      return payload.sub ?? null;
+    } catch {
+      return null;
+    }
   }
 
   // Shared post-verification provisioning: given a verified Google identity,

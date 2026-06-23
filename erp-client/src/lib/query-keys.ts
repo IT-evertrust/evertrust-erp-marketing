@@ -183,7 +183,9 @@ export const queryKeys = {
   // Engage: ERP-direct Gmail reply triage queue.
   engage: {
     all: ['engage'] as const,
-    replies: () => ['engage', 'replies'] as const,
+    accounts: () => ['engage', 'accounts'] as const,
+    replies: (accountId?: string) =>
+      ['engage', 'replies', accountId ?? ''] as const,
   },
 
   // Key Account: hot-lead CRM.

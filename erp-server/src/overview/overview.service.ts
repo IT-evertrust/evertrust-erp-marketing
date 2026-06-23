@@ -8,7 +8,10 @@ import type {
   ActivityLevel,
   EngineActivityItem,
   EngineAlert,
+  FunnelStage,
   OverviewActivity,
+  OverviewKpi,
+  OverviewSummary,
 } from './overview.model';
 
 // arsenal stage -> the funnel-stage source label shown on the activity row.
@@ -47,8 +50,99 @@ const VERDICT_LEVEL: Record<string, ActivityLevel> = {
 export class OverviewService {
   constructor(@Inject(DB) private readonly db: DbClient) {}
 
-  getOverview() {
-    return { kpis: [], funnel: [], activity: [] };
+  // Real org KPIs + R-E-A-N funnel computed from the org's actual data: reach leads,
+  // outreach sends, reply classifications, meetings, prospects, contracts. Each source
+  // degrades to [] on its own error (drifted/empty table) so the dashboard never 500s.
+  // Counts drive the headline values; the last 7 days' daily counts drive each card's
+  // sparkline + "this week" delta. (Activity is the separate getActivity endpoint.)
+  async getOverview(orgId: string): Promise<OverviewSummary> {
+    const safe = <T>(p: Promise<T[]>): Promise<T[]> => p.catch(() => [] as T[]);
+
+    const [leads, sends, replies, meetings, prospects, contracts] =
+      await Promise.all([
+        safe(
+          this.db
+            .select({ createdAt: schema.reachLeads.createdAt })
+            .from(schema.reachLeads)
+            .where(tenantScope(orgId, schema.reachLeads)),
+        ),
+        // outreach + replies carry no org column — tenancy is inherited via the
+        // parent prospect, so scope the join on prospects.
+        safe(
+          this.db
+            .select({ createdAt: schema.outreachMessages.createdAt })
+            .from(schema.outreachMessages)
+            .innerJoin(
+              schema.prospects,
+              eq(schema.outreachMessages.prospectId, schema.prospects.id),
+            )
+            .where(tenantScope(orgId, schema.prospects)),
+        ),
+        safe(
+          this.db
+            .select({
+              createdAt: schema.replyClassifications.createdAt,
+              verdict: schema.replyClassifications.verdict,
+            })
+            .from(schema.replyClassifications)
+            .innerJoin(
+              schema.prospects,
+              eq(schema.replyClassifications.prospectId, schema.prospects.id),
+            )
+            .where(tenantScope(orgId, schema.prospects)),
+        ),
+        safe(
+          this.db
+            .select({ createdAt: schema.meetings.createdAt })
+            .from(schema.meetings)
+            .where(tenantScope(orgId, schema.meetings)),
+        ),
+        safe(
+          this.db
+            .select({ createdAt: schema.prospects.createdAt })
+            .from(schema.prospects)
+            .where(tenantScope(orgId, schema.prospects)),
+        ),
+        safe(
+          this.db
+            .select({ createdAt: schema.contracts.createdAt })
+            .from(schema.contracts)
+            .where(tenantScope(orgId, schema.contracts)),
+        ),
+      ]);
+
+    const interested = replies.filter(
+      (r) => r.verdict === 'INTERESTED' || r.verdict === 'MEETING_REQUEST',
+    );
+
+    const kpis: OverviewKpi[] = [
+      buildKpi('NEW LEADS', leads.map((r) => r.createdAt)),
+      buildKpi('CONTACTED', sends.map((r) => r.createdAt)),
+      buildKpi('REPLIES', replies.map((r) => r.createdAt)),
+      buildKpi('INTERESTED', interested.map((r) => r.createdAt)),
+      buildKpi('MEETINGS', meetings.map((r) => r.createdAt)),
+      buildKpi('PROSPECTS', prospects.map((r) => r.createdAt)),
+    ];
+
+    // Funnel = real per-stage volume across R-E-A-N. width scales to the largest
+    // stage so the bars fit; conversion is each stage as a % of Reach.
+    const stages = [
+      { name: 'Reach', value: leads.length },
+      { name: 'Engage', value: replies.length },
+      { name: 'Activate', value: meetings.length },
+      { name: 'Nurture', value: prospects.length },
+      { name: 'Won', value: contracts.length },
+    ];
+    const maxStage = Math.max(1, ...stages.map((s) => s.value));
+    const reach = Math.max(1, stages[0]!.value);
+    const funnel: FunnelStage[] = stages.map((s) => ({
+      name: s.name,
+      value: numberFmt(s.value),
+      width: Math.round((s.value / maxStage) * 100),
+      conversion: `${Math.round((s.value / reach) * 100)}%`,
+    }));
+
+    return { kpis, funnel };
   }
 
   // The real cross-system Engine Activity feed + derived alerts for an org. Aggregates recent
@@ -314,4 +408,41 @@ export class OverviewService {
       .map(([k, v]) => `${v} ${k.replace(/([A-Z])/g, ' $1').trim().toLowerCase()}`);
     return parts.length ? ` · ${parts.join(', ')}` : '';
   }
+}
+
+// ---- KPI helpers (module-level, pure) -------------------------------------
+
+function numberFmt(n: number): string {
+  return new Intl.NumberFormat('en-US').format(n);
+}
+
+// Build one KPI card from a metric's timestamps: the total count is the headline
+// value; the last 7 days' daily counts become the sparkline polyline (viewBox
+// 0 0 100 22, taller = more) and the "+N this week" delta (or "all time" when
+// nothing landed in the window).
+function buildKpi(label: string, timestamps: Array<Date | string>): OverviewKpi {
+  const DAYS = 7;
+  const now = Date.now();
+  const buckets = new Array<number>(DAYS).fill(0);
+  for (const ts of timestamps) {
+    const t = ts instanceof Date ? ts.getTime() : Date.parse(ts);
+    if (Number.isNaN(t)) continue;
+    const daysAgo = Math.floor((now - t) / 86_400_000);
+    if (daysAgo >= 0 && daysAgo < DAYS) buckets[DAYS - 1 - daysAgo]! += 1;
+  }
+  const max = Math.max(1, ...buckets);
+  const spark = buckets
+    .map((v, i) => {
+      const x = (i / (DAYS - 1)) * 100;
+      const y = 22 - (v / max) * 20; // 2px headroom at the top; taller = more
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+  const week = buckets.reduce((a, b) => a + b, 0);
+  return {
+    label,
+    value: numberFmt(timestamps.length),
+    delta: week > 0 ? `+${week} this week` : 'all time',
+    spark,
+  };
 }

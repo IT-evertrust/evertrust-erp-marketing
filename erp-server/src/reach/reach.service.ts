@@ -273,12 +273,82 @@ export class ReachService {
   // house multi-tenant rule, exactly like EngageService.resolveAiModel/resolveTone)
   // can be layered in here without touching any caller, once the org_config columns
   // land (see FLAG in the integration report). Async to match that future DB read.
-  private async resolveSendConfig(_orgId: string): Promise<ReachSendConfig> {
-    return Promise.resolve({
-      mode: this.config.get('REACH_SEND_MODE'),
-      testRecipient: this.config.get('REACH_TEST_RECIPIENT'),
-      cap: this.config.get('REACH_TEST_SEND_CAP'),
-    });
+  private async resolveSendConfig(orgId: string): Promise<ReachSendConfig> {
+    // Per-org override (org_config) ?? env default — the house multi-tenant rule.
+    // Now editable at runtime from the Settings page (no redeploy).
+    const ov = await this.repo.getReachSettings(orgId);
+    const mode: 'test' | 'live' =
+      ov.mode === 'test' || ov.mode === 'live'
+        ? ov.mode
+        : this.config.get('REACH_SEND_MODE');
+    return {
+      mode,
+      testRecipient: ov.testRecipient ?? this.config.get('REACH_TEST_RECIPIENT'),
+      cap: ov.cap ?? this.config.get('REACH_TEST_SEND_CAP'),
+    };
+  }
+
+  // ---- Reach send-policy settings (Settings page) ----
+
+  // The org's EFFECTIVE Reach send policy (override ?? env), alongside the env
+  // defaults and the current sending-mailbox status, for the Settings form.
+  async getReachSendSettings(orgId: string): Promise<{
+    mode: 'test' | 'live';
+    testRecipient: string;
+    cap: number;
+    envDefaults: { mode: 'test' | 'live'; testRecipient: string; cap: number };
+    mailbox: { connected: boolean; email: string | null; reason: string | null };
+  }> {
+    const [effective, mailbox] = await Promise.all([
+      this.resolveSendConfig(orgId),
+      this.gmail.senderStatus(orgId),
+    ]);
+    return {
+      ...effective,
+      envDefaults: {
+        mode: this.config.get('REACH_SEND_MODE'),
+        testRecipient: this.config.get('REACH_TEST_RECIPIENT'),
+        cap: this.config.get('REACH_TEST_SEND_CAP'),
+      },
+      mailbox,
+    };
+  }
+
+  // Persist a partial Reach send-policy override, then return the refreshed effective
+  // settings (so the UI reflects exactly what will be used).
+  async updateReachSendSettings(
+    orgId: string,
+    patch: { mode?: 'test' | 'live'; testRecipient?: string | null; cap?: number | null },
+  ): ReturnType<ReachService['getReachSendSettings']> {
+    await this.repo.setReachSettings(orgId, patch);
+    return this.getReachSendSettings(orgId);
+  }
+
+  // Send a one-off sample email to `to` via the org's connected mailbox — a manual
+  // "does sending work?" probe for the Settings page. Sends DIRECTLY to the given
+  // inbox (it does not apply test-mode redirection). Never throws: a send failure is
+  // returned as { ok:false, reason } so the form can show why.
+  async sendTestEmail(
+    orgId: string,
+    to: string,
+  ): Promise<{ ok: boolean; to: string; from: string | null; messageId: string | null; reason: string | null }> {
+    const status = await this.gmail.senderStatus(orgId);
+    try {
+      const messageId = await this.gmail.sendAs(orgId, 'info', {
+        to,
+        subject: 'EVERTRUST Reach — test email',
+        body:
+          'This is a test email sent from the EVERTRUST Growth Engine settings page ' +
+          'to verify that outbound sending is working.\n\nIf you received this, the ' +
+          'connected mailbox can send mail.\n\n— EVERTRUST GmbH',
+        fromName: 'EVERTRUST GmbH',
+      });
+      return { ok: true, to, from: status.email, messageId, reason: null };
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : 'Send failed.';
+      this.logger.warn(`Reach test-send to ${to} failed: ${reason}`);
+      return { ok: false, to, from: status.email, messageId: null, reason };
+    }
   }
 
   // ---- Reach Bazooka (auto-sender) ----

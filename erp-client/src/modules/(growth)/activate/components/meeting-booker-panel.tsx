@@ -16,21 +16,49 @@ type MeetingBookerPanelProps = {
   loadingMeetings: boolean;
 };
 
-const HOURS = Array.from({ length: 11 }, (_, index) => 8 + index);
+// Calendar grid geometry. Wider hour range (7 AM–9 PM) + taller rows so slots breathe
+// and the body scrolls vertically through the day. Event positioning derives from these,
+// so changing them keeps grid + events in sync.
+const DAY_START = 7; // first hour shown (7 AM)
+const DAY_END = 21; // last hour shown (9 PM)
+const ROW_H = 80; // px per hour row (was 56 — more space, less clutter)
+const HOURS = Array.from({ length: DAY_END - DAY_START + 1 }, (_, i) => DAY_START + i);
 const WEEKDAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+const MS_DAY = 86_400_000;
+const YEAR_MS = 365 * MS_DAY;
 
-// The five weekday Date objects (Mon–Fri) of the week `offset` weeks from this one.
-// (The backend returns a -2w → +10w window, so prev/next weeks always have data.)
-function weekDates(offset: number): Date[] {
-  const today = new Date();
-  const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  const dow = (today.getDay() + 6) % 7; // 0 = Monday
-  monday.setDate(monday.getDate() - dow + offset * 7);
-  return Array.from({ length: 5 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    return d;
-  });
+const startOfDay = (d: Date): Date =>
+  new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+// Monday of the week containing `d`.
+function mondayOf(d: Date): Date {
+  const m = startOfDay(d);
+  const dow = (d.getDay() + 6) % 7; // 0 = Monday
+  m.setDate(m.getDate() - dow);
+  return m;
+}
+
+const addDays = (d: Date, n: number): Date => {
+  const x = new Date(d);
+  x.setDate(x.getDate() + n);
+  return x;
+};
+
+const firstOfMonth = (d: Date, monthDelta: number): Date =>
+  new Date(d.getFullYear(), d.getMonth() + monthDelta, 1);
+
+// Keep navigation within ±1 year of today (the calendar window the backend fetches).
+function clampToYear(d: Date): Date {
+  const now = Date.now();
+  if (d.getTime() < now - YEAR_MS) return new Date(now - YEAR_MS);
+  if (d.getTime() > now + YEAR_MS) return new Date(now + YEAR_MS);
+  return d;
+}
+
+// The five weekday Date objects (Mon–Fri) of the week containing `anchor`.
+function weekDates(anchor: Date): Date[] {
+  const monday = mondayOf(anchor);
+  return Array.from({ length: 5 }, (_, i) => addDays(monday, i));
 }
 
 const dayLabel = (d: Date): string => `${WEEKDAYS[d.getDay()]} ${d.getDate()}`;
@@ -46,11 +74,20 @@ function sameDay(iso: string | null | undefined, d: Date): boolean {
   );
 }
 
-function weekLabel(offset: number): string {
-  if (offset === 0) return 'This week';
-  if (offset === 1) return 'Next week';
-  if (offset === -1) return 'Last week';
-  return offset > 0 ? `In ${offset} weeks` : `${-offset} weeks ago`;
+const monthYearLabel = (d: Date): string =>
+  mondayOf(d).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+// "Jun 23 – 27" / "Jun 30 – Jul 4" for the visible Mon–Fri span.
+function weekRangeLabel(dates: Date[]): string {
+  const a = dates[0];
+  const b = dates[dates.length - 1];
+  if (!a || !b) return '';
+  const left = a.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const right =
+    a.getMonth() === b.getMonth()
+      ? `${b.getDate()}`
+      : b.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return `${left} – ${right}`;
 }
 
 export function MeetingBookerPanel({
@@ -62,8 +99,12 @@ export function MeetingBookerPanel({
   loadingMeetings,
 }: MeetingBookerPanelProps) {
   const [openMeeting, setOpenMeeting] = useState<CalendarMeeting | null>(null);
-  const [weekOffset, setWeekOffset] = useState(0);
-  const dates = weekDates(weekOffset);
+  // Anchor date for the visible week. Navigation moves it by week or month, clamped to
+  // ±1 year — the window the backend now fetches — so every view has real data.
+  const [viewDate, setViewDate] = useState<Date>(() => new Date());
+  const dates = weekDates(viewDate);
+  const isThisWeek = mondayOf(viewDate).getTime() === mondayOf(new Date()).getTime();
+  const go = (next: Date) => setViewDate(clampToYear(next));
   // Events on a given day: by real start date, falling back to the day-label for any
   // DB-seeded meeting that lacks an ISO start.
   const eventsFor = (d: Date) =>
@@ -73,7 +114,7 @@ export function MeetingBookerPanel({
 
   return (
     <GrowthCard
-      title={`Calendar · ${weekLabel(weekOffset)}`}
+      title={`Calendar · ${monthYearLabel(viewDate)}`}
       hint={
         <span className="inline-flex items-center gap-2">
           <LiveDot />
@@ -104,32 +145,62 @@ export function MeetingBookerPanel({
           </span>
         )}
 
-        {/* Week navigation */}
-        <div className="ml-auto flex items-center gap-1.5">
+        {/* Navigation: month stepper + week stepper + Today (all within ±1 year) */}
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          {/* Month stepper */}
+          <div className="flex items-center rounded-[8px] border border-[#e4e7eb] bg-white">
+            <button
+              type="button"
+              onClick={() => go(firstOfMonth(viewDate, -1))}
+              className="px-2.5 py-1.5 text-[12px] font-bold text-[#15171c] hover:bg-[#f6f7f9]"
+              aria-label="Previous month"
+            >
+              ‹
+            </button>
+            <span className="min-w-[104px] px-1 text-center text-[11px] font-bold uppercase tracking-[0.04em] text-[#15171c]">
+              {monthYearLabel(viewDate)}
+            </span>
+            <button
+              type="button"
+              onClick={() => go(firstOfMonth(viewDate, 1))}
+              className="px-2.5 py-1.5 text-[12px] font-bold text-[#15171c] hover:bg-[#f6f7f9]"
+              aria-label="Next month"
+            >
+              ›
+            </button>
+          </div>
+
           <button
             type="button"
-            onClick={() => setWeekOffset((w) => w - 1)}
-            className="rounded-[8px] border border-[#e4e7eb] bg-white px-2.5 py-1.5 text-[12px] font-bold text-[#15171c] hover:bg-[#f6f7f9]"
-            aria-label="Previous week"
-          >
-            ‹
-          </button>
-          <button
-            type="button"
-            onClick={() => setWeekOffset(0)}
-            disabled={weekOffset === 0}
+            onClick={() => setViewDate(new Date())}
+            disabled={isThisWeek}
             className="rounded-[8px] border border-[#e4e7eb] bg-white px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.06em] text-[#15171c] hover:bg-[#f6f7f9] disabled:opacity-40"
           >
-            This week
+            Today
           </button>
-          <button
-            type="button"
-            onClick={() => setWeekOffset((w) => w + 1)}
-            className="rounded-[8px] border border-[#e4e7eb] bg-white px-2.5 py-1.5 text-[12px] font-bold text-[#15171c] hover:bg-[#f6f7f9]"
-            aria-label="Next week"
-          >
-            ›
-          </button>
+
+          {/* Week stepper */}
+          <div className="flex items-center rounded-[8px] border border-[#e4e7eb] bg-white">
+            <button
+              type="button"
+              onClick={() => go(addDays(viewDate, -7))}
+              className="px-2.5 py-1.5 text-[12px] font-bold text-[#15171c] hover:bg-[#f6f7f9]"
+              aria-label="Previous week"
+            >
+              ‹
+            </button>
+            <span className="min-w-[86px] px-1 text-center text-[11px] font-bold text-[#5b626d]">
+              {weekRangeLabel(dates)}
+            </span>
+            <button
+              type="button"
+              onClick={() => go(addDays(viewDate, 7))}
+              className="px-2.5 py-1.5 text-[12px] font-bold text-[#15171c] hover:bg-[#f6f7f9]"
+              aria-label="Next week"
+            >
+              ›
+            </button>
+          </div>
         </div>
       </div>
 
@@ -139,7 +210,7 @@ export function MeetingBookerPanel({
         </div>
       ) : (
         <div className="overflow-hidden rounded-[10px] border border-[#e4e7eb]">
-          <div className="grid grid-cols-[58px_repeat(5,minmax(0,1fr))] border-b border-[#e4e7eb] bg-white">
+          <div className="grid grid-cols-[64px_repeat(5,minmax(0,1fr))] border-b border-[#e4e7eb] bg-white">
             <div className="flex items-end justify-end px-2 pb-2 text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#959ca7]">
               GMT+02
             </div>
@@ -163,15 +234,16 @@ export function MeetingBookerPanel({
             })}
           </div>
 
-          <div className="grid max-h-[620px] grid-cols-[58px_repeat(5,minmax(0,1fr))] overflow-y-auto">
+          <div className="grid max-h-[560px] grid-cols-[64px_repeat(5,minmax(0,1fr))] overflow-y-auto">
             <div className="relative bg-white">
               {HOURS.map((hour) => (
                 <div
                   key={hour}
-                  className="h-14 border-t border-[#e4e7eb] pr-2 text-right text-[9.5px] font-bold text-[#959ca7]"
+                  style={{ height: ROW_H }}
+                  className="border-t border-[#e4e7eb] pr-2 text-right text-[9.5px] font-bold text-[#959ca7]"
                 >
                   <span className="relative top-[-7px]">
-                    {hour <= 12 ? `${hour} AM` : `${hour - 12} PM`}
+                    {hour === 12 ? '12 PM' : hour < 12 ? `${hour} AM` : `${hour - 12} PM`}
                   </span>
                 </div>
               ))}
@@ -183,7 +255,7 @@ export function MeetingBookerPanel({
                 className="relative border-l border-[#e4e7eb] bg-white"
               >
                 {HOURS.map((hour) => (
-                  <div key={hour} className="h-14 border-t border-[#e4e7eb]" />
+                  <div key={hour} style={{ height: ROW_H }} className="border-t border-[#e4e7eb]" />
                 ))}
 
                 {eventsFor(d).map((meeting) => (
@@ -223,15 +295,16 @@ function CalendarEvent({
   meeting: CalendarMeeting;
   onOpen: () => void;
 }) {
-  const [hour = 0, minute = 0] = meeting.time.split(':').map(Number);
-  const top = ((hour - 8) * 56) + (minute / 60) * 56;
+  const [rawHour = DAY_START, minute = 0] = meeting.time.split(':').map(Number);
+  const hour = Number.isFinite(rawHour) ? rawHour : DAY_START;
+  const top = (hour - DAY_START) * ROW_H + (minute / 60) * ROW_H;
 
   return (
     <button
       type="button"
       onClick={onOpen}
       className="gc-press absolute left-1.5 right-1.5 z-[1] cursor-pointer rounded-md border border-[#d6dade] border-l-2 border-l-[#15171c] bg-[#eceef1] px-2 py-1.5 text-left transition-all duration-150 hover:z-[2] hover:bg-[#e2e5ea] hover:shadow-[0_4px_12px_-6px_rgba(21,23,28,0.3)]"
-      style={{ top, minHeight: 54 }}
+      style={{ top, minHeight: ROW_H - 12 }}
     >
       <div className="text-[9px] font-bold text-[#959ca7]">{meeting.time}</div>
       <div className="truncate text-[10.5px] font-bold text-[#15171c]">

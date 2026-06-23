@@ -491,4 +491,52 @@ export class ReachRepository {
       return true;
     });
   }
+
+  // ---- Reach send-policy settings (per-org override columns on org_config) ----
+
+  // The org's stored Reach send-policy OVERRIDES (null = "use the env default",
+  // resolved in the service). Returns all-null when the org has no org_config row yet.
+  async getReachSettings(orgId: string): Promise<{
+    mode: string | null;
+    testRecipient: string | null;
+    cap: number | null;
+  }> {
+    const rows = await this.db
+      .select({
+        mode: schema.orgConfig.reachSendMode,
+        testRecipient: schema.orgConfig.reachTestRecipient,
+        cap: schema.orgConfig.reachTestSendCap,
+      })
+      .from(schema.orgConfig)
+      .where(eq(schema.orgConfig.organizationId, orgId))
+      .limit(1);
+
+    return rows[0] ?? { mode: null, testRecipient: null, cap: null };
+  }
+
+  // Persist a partial Reach send-policy override. Only the provided keys are written
+  // (an omitted key leaves that column unchanged; an explicit `null` resets it to the
+  // env default). Find-or-creates the org_config row.
+  async setReachSettings(
+    orgId: string,
+    patch: {
+      mode?: string | null;
+      testRecipient?: string | null;
+      cap?: number | null;
+    },
+  ): Promise<void> {
+    const set: Partial<typeof schema.orgConfig.$inferInsert> = {};
+    if ('mode' in patch) set.reachSendMode = patch.mode ?? null;
+    if ('testRecipient' in patch) set.reachTestRecipient = patch.testRecipient ?? null;
+    if ('cap' in patch) set.reachTestSendCap = patch.cap ?? null;
+    if (Object.keys(set).length === 0) return;
+
+    await this.db
+      .insert(schema.orgConfig)
+      .values({ organizationId: orgId, ...set })
+      .onConflictDoUpdate({
+        target: schema.orgConfig.organizationId,
+        set: { ...set, updatedAt: new Date() },
+      });
+  }
 }

@@ -2,21 +2,16 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { AUTH_COOKIE } from '@/lib/env';
 
-// Route prefixes that require an authenticated session. Add future ERP modules
-// here. Everything NOT matched is public — notably `/` (the marketing landing)
-// and `/login`. There is intentionally no `/` -> `/dashboard` redirect: the
-// landing page is public for everyone, signed in or not.
-const PROTECTED_PREFIXES = [
-  '/dashboard',
-  '/automation',
-  '/marketing',
-  '/activate',
-  '/nurture',
-  '/performance',
-  '/reports',
-  '/users',
-  '/settings',
-];
+// This is a single internal product (the marketing department's ERP), not a
+// multi-tenant SaaS with a public marketing site — so the gate is an ALLOWLIST:
+// EVERYTHING requires an authenticated session except the routes below, and any
+// future ERP route is protected by default (no denylist to keep in sync). `/`
+// itself is gated too — it server-redirects to /overview, so an unauthenticated
+// hit bounces straight to /login.
+//
+// PUBLIC: only the login page. (Next internals + the API + static assets are
+// already excluded by the matcher at the bottom.)
+const PUBLIC_PREFIXES = ['/login'];
 
 // Demo/no-login mode. When NEXT_PUBLIC_AUTH_DISABLED=true the edge stops bouncing
 // unauthenticated visitors to /login — paired with the API's AUTH_DISABLED flag
@@ -30,21 +25,21 @@ export function middleware(request: NextRequest): NextResponse {
   // (the API is the source of truth). Missing cookie => treat as logged out.
   const hasSession = Boolean(request.cookies.get(AUTH_COOKIE)?.value);
 
-  const isProtected = PROTECTED_PREFIXES.some(
+  const isPublic = PUBLIC_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
 
-  if (isProtected && !hasSession && !AUTH_DISABLED) {
+  if (!isPublic && !hasSession && !AUTH_DISABLED) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
     url.search = '';
     return NextResponse.redirect(url);
   }
 
-  // NOTE: intentionally NO `/login -> /dashboard` bounce on cookie presence. The
+  // NOTE: intentionally NO `/login -> /overview` bounce on cookie presence. The
   // edge can't verify the JWT, so a stale/invalid cookie would ping-pong between
-  // /login and /dashboard forever. /login always renders; a successful login
-  // overwrites the cookie, and /dashboard stays protected by the check above.
+  // /login and /overview forever. /login always renders; a successful login
+  // overwrites the cookie, and every other route stays protected by the check above.
 
   return NextResponse.next();
 }

@@ -9,6 +9,9 @@ export type EngageCampaign = {
   region: string;
   replies: number;
   status: 'NEW' | 'IN CAMPAIGN' | 'OVER';
+  // The mailbox this campaign sends from — the axis the inbox filter works on.
+  sender: string;
+  senderEmail: string;
 };
 
 export type ReplyThreadMessage = {
@@ -31,4 +34,7 @@ export type CampaignReply = {
   draftSubject: string;
   draftBody: string;
   thread: ReplyThreadMessage[];
+  // The mailbox this conversation belongs to (from its campaign).
+  sender: string;
+  senderEmail: string;
 };

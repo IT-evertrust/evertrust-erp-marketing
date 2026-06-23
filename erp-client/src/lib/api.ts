@@ -173,6 +173,10 @@ export type UpsertOrgSenderBody = z.infer<typeof UpsertOrgSenderBodyDto>;
 
 const ConnectedGoogleAccountListDto = z.array(ConnectedGoogleAccountDto);
 
+// `?accountId=…` for the Engage inbox calls, or '' for the org default mailbox.
+const engageAccountQuery = (accountId?: string) =>
+  accountId ? `?accountId=${encodeURIComponent(accountId)}` : '';
+
 const GoogleConnectStartDto = z.object({
   url: z.string().url(),
 });
@@ -885,30 +889,44 @@ export const api = {
   },
 
   engage: {
-    replies: (signal?: AbortSignal) =>
-      request<EngageReplyListDto>('/engage/replies', {
+    // The org's connected Google mailboxes — feeds the inbox switcher. An optional
+    // `accountId` on the other calls targets a specific inbox (omitted = org default).
+    accounts: (signal?: AbortSignal) =>
+      request<ConnectedGoogleAccountDto[]>('/engage/accounts', {
+        schema: ConnectedGoogleAccountListDto,
+        signal,
+      }),
+
+    replies: (accountId?: string, signal?: AbortSignal) =>
+      request<EngageReplyListDto>(`/engage/replies${engageAccountQuery(accountId)}`, {
         schema: EngageReplyListDto,
         signal,
       }),
 
-    scan: () =>
-      request<EngageScanResultDto>('/engage/scan', {
+    scan: (accountId?: string) =>
+      request<EngageScanResultDto>(`/engage/scan${engageAccountQuery(accountId)}`, {
         method: 'POST',
         schema: EngageScanResultDto,
       }),
 
-    send: (id: string, text: string) =>
-      request<EngageReplyListDto>(`/engage/replies/${encodeURIComponent(id)}/send`, {
-        method: 'POST',
-        body: EngageSendBodyDto.parse({ text }),
-        schema: EngageReplyListDto,
-      }),
+    send: (id: string, text: string, accountId?: string) =>
+      request<EngageReplyListDto>(
+        `/engage/replies/${encodeURIComponent(id)}/send${engageAccountQuery(accountId)}`,
+        {
+          method: 'POST',
+          body: EngageSendBodyDto.parse({ text }),
+          schema: EngageReplyListDto,
+        },
+      ),
 
-    redraft: (id: string) =>
-      request<EngageReplyListDto>(`/engage/replies/${encodeURIComponent(id)}/redraft`, {
-        method: 'POST',
-        schema: EngageReplyListDto,
-      }),
+    redraft: (id: string, accountId?: string) =>
+      request<EngageReplyListDto>(
+        `/engage/replies/${encodeURIComponent(id)}/redraft${engageAccountQuery(accountId)}`,
+        {
+          method: 'POST',
+          schema: EngageReplyListDto,
+        },
+      ),
   },
 
   marketing: {

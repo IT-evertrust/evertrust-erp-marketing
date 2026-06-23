@@ -835,20 +835,20 @@ export const DEFAULT_SENDERS: OrgSenderDto[] = [
   { key: 'hanna', email: 'hanna@evertrust-germany.de', label: 'Hanna', isDefault: false },
 ];
 
-// --- Per-org Google connect (OAuth authorization-code flow, distinct from GIS login) ---
-// The OAuth scopes requested when a user connects their company Google account. All are
-// SENSITIVE (one-time app verification) but NONE are RESTRICTED — so no annual CASA audit.
-// `gmail.readonly` (inbox read for replies) is intentionally absent: that is the increment-2
-// scope decision. `include_granted_scopes` makes adding it later incremental.
+// --- Per-org Google connect / single-path login OAuth scopes ---
+// The OAuth scopes the (unified) Google login requests. gmail.readonly is a RESTRICTED
+// scope (needs Google verification + CASA audit before PUBLIC production), but it's what
+// Engage requires to SEARCH inbox threads by a client's email address (Gmail's `q=` search
+// rejects gmail.metadata with HTTP 400). For an internal org (@evertrust-germany.de test
+// users) it works in dev today. `include_granted_scopes` keeps adding scopes incremental.
 export const GOOGLE_CONNECT_SCOPES: readonly string[] = [
   'openid',
   'email',
   'profile',
   'https://www.googleapis.com/auth/gmail.send',
-  // gmail.metadata (headers + Gmail snippet, NO message body) is a SENSITIVE scope —
-  // it sidesteps the RESTRICTED-scope verification + CASA audit that gmail.readonly
-  // would force. Engage triages on subject + snippet only.
-  'https://www.googleapis.com/auth/gmail.metadata',
+  // gmail.readonly: full message read INCLUDING body + the `q` search needed to find a
+  // client's email threads. Replaces the narrower gmail.metadata (which can't `q`-search).
+  'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/calendar.readonly',
 ];

@@ -42,7 +42,7 @@ export function useCan(perm: Permission): boolean {
 }
 
 // Page guard for protected module pages. If the loaded user lacks `perm`, send
-// them to /dashboard (the always-allowed landing zone for authenticated users).
+// them to /overview (the always-allowed landing zone for authenticated users).
 // Returns the live state so the page can render a skeleton while loading and a
 // small "no access" notice in the brief window before the redirect fires.
 // This is the pattern future module pages should adopt.
@@ -52,7 +52,7 @@ export function useRequirePermission(perm: Permission): CanState {
 
   useEffect(() => {
     if (!state.isLoading && !state.allowed) {
-      router.replace('/dashboard');
+      router.replace('/overview');
     }
   }, [state.isLoading, state.allowed, router]);
 

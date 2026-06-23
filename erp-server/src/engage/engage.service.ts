@@ -1,8 +1,9 @@
 import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 import { z } from 'zod';
 import type {
+  ConnectedGoogleAccountDto,
   EngageReplyDto,
   EngageReplyListDto,
   EngageScanResultDto,
@@ -10,7 +11,9 @@ import type {
 } from '@evertrust/shared';
 import { DB, type DbClient } from '../db/db.tokens';
 import { GoogleAccountsService } from '../google/google-accounts.service';
+import { GoogleGmailService } from '../google/google-gmail.service';
 import { ClaudeService } from '../ai/claude.service';
+import { tenantScope } from '../common/tenant';
 import { writeMachineAudit } from '../common/machine-audit';
 
 // ===========================================================================
@@ -242,13 +245,107 @@ export class EngageService {
   constructor(
     @Inject(DB) private readonly db: DbClient,
     private readonly googleAccounts: GoogleAccountsService,
+    private readonly gmail: GoogleGmailService,
     private readonly claude: ClaudeService,
   ) {}
+
+  // --- CAMPAIGN → LEAD FOLDER → THREADS (the campaign-scoped inbox model) -----
+  // Engage is organised by CAMPAIGN (a Reach AIM), each of which owns a lead folder
+  // (reach_leads). Each lead carries a client email; we search the campaign's mailbox
+  // for the threads with that email. These three methods back that flow.
+
+  // The org's campaigns (Reach AIMs) with their lead count and the connected mailbox
+  // they send from (sender 'info'|'hanna' -> the google_accounts row whose email
+  // local-part matches), so the client can scope the inbox search to the campaign.
+  async listCampaigns(orgId: string) {
+    const aims = await this.db
+      .select({
+        aimId: schema.reachAims.id,
+        name: schema.reachAims.name,
+        niche: schema.reachAims.niche,
+        region: schema.reachAims.region,
+        sender: schema.reachAims.sender,
+        status: schema.reachAims.status,
+      })
+      .from(schema.reachAims)
+      .where(tenantScope(orgId, schema.reachAims))
+      .orderBy(desc(schema.reachAims.createdAt));
+
+    const counts = await this.db
+      .select({ aimId: schema.reachLeads.aimId, n: count() })
+      .from(schema.reachLeads)
+      .where(tenantScope(orgId, schema.reachLeads))
+      .groupBy(schema.reachLeads.aimId);
+    const countByAim = new Map(counts.map((c) => [c.aimId, Number(c.n)]));
+
+    const accounts = await this.db
+      .select({ id: schema.googleAccounts.id, email: schema.googleAccounts.email })
+      .from(schema.googleAccounts)
+      .where(eq(schema.googleAccounts.organizationId, orgId));
+    const accByLocalPart = new Map(
+      accounts.map((a) => [a.email.split('@')[0]?.toLowerCase() ?? '', a]),
+    );
+
+    return aims.map((a) => {
+      const mailbox = accByLocalPart.get(a.sender.toLowerCase());
+      return {
+        aimId: a.aimId,
+        name: a.name,
+        niche: a.niche,
+        region: a.region,
+        sender: a.sender,
+        status: a.status,
+        leadCount: countByAim.get(a.aimId) ?? 0,
+        mailboxAccountId: mailbox?.id ?? null,
+        mailboxEmail: mailbox?.email ?? null,
+      };
+    });
+  }
+
+  // The lead folder for a campaign: each lead's company + client email (+ context).
+  // Org-scoped AND aim-scoped; alphabetical by company.
+  async listCampaignLeads(orgId: string, aimId: string) {
+    return this.db
+      .select({
+        id: schema.reachLeads.id,
+        company: schema.reachLeads.company,
+        email: schema.reachLeads.email,
+        contactName: schema.reachLeads.contactName,
+        contactTitle: schema.reachLeads.contactTitle,
+        website: schema.reachLeads.website,
+        location: schema.reachLeads.location,
+        status: schema.reachLeads.status,
+      })
+      .from(schema.reachLeads)
+      .where(
+        and(
+          tenantScope(orgId, schema.reachLeads),
+          eq(schema.reachLeads.aimId, aimId),
+        ),
+      )
+      .orderBy(asc(schema.reachLeads.company));
+  }
+
+  // The Gmail threads (messages) to/from a lead's client email, searched in the
+  // campaign's mailbox (accountId) or the org default. Delegates to the Gmail
+  // service's gmail.readonly `q` search; never throws.
+  searchLeadThreads(orgId: string, email: string, accountId?: string) {
+    return this.gmail.searchByEmail(orgId, email, accountId ?? null);
+  }
+
+  // --- ACCOUNTS -------------------------------------------------------------
+  // The org's connected Google mailboxes — the data source for the inbox account
+  // switcher. A central operator picks one of these as the `accountId` passed to
+  // scan/list/send to view/act on that colleague's inbox (subject to the account
+  // having signed in and granted Gmail access).
+  listAccounts(orgId: string): Promise<ConnectedGoogleAccountDto[]> {
+    return this.googleAccounts.listForOrg(orgId);
+  }
 
   // --- SCAN -----------------------------------------------------------------
   // Read recent Gmail replies, match to org prospects, persist + classify +
   // draft. Never throws — degrades to `configured: false` with zero counters.
-  async scan(orgId: string): Promise<EngageScanResultDto> {
+  async scan(orgId: string, accountId?: string): Promise<EngageScanResultDto> {
     const empty: EngageScanResultDto = {
       configured: false,
       scanned: 0,
@@ -259,7 +356,7 @@ export class EngageService {
       reason: null,
     };
 
-    const access = await this.googleAccounts.resolveMailbox(orgId, 'gmail');
+    const access = await this.googleAccounts.resolveMailboxForAccount(orgId, accountId, 'gmail');
     if (!access.ok) return { ...empty, reason: access.reason };
     const perOrg = access;
     const token = perOrg.accessToken;
@@ -352,11 +449,11 @@ export class EngageService {
   // --- LIST -----------------------------------------------------------------
   // The Engage review queue: classification rows that carry a drafted reply OR
   // are UNSURE, ORG-SCOPED via the parent prospect, newest-first. Never throws.
-  async list(orgId: string): Promise<EngageReplyListDto> {
+  async list(orgId: string, accountId?: string): Promise<EngageReplyListDto> {
     let account: { email: string } | null = null;
     let reason: string | null = null;
     try {
-      const access = await this.googleAccounts.resolveMailbox(orgId, 'gmail');
+      const access = await this.googleAccounts.resolveMailboxForAccount(orgId, accountId, 'gmail');
       if (access.ok) account = { email: access.account.email };
       else reason = access.reason;
 
@@ -433,6 +530,7 @@ export class EngageService {
     orgId: string,
     classificationId: string,
     text: string,
+    accountId?: string,
   ): Promise<EngageReplyListDto> {
     // Resolve the classification + its prospect, asserting org ownership.
     const found = await this.db
@@ -453,10 +551,11 @@ export class EngageService {
       throw new BadRequestException('Unknown reply classification');
     }
 
-    const perOrg = await this.googleAccounts.getAccessTokenForOrg(orgId, 'gmail');
-    if (!perOrg) {
-      throw new BadRequestException('No connected Gmail mailbox for this org');
+    const access = await this.googleAccounts.resolveMailboxForAccount(orgId, accountId, 'gmail');
+    if (!access.ok) {
+      throw new BadRequestException(access.reason);
     }
+    const perOrg = access;
 
     // The inbound message we're replying to (for threading headers + subject).
     const inbound = row.classification.messageId
@@ -537,12 +636,16 @@ export class EngageService {
       .set({ suggestedReply: null })
       .where(eq(schema.replyClassifications.id, classificationId));
 
-    return this.list(orgId);
+    return this.list(orgId, accountId);
   }
 
   // --- REDRAFT --------------------------------------------------------------
   // Regenerate the suggested reply for one queued classification (org-scoped).
-  async redraft(orgId: string, classificationId: string): Promise<EngageReplyListDto> {
+  async redraft(
+    orgId: string,
+    classificationId: string,
+    accountId?: string,
+  ): Promise<EngageReplyListDto> {
     const found = await this.db
       .select({
         classification: schema.replyClassifications,
@@ -587,7 +690,7 @@ export class EngageService {
         .set({ suggestedReply: draft, model })
         .where(eq(schema.replyClassifications.id, classificationId));
     }
-    return this.list(orgId);
+    return this.list(orgId, accountId);
   }
 
   // ---------------------------------------------------------------------------

@@ -65,6 +65,11 @@ interface GoogleCodeClientConfig {
   callback: (response: GoogleCodeResponse) => void;
   error_callback?: (error: { type: string; message?: string }) => void;
   state?: string;
+  // Forwarded to Google's authorization endpoint. 'consent' forces the consent
+  // screen on every login so the code exchange ALWAYS returns a refresh_token —
+  // without it Google omits the refresh token for an already-granted user, so the
+  // server can never (re)store an offline grant on a repeat login.
+  prompt?: string;
 }
 
 interface GoogleCodeClient {

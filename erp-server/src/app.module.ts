@@ -6,7 +6,6 @@ import { LoggerModule } from './logger/logger.module';
 import { DbModule } from './db/db.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
-import { UsersModule } from './users/users.module';
 import { NichesModule } from './niches/niches.module';
 import { IndustriesModule } from './industries/industries.module';
 import { WorkflowConfigModule } from './arsenal/workflow-config.module';
@@ -17,8 +16,6 @@ import { OutreachModule } from './outreach/outreach.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { LeadsModule } from './leads/leads.module';
 import { MeetingsModule } from './meetings/meetings.module';
-import { MarketingModule } from './marketing/marketing.module';
-import { PerformanceModule } from './performance/performance.module';
 import { GoogleModule } from './google/google.module';
 import { EngageModule } from './engage/engage.module';
 import { ReachModule } from './reach/reach.module';
@@ -35,7 +32,6 @@ import { AuditInterceptor } from './common/audit.interceptor';
     DbModule,
     HealthModule,
     AuthModule,
-    UsersModule,
     NichesModule,
     IndustriesModule,
     WorkflowConfigModule,
@@ -46,8 +42,6 @@ import { AuditInterceptor } from './common/audit.interceptor';
     NotificationsModule,
     LeadsModule,
     MeetingsModule,
-    MarketingModule,
-    PerformanceModule,
     GoogleModule,
     EngageModule,
     ReachModule,

@@ -1,10 +1,8 @@
 import type { LucideIcon } from 'lucide-react';
 import {
   CalendarDays,
-  Gauge,
   LayoutGrid,
   Mail,
-  Settings,
   Target,
   Workflow,
 } from 'lucide-react';
@@ -52,23 +50,12 @@ export const GROWTH_NAV_ITEMS: GrowthNavItem[] = [
     step: '04',
     group: 'funnel',
   },
-  {
-    label: 'Settings',
-    href: '/settings',
-    icon: Settings,
-    group: 'system',
-  },
 ];
 
 export function getActiveGrowthNavItem(pathname: string) {
   return (
-    GROWTH_NAV_ITEMS.find((item) => {
-      if (item.href === '/dashboard') {
-        return pathname === '/' || pathname === '/dashboard';
-      }
-
-      return pathname.startsWith(item.href);
-    }) ?? GROWTH_NAV_ITEMS[0]!
+    GROWTH_NAV_ITEMS.find((item) => pathname.startsWith(item.href)) ??
+    GROWTH_NAV_ITEMS[0]!
   );
 }
 
@@ -81,7 +68,6 @@ export function getGrowthPageMeta(pathname: string) {
     Engage: '02 · SORT REPLIES',
     Activate: '03 · BOOKER · RESEARCH · ANALYSIS',
     Nurture: '04 · PIPELINE · CONTRACT',
-    Settings: 'ACCOUNT · SENDING · INTEGRATIONS',
   };
 
   return {

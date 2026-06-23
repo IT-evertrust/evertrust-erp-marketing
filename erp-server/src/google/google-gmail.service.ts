@@ -268,6 +268,92 @@ export class GoogleGmailService {
     }
   }
 
+  // Search a connected mailbox for messages to/from a specific client email — the core
+  // of the campaign→lead→thread Engage flow. Requires the gmail.readonly scope (Gmail
+  // rejects the `q` search param under gmail.metadata with HTTP 400). `accountId` scopes
+  // the search to a CAMPAIGN'S mailbox; null/absent uses the org default. Never throws —
+  // degrades to configured:false + a human reason.
+  async searchByEmail(
+    orgId: string,
+    clientEmail: string,
+    accountId?: string | null,
+  ): Promise<GmailMessagesListDto> {
+    const email = clientEmail.trim();
+    if (!email) {
+      return {
+        configured: false,
+        account: null,
+        messages: [],
+        nextPageToken: null,
+        resultSizeEstimate: null,
+        reason: 'No client email to search.',
+      };
+    }
+
+    const access = await this.googleAccounts.resolveMailboxForAccount(
+      orgId,
+      accountId ?? null,
+      'gmail-read',
+    );
+    if (!access.ok) {
+      return {
+        configured: false,
+        account: null,
+        messages: [],
+        nextPageToken: null,
+        resultSizeEstimate: null,
+        reason: access.reason,
+      };
+    }
+
+    try {
+      const params = new URLSearchParams({
+        maxResults: String(this.maxResults(undefined)),
+        // Find the whole conversation with this client — sent OR received.
+        q: `from:${email} OR to:${email}`,
+      });
+
+      const list = await this.googleGetJson<GmailApiListResponse>(
+        `${GMAIL_API_BASE}/messages?${params.toString()}`,
+        access.accessToken,
+      );
+
+      if (!list.ok) {
+        this.logger.warn(
+          `Gmail search returned HTTP ${list.status} for org ${orgId}: ${list.body}`,
+        );
+        return this.messagesNotConfigured(
+          access.account.email,
+          `Gmail API error (HTTP ${list.status}). Reconnect the account and allow Gmail read access.`,
+        );
+      }
+
+      const messages = await Promise.all(
+        (list.data.messages ?? [])
+          .filter((m) => !!m.id)
+          .map((m) =>
+            this.messageSummary(access.accessToken, m.id as string, m.threadId ?? null),
+          ),
+      );
+
+      return {
+        configured: true,
+        account: { email: access.account.email },
+        messages,
+        nextPageToken: list.data.nextPageToken ?? null,
+        resultSizeEstimate: list.data.resultSizeEstimate ?? null,
+        reason: null,
+      };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown error';
+      this.logger.warn(`Gmail searchByEmail failed for org ${orgId}: ${msg}`);
+      return this.messagesNotConfigured(
+        access.account.email,
+        'Could not reach Gmail. Try again, or reconnect the account.',
+      );
+    }
+  }
+
   async getMessage(orgId: string, messageId: string): Promise<GmailMessageDetailDto> {
     const access = await this.googleAccounts.resolveMailbox(orgId, 'gmail-read');
     if (!access.ok) {
