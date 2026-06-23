@@ -177,10 +177,11 @@ export class ReachService {
     return Promise.all(
       aims.map(async (a) =>
         a.status === 'RUNNING' && this.isScrapeStale(a, timeoutMs)
-          ? (await this.repo.markScrapeFailed(orgId, a.id)) ?? {
-              ...a,
-              status: 'FAILED' as const,
-            }
+          ? (await this.repo.markScrapeFailed(
+              orgId,
+              a.id,
+              'The scrape did not finish in time and was interrupted. Try again, or raise the scrape timeout in Configuration.',
+            )) ?? { ...a, status: 'FAILED' as const, scrapeError: null }
           : a,
       ),
     );
@@ -253,7 +254,8 @@ export class ReachService {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'lead_satellite failed';
       this.logger.warn(`Lead Satellite failed for aim ${aim.id}: ${msg}`);
-      await this.repo.markScrapeFailed(orgId, aim.id).catch(() => undefined);
+      // Persist the reason so the UI can show WHY (not just "failed").
+      await this.repo.markScrapeFailed(orgId, aim.id, msg).catch(() => undefined);
     }
   }
 

@@ -44,6 +44,7 @@ interface BackendAim {
   companies: number;
   scrapeStartedAt?: string | null;
   scrapeEtaSeconds?: number | null;
+  scrapeError?: string | null;
   templates: ReachTemplates | null;
   newsBrief: { title: string; body: string } | null;
   generatedBy: string | null;
@@ -251,6 +252,7 @@ function mapAim(a: BackendAim): ReachCampaignView {
     sender: a.sender,
     scrapeStartedAt: a.scrapeStartedAt ?? null,
     scrapeEtaSeconds: a.scrapeEtaSeconds ?? null,
+    scrapeError: a.scrapeError ?? null,
   };
 }
 

@@ -20,6 +20,8 @@ type LeadScraperPanelProps = {
   loadingLeads?: boolean;
   // The selected campaign's in-flight scrape (server-seeded), or null when idle.
   scrape?: { startedAt: string; etaSeconds: number } | null;
+  // The reason the selected campaign's last scrape failed, or null.
+  scrapeError?: string | null;
 };
 
 export function LeadScraperPanel({
@@ -32,6 +34,7 @@ export function LeadScraperPanel({
   loadingCampaigns = false,
   loadingLeads = false,
   scrape = null,
+  scrapeError = null,
 }: LeadScraperPanelProps) {
   const t = useTranslations('reach');
 
@@ -63,6 +66,15 @@ export function LeadScraperPanel({
           />
         ) : loadingLeads ? (
           <Spinner label={t('scraper.loadingLeads')} />
+        ) : scrapeError ? (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-6 text-center">
+            <p className="text-[12.5px] font-bold text-destructive">
+              {t('scraper.failed')}
+            </p>
+            <p className="mt-1 break-words text-xs text-muted-foreground">
+              {scrapeError}
+            </p>
+          </div>
         ) : leads.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border bg-muted p-6 text-center text-[12.5px] font-bold text-muted-foreground">
             {t('scraper.empty')}

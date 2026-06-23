@@ -115,4 +115,6 @@ export type ReachCampaignView = Campaign & {
   // after navigating away and back (null unless the aim is/has been scraping).
   scrapeStartedAt: string | null;
   scrapeEtaSeconds: number | null;
+  // Reason the last scrape failed (shown when aimStatus === 'FAILED'); null otherwise.
+  scrapeError: string | null;
 };

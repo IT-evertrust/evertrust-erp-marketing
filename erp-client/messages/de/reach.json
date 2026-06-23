@@ -32,6 +32,7 @@
     "eta": "Geschätzte Restzeit",
     "finishing": "Wird abgeschlossen…",
     "finishingHint": "Fast fertig — der Scrape wird abgeschlossen.",
+    "failed": "Lead-Scrape fehlgeschlagen",
     "loadingLeads": "Leads werden geladen…",
     "empty": "Für diese Kampagne sind noch keine Leads geladen.",
     "col": {

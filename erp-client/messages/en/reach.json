@@ -32,6 +32,7 @@
     "eta": "Estimated time remaining",
     "finishing": "Finishing up…",
     "finishingHint": "Almost there — wrapping up the scrape.",
+    "failed": "Lead scrape failed",
     "loadingLeads": "Loading leads…",
     "empty": "No leads loaded for this campaign yet.",
     "col": {
