@@ -66,6 +66,9 @@ export type ReachAim = {
   scrapeStartedAt: string | null;
   scrapeEtaSeconds: number | null;
   scrapeLastSeconds: number | null;
+  // Reason the last scrape failed (agent error / timeout), shown in the UI. Null when
+  // the aim hasn't failed (cleared on a new run + on success).
+  scrapeError: string | null;
   // Which mailbox the campaign sends from (info | hanna).
   sender: string;
   // Ammo Forge output (null until generated).

@@ -78,6 +78,7 @@ function rowToAim(row: AimRow): ReachAim {
     scrapeStartedAt: row.scrapeStartedAt ? row.scrapeStartedAt.toISOString() : null,
     scrapeEtaSeconds: row.scrapeEtaSeconds ?? null,
     scrapeLastSeconds: row.scrapeLastSeconds ?? null,
+    scrapeError: row.scrapeError ?? null,
     sender: row.sender,
     templates: (row.templates as ReachTemplates | null) ?? null,
     newsBrief: (row.newsBrief as ReachNewsBrief | null) ?? null,
@@ -200,6 +201,7 @@ export class ReachRepository {
         status: 'RUNNING',
         scrapeStartedAt: new Date(),
         scrapeEtaSeconds: etaSeconds,
+        scrapeError: null, // clear any prior failure reason on a fresh run
         updatedAt: new Date(),
       })
       .where(
@@ -209,14 +211,16 @@ export class ReachRepository {
     return row ? rowToAim(row) : undefined;
   }
 
-  // Mark a background scrape as FAILED (the agent errored or the run went stale).
+  // Mark a background scrape as FAILED + record WHY (the agent error / reason) so the
+  // UI can show the cause instead of a generic "failed".
   async markScrapeFailed(
     orgId: string,
     aimId: string,
+    error?: string | null,
   ): Promise<ReachAim | undefined> {
     const [row] = await this.db
       .update(schema.reachAims)
-      .set({ status: 'FAILED', updatedAt: new Date() })
+      .set({ status: 'FAILED', scrapeError: error ?? null, updatedAt: new Date() })
       .where(
         and(eq(schema.reachAims.id, aimId), tenantScope(orgId, schema.reachAims)),
       )
@@ -292,6 +296,7 @@ export class ReachRepository {
         .set({
           companies: inserted.length,
           status: 'COMPLETED',
+          scrapeError: null, // success clears any prior failure reason
           ...(lastSeconds != null ? { scrapeLastSeconds: lastSeconds } : {}),
           updatedAt: new Date(),
         })

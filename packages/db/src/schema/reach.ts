@@ -107,6 +107,9 @@ export const reachAims = pgTable(
     scrapeStartedAt: timestamp('scrape_started_at', { withTimezone: true }),
     scrapeEtaSeconds: integer('scrape_eta_seconds'),
     scrapeLastSeconds: integer('scrape_last_seconds'),
+    // Why the last scrape FAILED (the agent's error / reason), surfaced in the UI so
+    // the operator sees the cause instead of a generic "failed". Null when not failed.
+    scrapeError: text('scrape_error'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

@@ -25,6 +25,7 @@ export function ReachPage() {
           loadingCampaigns={reach.loadingCampaigns}
           loadingLeads={reach.loadingLeads}
           scrape={reach.selectedScrape}
+          scrapeError={reach.selectedScrapeError}
         />
       ) : null}
 

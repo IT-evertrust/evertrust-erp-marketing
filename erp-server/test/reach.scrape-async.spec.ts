@@ -129,6 +129,7 @@ describe('ReachService — async scrape', () => {
     expect(done.companies).toBe(2);
     expect(done.scrapeLastSeconds).not.toBeNull();
     expect(done.scrapeLastSeconds).toBeGreaterThanOrEqual(0);
+    expect(done.scrapeError).toBeNull(); // success clears any prior failure reason
     const leads = await service.getAimLeads(ORG, aim.id);
     expect(leads.map((l) => l.company).sort()).toEqual(['Acme GmbH', 'Globex AG']);
   });
@@ -159,6 +160,8 @@ describe('ReachService — async scrape', () => {
     await service.scrapeAim(ORG, aim.id);
     const failed = await waitForStatus(service, aim.id, 'FAILED');
     expect(failed.status).toBe('FAILED');
+    // The reason is persisted so the UI can show WHY, not just "failed".
+    expect(failed.scrapeError).toContain('satellite blew up');
   });
 
   it('self-heals a stale RUNNING aim to FAILED on getAims (process died mid-run)', async () => {

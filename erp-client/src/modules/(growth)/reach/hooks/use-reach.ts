@@ -122,7 +122,8 @@ export function useReach() {
             toast.success(t('toast.scrapeDone', { count: ls.length }));
           }
         } else if (after.aimStatus === 'FAILED' && !cancelled) {
-          toast.error(t('toast.scrapeFailed'));
+          // Show the real reason the server recorded, not just a generic "failed".
+          toast.error(after.scrapeError || t('toast.scrapeFailed'));
         }
       }
     }, 6000);
@@ -148,6 +149,16 @@ export function useReach() {
           }
         : null,
     [selectedCampaign],
+  );
+
+  // The failure reason for the SELECTED campaign (when its last scrape FAILED), so
+  // the panel can show WHY instead of an empty state. Null otherwise.
+  const selectedScrapeError = useMemo(
+    () =>
+      selectedCampaign?.aimStatus === 'FAILED'
+        ? selectedCampaign.scrapeError || t('toast.scrapeFailed')
+        : null,
+    [selectedCampaign, t],
   );
 
   const emails = useMemo(
@@ -276,6 +287,7 @@ export function useReach() {
     loadingLeads,
     creatingAim,
     selectedScrape,
+    selectedScrapeError,
 
     bazookaRunning,
     toggleAutoSend,
