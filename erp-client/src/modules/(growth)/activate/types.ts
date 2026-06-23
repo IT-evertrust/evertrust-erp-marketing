@@ -6,6 +6,8 @@ export type MeetingAccount = {
   email: string;
   displayName: string | null;
   status: string;
+  // Auto-assigned palette color (hex) used to color-code this account's meetings.
+  color?: string | null;
 };
 
 export type MeetingAttendee = {
@@ -31,6 +33,10 @@ export type CalendarMeeting = {
   htmlLink?: string | null;
   attendees?: MeetingAttendee[];
   organizer?: string | null;
+  // The owning account (for per-account color-coding, esp. in all-accounts mode).
+  accountId?: string | null;
+  accountEmail?: string | null;
+  accountColor?: string | null;
 };
 
 export type ResearchDossier = {

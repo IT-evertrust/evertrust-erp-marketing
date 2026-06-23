@@ -13,6 +13,7 @@ type ReplyListProps = {
     all: number;
     interested: number;
     unsure: number;
+    temp: number;
     notInterested: number;
   };
 };
@@ -46,6 +47,12 @@ export function ReplyList({
           onClick={() => onSelectCategory('UNSURE')}
         >
           Unsure · {counts.unsure}
+        </FilterChip>
+        <FilterChip
+          active={categoryFilter === 'TEMP'}
+          onClick={() => onSelectCategory('TEMP')}
+        >
+          Temp · {counts.temp}
         </FilterChip>
         <FilterChip
           active={categoryFilter === 'NOT INTERESTED'}

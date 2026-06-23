@@ -46,17 +46,98 @@ export class ActivateService {
         email: a.email,
         displayName: a.displayName,
         status: a.status,
+        color: a.color ?? null,
       }));
     }
-    return this.repo.listMeetingOwners(orgId);
+    return (await this.repo.listMeetingOwners(orgId)).map((o) => ({
+      ...o,
+      color: null,
+    }));
   }
 
   // Upcoming events for one connected mailbox's calendar. accountId is a google_accounts id;
-  // empty selects the newest grant. Falls back to DB-seeded meetings with no Google account.
+  // empty selects the newest grant. `'all'` aggregates EVERY connected account's calendar.
+  // Falls back to DB-seeded meetings with no Google account. Each meeting carries its owning
+  // account's id/email/color so the UI can color-code per account.
   async listMeetings(orgId: string, accountId: string): Promise<ActivateMeeting[]> {
-    const account = await this.resolveAccountId(orgId, accountId);
-    if (!account) return this.repo.listUpcomingMeetings(orgId, accountId || undefined);
-    return this.calendar.listUpcoming(orgId, account);
+    const connected = await this.google.listForOrg(orgId);
+
+    // All-accounts mode: read every connected calendar and merge, tagging each event
+    // with its owning account's color.
+    if (accountId === 'all' && connected.length > 0) {
+      const perAccount = await Promise.all(
+        connected.map(async (a) => {
+          const events = await this.calendar.listUpcoming(orgId, a.id);
+          return events.map((m) => this.tagAccount(m, a));
+        }),
+      );
+      return perAccount.flat();
+    }
+
+    const resolvedId =
+      accountId && connected.some((a) => a.id === accountId)
+        ? accountId
+        : connected[0]?.id ?? null;
+    if (!resolvedId) {
+      return this.repo.listUpcomingMeetings(orgId, accountId || undefined);
+    }
+    const account = connected.find((a) => a.id === resolvedId);
+    const events = await this.calendar.listUpcoming(orgId, resolvedId);
+    return account ? events.map((m) => this.tagAccount(m, account)) : events;
+  }
+
+  // Edit a meeting in place on its account's calendar. Returns the updated, account-tagged
+  // meeting. accountId must be a real connected account (resolved to the newest if blank).
+  async updateMeeting(
+    orgId: string,
+    accountId: string,
+    eventId: string,
+    patch: {
+      title?: string;
+      description?: string | null;
+      location?: string | null;
+      start?: string;
+      end?: string;
+    },
+  ): Promise<ActivateMeeting> {
+    const connected = await this.google.listForOrg(orgId);
+    const account =
+      connected.find((a) => a.id === accountId) ?? connected[0];
+    if (!account) throw new BadRequestException('No connected calendar account.');
+    const updated = await this.calendar.updateEvent(orgId, account.id, eventId, patch);
+    if (!updated) throw new BadRequestException('Could not update the meeting.');
+    return this.tagAccount(updated, account);
+  }
+
+  // Move a meeting from one connected account's calendar to another (copy to target +
+  // delete from source). Returns the new meeting on the target account.
+  async moveMeeting(
+    orgId: string,
+    eventId: string,
+    fromAccountId: string,
+    toAccountId: string,
+  ): Promise<ActivateMeeting> {
+    const connected = await this.google.listForOrg(orgId);
+    const from = connected.find((a) => a.id === fromAccountId);
+    const to = connected.find((a) => a.id === toAccountId);
+    if (!from || !to) throw new BadRequestException('Unknown source or target account.');
+    if (from.id === to.id) throw new BadRequestException('Source and target are the same account.');
+    const moved = await this.calendar.moveEvent(orgId, eventId, from.id, to.id);
+    if (!moved) throw new BadRequestException('Could not move the meeting.');
+    return this.tagAccount(moved, to);
+  }
+
+  // Stamp an event with its owning account's id/email/color (for per-account coloring).
+  private tagAccount(
+    m: ActivateMeeting,
+    account: { id: string; email: string; color: string | null },
+  ): ActivateMeeting {
+    return {
+      ...m,
+      accountId: account.id,
+      accountEmail: account.email,
+      accountColor: account.color ?? null,
+    };
   }
 
   async getMeeting(

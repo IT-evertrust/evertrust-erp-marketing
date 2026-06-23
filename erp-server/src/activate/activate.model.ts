@@ -8,6 +8,8 @@ export type ActivateMeetingAccount = {
   email: string;
   displayName: string | null;
   status: string;
+  // The account's auto-assigned palette color (hex), for calendar color-coding.
+  color: string | null;
 };
 
 // A calendar event for an account. The list view uses day/time/company/contact/title; the
@@ -28,6 +30,12 @@ export type ActivateMeeting = {
   htmlLink: string | null; // open-in-calendar link
   attendees: Array<{ name: string | null; email: string | null; responseStatus: string | null }>;
   organizer: string | null;
+  // The owning account (which connected mailbox's calendar this event is on) + its color,
+  // so the calendar can color-code each event by account (esp. in all-accounts mode).
+  // Optional: the calendar reader / repo omit them; the service attaches them.
+  accountId?: string | null;
+  accountEmail?: string | null;
+  accountColor?: string | null;
 };
 
 // A coaching persona (the lens After-Sales analysis runs through). From the PG personas table.

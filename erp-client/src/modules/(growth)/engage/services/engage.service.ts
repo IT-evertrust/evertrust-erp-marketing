@@ -1,12 +1,8 @@
 import { API_URL } from '@/lib/env';
 
-import type {
-  CampaignReply,
-  EngageCampaign,
-  ReplyThreadMessage,
-} from '../types';
+import type { CampaignReply, EngageCampaign, ReplyCategory } from '../types';
 
-// ---- new backend shapes (erp-server /engage: campaign → leads → Gmail threads) ----
+// ---- backend shapes (erp-server /engage campaign-centric reply pipeline) ----
 interface BackendCampaign {
   aimId: string;
   name: string;
@@ -19,34 +15,35 @@ interface BackendCampaign {
   mailboxEmail: string | null;
 }
 
-interface BackendLead {
-  id: string;
-  company: string;
-  email: string | null;
-  contactName: string | null;
-  contactTitle: string | null;
-  website: string | null;
-  location: string | null;
-  status: string;
-}
-
 interface BackendThreadMessage {
   id: string;
-  threadId: string | null;
-  snippet: string | null;
-  subject: string | null;
-  from: string | null;
-  to: string | null;
-  date: string | null;
-  internalDate: string | null;
-  labelIds: string[];
+  direction: 'inbound' | 'outbound';
+  header: string;
+  subject: string;
+  body: string;
 }
 
-interface BackendThreadsResult {
-  configured: boolean;
-  account: { email: string } | null;
-  messages: BackendThreadMessage[];
-  reason: string | null;
+// The persisted, classified reply as returned by GET /engage/campaigns/:aimId/replies.
+interface BackendReply {
+  id: string;
+  campaignId: string;
+  company: string;
+  contact: string;
+  category: string; // already mapped to the UI vocabulary
+  rawCategory: string;
+  confidence: number;
+  reasoning: string;
+  recommendedAction: string | null;
+  inboundPreview: string;
+  inboundBody: string;
+  draftSubject: string;
+  draftBody: string;
+  draftSource: string | null;
+  citations: string[];
+  followUpWindow: string | null;
+  handled: boolean;
+  thread: BackendThreadMessage[];
+  time: string;
 }
 
 async function getJson<T>(path: string): Promise<T> {
@@ -58,8 +55,36 @@ async function getJson<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-// The new model searches Gmail threads live per lead — there is no inbox-to-DB sync
-// step. Kept as a resolved no-op so the page-load flow (sync → campaigns) is unchanged.
+async function mutate<T>(
+  method: 'POST' | 'PATCH',
+  path: string,
+  body?: unknown,
+): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method,
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let message = `${method} ${path} -> ${res.status}`;
+    try {
+      const json = (await res.json()) as { message?: string | string[] };
+      if (json?.message) {
+        message = Array.isArray(json.message)
+          ? json.message.join(', ')
+          : json.message;
+      }
+    } catch {
+      /* non-JSON error body — keep the status message */
+    }
+    throw new Error(message);
+  }
+  return (await res.json()) as T;
+}
+
+// Classification is persisted by a separate (slow) campaign scan; page-load just
+// reads it. Kept as a resolved no-op so the hook's sync→campaigns flow is unchanged.
 export async function syncEngageInbox(): Promise<{
   accounts: number;
   scanned: number;
@@ -69,64 +94,49 @@ export async function syncEngageInbox(): Promise<{
   return { accounts: 0, scanned: 0, matched: 0, ingested: 0 };
 }
 
-// Campaigns = Reach AIMs (with lead count + the mailbox they send from), mapped into
-// the table's EngageCampaign shape. `replies` shows the lead count (the conversations
-// the campaign can have) until per-thread counts are available.
+// Campaigns = Reach AIMs (with lead count + the mailbox they send from).
 export async function getEngageCampaigns(): Promise<EngageCampaign[]> {
   const data = await getJson<BackendCampaign[]>('/engage/campaigns');
   return data.map(mapCampaign);
 }
 
-// The bottom "Reply Sorter" list for a campaign: each lead's Gmail thread (searched by
-// the lead's client email) mapped into the CampaignReply shape. Leads with no thread
-// (or before Gmail read access is granted) are omitted. Searches run in parallel.
+// The reply-sorter queue for a campaign: the persisted, reply_glock-classified
+// replies (category + AI draft + thread), read instantly from the server.
 export async function getCampaignReplies(
   campaignId: string,
 ): Promise<CampaignReply[]> {
   if (!campaignId) return [];
-
-  const leads = await getJson<BackendLead[]>(
-    `/engage/campaigns/${campaignId}/leads`,
+  const data = await getJson<BackendReply[]>(
+    `/engage/campaigns/${campaignId}/replies`,
   );
-  const withEmail = leads.filter((l) => !!l.email);
-
-  const results = await Promise.all(
-    withEmail.map(async (lead) => {
-      try {
-        const res = await getJson<BackendThreadsResult>(
-          `/engage/threads?email=${encodeURIComponent(lead.email as string)}`,
-        );
-        if (!res.configured || res.messages.length === 0) return null;
-        return mapReply(campaignId, lead, res.messages);
-      } catch {
-        return null;
-      }
-    }),
-  );
-
-  return results.filter((r): r is CampaignReply => r !== null);
+  return data.map(mapReply);
 }
 
-// Draft/send compose is not part of the read-only thread view yet. Kept with the same
-// (replyId, subject, body) signature the UI calls so nothing breaks; wire to a real
-// endpoint when the compose layer is added back.
+// Persist an edited draft.
 export async function saveReplyDraft(
-  _replyId: string,
-  _subject: string,
-  _body: string,
+  replyId: string,
+  subject: string,
+  body: string,
 ): Promise<void> {
-  /* no-op until the thread compose layer is rebuilt */
+  await mutate('PATCH', `/engage/campaign-replies/${replyId}/draft`, {
+    subject,
+    body,
+  });
 }
 
+// Send the (edited) draft to the lead, threaded onto the existing conversation.
 export async function sendReply(
-  _replyId: string,
-  _subject: string,
-  _body: string,
+  replyId: string,
+  subject: string,
+  body: string,
 ): Promise<void> {
-  throw new Error('Sending replies from the thread view is not enabled yet.');
+  await mutate('POST', `/engage/campaign-replies/${replyId}/send`, {
+    subject,
+    body,
+  });
 }
 
-// ---- mappers: new backend shape -> the UI's local view types (UI is untouched) ----
+// ---- mappers: backend shape -> the UI's local view types (UI is untouched) ----
 function mapCampaign(c: BackendCampaign): EngageCampaign {
   return {
     id: c.aimId,
@@ -140,7 +150,6 @@ function mapCampaign(c: BackendCampaign): EngageCampaign {
   };
 }
 
-// Reach AIM status -> the table's NEW | IN CAMPAIGN | OVER vocabulary.
 function mapStatus(status: string): EngageCampaign['status'] {
   const s = status.toUpperCase();
   if (s === 'COMPLETED' || s === 'OVER' || s === 'DONE') return 'OVER';
@@ -150,70 +159,45 @@ function mapStatus(status: string): EngageCampaign['status'] {
   return 'NEW';
 }
 
-function mapReply(
-  campaignId: string,
-  lead: BackendLead,
-  messages: BackendThreadMessage[],
-): CampaignReply {
-  const leadEmail = (lead.email ?? '').toLowerCase();
-  const ordered = [...messages].sort(
-    (a, b) => msgTime(a.internalDate, a.date) - msgTime(b.internalDate, b.date),
-  );
-  const latest = ordered[ordered.length - 1];
-  const latestInbound = [...ordered]
-    .reverse()
-    .find((m) => isInbound(m, leadEmail));
+const UI_CATEGORIES: ReplyCategory[] = [
+  'INTERESTED',
+  'UNSURE',
+  'TEMP',
+  'NOT INTERESTED',
+];
 
+function mapReply(r: BackendReply): CampaignReply {
+  const category = (UI_CATEGORIES as string[]).includes(r.category)
+    ? (r.category as ReplyCategory)
+    : 'UNSURE';
   return {
-    id: lead.id,
-    campaignId,
-    company: lead.company,
-    contact: lead.email ?? '',
-    time: relativeTime(latest?.date ?? null),
-    // No AI classification in the thread view — neutral by default.
-    category: 'UNSURE',
-    inboundPreview: (latestInbound ?? latest)?.snippet ?? '',
-    inboundBody: (latestInbound ?? latest)?.snippet ?? '',
-    draftSubject: '',
-    draftBody: '',
-    thread: ordered.map((m) => mapThread(m, lead.company, leadEmail)),
+    id: r.id,
+    campaignId: r.campaignId,
+    company: r.company,
+    contact: r.contact,
+    time: relativeTime(r.time),
+    category,
+    inboundPreview: r.inboundPreview,
+    inboundBody: r.inboundBody,
+    draftSubject: r.draftSubject,
+    draftBody: r.draftBody,
+    thread: r.thread.map((m) => ({
+      id: m.id,
+      direction: m.direction,
+      header: m.header,
+      subject: m.subject,
+      body: m.body,
+    })),
     sender: '',
     senderEmail: '',
+    confidence: r.confidence,
+    reasoning: r.reasoning,
+    recommendedAction: r.recommendedAction,
+    followUpWindow: r.followUpWindow,
+    handled: r.handled,
+    draftSource: r.draftSource,
+    citations: r.citations,
   };
-}
-
-function isInbound(m: BackendThreadMessage, leadEmail: string): boolean {
-  return (m.from ?? '').toLowerCase().includes(leadEmail);
-}
-
-function mapThread(
-  m: BackendThreadMessage,
-  company: string,
-  leadEmail: string,
-): ReplyThreadMessage {
-  const inbound = isInbound(m, leadEmail);
-  const when = relativeTime(m.date);
-  const them = company.toUpperCase();
-  const header = inbound
-    ? `${them} → EVERTRUST${when ? ` · ${when}` : ''}`
-    : `EVERTRUST → ${them}${when ? ` · ${when}` : ''}`;
-  return {
-    id: m.id,
-    direction: inbound ? 'inbound' : 'outbound',
-    header,
-    subject: m.subject ?? '(no subject)',
-    // Gmail metadata read gives headers + snippet only (no full body).
-    body: m.snippet ?? '',
-  };
-}
-
-function msgTime(internalDate: string | null, date: string | null): number {
-  if (internalDate && /^\d+$/.test(internalDate)) return Number(internalDate);
-  if (date) {
-    const t = new Date(date).getTime();
-    if (!Number.isNaN(t)) return t;
-  }
-  return 0;
 }
 
 // ISO -> compact relative label ("2h", "1d") matching the existing UI copy.

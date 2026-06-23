@@ -36,6 +36,9 @@ export const googleAccounts = pgTable(
     googleSub: text('google_sub').notNull(),
     email: text('email').notNull(),
     displayName: text('display_name'),
+    // A distinct hex color auto-assigned from a palette when the account connects.
+    // Drives the per-account color-coding of meetings in the Activate calendar.
+    color: text('color'),
     // Granted OAuth scopes. Default '{}' (empty array).
     scopes: text('scopes').array().notNull().default([]),
     // AES-256-GCM ciphertext — NEVER plaintext.

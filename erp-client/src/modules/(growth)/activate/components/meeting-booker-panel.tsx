@@ -1,10 +1,15 @@
 'use client';
 
 import { useState } from 'react';
+import { toast } from 'sonner';
 
 import { GrowthCard, LiveDot } from '@/modules/(growth)/shared';
 
-import { requestToJoinMeeting } from '../services/activate-service';
+import {
+  moveMeeting,
+  requestToJoinMeeting,
+  updateMeeting,
+} from '../services/activate-service';
 import type { CalendarMeeting, MeetingAccount } from '../types';
 
 type MeetingBookerPanelProps = {
@@ -14,6 +19,8 @@ type MeetingBookerPanelProps = {
   loadingAccounts: boolean;
   meetings: CalendarMeeting[];
   loadingMeetings: boolean;
+  // Re-pull the calendar after an edit / move.
+  onMeetingChanged: () => void;
 };
 
 // Calendar grid geometry. Wider hour range (7 AM–9 PM) + taller rows so slots breathe
@@ -97,6 +104,7 @@ export function MeetingBookerPanel({
   loadingAccounts,
   meetings,
   loadingMeetings,
+  onMeetingChanged,
 }: MeetingBookerPanelProps) {
   const [openMeeting, setOpenMeeting] = useState<CalendarMeeting | null>(null);
   // Anchor date for the visible week. Navigation moves it by week or month, clamped to
@@ -111,6 +119,11 @@ export function MeetingBookerPanel({
     meetings.filter(
       (m) => sameDay(m.startsAt, d) || (!m.startsAt && m.day === dayLabel(d)),
     );
+  // How many meetings fall in the currently visible Mon–Fri week.
+  const weekMeetingCount = dates.reduce((n, d) => n + eventsFor(d).length, 0);
+  // While accounts (or the first meetings load) are in flight, show a loading state
+  // INSTEAD of an empty grid — otherwise the calendar box renders blank mid-load.
+  const isLoading = loadingAccounts || (loadingMeetings && meetings.length === 0);
 
   return (
     <GrowthCard
@@ -128,17 +141,40 @@ export function MeetingBookerPanel({
           Account
         </span>
         {accounts.length > 0 ? (
-          <select
-            value={accountId}
-            onChange={(event) => onSelectAccount(event.target.value)}
-            className="rounded-[8px] border border-[#e4e7eb] bg-white px-3 py-1.5 text-[12.5px] text-[#15171c]"
-          >
-            {accounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.email}
-              </option>
-            ))}
-          </select>
+          <>
+            <select
+              value={accountId}
+              onChange={(event) => onSelectAccount(event.target.value)}
+              className="rounded-[8px] border border-[#e4e7eb] bg-white px-3 py-1.5 text-[12.5px] text-[#15171c]"
+            >
+              {accounts.length > 1 ? (
+                <option value="all">All accounts</option>
+              ) : null}
+              {accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.email}
+                </option>
+              ))}
+            </select>
+
+            {/* Color legend — which hue belongs to which account. */}
+            {accounts.length > 1 ? (
+              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                {accounts.map((account) => (
+                  <span
+                    key={account.id}
+                    className="inline-flex items-center gap-1 text-[10px] font-bold text-[#5b626d]"
+                  >
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ background: account.color ?? '#15171c' }}
+                    />
+                    {account.email.split('@')[0]}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </>
         ) : (
           <span className="text-[12px] text-[#959ca7]">
             {loadingAccounts ? 'Loading accounts…' : 'No meetings yet'}
@@ -204,9 +240,23 @@ export function MeetingBookerPanel({
         </div>
       </div>
 
-      {accounts.length === 0 && !loadingAccounts ? (
+      {isLoading ? (
+        <div className="flex min-h-[300px] items-center justify-center rounded-[10px] border border-[#e4e7eb] bg-white">
+          <div className="flex items-center gap-2.5 text-[12px] font-bold text-[#959ca7]">
+            <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-[#c2c7ce]" />
+            {loadingAccounts ? 'Loading accounts…' : 'Loading meetings…'}
+          </div>
+        </div>
+      ) : accounts.length === 0 ? (
         <div className="rounded-[10px] border border-dashed border-[#d6dade] bg-[#f6f7f9] px-6 py-10 text-center text-[12.5px] font-bold text-[#959ca7]">
           No booked meetings yet. Run the Activate demo seed to populate the calendar.
+        </div>
+      ) : weekMeetingCount === 0 ? (
+        <div className="rounded-[10px] border border-dashed border-[#d6dade] bg-[#f6f7f9] px-6 py-10 text-center text-[12.5px] font-bold text-[#959ca7]">
+          No meetings booked this week.
+          <div className="mt-1 text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#c2c7ce]">
+            {weekRangeLabel(dates)} · use ‹ › to find a week with meetings
+          </div>
         </div>
       ) : (
         <div className="overflow-hidden rounded-[10px] border border-[#e4e7eb]">
@@ -271,9 +321,9 @@ export function MeetingBookerPanel({
         </div>
       )}
 
-      {loadingMeetings ? (
+      {loadingMeetings && meetings.length > 0 ? (
         <div className="mt-2 text-center text-[11px] font-bold text-[#959ca7]">
-          Loading meetings…
+          Refreshing…
         </div>
       ) : null}
 
@@ -281,7 +331,12 @@ export function MeetingBookerPanel({
         <MeetingPopup
           meeting={openMeeting}
           accountId={accountId}
+          accounts={accounts}
           onClose={() => setOpenMeeting(null)}
+          onSaved={() => {
+            setOpenMeeting(null);
+            onMeetingChanged();
+          }}
         />
       ) : null}
     </GrowthCard>
@@ -298,13 +353,22 @@ function CalendarEvent({
   const [rawHour = DAY_START, minute = 0] = meeting.time.split(':').map(Number);
   const hour = Number.isFinite(rawHour) ? rawHour : DAY_START;
   const top = (hour - DAY_START) * ROW_H + (minute / 60) * ROW_H;
+  // Color-code the event by the account whose calendar it lives on. Border (all sides
+  // + a thicker left accent) takes the account color; the fill is the same hue, faint.
+  const color = meeting.accountColor ?? '#15171c';
 
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="gc-press absolute left-1.5 right-1.5 z-[1] cursor-pointer rounded-md border border-[#d6dade] border-l-2 border-l-[#15171c] bg-[#eceef1] px-2 py-1.5 text-left transition-all duration-150 hover:z-[2] hover:bg-[#e2e5ea] hover:shadow-[0_4px_12px_-6px_rgba(21,23,28,0.3)]"
-      style={{ top, minHeight: ROW_H - 12 }}
+      className="gc-press absolute left-1.5 right-1.5 z-[1] cursor-pointer rounded-md border border-l-[3px] px-2 py-1.5 text-left transition-all duration-150 hover:z-[2] hover:shadow-[0_4px_12px_-6px_rgba(21,23,28,0.3)]"
+      style={{
+        top,
+        minHeight: ROW_H - 12,
+        borderColor: color,
+        borderLeftColor: color,
+        background: `${color}14`,
+      }}
     >
       <div className="text-[9px] font-bold text-[#959ca7]">{meeting.time}</div>
       <div className="truncate text-[10.5px] font-bold text-[#15171c]">
@@ -317,29 +381,98 @@ function CalendarEvent({
   );
 }
 
+// Convert an ISO datetime to the value a <input type="datetime-local"> expects
+// (YYYY-MM-DDTHH:mm in the browser's local time).
+function toLocalInput(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 function MeetingPopup({
   meeting,
   accountId,
+  accounts,
   onClose,
+  onSaved,
 }: {
   meeting: CalendarMeeting;
   accountId: string;
+  accounts: MeetingAccount[];
   onClose: () => void;
+  onSaved: () => void;
 }) {
   const [joining, setJoining] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // The account this meeting actually lives on (in all-accounts mode the selected
+  // accountId is 'all', so prefer the meeting's own account).
+  const sourceAccountId = meeting.accountId ?? accountId;
+
+  // Edit-state form, seeded from the meeting.
+  const [title, setTitle] = useState(meeting.title);
+  const [startLocal, setStartLocal] = useState(toLocalInput(meeting.startsAt));
+  const [location, setLocation] = useState(meeting.location ?? '');
+  const [description, setDescription] = useState(meeting.description ?? '');
+  const [targetAccountId, setTargetAccountId] = useState(sourceAccountId);
 
   async function handleJoin() {
     setJoining(true);
     try {
-      const res = await requestToJoinMeeting(accountId, meeting.id);
+      const res = await requestToJoinMeeting(sourceAccountId, meeting.id);
       const url = res.joinUrl ?? res.htmlLink;
-      if (url) {
-        window.open(url, '_blank', 'noopener,noreferrer');
-      }
+      if (url) window.open(url, '_blank', 'noopener,noreferrer');
     } catch {
-      // surface nothing destructive — the calendar link below still works
+      // surface nothing destructive — the calendar link still works
     } finally {
       setJoining(false);
+    }
+  }
+
+  async function handleSave() {
+    if (!title.trim()) {
+      toast.error('Title is required.');
+      return;
+    }
+    setSaving(true);
+    try {
+      const dur = meeting.durationMinutes ?? 30;
+      const start = startLocal ? new Date(startLocal).toISOString() : undefined;
+      const end =
+        startLocal && start
+          ? new Date(new Date(startLocal).getTime() + dur * 60_000).toISOString()
+          : undefined;
+
+      // 1) Move to another account first (copy + delete) if the account changed.
+      let eventId = meeting.id;
+      let onAccount = sourceAccountId;
+      if (targetAccountId && targetAccountId !== sourceAccountId) {
+        const moved = await moveMeeting(meeting.id, sourceAccountId, targetAccountId);
+        eventId = moved.id;
+        onAccount = targetAccountId;
+      }
+
+      // 2) Apply the field edits on whichever account now holds the event.
+      await updateMeeting(onAccount, eventId, {
+        title: title.trim(),
+        location: location.trim() || null,
+        description: description.trim() || null,
+        ...(start ? { start, end } : {}),
+      });
+
+      toast.success(
+        targetAccountId !== sourceAccountId
+          ? 'Meeting moved and updated.'
+          : 'Meeting updated.',
+      );
+      onSaved();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not save the meeting.');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -366,7 +499,9 @@ function MeetingPopup({
       >
         <div className="flex items-start justify-between gap-3 border-b border-[#e4e7eb] px-5 py-4">
           <div>
-            <div className="text-[15px] font-bold text-[#15171c]">{meeting.title}</div>
+            <div className="text-[15px] font-bold text-[#15171c]">
+              {editing ? 'Edit meeting' : meeting.title}
+            </div>
             <div className="mt-1 text-[11px] text-[#959ca7]">{when}</div>
           </div>
           <button
@@ -379,53 +514,148 @@ function MeetingPopup({
           </button>
         </div>
 
-        <div className="flex flex-col gap-3 px-5 py-4">
-          <DetailRow label="Company" value={meeting.company} />
-          <DetailRow label="Contact" value={meeting.contact} />
-          {meeting.durationMinutes ? (
-            <DetailRow label="Duration" value={`${meeting.durationMinutes} min`} />
-          ) : null}
-          {meeting.location ? <DetailRow label="Location" value={meeting.location} /> : null}
-          {meeting.organizer ? <DetailRow label="Organizer" value={meeting.organizer} /> : null}
-          {meeting.attendees && meeting.attendees.length > 0 ? (
-            <DetailRow
-              label="Attendees"
-              value={meeting.attendees
-                .map((a) => a.name ?? a.email ?? '')
-                .filter(Boolean)
-                .join(', ')}
-            />
-          ) : null}
-          {meeting.description ? (
+        {editing ? (
+          <div className="flex flex-col gap-3 px-5 py-4">
+            <EditField label="Title">
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full rounded-md border border-[#e4e7eb] px-2.5 py-1.5 text-[12.5px] text-[#15171c] outline-none focus:border-[#15171c]"
+              />
+            </EditField>
+            <EditField label="Start">
+              <input
+                type="datetime-local"
+                value={startLocal}
+                onChange={(e) => setStartLocal(e.target.value)}
+                className="w-full rounded-md border border-[#e4e7eb] px-2.5 py-1.5 text-[12.5px] text-[#15171c] outline-none focus:border-[#15171c]"
+              />
+            </EditField>
+            <EditField label="Location">
+              <input
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                className="w-full rounded-md border border-[#e4e7eb] px-2.5 py-1.5 text-[12.5px] text-[#15171c] outline-none focus:border-[#15171c]"
+              />
+            </EditField>
+            <EditField label="Account">
+              <select
+                value={targetAccountId}
+                onChange={(e) => setTargetAccountId(e.target.value)}
+                className="w-full rounded-md border border-[#e4e7eb] bg-white px-2.5 py-1.5 text-[12.5px] text-[#15171c] outline-none focus:border-[#15171c]"
+              >
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.email}
+                  </option>
+                ))}
+              </select>
+            </EditField>
             <div>
               <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
                 Notes
               </div>
-              <p className="max-h-[120px] overflow-auto whitespace-pre-wrap text-[12.5px] leading-relaxed text-[#5b626d]">
-                {meeting.description}
-              </p>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={4}
+                className="w-full resize-y rounded-md border border-[#e4e7eb] px-2.5 py-1.5 text-[12.5px] leading-relaxed text-[#15171c] outline-none focus:border-[#15171c]"
+              />
             </div>
-          ) : null}
-        </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3 px-5 py-4">
+            <DetailRow label="Company" value={meeting.company} />
+            <DetailRow label="Contact" value={meeting.contact} />
+            {meeting.accountEmail ? (
+              <DetailRow label="On account" value={meeting.accountEmail} />
+            ) : null}
+            {meeting.durationMinutes ? (
+              <DetailRow label="Duration" value={`${meeting.durationMinutes} min`} />
+            ) : null}
+            {meeting.location ? <DetailRow label="Location" value={meeting.location} /> : null}
+            {meeting.organizer ? <DetailRow label="Organizer" value={meeting.organizer} /> : null}
+            {meeting.attendees && meeting.attendees.length > 0 ? (
+              <DetailRow
+                label="Attendees"
+                value={meeting.attendees
+                  .map((a) => a.name ?? a.email ?? '')
+                  .filter(Boolean)
+                  .join(', ')}
+              />
+            ) : null}
+            {meeting.description ? (
+              <div>
+                <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+                  Notes
+                </div>
+                <p className="max-h-[120px] overflow-auto whitespace-pre-wrap text-[12.5px] leading-relaxed text-[#5b626d]">
+                  {meeting.description}
+                </p>
+              </div>
+            ) : null}
+          </div>
+        )}
 
         <div className="flex flex-wrap justify-end gap-2 border-t border-[#e4e7eb] px-5 py-4">
-          <button
-            type="button"
-            onClick={onClose}
-            className="gc-press rounded-md border border-[#c2c7ce] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#15171c] hover:bg-[#f6f7f9]"
-          >
-            Close
-          </button>
-          <button
-            type="button"
-            onClick={handleJoin}
-            disabled={joining}
-            className="gc-press rounded-md border border-[#15171c] bg-[#15171c] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:bg-[#2a2d34] disabled:opacity-50"
-          >
-            {joining ? 'Opening…' : 'Request to join'}
-          </button>
+          {editing ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                disabled={saving}
+                className="gc-press rounded-md border border-[#c2c7ce] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#15171c] hover:bg-[#f6f7f9] disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving}
+                className="gc-press rounded-md border border-[#15171c] bg-[#15171c] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:bg-[#2a2d34] disabled:opacity-50"
+              >
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={onClose}
+                className="gc-press rounded-md border border-[#c2c7ce] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#15171c] hover:bg-[#f6f7f9]"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="gc-press rounded-md border border-[#c2c7ce] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#15171c] hover:bg-[#f6f7f9]"
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={handleJoin}
+                disabled={joining}
+                className="gc-press rounded-md border border-[#15171c] bg-[#15171c] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-white hover:bg-[#2a2d34] disabled:opacity-50"
+              >
+                {joining ? 'Opening…' : 'Request to join'}
+              </button>
+            </>
+          )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function EditField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+        {label}
+      </div>
+      {children}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Any
 
 from erp_agents.clients.llm_client import LlmClient
@@ -26,6 +27,30 @@ from erp_agents.workflows.engage.reply_glock.tools import (
     recommended_action_for_status,
     ui_bucket_for_status,
 )
+
+# Deterministic language pick for the draft: German ONLY when the prospect's reply is
+# clearly German, otherwise English. The LLM is unreliable at self-detecting language
+# (Hermes sometimes drafts German for an English reply), so we decide in code and pin
+# it with a hard directive. Bias to English unless there is a strong German signal.
+_GERMAN_CHARS = set("äöüßÄÖÜ")
+_GERMAN_WORDS = {
+    "der", "die", "das", "und", "wir", "sie", "ich", "nicht", "ein", "eine", "ist",
+    "danke", "mit", "für", "sind", "haben", "kein", "keine", "gerade", "aktuell",
+    "budget", "uns", "unser", "unsere", "vielen", "gruß", "grüße", "hallo", "bitte",
+    "derzeit", "momentan", "zurück", "melden", "kontaktieren", "interesse", "leider",
+    "jetzt", "nächste", "nächsten", "quartal", "jahr", "wäre", "können", "möchten",
+}
+
+
+def detect_language(text: str) -> str:
+    """'de' when the text is clearly German, else 'en' (the default)."""
+    t = (text or "").lower()
+    if any(c in _GERMAN_CHARS for c in t):
+        return "de"
+    words = re.findall(r"[a-zäöüß]+", t)
+    hits = sum(1 for w in words if w in _GERMAN_WORDS)
+    return "de" if hits >= 2 else "en"
+
 
 # Maps each status to the draft's purpose when the LLM omits/garbles it.
 _DEFAULT_PURPOSE: dict[str, str] = {
@@ -152,6 +177,15 @@ class ReplyGlockWorkflow(Workflow):
             company=workflow_input.company or "Unknown",
             subject=workflow_input.subject,
             clean_body=normalized.clean_body,
+        )
+        # Pin the output language deterministically (German iff the prospect's reply is
+        # clearly German, else English) — overrides the model's flaky self-detection.
+        lang = detect_language(normalized.clean_body)
+        lang_name = "German" if lang == "de" else "English"
+        user_prompt += (
+            f"\n\nOUTPUT LANGUAGE — STRICT: the prospect wrote in {lang_name}. "
+            f"Write the ENTIRE reply — subject AND body — in {lang_name} only. "
+            f"Do not use any other language."
         )
         trace.append(self.trace_step("draft_prompt", {"system": DRAFT_SYSTEM_PROMPT}, {"user": user_prompt}))
 

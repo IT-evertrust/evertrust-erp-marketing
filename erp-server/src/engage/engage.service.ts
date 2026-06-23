@@ -204,12 +204,16 @@ export function buildRawReply(args: {
   const subject = /^(re:|aw:)/i.test(args.subject.trim())
     ? args.subject
     : `Re: ${args.subject}`;
+  // RFC2047-encode the Subject so non-ASCII (em dashes, umlauts) survive the header
+  // (a raw UTF-8 subject is mangled into mojibake by mail transport).
+  const encodedSubject = `=?UTF-8?B?${Buffer.from(subject, 'utf8').toString('base64')}?=`;
   const lines = [
     `From: ${args.from}`,
     `To: ${args.to}`,
-    `Subject: ${subject}`,
+    `Subject: ${encodedSubject}`,
     'Content-Type: text/plain; charset="UTF-8"',
     'MIME-Version: 1.0',
+    'Content-Transfer-Encoding: 8bit',
   ];
   if (args.inReplyTo) lines.push(`In-Reply-To: ${args.inReplyTo}`);
   // References = prior chain + the message we're replying to (RFC 5322 §3.6.4).

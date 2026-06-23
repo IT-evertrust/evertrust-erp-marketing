@@ -60,6 +60,54 @@ export function requestToJoinMeeting(
   );
 }
 
+// Edit a meeting in place on its account's calendar.
+export async function updateMeeting(
+  accountId: string,
+  eventId: string,
+  patch: {
+    title?: string;
+    description?: string | null;
+    location?: string | null;
+    start?: string;
+    end?: string;
+  },
+): Promise<CalendarMeeting> {
+  const res = await fetch(
+    `${API_URL}/growth/activate/meetings/${encodeURIComponent(eventId)}?accountId=${encodeURIComponent(accountId)}`,
+    {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(patch),
+    },
+  );
+  if (!res.ok) throw new Error(await errorMessage(res, 'PATCH meeting'));
+  return (await res.json()) as CalendarMeeting;
+}
+
+// Move a meeting to another connected account's calendar.
+export function moveMeeting(
+  eventId: string,
+  fromAccountId: string,
+  toAccountId: string,
+): Promise<CalendarMeeting> {
+  return postJson<CalendarMeeting>(
+    `/growth/activate/meetings/${encodeURIComponent(eventId)}/move?from=${encodeURIComponent(fromAccountId)}&to=${encodeURIComponent(toAccountId)}`,
+  );
+}
+
+async function errorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const json = (await res.json()) as { message?: string | string[] };
+    if (json?.message) {
+      return Array.isArray(json.message) ? json.message.join(', ') : json.message;
+    }
+  } catch {
+    /* keep fallback */
+  }
+  return `${fallback} -> ${res.status}`;
+}
+
 // ---- Company Research ----
 export function getResearchDossiers(accountId: string): Promise<ResearchDossier[]> {
   if (!accountId) return Promise.resolve([]);

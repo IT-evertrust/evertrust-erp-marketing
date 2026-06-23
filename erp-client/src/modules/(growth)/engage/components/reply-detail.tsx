@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import { LiveDot } from '@/modules/(growth)/shared';
 
 import { saveReplyDraft, sendReply } from '../services/engage.service';
-import type { AiAgentMode, CampaignReply } from '../types';
+import type { AiAgentMode, CampaignReply, ReplyThreadMessage } from '../types';
 import { AiAgentBox } from './ai-agent-box';
 
 type ReplyDetailProps = {
@@ -26,11 +26,17 @@ export function ReplyDetail({
   const [body, setBody] = useState('');
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
+  // Messages sent this session, appended to the thread so the rep immediately SEES
+  // their reply land in the conversation (the server has it; this avoids a slow refetch).
+  const [sentMessages, setSentMessages] = useState<ReplyThreadMessage[]>([]);
+  const [justSent, setJustSent] = useState(false);
 
   const replyId = reply?.id;
   useEffect(() => {
     setSubject(reply?.draftSubject ?? '');
     setBody(reply?.draftBody ?? '');
+    setSentMessages([]);
+    setJustSent(false);
   }, [replyId, reply?.draftSubject, reply?.draftBody]);
 
   if (!reply) {
@@ -69,13 +75,29 @@ export function ReplyDetail({
     setSending(true);
     try {
       await sendReply(reply.id, subject, body);
-      toast.success('Reply sent.');
+      // Show the just-sent reply in the thread immediately (it's now in Gmail too).
+      setSentMessages((prev) => [
+        ...prev,
+        {
+          id: `sent-${prev.length}`,
+          direction: 'outbound',
+          header: `EVERTRUST → ${reply.company.toUpperCase()} · just now`,
+          subject: subject.trim().toLowerCase().startsWith('re:')
+            ? subject
+            : `Re: ${subject}`,
+          body,
+        },
+      ]);
+      setJustSent(true);
+      toast.success(`Reply sent to ${reply.contact} from your campaign mailbox.`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not send reply.');
     } finally {
       setSending(false);
     }
   }
+
+  const threadMessages = [...(reply?.thread ?? []), ...sentMessages];
 
   return (
     <section className="flex min-h-[560px] flex-col gap-4 p-5">
@@ -94,7 +116,7 @@ export function ReplyDetail({
 
       <div className="max-h-[300px] overflow-auto rounded-[10px] border border-[#c2c7ce] p-3">
         <div className="flex flex-col gap-2.5">
-          {reply.thread.map((message) => (
+          {threadMessages.map((message) => (
             <div
               key={message.id}
               className={[
@@ -149,7 +171,7 @@ export function ReplyDetail({
               disabled={sending || saving}
               className="rounded-md border border-[#15171c] bg-[#15171c] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-white disabled:opacity-50"
             >
-              {sending ? 'Sending…' : 'Send'}
+              {sending ? 'Sending…' : justSent ? 'Sent ✓' : 'Send'}
             </button>
             <button
               type="button"

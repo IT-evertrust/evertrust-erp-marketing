@@ -24,6 +24,7 @@ export function ActivatePage() {
           loadingAccounts={activate.loadingAccounts}
           meetings={activate.meetings}
           loadingMeetings={activate.loadingMeetings}
+          onMeetingChanged={activate.refreshMeetings}
         />
       ) : null}
 

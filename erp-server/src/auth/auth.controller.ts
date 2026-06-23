@@ -20,6 +20,22 @@ import {
   LoginBodyDto,
 } from './auth.dto';
 
+// Convert a JWT `expiresIn` value into milliseconds for the session-cookie maxAge,
+// so the cookie and the token always expire together (one source of truth =
+// JWT_EXPIRES_IN). Accepts the jsonwebtoken forms: a bare number = seconds, or a
+// `<n><unit>` string with unit s|m|h|d (e.g. '30d', '12h'). Falls back to 1 day.
+function durationToMs(value: string): number {
+  const DAY = 86_400_000;
+  const trimmed = (value ?? '').trim();
+  if (/^\d+$/.test(trimmed)) return Number(trimmed) * 1000; // bare number = seconds
+  const m = /^(\d+)\s*(s|m|h|d)$/i.exec(trimmed);
+  if (!m) return DAY;
+  const n = Number(m[1] ?? '1');
+  const unitKey = (m[2] ?? 'd').toLowerCase();
+  const unit = { s: 1000, m: 60_000, h: 3_600_000, d: DAY }[unitKey];
+  return n * (unit ?? DAY);
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -88,6 +104,13 @@ export class AuthController {
       // force it on in that case (cross-site deploys are always over HTTPS).
       secure: this.config.get('COOKIE_SECURE') || sameSite === 'none',
       path: '/',
+      // Persist the cookie for the SAME duration as the JWT (derived from
+      // JWT_EXPIRES_IN, the single source of truth). Without maxAge the cookie is
+      // session-scoped (dies on browser close); matching it to the token means the
+      // cookie disappears exactly when the token expires, so the next navigation
+      // hits the middleware and is redirected to /login — i.e. expiry prompts a
+      // clean re-login instead of silent 401s.
+      maxAge: durationToMs(this.config.get('JWT_EXPIRES_IN')),
     });
   }
 }

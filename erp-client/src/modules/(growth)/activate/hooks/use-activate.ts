@@ -50,6 +50,10 @@ export function useActivate() {
   const [analysisQuery, setAnalysisQuery] = useState('');
   const [analysisDate, setAnalysisDate] = useState('');
 
+  // Bumped to re-pull the calendar after an edit/move so the grid reflects the change.
+  const [refreshTick, setRefreshTick] = useState(0);
+  const refreshMeetings = () => setRefreshTick((t) => t + 1);
+
   // Load connected accounts once; default to the first.
   useEffect(() => {
     let active = true;
@@ -103,7 +107,7 @@ export function useActivate() {
     return () => {
       active = false;
     };
-  }, [accountId]);
+  }, [accountId, refreshTick]);
 
   // Load personas once.
   useEffect(() => {
@@ -208,6 +212,7 @@ export function useActivate() {
     loadingAccounts,
     meetings,
     loadingMeetings,
+    refreshMeetings,
 
     // research
     dossiers,

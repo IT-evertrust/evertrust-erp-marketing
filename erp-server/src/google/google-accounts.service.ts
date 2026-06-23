@@ -66,6 +66,13 @@ const GMAIL_READ_SCOPES = [
   'https://mail.google.com/',
 ] as const;
 
+// Distinct palette for per-account calendar color-coding. A newly connected account
+// gets the next unused color (by the org's current account count), cycling if needed.
+const ACCOUNT_COLOR_PALETTE = [
+  '#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed',
+  '#0891b2', '#db2777', '#65a30d', '#ea580c', '#4f46e5',
+] as const;
+
 export type GoogleMailboxKind = 'gmail' | 'gmail-read' | 'calendar';
 
 // PER-ORG connected Google accounts: list/upsert/set-defaults/disconnect, plus the
@@ -98,6 +105,7 @@ export class GoogleAccountsService {
         id: schema.googleAccounts.id,
         email: schema.googleAccounts.email,
         displayName: schema.googleAccounts.displayName,
+        color: schema.googleAccounts.color,
         scopes: schema.googleAccounts.scopes,
         status: schema.googleAccounts.status,
         connectedAt: schema.googleAccounts.connectedAt,
@@ -125,6 +133,7 @@ export class GoogleAccountsService {
           // Legacy fields mirror the single default until the web rewrite drops them.
           isDefaultGmail: isDefault,
           isDefaultCalendar: isDefault,
+          color: r.color ?? null,
           connectedAt: r.connectedAt.toISOString(),
         };
       });
@@ -139,6 +148,13 @@ export class GoogleAccountsService {
     const refreshTokenEnc = this.crypto.encrypt(p.refreshToken);
     const accessTokenEnc = p.accessToken ? this.crypto.encrypt(p.accessToken) : null;
     const accessTokenExpiresAt = p.expiryDate ? new Date(p.expiryDate) : null;
+    // Pick the next palette color for a NEW account (by the org's current count). On a
+    // re-connect this value is ignored (color is left out of the conflict-update set).
+    const existing = await this.db
+      .select({ id: schema.googleAccounts.id })
+      .from(schema.googleAccounts)
+      .where(eq(schema.googleAccounts.organizationId, orgId));
+    const color = ACCOUNT_COLOR_PALETTE[existing.length % ACCOUNT_COLOR_PALETTE.length];
 
     await this.db
       .insert(schema.googleAccounts)
@@ -148,6 +164,7 @@ export class GoogleAccountsService {
         googleSub: p.sub,
         email: p.email,
         displayName: p.name,
+        color,
         scopes: p.scopes,
         refreshTokenEnc,
         accessTokenEnc,

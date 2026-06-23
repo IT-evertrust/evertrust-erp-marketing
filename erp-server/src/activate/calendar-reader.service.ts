@@ -4,6 +4,7 @@ import { GoogleAccountsService } from '../google/google-accounts.service';
 import type { ActivateMeeting } from './activate.model';
 
 const CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
+const DEFAULT_TZ = 'Europe/Berlin';
 
 // Raw Google Calendar event (the subset we read).
 interface GCalEvent {
@@ -97,6 +98,108 @@ export class CalendarReaderService {
       const event = (await res.json()) as GCalEvent;
       return mapEvent(event);
     } catch {
+      return null;
+    }
+  }
+
+  // Edit an event IN PLACE on an account's calendar (title/time/location/notes). Returns
+  // the updated meeting, or null if the grant is unusable / the API rejects.
+  async updateEvent(
+    orgId: string,
+    accountId: string,
+    eventId: string,
+    patch: {
+      title?: string;
+      description?: string | null;
+      location?: string | null;
+      start?: string;
+      end?: string;
+    },
+  ): Promise<ActivateMeeting | null> {
+    const token = await this.google.getAccessTokenForAccount(orgId, accountId);
+    if (!token) return null;
+    const body: Record<string, unknown> = {};
+    if (patch.title !== undefined) body.summary = patch.title;
+    if (patch.description !== undefined) body.description = patch.description;
+    if (patch.location !== undefined) body.location = patch.location;
+    if (patch.start !== undefined) body.start = { dateTime: patch.start, timeZone: DEFAULT_TZ };
+    if (patch.end !== undefined) body.end = { dateTime: patch.end, timeZone: DEFAULT_TZ };
+    try {
+      const res = await fetch(
+        `${CALENDAR_API}/calendars/primary/events/${encodeURIComponent(eventId)}?sendUpdates=all`,
+        {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+      );
+      if (!res.ok) {
+        this.logger.warn(`Calendar update failed (${accountId}/${eventId}): ${res.status}`);
+        return null;
+      }
+      return mapEvent((await res.json()) as GCalEvent);
+    } catch (err) {
+      this.logger.warn(`Calendar update error: ${err instanceof Error ? err.message : 'error'}`);
+      return null;
+    }
+  }
+
+  // MOVE an event from one connected account's calendar to ANOTHER. Google's native
+  // events.move only works within one account, so across accounts (different OAuth
+  // tokens) we COPY the event onto the target calendar then delete it from the source.
+  // Returns the new meeting on the target account, or null on failure (source is left
+  // intact if the copy fails, so we never lose the meeting).
+  async moveEvent(
+    orgId: string,
+    eventId: string,
+    fromAccountId: string,
+    toAccountId: string,
+  ): Promise<ActivateMeeting | null> {
+    const fromToken = await this.google.getAccessTokenForAccount(orgId, fromAccountId);
+    const toToken = await this.google.getAccessTokenForAccount(orgId, toAccountId);
+    if (!fromToken || !toToken) return null;
+    try {
+      const getRes = await fetch(
+        `${CALENDAR_API}/calendars/primary/events/${encodeURIComponent(eventId)}`,
+        { headers: { Authorization: `Bearer ${fromToken}` } },
+      );
+      if (!getRes.ok) return null;
+      const ev = (await getRes.json()) as GCalEvent;
+
+      const body = {
+        summary: ev.summary,
+        description: ev.description,
+        location: ev.location,
+        start: ev.start,
+        end: ev.end,
+        // Re-invite the external attendees (drop the source self entry).
+        attendees: (ev.attendees ?? [])
+          .filter((a) => !a.self && a.email)
+          .map((a) => ({ email: a.email })),
+      };
+      const createRes = await fetch(
+        `${CALENDAR_API}/calendars/primary/events?sendUpdates=all`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${toToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+      );
+      if (!createRes.ok) {
+        this.logger.warn(`Calendar move copy failed (${toAccountId}): ${createRes.status}`);
+        return null; // source preserved
+      }
+      const created = (await createRes.json()) as GCalEvent;
+
+      // Copy succeeded — remove the original from the source account.
+      await fetch(
+        `${CALENDAR_API}/calendars/primary/events/${encodeURIComponent(eventId)}?sendUpdates=all`,
+        { method: 'DELETE', headers: { Authorization: `Bearer ${fromToken}` } },
+      ).catch(() => undefined);
+
+      return mapEvent(created);
+    } catch (err) {
+      this.logger.warn(`Calendar move error: ${err instanceof Error ? err.message : 'error'}`);
       return null;
     }
   }

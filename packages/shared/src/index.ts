@@ -849,6 +849,10 @@ export const GOOGLE_CONNECT_SCOPES: readonly string[] = [
   // gmail.readonly: full message read INCLUDING body + the `q` search needed to find a
   // client's email threads. Replaces the narrower gmail.metadata (which can't `q`-search).
   'https://www.googleapis.com/auth/gmail.readonly',
+  // gmail.insert: IMAP-APPEND a message straight into the mailbox WITHOUT sending it.
+  // Used to seed realistic test conversations (outreach + simulated replies) into a
+  // connected inbox so the Engage scan/classify pipeline has real threads to work on.
+  'https://www.googleapis.com/auth/gmail.insert',
   'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/calendar.readonly',
 ];
@@ -874,6 +878,8 @@ export const ConnectedGoogleAccountDto = z.object({
   // Legacy two-pointer flags — kept so the current web compiles; both mirror isDefault.
   isDefaultGmail: z.boolean(),
   isDefaultCalendar: z.boolean(),
+  // Auto-assigned palette color (hex) for per-account calendar color-coding.
+  color: z.string().nullable().default(null),
   connectedAt: z.string(),
 });
 export type ConnectedGoogleAccountDto = z.infer<typeof ConnectedGoogleAccountDto>;

@@ -1,4 +1,6 @@
-export type ReplyCategory = 'INTERESTED' | 'UNSURE' | 'NOT INTERESTED';
+// TEMP = interested but the timing isn't right (reply_glock TEMPORARY) — a soft
+// "later", distinct from a hard "not interested".
+export type ReplyCategory = 'INTERESTED' | 'UNSURE' | 'TEMP' | 'NOT INTERESTED';
 
 export type AiAgentMode = 'write' | 'train';
 
@@ -37,4 +39,14 @@ export type CampaignReply = {
   // The mailbox this conversation belongs to (from its campaign).
   sender: string;
   senderEmail: string;
+  // AI classification context (reply_glock). Optional so the view degrades cleanly.
+  confidence?: number;
+  reasoning?: string;
+  recommendedAction?: string | null;
+  followUpWindow?: string | null;
+  handled?: boolean;
+  // Draft provenance — 'reply_glock' (thread) or 'rag_agent' (knowledge base), plus
+  // the KB citations the unsure-drafter pulled from (Phase 4).
+  draftSource?: string | null;
+  citations?: string[];
 };

@@ -1,45 +1,19 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  ForbiddenException,
-  Injectable,
-} from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
-import type { Request } from 'express';
-import { type Permission, ROLE_PERMISSIONS } from '@evertrust/shared';
-import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
-import type { AuthUser } from '../auth.types';
+import { CanActivate, Injectable } from '@nestjs/common';
 
-// The RBAC authority. Registered globally AFTER JwtAuthGuard so req.user is
-// populated. Expands the caller's role into its permission set via
-// ROLE_PERMISSIONS (@evertrust/shared) and allows the request only if EVERY
-// permission named by @RequirePermissions(...) is present. Routes without the
-// decorator are authenticated-only (no permission restriction). Throws 403 on a
-// missing permission (e.g. a principal lacking admin:config hitting /admin/ping
-// which needs it — only L1/L2 hold it).
+// AUTHORIZATION DISABLED (single-team internal app).
+//
+// This is the marketing department's own ERP for ~4 trusted colleagues — there is
+// no need to restrict people from each other, so role/permission authorization is
+// turned off. AUTHENTICATION is unchanged: JwtAuthGuard still requires a valid
+// Google session on every non-@Public route, so we always know WHO the caller is
+// (org + identity for per-user Gmail/Calendar). This guard used to expand the
+// caller's role via ROLE_PERMISSIONS and 403 on any missing @RequirePermissions —
+// now every authenticated request is allowed. The @RequirePermissions(...)
+// decorators are left in place but are no-ops; restore the RBAC body here to
+// re-enable them.
 @Injectable()
 export class PermissionsGuard implements CanActivate {
-  constructor(private readonly reflector: Reflector) {}
-
-  canActivate(context: ExecutionContext): boolean {
-    const required = this.reflector.getAllAndOverride<
-      Permission[] | undefined
-    >(PERMISSIONS_KEY, [context.getHandler(), context.getClass()]);
-
-    // No @RequirePermissions on this route => no permission restriction.
-    if (!required || required.length === 0) return true;
-
-    const req = context.switchToHttp().getRequest<Request>();
-    const user = req.user as AuthUser | undefined;
-
-    if (!user) throw new ForbiddenException('Insufficient permissions');
-
-    // Prefer the per-request EFFECTIVE permissions JwtStrategy attaches; fall back
-    // to the role's defaults (e.g. test contexts that build a bare AuthUser).
-    const granted = user.permissions ?? ROLE_PERMISSIONS[user.role] ?? [];
-    const hasAll = required.every((perm) => granted.includes(perm));
-    if (!hasAll) throw new ForbiddenException('Insufficient permissions');
-
+  canActivate(): boolean {
     return true;
   }
 }

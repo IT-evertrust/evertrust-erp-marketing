@@ -132,6 +132,7 @@ export function useEngage() {
     interested: replies.filter((reply) => reply.category === 'INTERESTED')
       .length,
     unsure: replies.filter((reply) => reply.category === 'UNSURE').length,
+    temp: replies.filter((reply) => reply.category === 'TEMP').length,
     notInterested: replies.filter(
       (reply) => reply.category === 'NOT INTERESTED',
     ).length,

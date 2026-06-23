@@ -12,10 +12,12 @@ import type {
   EngageReplyListDto,
   EngageScanResultDto,
 } from '@evertrust/shared';
+import { Patch } from '@nestjs/common';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { OrgId } from '../common/tenant';
 import { EngageService } from './engage.service';
-import { EngageSendBodyDto } from './engage.dto';
+import { EngageRepliesService } from './engage-replies.service';
+import { CampaignReplyBodyDto, EngageSendBodyDto } from './engage.dto';
 
 // Engage · ERP-DIRECT Gmail reply pipeline. JWT-auth + tenant-scoped (@OrgId),
 // gated by the campaigns RBAC (read for the queue, write for scan/send/redraft).
@@ -25,7 +27,55 @@ import { EngageSendBodyDto } from './engage.dto';
 // the calling org.
 @Controller('engage')
 export class EngageController {
-  constructor(private readonly engage: EngageService) {}
+  constructor(
+    private readonly engage: EngageService,
+    private readonly campaignReplies: EngageRepliesService,
+  ) {}
+
+  // --- CAMPAIGN-CENTRIC reply pipeline (reply_glock classify + draft + send) ---
+
+  // Run the classifier over every lead's thread in a campaign and persist the
+  // results. SLOW (~35s/lead on local Hermes) — runs once, the queue reads instantly.
+  @RequirePermissions('campaigns:write')
+  @Post('campaigns/:aimId/scan')
+  scanCampaign(
+    @OrgId() orgId: string,
+    @Param('aimId', ParseUUIDPipe) aimId: string,
+  ) {
+    return this.campaignReplies.scanCampaign(orgId, aimId);
+  }
+
+  // The persisted, classified replies for a campaign (the reply-sorter queue).
+  @RequirePermissions('campaigns:read')
+  @Get('campaigns/:aimId/replies')
+  campaignReplyList(
+    @OrgId() orgId: string,
+    @Param('aimId', ParseUUIDPipe) aimId: string,
+  ) {
+    return this.campaignReplies.listReplies(orgId, aimId);
+  }
+
+  // Save an edited draft for a campaign reply.
+  @RequirePermissions('campaigns:write')
+  @Patch('campaign-replies/:id/draft')
+  saveCampaignDraft(
+    @OrgId() orgId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: CampaignReplyBodyDto,
+  ) {
+    return this.campaignReplies.saveDraft(orgId, id, body.subject, body.body);
+  }
+
+  // Send the (edited) draft to the lead, threaded onto the existing conversation.
+  @RequirePermissions('campaigns:write')
+  @Post('campaign-replies/:id/send')
+  sendCampaignReply(
+    @OrgId() orgId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: CampaignReplyBodyDto,
+  ) {
+    return this.campaignReplies.sendReply(orgId, id, body.subject, body.body);
+  }
 
   // The org's connected Google mailboxes — feeds the inbox account switcher.
   @RequirePermissions('campaigns:read')

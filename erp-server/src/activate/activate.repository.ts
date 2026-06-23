@@ -111,6 +111,7 @@ export class ActivateRepository {
       email,
       displayName: null,
       status: 'CONNECTED',
+      color: null,
     }));
   }
 
