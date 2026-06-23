@@ -60,6 +60,12 @@ export type ReachAim = {
   source?: string;
   status: AimStatus;
   companies: number;
+  // Async scrape tracking (Lead Satellite runs in the background). startedAt + eta
+  // drive the ETA countdown (server-seeded so it survives navigation); lastSeconds
+  // seeds the next run's estimate. Null until the aim has been scraped.
+  scrapeStartedAt: string | null;
+  scrapeEtaSeconds: number | null;
+  scrapeLastSeconds: number | null;
   // Which mailbox the campaign sends from (info | hanna).
   sender: string;
   // Ammo Forge output (null until generated).

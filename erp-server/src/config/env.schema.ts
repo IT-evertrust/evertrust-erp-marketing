@@ -113,6 +113,10 @@ export const EnvSchema = z.object({
   // the per-run abort timeout in ms (default 5 min for long scrape/analysis jobs).
   AGENTS_BASE_URL: z.string().default(''),
   AGENT_TIMEOUT_MS: z.coerce.number().int().positive().default(300_000),
+  // The Reach lead scrape runs in the BACKGROUND (off the request thread), so its
+  // agent call gets a much longer leash than the 5-min foreground default — a big
+  // targets×cities scrape can take many minutes. Raisable on Render up to ~2h.
+  REACH_SCRAPE_TIMEOUT_MS: z.coerce.number().int().positive().default(1_800_000),
 
   // Reach send mode. 'test' (default) redirects every Reach email to
   // REACH_TEST_RECIPIENT (capped by REACH_TEST_SEND_CAP) with a banner so synthetic

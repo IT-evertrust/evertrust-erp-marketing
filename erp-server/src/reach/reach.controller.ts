@@ -55,7 +55,9 @@ export class ReachController {
     return this.reachService.createAim(orgId, body);
   }
 
-  // Activate Lead Satellite for this aim's config; returns the scraped leads.
+  // Activate Lead Satellite for this aim's config. The scrape runs in the BACKGROUND
+  // (it can take minutes) — this returns the aim marked RUNNING with a server-seeded
+  // ETA immediately; the FE polls getAims for completion + renders the countdown.
   @RequirePermissions('campaigns:write')
   @Post('aims/:aimId/scrape')
   scrapeAim(@OrgId() orgId: string, @Param('aimId') aimId: string) {
