@@ -6,6 +6,7 @@ import { GrowthCard, StatusPill } from '../../shared';
 
 import type { Campaign, Lead } from '../types';
 import { CampaignTable } from './campaign-table';
+import { ScrapeCountdown } from './scrape-countdown';
 import { Spinner } from './spinner';
 
 type LeadScraperPanelProps = {
@@ -17,7 +18,8 @@ type LeadScraperPanelProps = {
   leads: Lead[];
   loadingCampaigns?: boolean;
   loadingLeads?: boolean;
-  scraping?: boolean;
+  // The selected campaign's in-flight scrape (server-seeded), or null when idle.
+  scrape?: { startedAt: string; etaSeconds: number } | null;
 };
 
 export function LeadScraperPanel({
@@ -29,7 +31,7 @@ export function LeadScraperPanel({
   leads,
   loadingCampaigns = false,
   loadingLeads = false,
-  scraping = false,
+  scrape = null,
 }: LeadScraperPanelProps) {
   const t = useTranslations('reach');
 
@@ -49,13 +51,16 @@ export function LeadScraperPanel({
           campaign: selectedCampaignName ?? t('scraper.selectedCampaign'),
         })}
         hint={
-          scraping
+          scrape
             ? t('scraper.scrapingHint')
             : t('scraper.companiesHint', { count: leads.length })
         }
       >
-        {scraping ? (
-          <Spinner label={t('scraper.scrapingLabel')} />
+        {scrape ? (
+          <ScrapeCountdown
+            startedAt={scrape.startedAt}
+            etaSeconds={scrape.etaSeconds}
+          />
         ) : loadingLeads ? (
           <Spinner label={t('scraper.loadingLeads')} />
         ) : leads.length === 0 ? (
