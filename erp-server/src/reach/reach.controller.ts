@@ -178,6 +178,7 @@ export class ReachController {
       dealValue: body.dealValue,
       contactName: body.contactName,
       phone: body.contactPhone,
+      aimId: body.aimId,
     });
     setAuditContext(req, {
       entity: 'reach_leads',

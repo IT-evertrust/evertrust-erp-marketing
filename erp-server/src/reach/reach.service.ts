@@ -199,8 +199,12 @@ export class ReachService {
       dealValue?: number;
       contactName?: string | null;
       phone?: string | null;
+      aimId?: string | null;
     },
   ) {
+    if (patch.aimId && !(await this.repo.aimExists(orgId, patch.aimId))) {
+      throw new NotFoundException('Campaign not found');
+    }
     const lead = await this.repo.updateLeadDeal(orgId, leadId, patch);
     if (!lead) throw new NotFoundException('Lead not found');
     return lead;
@@ -210,7 +214,7 @@ export class ReachService {
   async createLead(
     orgId: string,
     input: {
-      aimId: string;
+      aimId?: string | null;
       company?: string;
       pipelineStage?: PipelineStage;
       dealValue?: number;
@@ -218,11 +222,13 @@ export class ReachService {
       phone?: string | null;
     },
   ) {
-    if (!(await this.repo.aimExists(orgId, input.aimId))) {
+    // A deal can be added unassigned and attached to a campaign later. Only validate
+    // the campaign when one was actually given.
+    if (input.aimId && !(await this.repo.aimExists(orgId, input.aimId))) {
       throw new NotFoundException('Campaign not found');
     }
     return this.repo.createLead(orgId, {
-      aimId: input.aimId,
+      aimId: input.aimId ?? null,
       company: (input.company ?? '').trim() || 'New deal',
       pipelineStage: input.pipelineStage ?? 'INTEREST',
       dealValue: input.dealValue ?? 0,

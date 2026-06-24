@@ -119,9 +119,9 @@ export const reachLeads = pgTable(
     organizationId: uuid('organization_id')
       .notNull()
       .references(() => organizations.id),
-    aimId: uuid('aim_id')
-      .notNull()
-      .references(() => reachAims.id, { onDelete: 'cascade' }),
+    // NULLABLE: scraped leads always belong to an aim, but a manually-added Nurture
+    // deal can start unassigned and get a campaign attached later.
+    aimId: uuid('aim_id').references(() => reachAims.id, { onDelete: 'cascade' }),
     company: text('company').notNull(),
     website: text('website'),
     contactName: text('contact_name'),

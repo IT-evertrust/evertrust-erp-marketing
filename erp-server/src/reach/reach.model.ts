@@ -100,7 +100,8 @@ export type ReachLeadStatus =
 
 export type ReachLead = {
   id: string;
-  aimId: string;
+  // Null when the lead is a manually-added Nurture deal not yet attached to a campaign.
+  aimId: string | null;
   company: string;
   website?: string;
   contactName?: string;

@@ -39,14 +39,19 @@ function formatEuros(value: number): string {
   return `€${Math.round(value)}`;
 }
 
+export type BoardCampaign = { id: string; niche: string; name: string };
+
 export function PipelineBoard({
   aimId,
   q: search,
   items: filteredItems,
+  campaigns = [],
 }: {
   aimId?: string;
   q?: string;
   items?: ReachBoardLeadDto[];
+  // The org's campaigns (Reach AIMs) — for the per-card "attach a campaign" selector.
+  campaigns?: BoardCampaign[];
 }) {
   const [dragOverStage, setDragOverStage] = useState<PipelineStage | null>(null);
 
@@ -76,14 +81,12 @@ export function PipelineBoard({
     updateStage.mutate({ id, stage });
   }
 
-  // "+ Add deal": needs a specific campaign (a reach lead belongs to one aim).
+  // "+ Add deal": creates a card in this stage. If a campaign is selected above it's
+  // attached now; otherwise the deal starts unassigned and a campaign can be attached
+  // later from the card's campaign selector.
   function handleAddDeal(stage: PipelineStage) {
-    if (!aimId) {
-      toast.error('Pick a campaign above to add a deal.');
-      return;
-    }
     createLead.mutate(
-      { aimId, pipelineStage: stage, company: 'New deal' },
+      { aimId: aimId || undefined, pipelineStage: stage, company: 'New deal' },
       { onError: (e) => toast.error(e.message || 'Could not add the deal.') },
     );
   }
@@ -152,7 +155,14 @@ export function PipelineBoard({
                           : 'Empty'}
                     </div>
                   ) : (
-                    cards.map((p) => <LeadCard key={p.id} lead={p} tone={stage.tone} />)
+                    cards.map((p) => (
+                      <LeadCard
+                        key={p.id}
+                        lead={p}
+                        tone={stage.tone}
+                        campaigns={campaigns}
+                      />
+                    ))
                   )}
 
                   {/* + Add deal (mock's .addlead) — appends a card to this stage. */}
@@ -188,9 +198,11 @@ export function PipelineBoard({
 function LeadCard({
   lead: p,
   tone,
+  campaigns,
 }: {
   lead: ReachBoardLeadDto;
   tone?: 'won' | 'lost';
+  campaigns: BoardCampaign[];
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -298,13 +310,27 @@ function LeadCard({
       ) : null}
 
       <div className="mt-[9px] flex items-center justify-between gap-2">
-        {p.niche ? (
-          <span className="shrink-0 truncate rounded-[5px] border border-[#c2c7ce] px-[5px] py-px text-[9px] font-bold uppercase tracking-[0.05em] text-[#5b626d]">
-            {p.niche}
-          </span>
-        ) : (
-          <span />
-        )}
+        {/* Campaign selector (mock's select.tag): shows the niche, lets you attach or
+            change the deal's campaign — so a deal added unassigned gets one later. */}
+        <select
+          value={p.aimId ?? ''}
+          onClick={(e) => e.stopPropagation()}
+          onChange={(e) =>
+            updateDeal.mutate({
+              id: p.id,
+              patch: { aimId: e.target.value || null },
+            })
+          }
+          title="Campaign"
+          className="min-w-0 max-w-[60%] shrink truncate rounded-[5px] border border-[#c2c7ce] bg-white py-px pl-[5px] pr-3 text-[9px] font-bold uppercase tracking-[0.05em] text-[#5b626d] outline-none"
+        >
+          <option value="">+ Campaign</option>
+          {campaigns.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.niche || c.name}
+            </option>
+          ))}
+        </select>
         {editing ? (
           <input
             type="number"

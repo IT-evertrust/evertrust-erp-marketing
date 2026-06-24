@@ -222,6 +222,11 @@ function NurtureView() {
           aimId={effectiveAimId}
           q={search || undefined}
           items={filteredItems}
+          campaigns={campaigns.map((c) => ({
+            id: c.id,
+            niche: c.niche,
+            name: c.name,
+          }))}
         />
       ) : !campaignId || campaignId === ALL_CAMPAIGNS ? (
         <EmptyPanel

@@ -292,7 +292,8 @@ export class ReachRepository {
     const rows = await this.db
       .select({ lead: schema.reachLeads, niche: schema.reachAims.niche })
       .from(schema.reachLeads)
-      .innerJoin(schema.reachAims, eq(schema.reachLeads.aimId, schema.reachAims.id))
+      // LEFT join: unassigned manual deals (aim_id null) still appear, with no niche.
+      .leftJoin(schema.reachAims, eq(schema.reachLeads.aimId, schema.reachAims.id))
       .where(where)
       .orderBy(desc(schema.reachLeads.dealValue), desc(schema.reachLeads.confidence));
 
@@ -343,6 +344,7 @@ export class ReachRepository {
       dealValue?: number;
       contactName?: string | null;
       phone?: string | null;
+      aimId?: string | null;
     },
   ): Promise<ReachLead | undefined> {
     const set: Partial<LeadRow> = { updatedAt: new Date() };
@@ -351,6 +353,7 @@ export class ReachRepository {
     if (patch.dealValue !== undefined) set.dealValue = patch.dealValue;
     if (patch.contactName !== undefined) set.contactName = patch.contactName;
     if (patch.phone !== undefined) set.phone = patch.phone;
+    if (patch.aimId !== undefined) set.aimId = patch.aimId; // attach/detach campaign
 
     const [row] = await this.db
       .update(schema.reachLeads)
@@ -370,7 +373,7 @@ export class ReachRepository {
   async createLead(
     orgId: string,
     input: {
-      aimId: string;
+      aimId?: string | null;
       company: string;
       pipelineStage: PipelineStage;
       dealValue: number;
@@ -382,7 +385,7 @@ export class ReachRepository {
       .insert(schema.reachLeads)
       .values({
         organizationId: orgId,
-        aimId: input.aimId,
+        aimId: input.aimId ?? null,
         company: input.company,
         pipelineStage: input.pipelineStage,
         dealValue: input.dealValue,

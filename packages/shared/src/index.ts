@@ -2068,7 +2068,8 @@ export type UpdateProspectDealBody = z.infer<typeof UpdateProspectDealBody>;
 // retired for Nurture). A board lead is a reach_lead enriched with its aim's niche.
 export const ReachBoardLeadDto = z.object({
   id: z.string().uuid(),
-  aimId: z.string().uuid(),
+  // Null when the deal isn't attached to a campaign yet.
+  aimId: z.string().uuid().nullable(),
   company: z.string(),
   website: z.string().optional(),
   contactName: z.string().optional(),
@@ -2111,13 +2112,16 @@ export const UpdateReachLeadDealBody = z.object({
   dealValue: z.number().int().min(0).optional(),
   contactName: z.string().nullable().optional(),
   contactPhone: z.string().nullable().optional(),
+  // Attach (or detach, null) the deal's campaign.
+  aimId: z.string().uuid().nullable().optional(),
 });
 export type UpdateReachLeadDealBody = z.infer<typeof UpdateReachLeadDealBody>;
 
 // Body for POST /growth/reach/leads — manually add a Nurture card under an aim
 // (the board's "+ Add deal"). company defaults to "New deal" server-side if blank.
 export const CreateReachLeadBody = z.object({
-  aimId: z.string().uuid(),
+  // Optional: a deal can be created unassigned and attached to a campaign later.
+  aimId: z.string().uuid().optional(),
   company: z.string().max(200).optional(),
   pipelineStage: PipelineStage.optional(),
   dealValue: z.number().int().min(0).optional(),

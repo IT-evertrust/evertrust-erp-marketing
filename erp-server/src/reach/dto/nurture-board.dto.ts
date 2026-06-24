@@ -24,6 +24,7 @@ export const updateReachLeadDealSchema = z.object({
   dealValue: z.number().int().min(0).optional(),
   contactName: z.string().max(200).nullable().optional(),
   contactPhone: z.string().max(80).nullable().optional(),
+  aimId: z.string().uuid().nullable().optional(),
 });
 export type UpdateReachLeadDealDto = z.infer<typeof updateReachLeadDealSchema>;
 export class UpdateReachLeadDealBodyDto extends createZodDto(
