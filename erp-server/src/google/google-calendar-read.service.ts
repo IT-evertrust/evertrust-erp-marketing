@@ -355,6 +355,15 @@ export class GoogleCalendarReadService {
   // is the org's optional dual-scale gutter zone (org_config.salesSecondaryTimeZone)
   // or null. Invalid stored/env zones are ignored (degrade to the default) — this
   // powers a page load and must never throw.
+  // Public accessor for callers outside the calendar (e.g. Engage meeting emails) that
+  // need the org's resolved primary + secondary sales zones — the SAME zones the
+  // calendar renders, so an email's time and the invite never disagree.
+  getOrgTimeZones(
+    orgId: string,
+  ): Promise<{ primary: string; secondary: string | null }> {
+    return this.resolveOrgTimeZones(orgId);
+  }
+
   private async resolveOrgTimeZones(
     orgId: string,
   ): Promise<{ primary: string; secondary: string | null }> {
