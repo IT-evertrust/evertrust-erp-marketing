@@ -5,12 +5,11 @@
 // Step 4 of R.E.A.N. — move deals through the pipeline + assist with contracts.
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { Columns3, FileSignature, Inbox } from 'lucide-react';
+import { Inbox } from 'lucide-react';
 import type { CampaignDto } from '@evertrust/shared';
 import { useRequirePermission } from '@/lib/permissions';
 import { useCampaigns } from '@/hooks/use-campaigns';
 import { EmptyState } from '@/components/common/empty-state';
-import { SegmentedTabs } from '@/components/rean/segmented-tabs';
 import {
   Select,
   SelectContent,
@@ -19,6 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 import { NurturePipelineBoard } from '@/components/growth/nurture-pipeline-board';
 import { ContractsCard } from '@/components/growth/contracts-card';
 
@@ -58,46 +58,35 @@ function NurtureView() {
     setCampaignId((active ?? first).id);
   }, [campaigns, campaignId]);
 
-  const tabs = [
-    {
-      value: 'pipeline' as const,
-      label: tn('tabs.pipeline'),
-      icon: <Columns3 className="size-3.5" />,
-    },
-    {
-      value: 'contracts' as const,
-      label: tn('tabs.contracts'),
-      icon: <FileSignature className="size-3.5" />,
-    },
+  const TABS: ReadonlyArray<readonly [Tab, string]> = [
+    ['pipeline', tn('tabs.pipeline')],
+    ['contracts', tn('tabs.contracts')],
   ];
 
   return (
     <main className="flex flex-col gap-5 px-6 py-5 duration-300 animate-in fade-in">
-      {/* No body title here — the GrowthTopbar masthead is the single page header
-          (Overview/Engage do the same), so "Nurture" isn't rendered twice. This row
-          carries only the campaign scope selector. */}
-      {campaigns.length > 0 ? (
-        <div className="flex flex-wrap items-center justify-end gap-3 border-b border-sidebar-border pb-5">
-          <Select value={campaignId ?? undefined} onValueChange={setCampaignId}>
-            <SelectTrigger className="w-[260px]">
-              <SelectValue placeholder={tn('campaignPlaceholder')} />
-            </SelectTrigger>
-            <SelectContent>
-              {campaigns.map((c) => (
-                <SelectItem key={c.id} value={c.id}>
-                  {campaignLabel(c)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      ) : null}
-
-      <SegmentedTabs
-        tabs={tabs}
-        value={tab}
-        onValueChange={(v) => setTab(v as Tab)}
-      />
+      {/* Underline tab bar (matches Activate). The GrowthTopbar masthead owns the
+          page title; the campaign scope selector moved into the filter rows below. */}
+      <div className="flex flex-wrap gap-0 border-b border-sidebar-border">
+        {TABS.map(([value, label]) => {
+          const active = tab === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setTab(value)}
+              className={cn(
+                'mb-[-1px] border-b-2 px-4 py-3 text-[13px] font-bold transition',
+                active
+                  ? 'border-foreground text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
 
       {campaignsQ.isLoading ? (
         <Skeleton className="h-72 w-full rounded-lg" />
@@ -112,25 +101,36 @@ function NurtureView() {
           description={tn('noCampaigns.body')}
         />
       ) : !campaignId ? (
-        <EmptyState
-          icon={<Inbox />}
-          title={tn('pickCampaign.title')}
-          description={tn('pickCampaign.body')}
-        />
+        <Skeleton className="h-72 w-full rounded-lg" />
       ) : tab === 'pipeline' ? (
         <NurturePipelineBoard
+          campaigns={campaigns}
           campaignId={campaignId}
-          nicheId={
-            campaigns.find((c) => c.id === campaignId)?.nicheId ?? null
-          }
+          onCampaignChange={setCampaignId}
+          nicheId={campaigns.find((c) => c.id === campaignId)?.nicheId ?? null}
         />
       ) : (
-        <ContractsCard
-          filters={{ campaignId }}
-          title={tn('contracts.listTitle')}
-          emptyHint={tn('contracts.listEmpty')}
-          showDraftForm
-        />
+        <div className="flex flex-col gap-4">
+          {/* Contracts are per-campaign — keep a campaign scope selector here. */}
+          <Select value={campaignId ?? undefined} onValueChange={setCampaignId}>
+            <SelectTrigger className="w-[260px]">
+              <SelectValue placeholder={tn('campaignPlaceholder')} />
+            </SelectTrigger>
+            <SelectContent>
+              {campaigns.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {campaignLabel(c)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <ContractsCard
+            filters={{ campaignId: campaignId ?? undefined }}
+            title={tn('contracts.listTitle')}
+            emptyHint={tn('contracts.listEmpty')}
+            showDraftForm
+          />
+        </div>
       )}
     </main>
   );
