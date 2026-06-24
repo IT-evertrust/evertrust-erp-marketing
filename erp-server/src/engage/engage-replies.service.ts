@@ -300,12 +300,14 @@ export class EngageRepliesService {
             offeredSlots,
             inbound.id,
           );
-          // INTERESTED but no usable time was resolved (meetingStatus still NONE and no
-          // slots offered yet) → proactively offer concrete free slots so the lead has
-          // times to pick, instead of a vague "let's schedule soon".
-          if (out.status === 'INTERESTED') {
-            await this.maybeProposeSlots(orgId, aimId, lead.id);
-          }
+          // Keep the meeting-time prose on the (re-drafted) reply for its current state,
+          // and — for an INTERESTED lead with no time yet — make the first proposal.
+          await this.ensureMeetingTimeOnDraft(
+            orgId,
+            aimId,
+            lead.id,
+            out.status === 'INTERESTED',
+          );
         }
         // Propagate the classification into the Reach plane (stats cache + lead status)
         // so the Email Generator / Sequence Sender / Lead Scraper reflect the reply.
@@ -526,45 +528,75 @@ export class EngageRepliesService {
     }
   }
 
-  // Scenario 2: an INTERESTED lead gave no usable meeting time → proactively offer
-  // concrete free slots so the reply contains times to pick, not a vague "let's schedule
-  // soon". No-op when the lead is already in a meeting flow (PROPOSED/ACCEPTED/COUNTER/
-  // BOOKED) or slots were already offered. Best-effort: never fails the scan.
-  private async maybeProposeSlots(orgId: string, aimId: string, leadId: string): Promise<void> {
+  // Keep the natural meeting-time sentence on the (just re-drafted) reply for its CURRENT
+  // state. upsertReply overwrites draft_body on every scan, so without re-applying here a
+  // re-scan would DROP the prose from an already-proposed/accepted reply. Also handles the
+  // first proposal (Scenario 2): an INTERESTED lead that gave no usable time gets concrete
+  // free slots offered, so the reply contains times to pick rather than a vague "let's
+  // schedule soon". `allowPropose` gates that first proposal to INTERESTED replies.
+  // Best-effort: never fails the scan.
+  private async ensureMeetingTimeOnDraft(
+    orgId: string,
+    aimId: string,
+    leadId: string,
+    allowPropose: boolean,
+  ): Promise<void> {
     try {
-      const existing = await this.loadExistingReply(orgId, aimId, leadId);
-      if (!existing) return;
-      if (existing.meetingStatus !== 'NONE') return; // already resolved into a meeting flow
-      if ((existing.proposedSlots?.length ?? 0) > 0) return; // already offered times
+      const r = await this.loadExistingReply(orgId, aimId, leadId);
+      if (!r || r.meetingStatus === 'BOOKED') return; // booked → confirmed, leave it
 
-      // Pull genuinely-free business-hours slots from the real calendar over a generous
-      // window, then offer the earliest few — surfacing real availability, not a fixed cap.
-      const now = new Date();
-      const free = await this.calendar.freeSlots(orgId, {
-        timeMin: now.toISOString(),
-        timeMax: new Date(now.getTime() + PROPOSE_HORIZON_DAYS * 86_400_000).toISOString(),
-      });
-      if (!free.configured || free.slots.length === 0) return; // no availability → leave draft as-is
+      let slots: Slot[] = [];
+      let kind: MeetingKind = 'propose';
+      let setProposed = false;
 
-      const slots = free.slots.slice(0, PROPOSE_SLOT_COUNT);
-      const body = await this.stampMeetingTime(orgId, existing.draftBody ?? '', slots);
+      if (r.meetingStatus === 'ACCEPTED' && r.acceptedSlot) {
+        slots = [r.acceptedSlot];
+        kind = 'accept';
+      } else if (r.meetingStatus === 'COUNTER' && (r.proposedSlots?.length ?? 0) > 0) {
+        slots = r.proposedSlots!;
+        kind = 'counter';
+      } else if (r.meetingStatus === 'PROPOSED' && (r.proposedSlots?.length ?? 0) > 0) {
+        slots = r.proposedSlots!;
+        kind = 'propose';
+      } else if (
+        allowPropose &&
+        r.meetingStatus === 'NONE' &&
+        (r.proposedSlots?.length ?? 0) === 0
+      ) {
+        // First proposal: pull genuinely-free business-hours slots over a generous window
+        // and offer the earliest few — surfacing real availability, not a fixed cap.
+        const now = new Date();
+        const free = await this.calendar.freeSlots(orgId, {
+          timeMin: now.toISOString(),
+          timeMax: new Date(now.getTime() + PROPOSE_HORIZON_DAYS * 86_400_000).toISOString(),
+        });
+        if (!free.configured || free.slots.length === 0) return; // no availability
+        slots = free.slots.slice(0, PROPOSE_SLOT_COUNT);
+        kind = 'propose';
+        setProposed = true;
+      }
+      if (slots.length === 0) return;
+
+      const body = await this.stampMeetingTime(orgId, r.draftBody ?? '', slots, kind);
+      if (body === r.draftBody && !setProposed) return; // already current → no write
       await this.db
         .update(schema.reachLeadReplies)
         .set({
-          proposedSlots: slots,
-          meetingStatus: 'PROPOSED',
           draftBody: body,
+          ...(setProposed
+            ? { proposedSlots: slots, meetingStatus: 'PROPOSED' as const }
+            : {}),
           updatedAt: new Date(),
         })
         .where(
           and(
             tenantScope(orgId, schema.reachLeadReplies),
-            eq(schema.reachLeadReplies.id, existing.id),
+            eq(schema.reachLeadReplies.id, r.id),
           ),
         );
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown error';
-      this.logger.warn(`Engage maybeProposeSlots lead ${leadId} failed: ${msg}`);
+      this.logger.warn(`Engage ensureMeetingTimeOnDraft lead ${leadId} failed: ${msg}`);
     }
   }
 
