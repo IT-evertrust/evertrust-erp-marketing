@@ -67,12 +67,31 @@ function placeBeforeSignoff(body: string, block: string): string {
   return `${head}\n\n${block}\n\n${tail}`;
 }
 
+// A concrete clock time the drafter should NEVER have written — the system owns the
+// authoritative meeting time. Matches "9:30am", "2 pm", "09:00", "14:00 CET".
+const CLOCK_TIME_RE = /\b\d{1,2}:\d{2}\b|\b\d{1,2}\s*(?:a\.?m\.?|p\.?m\.?)\b/i;
+
+// The drafter LLM sometimes invents a meeting time in the body ("Let's connect Thursday
+// at 9:30am"), which then contradicts the system-stamped authoritative block — two
+// proposals. Strip any sentence stating a concrete clock time, per-sentence, preserving
+// paragraph structure and dropping emptied paragraphs, so only the grounded block remains.
+function stripProposedTimeSentences(body: string): string {
+  const kept: string[] = [];
+  for (const para of body.split(/\n{2,}/)) {
+    const sentences = para.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g) ?? [para];
+    const rebuilt = sentences.filter((s) => !CLOCK_TIME_RE.test(s)).join('').trim();
+    if (rebuilt) kept.push(rebuilt);
+  }
+  return kept.join('\n\n');
+}
+
 // Stamp the authoritative dual-zone meeting time onto an email body as a NATURAL sentence
 // (rendered from the structured slot(s) — the SAME ones the calendar books — so the email
 // can never disagree with the invite; the LLM never writes the time). `kind` shapes the
 // phrasing (propose / accept / counter). Idempotent: any prior block is stripped before
-// re-inserting, so re-stamping (e.g. ACCEPTED after PROPOSED) never duplicates it. The
-// block lands as the last body paragraph, just above the sign-off — not beneath it.
+// re-inserting, so re-stamping (e.g. ACCEPTED after PROPOSED) never duplicates it. Any
+// LLM-invented clock time in the body is scrubbed first, so there's exactly ONE time
+// statement — the grounded block — placed just above the sign-off, not beneath it.
 export function withMeetingTime(
   body: string,
   slots: Slot[],
@@ -82,8 +101,9 @@ export function withMeetingTime(
 ): string {
   const stripped = body.replace(MTG_BLOCK, '').trimEnd();
   if (slots.length === 0) return stripped;
+  const scrubbed = stripProposedTimeSentences(stripped);
   const prose = renderMeetingProse(slots, primaryTz, secondaryTz, kind);
-  return placeBeforeSignoff(stripped, `${MTG_OPEN}${prose}${MTG_CLOSE}`);
+  return placeBeforeSignoff(scrubbed, `${MTG_OPEN}${prose}${MTG_CLOSE}`);
 }
 
 // ===========================================================================
