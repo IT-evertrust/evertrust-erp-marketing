@@ -1523,7 +1523,11 @@ export class EngageRepliesService {
     const row = await this.ownedReply(orgId, replyId);
     const lead = (
       await this.db
-        .select({ email: schema.reachLeads.email, company: schema.reachLeads.company })
+        .select({
+          email: schema.reachLeads.email,
+          company: schema.reachLeads.company,
+          contactName: schema.reachLeads.contactName,
+        })
         .from(schema.reachLeads)
         .where(eq(schema.reachLeads.id, row.leadId))
         .limit(1)
@@ -1616,7 +1620,86 @@ export class EngageRepliesService {
       }
     }
 
+    // Option B — book on send of the ACCEPT confirmation: when this reply confirms an agreed
+    // slot, create the real calendar event (client invited + Meet) and flip it to BOOKED now,
+    // so "I've added our call to my calendar" is true exactly when that email goes out. Runs
+    // only when the proposed-slot path above didn't (the two states are mutually exclusive).
+    if (!meeting && row.meetingStatus === 'ACCEPTED' && row.acceptedSlot && !row.bookedMeetingId) {
+      meeting = await this.bookOnAccept(orgId, row, lead, access.account.email);
+    }
+
     return { ok: true, meeting };
+  }
+
+  // Book the agreed slot for real when the ACCEPT confirmation is sent: create the calendar
+  // event (client invited + Google Meet), record a linked meetings row (idempotent on
+  // org+eventId), and flip the reply to BOOKED. Best-effort — a calendar failure must NOT
+  // fail the send (the confirmation already went out); it returns { ok:false } and leaves the
+  // reply ACCEPTED so it can still be booked manually. Returns null if there's nothing to book.
+  private async bookOnAccept(
+    orgId: string,
+    reply: { id: string; meetingStatus: string | null; acceptedSlot: Slot | null },
+    lead: { company: string; email: string | null; contactName: string | null },
+    ownerEmail: string,
+  ): Promise<{ ok: boolean; eventId: string | null; htmlLink: string | null } | null> {
+    const slot = reply.acceptedSlot;
+    if (!slot) return null;
+    try {
+      const { primary } = await this.calendar.getOrgTimeZones(orgId);
+      const title = `EVERTRUST × ${lead.company} — intro call`;
+      const created = await this.calendar.createEvent(orgId, {
+        title,
+        start: slot.start,
+        end: slot.end,
+        timeZone: primary,
+        attendees: lead.email ? [{ email: lead.email }] : [],
+        addGoogleMeet: true,
+      });
+      if (!created.ok || !created.eventId) {
+        this.logger.warn(
+          `Engage bookOnAccept: calendar create degraded for reply ${reply.id}: ${created.reason}`,
+        );
+        return { ok: false, eventId: null, htmlLink: null };
+      }
+      const docUrl = created.meetingUrl ?? created.htmlLink ?? null;
+      const inserted = await this.db
+        .insert(schema.meetings)
+        .values({
+          organizationId: orgId,
+          sessionId: created.eventId,
+          title,
+          clientCompany: lead.company,
+          aeName: ownerEmail,
+          clientContact: lead.contactName,
+          clientEmail: lead.email,
+          meetingDate: slot.start,
+          transcript: null,
+          docUrl,
+          matchMethod: 'engage_booking',
+        })
+        .onConflictDoUpdate({
+          target: [schema.meetings.organizationId, schema.meetings.sessionId],
+          set: { title, meetingDate: slot.start, docUrl, updatedAt: new Date() },
+        })
+        .returning({ id: schema.meetings.id });
+      const meetingId = inserted[0]?.id;
+      if (meetingId) {
+        await this.db
+          .update(schema.reachLeadReplies)
+          .set({ meetingStatus: 'BOOKED', bookedMeetingId: meetingId, updatedAt: new Date() })
+          .where(
+            and(
+              tenantScope(orgId, schema.reachLeadReplies),
+              eq(schema.reachLeadReplies.id, reply.id),
+            ),
+          );
+      }
+      return { ok: true, eventId: created.eventId, htmlLink: created.meetingUrl ?? created.htmlLink };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown error';
+      this.logger.warn(`Engage bookOnAccept failed for reply ${reply.id}: ${msg}`);
+      return { ok: false, eventId: null, htmlLink: null };
+    }
   }
 
   // --- MARK BOOKED ----------------------------------------------------------
