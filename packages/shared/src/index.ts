@@ -2063,6 +2063,56 @@ export const UpdateProspectDealBody = z.object({
 });
 export type UpdateProspectDealBody = z.infer<typeof UpdateProspectDealBody>;
 
+// ---- Reach Nurture board (reach_leads ARE the pipeline cards) ----
+// The Nurture pipeline now reads reach_leads directly (the legacy prospects table is
+// retired for Nurture). A board lead is a reach_lead enriched with its aim's niche.
+export const ReachBoardLeadDto = z.object({
+  id: z.string().uuid(),
+  aimId: z.string().uuid(),
+  company: z.string(),
+  website: z.string().optional(),
+  contactName: z.string().optional(),
+  contactTitle: z.string().optional(),
+  email: z.string().optional(),
+  phone: z.string().optional(),
+  location: z.string().optional(),
+  source: z.string().optional(),
+  qualificationReason: z.string().optional(),
+  confidence: z.number().optional(),
+  // Outreach status (NEW/COLD_OUTREACHED/…) — kept loose; the board groups by stage.
+  status: z.string(),
+  pipelineStage: PipelineStage,
+  dealValue: z.number().int().nonnegative(),
+  niche: z.string().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type ReachBoardLeadDto = z.infer<typeof ReachBoardLeadDto>;
+
+// GET /growth/reach/board — leads (optionally one aim) + full-set tallies. Mirrors
+// ProspectListDto so the Nurture UI/optimistic logic is a drop-in swap.
+export const ReachBoardResultDto = z.object({
+  items: z.array(ReachBoardLeadDto),
+  total: z.number().int().nonnegative(),
+  statusCounts: z.record(z.string(), z.number().int().nonnegative()),
+  stageCounts: z.record(PipelineStage, z.number().int().nonnegative()),
+});
+export type ReachBoardResultDto = z.infer<typeof ReachBoardResultDto>;
+
+// Body for PATCH /growth/reach/leads/:leadId/stage — the Nurture kanban drag.
+export const UpdateReachLeadStageBody = z.object({
+  stage: PipelineStage,
+});
+export type UpdateReachLeadStageBody = z.infer<typeof UpdateReachLeadStageBody>;
+
+// Body for PATCH /growth/reach/leads/:leadId/deal — inline deal/contact edit.
+export const UpdateReachLeadDealBody = z.object({
+  dealValue: z.number().int().min(0).optional(),
+  contactName: z.string().nullable().optional(),
+  contactPhone: z.string().nullable().optional(),
+});
+export type UpdateReachLeadDealBody = z.infer<typeof UpdateReachLeadDealBody>;
+
 // ---- Reply classifications ----
 // Body for POST /reply-classifications — Reply Glock / RAG verdict. Inserted as
 // evidence AND projected onto prospects.status (INTERESTED→INTERESTED,

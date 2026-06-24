@@ -67,6 +67,27 @@ export const queryKeys = {
     detail: (id: string) => ['prospects', 'detail', id] as const,
   },
 
+  // Growth Engine: the Nurture pipeline board, now backed by reach_leads.
+  reachBoard: {
+    all: ['reach-board'] as const,
+    board: (
+      f: {
+        aimId?: string | null;
+        q?: string | null;
+        limit?: number | null;
+        offset?: number | null;
+      } = {},
+    ) =>
+      [
+        'reach-board',
+        'board',
+        f.aimId ?? 'all',
+        f.q ?? '',
+        f.limit ?? 500,
+        f.offset ?? 0,
+      ] as const,
+  },
+
   // Growth Engine: a prospect's outreach conversation timeline.
   outreachThread: {
     all: ['outreach-thread'] as const,

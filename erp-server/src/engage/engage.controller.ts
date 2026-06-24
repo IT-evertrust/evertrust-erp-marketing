@@ -17,6 +17,8 @@ import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { OrgId } from '../common/tenant';
 import { EngageService } from './engage.service';
 import { EngageRepliesService } from './engage-replies.service';
+import { EngageScanService } from './engage-scan.service';
+import { GmailWatchService } from './gmail-watch.service';
 import {
   CampaignPersonaBodyDto,
   CampaignReplyBodyDto,
@@ -36,6 +38,8 @@ export class EngageController {
   constructor(
     private readonly engage: EngageService,
     private readonly campaignReplies: EngageRepliesService,
+    private readonly scanService: EngageScanService,
+    private readonly watch: GmailWatchService,
   ) {}
 
   // --- CAMPAIGN-CENTRIC reply pipeline (reply_glock classify + draft + send) ---
@@ -49,6 +53,37 @@ export class EngageController {
     @Param('aimId', ParseUUIDPipe) aimId: string,
   ) {
     return this.campaignReplies.scanCampaign(orgId, aimId);
+  }
+
+  // Manual "scan all now" — classify every campaign in the org. Same work the hourly
+  // auto-scan does, on demand (the "manual scanning" button).
+  @RequirePermissions('campaigns:write')
+  @Post('scan-all')
+  scanAll(@OrgId() orgId: string) {
+    return this.scanService.scanAllForOrg(orgId);
+  }
+
+  // --- gmail.watch real-time controls ---
+
+  // Register a gmail.watch on every connected mailbox (needs GMAIL_PUBSUB_TOPIC).
+  @RequirePermissions('campaigns:write')
+  @Post('gmail/watch/register')
+  registerWatch(@OrgId() orgId: string) {
+    return this.watch.registerAllForOrg(orgId);
+  }
+
+  // Stop every gmail.watch in the org.
+  @RequirePermissions('campaigns:write')
+  @Post('gmail/watch/stop')
+  stopWatch(@OrgId() orgId: string) {
+    return this.watch.stopAllForOrg(orgId);
+  }
+
+  // Whether gmail.watch (Pub/Sub) is configured on this server.
+  @RequirePermissions('campaigns:read')
+  @Get('gmail/watch/status')
+  watchStatus() {
+    return { configured: this.watch.isConfigured() };
   }
 
   // DEV/TEST (F2): seed synthetic outreach→reply Gmail threads into the campaign

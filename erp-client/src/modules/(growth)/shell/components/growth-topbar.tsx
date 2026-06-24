@@ -18,9 +18,6 @@ export function GrowthTopbar() {
           <h1 className="text-[30px] font-bold leading-none tracking-[-0.02em] text-[#15171c]">
             {meta.title}
           </h1>
-          <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[#959ca7]">
-            {meta.subtitle}
-          </div>
         </div>
       </div>
 

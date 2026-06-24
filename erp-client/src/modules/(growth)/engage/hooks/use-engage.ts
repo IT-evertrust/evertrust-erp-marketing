@@ -9,6 +9,7 @@ import {
   getCampaignReplies,
   getEngageCampaigns,
   getEngagePersonas,
+  scanCampaign,
   setCampaignPersona,
   syncEngageInbox,
 } from '../services/engage.service';
@@ -38,6 +39,8 @@ export function useEngage() {
   // a blank/empty state while data is in flight.
   const [loadingCampaigns, setLoadingCampaigns] = useState(true);
   const [loadingReplies, setLoadingReplies] = useState(false);
+  // Manual "Scan now" in flight for the selected campaign.
+  const [scanning, setScanning] = useState(false);
 
   // Load campaigns once; default the selection to the first with replies. Best-effort
   // inbox sync first so real inbound Gmail (matched to known prospects) is in the queue.
@@ -126,6 +129,38 @@ export function useEngage() {
     };
   }, [selectedCampaignId]);
 
+  // Manual "Scan now": classify the selected campaign's mailbox for new replies,
+  // then refresh its queue in place. Slow (local Hermes) — the button shows a spinner.
+  async function scanNow() {
+    const aimId = selectedCampaignId;
+    if (!aimId || scanning) return;
+    setScanning(true);
+    try {
+      const result = await scanCampaign(aimId);
+      if (!result.configured) {
+        toast.error(
+          result.reason ?? 'This campaign’s mailbox isn’t connected for reading.',
+        );
+        return;
+      }
+      toast.success(
+        result.scanned > 0
+          ? `Scanned ${result.scanned} thread${result.scanned === 1 ? '' : 's'} · ${result.classified} classified.`
+          : 'No new replies found.',
+      );
+      // Re-read the queue so freshly-classified replies show without a reload.
+      const data = await getCampaignReplies(aimId);
+      setReplies(data);
+      setSelectedReplyId((prev) =>
+        data.some((r) => r.id === prev) ? prev : (data[0]?.id ?? ''),
+      );
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Scan failed.');
+    } finally {
+      setScanning(false);
+    }
+  }
+
   // Distinct inboxes present across all campaigns (the filter options).
   const inboxes = Array.from(
     new Set(campaigns.map((campaign) => campaign.senderEmail)),
@@ -200,5 +235,7 @@ export function useEngage() {
     setAiMode,
     personas,
     changePersona,
+    scanning,
+    scanNow,
   };
 }

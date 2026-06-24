@@ -2,22 +2,21 @@
 
 import { useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
-import type { PipelineStage, ProspectDto } from '@evertrust/shared';
+import type { PipelineStage, ReachBoardLeadDto } from '@evertrust/shared';
 import {
-  useProspectsBoard,
-  useUpdateProspectStage,
-  useUpdateProspectDeal,
-} from '@/hooks/use-prospects';
-import { ProspectDetailDrawer } from '@/components/growth/prospect-detail-drawer';
+  useReachBoard,
+  useUpdateReachLeadStage,
+  useUpdateReachLeadDeal,
+} from '@/hooks/use-reach-board';
 import { cn } from '@/lib/utils';
 
 // Big page so the kanban shows a meaningful slice of the pipeline at once.
-const PAGE_SIZE = 200;
+const PAGE_SIZE = 500;
 
 // The marketing department's pipeline (attached design) is a six-stage SALES funnel:
 // INTEREST → INTENT → CONSIDERATION → DECISION → WON / LOST. Cards are grouped by the
-// prospect's real `pipelineStage` (all six are backed now); a card click opens the
-// live prospect detail drawer, and dragging a card to another column re-stages it.
+// reach lead's `pipelineStage`; dragging a card to another column re-stages it, and the
+// € value is inline-editable. The Nurture pipeline IS reach_leads now (no prospects).
 const STAGES: Array<{
   key: PipelineStage;
   label: string;
@@ -39,22 +38,21 @@ function formatEuros(value: number): string {
 
 // Faithful re-creation of the attached design's `.kanban.six`, white-themed with the
 // app's light tokens. Six columns, each a stack of `.lead` cards with a per-column
-// footer total (summed deal value). Data is REAL prospects (GET /prospects/board);
+// footer total (summed deal value). Data is REAL reach leads (GET /growth/reach/board);
 // `items` is the niche/date-filtered slice the page hands down.
 export function PipelineBoard({
-  campaignId,
+  aimId,
   q: search,
   items: filteredItems,
 }: {
-  campaignId?: string;
+  aimId?: string;
   q?: string;
-  items?: ProspectDto[];
+  items?: ReachBoardLeadDto[];
 }) {
-  const [openId, setOpenId] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<PipelineStage | null>(null);
 
-  const query = useProspectsBoard({
-    campaignId,
+  const query = useReachBoard({
+    aimId,
     q: search,
     limit: PAGE_SIZE,
     offset: 0,
@@ -65,11 +63,11 @@ export function PipelineBoard({
   );
   const stageCounts = query.data?.stageCounts ?? {};
 
-  const updateStage = useUpdateProspectStage();
+  const updateStage = useUpdateReachLeadStage();
 
-  // Group the (filtered) page's prospects into the six stages by pipelineStage.
+  // Group the (filtered) page's leads into the six stages by pipelineStage.
   const byStage = useMemo(() => {
-    const map = {} as Record<PipelineStage, ProspectDto[]>;
+    const map = {} as Record<PipelineStage, ReachBoardLeadDto[]>;
     for (const s of STAGES) map[s.key] = [];
     for (const p of items) map[p.pipelineStage]?.push(p);
     return map;
@@ -151,12 +149,7 @@ export function PipelineBoard({
                     </div>
                   ) : (
                     cards.map((p) => (
-                      <LeadCard
-                        key={p.id}
-                        prospect={p}
-                        tone={stage.tone}
-                        onOpen={() => setOpenId(p.id)}
-                      />
+                      <LeadCard key={p.id} lead={p} tone={stage.tone} />
                     ))
                   )}
                 </div>
@@ -171,37 +164,27 @@ export function PipelineBoard({
           })}
         </div>
       </div>
-
-      <ProspectDetailDrawer
-        prospectId={openId}
-        onOpenChange={(open) => {
-          if (!open) setOpenId(null);
-        }}
-      />
     </div>
   );
 }
 
-// One `.lead` card. Company (bold) on top, contact name + phone on their own lines,
-// and the deal value as €X.XK bottom-right. WON cards get a ✓; LOST cards are dimmed.
-// The whole card is draggable (re-stages on drop) and clickable (opens the drawer) —
-// a drag flag suppresses the click that fires at the end of a drag. The € value is an
-// inline edit: click it → number input → blur/Enter saves via updateDeal.
+// One `.lead` card. Company (bold) on top, contact name below, and a footer row with
+// the niche tag (left) + deal value €X.XK (right) — matching the design's `.lf`. WON
+// cards get a ✓; LOST cards are dimmed. The whole card is draggable (re-stages on drop).
+// The € value is an inline edit: click it → number input → blur/Enter saves.
 function LeadCard({
-  prospect: p,
+  lead: p,
   tone,
-  onOpen,
 }: {
-  prospect: ProspectDto;
+  lead: ReachBoardLeadDto;
   tone?: 'won' | 'lost';
-  onOpen: () => void;
 }) {
   const [dragging, setDragging] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
-  const updateDeal = useUpdateProspectDeal();
+  const updateDeal = useUpdateReachLeadDeal();
 
-  const company = p.companyName || p.email;
+  const company = p.company || p.email || 'Unknown';
 
   function startEdit() {
     setDraft(String(p.dealValue));
@@ -224,24 +207,8 @@ function LeadCard({
         e.dataTransfer.setData('text/plain', p.id);
       }}
       onDragEnd={() => setDragging(false)}
-      onClick={() => {
-        // A click that fires at the tail of a drag must not open the drawer.
-        if (dragging) {
-          setDragging(false);
-          return;
-        }
-        onOpen();
-      }}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onOpen();
-        }
-      }}
       className={cn(
-        'relative w-full cursor-pointer rounded-[8px] border border-[#d6dade] bg-white p-2.5 text-left transition-colors hover:border-[#c2c7ce] hover:bg-[#fbfbfc]',
+        'relative w-full rounded-[8px] border border-[#d6dade] bg-white p-2.5 text-left transition-colors hover:border-[#c2c7ce] hover:bg-[#fbfbfc]',
         tone === 'lost' ? 'opacity-60' : '',
         dragging ? 'opacity-40' : '',
       )}
@@ -251,17 +218,19 @@ function LeadCard({
         {tone === 'won' ? <span className="text-[#15171c]"> ✓</span> : null}
       </div>
       {p.contactName ? (
-        <div className="mt-px truncate text-[10.5px] text-[#5b626d]">
+        <div className="mt-px truncate text-[10.5px] text-[#959ca7]">
           {p.contactName}
         </div>
       ) : null}
-      {p.contactPhone ? (
-        <div className="truncate text-[10.5px] text-[#959ca7]">
-          {p.contactPhone}
-        </div>
-      ) : null}
 
-      <div className="mt-[9px] flex items-center justify-end">
+      <div className="mt-[9px] flex items-center justify-between gap-2">
+        {p.niche ? (
+          <span className="shrink-0 truncate rounded-[5px] border border-[#c2c7ce] px-[5px] py-px text-[9px] font-bold uppercase tracking-[0.05em] text-[#5b626d]">
+            {p.niche}
+          </span>
+        ) : (
+          <span />
+        )}
         {editing ? (
           <input
             type="number"

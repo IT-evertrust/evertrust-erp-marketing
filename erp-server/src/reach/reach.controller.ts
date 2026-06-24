@@ -20,6 +20,10 @@ import { OrgId } from '../common/tenant';
 import { setAuditContext } from '../common/audit-context';
 import { CreateAimBodyDto, SetAutoSendBodyDto } from './dto/create-aim.dto';
 import {
+  UpdateReachLeadDealBodyDto,
+  UpdateReachLeadStageBodyDto,
+} from './dto/nurture-board.dto';
+import {
   ReachTestSendBodyDto,
   UpdateReachSettingsBodyDto,
 } from './dto/reach-settings.dto';
@@ -81,6 +85,69 @@ export class ReachController {
   @Get('aims/:aimId/leads')
   getAimLeads(@OrgId() orgId: string, @Param('aimId') aimId: string) {
     return this.reachService.getAimLeads(orgId, aimId);
+  }
+
+  // ---- Nurture board (reach_leads ARE the pipeline cards) ----
+
+  // The Nurture pipeline. Optional ?aimId scopes to one campaign (omit = all org
+  // leads, the "All campaigns" view). ?q filters by company substring.
+  @RequirePermissions('campaigns:read')
+  @Get('board')
+  board(
+    @OrgId() orgId: string,
+    @Query('aimId') aimId?: string,
+    @Query('q') q?: string,
+    @Query('limit') limit?: string,
+    @Query('offset') offset?: string,
+  ) {
+    return this.reachService.board(orgId, {
+      aimId: aimId || undefined,
+      q: q || undefined,
+      limit: limit ? Number(limit) : undefined,
+      offset: offset ? Number(offset) : undefined,
+    });
+  }
+
+  // Drag a lead to another pipeline stage. org-scoped + audited.
+  @RequirePermissions('campaigns:write')
+  @Patch('leads/:leadId/stage')
+  async updateLeadStage(
+    @OrgId() orgId: string,
+    @Param('leadId', ParseUUIDPipe) leadId: string,
+    @Body() body: UpdateReachLeadStageBodyDto,
+    @Req() req: Request,
+  ) {
+    const lead = await this.reachService.updateLeadStage(orgId, leadId, body.stage);
+    setAuditContext(req, {
+      entity: 'reach_leads',
+      entityId: leadId,
+      action: 'UPDATE_PIPELINE_STAGE',
+      after: { stage: body.stage },
+    });
+    return lead;
+  }
+
+  // Inline-edit a lead's deal value / contact fields. org-scoped + audited.
+  @RequirePermissions('campaigns:write')
+  @Patch('leads/:leadId/deal')
+  async updateLeadDeal(
+    @OrgId() orgId: string,
+    @Param('leadId', ParseUUIDPipe) leadId: string,
+    @Body() body: UpdateReachLeadDealBodyDto,
+    @Req() req: Request,
+  ) {
+    const lead = await this.reachService.updateLeadDeal(orgId, leadId, {
+      dealValue: body.dealValue,
+      contactName: body.contactName,
+      phone: body.contactPhone,
+    });
+    setAuditContext(req, {
+      entity: 'reach_leads',
+      entityId: leadId,
+      action: 'UPDATE_DEAL',
+      after: { dealValue: lead.dealValue },
+    });
+    return lead;
   }
 
   // Reach → Nurture bridge: promote a lead into the Nurture pipeline (creates/links

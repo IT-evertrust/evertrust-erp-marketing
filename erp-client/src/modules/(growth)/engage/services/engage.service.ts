@@ -101,6 +101,22 @@ export async function getEngageCampaigns(): Promise<EngageCampaign[]> {
   return data.map(mapCampaign);
 }
 
+// Result of a manual scan (mirrors the server CampaignScanResult).
+export interface EngageScanResult {
+  configured: boolean;
+  scanned: number;
+  classified: number;
+  byCategory: Record<string, number>;
+  skipped: number;
+  reason: string | null;
+}
+
+// Manual "Scan now" — read the campaign's mailbox for new replies, classify + draft
+// each, and persist. SLOW (~35s/lead on local Hermes); the queue reads the result.
+export async function scanCampaign(aimId: string): Promise<EngageScanResult> {
+  return mutate<EngageScanResult>('POST', `/engage/campaigns/${aimId}/scan`);
+}
+
 // The reply-sorter queue for a campaign: the persisted, reply_glock-classified
 // replies (category + AI draft + thread), read instantly from the server.
 export async function getCampaignReplies(

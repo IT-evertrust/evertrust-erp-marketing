@@ -5,7 +5,24 @@ import type { ActivityLevel, EngineActivityItem, EngineAlert } from '../types';
 type EngineActivityFeedProps = {
   activity: EngineActivityItem[];
   alerts?: EngineAlert[];
+  // When a wheel module is focused, narrow the log to that module's runs. Matched
+  // loosely (name/stage/key against the row's source) so it degrades gracefully:
+  // a module with no matching live activity shows the per-module empty state rather
+  // than silently hiding the whole feed.
+  activeModule?: { name: string; stage: string; key: string } | null;
 };
+
+function matchesModule(
+  item: EngineActivityItem,
+  mod: { name: string; stage: string; key: string },
+): boolean {
+  const haystack = `${item.source} ${item.message}`.toLowerCase();
+  return (
+    haystack.includes(mod.name.toLowerCase()) ||
+    haystack.includes(mod.stage.toLowerCase()) ||
+    haystack.includes(mod.key.toLowerCase())
+  );
+}
 
 // Level -> dot colour. Info stays the neutral ink so routine activity reads calm and only
 // warnings/errors/successes draw the eye.
@@ -21,7 +38,14 @@ const ALERT_ACCENT: Record<EngineAlert['level'], { border: string; bg: string; t
   info: { border: '#d6dade', bg: '#f6f7f9', text: '#5b626d' },
 };
 
-export function EngineActivityFeed({ activity, alerts = [] }: EngineActivityFeedProps) {
+export function EngineActivityFeed({
+  activity,
+  alerts = [],
+  activeModule = null,
+}: EngineActivityFeedProps) {
+  const shown = activeModule
+    ? activity.filter((item) => matchesModule(item, activeModule))
+    : activity;
   return (
     <GrowthCard
       title="Engine Activity"
@@ -46,12 +70,12 @@ export function EngineActivityFeed({ activity, alerts = [] }: EngineActivityFeed
       ) : null}
 
       <div className="max-h-[420px] overflow-y-auto pr-2">
-        {activity.length === 0 ? (
+        {shown.length === 0 ? (
           <div className="py-6 text-center text-[12px] font-bold text-[#959ca7]">
-            No engine activity yet.
+            {activeModule ? 'No recent runs for this module.' : 'No engine activity yet.'}
           </div>
         ) : (
-          activity.map((item, index) => (
+          shown.map((item, index) => (
             <ActivityRow key={`${item.at ?? item.time}-${index}`} item={item} index={index} />
           ))
         )}

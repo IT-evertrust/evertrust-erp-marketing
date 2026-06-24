@@ -7,10 +7,12 @@
 // owns neither the page title nor an <AppShell> — the shared GrowthTopbar renders
 // the "Nurture" header (matches Activate/Reach/Engage).
 import { useEffect, useMemo, useState } from 'react';
-import type { CampaignDto, ProspectDto } from '@evertrust/shared';
+import { useQuery } from '@tanstack/react-query';
+import type { ReachBoardLeadDto } from '@evertrust/shared';
 import { useRequirePermission } from '@/lib/permissions';
-import { useCampaigns } from '@/hooks/use-campaigns';
-import { useProspectsBoard } from '@/hooks/use-prospects';
+import { useReachBoard } from '@/hooks/use-reach-board';
+import { getReachCampaigns } from '@/modules/(growth)/reach/services/reach.service';
+import type { ReachCampaignView } from '@/modules/(growth)/reach/types';
 import {
   Select,
   SelectContent,
@@ -25,7 +27,8 @@ import { ContractAssist } from './contract-assist';
 type Tab = 'pipeline' | 'contract';
 
 // The campaign Select's "show everything" sentinel — Radix Select can't hold an
-// empty-string value, so we map this to `undefined` campaignId (no filter).
+// empty-string value, so we map this to `undefined` aimId (no filter). A "campaign"
+// in Nurture is now a Reach AIM (reach_aims); its leads ARE the pipeline cards.
 const ALL_CAMPAIGNS = '__all__';
 const ALL_NICHES = '__all__';
 
@@ -38,10 +41,10 @@ const DATE_PRESETS: Array<{ value: DatePreset; label: string }> = [
   { value: '90', label: 'Last 90 days' },
 ];
 
-const PAGE_SIZE = 200;
+const PAGE_SIZE = 500;
 
-function campaignLabel(c: CampaignDto): string {
-  return c.name || c.project || c.nicheName || c.region;
+function campaignLabel(c: ReachCampaignView): string {
+  return c.name || c.niche || c.region;
 }
 
 export function NurtureUI() {
@@ -61,7 +64,12 @@ export function NurtureUI() {
 }
 
 function NurtureView() {
-  const campaignsQ = useCampaigns();
+  // Nurture campaigns ARE Reach AIMs now (reach_aims). The selector + niche filter
+  // read the aim list; the board reads that aim's leads.
+  const campaignsQ = useQuery<ReachCampaignView[], Error>({
+    queryKey: ['reach', 'aims', 'nurture'],
+    queryFn: () => getReachCampaigns(),
+  });
   const campaigns = useMemo(() => campaignsQ.data ?? [], [campaignsQ.data]);
 
   const [tab, setTab] = useState<Tab>('pipeline');
@@ -88,50 +96,42 @@ function NurtureView() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  // Distinct niches across the org's campaigns, for the niche Select.
+  // Distinct niches across the org's aims, for the niche Select.
   const niches = useMemo(() => {
     const set = new Set<string>();
-    for (const c of campaigns) if (c.nicheName) set.add(c.nicheName);
+    for (const c of campaigns) if (c.niche) set.add(c.niche);
     return [...set].sort();
   }, [campaigns]);
 
-  // campaignId === null means "All campaigns" (server returns all org prospects).
-  const effectiveCampaignId =
+  // ALL_CAMPAIGNS means "All campaigns" (the board returns every org lead).
+  const effectiveAimId =
     campaignId === ALL_CAMPAIGNS || campaignId == null ? undefined : campaignId;
 
   // The board fetches the same query; we re-read it here (React Query dedupes by
   // key) to apply the CLIENT-SIDE niche + date filters before the columns group.
-  const boardQ = useProspectsBoard({
-    campaignId: effectiveCampaignId,
+  const boardQ = useReachBoard({
+    aimId: effectiveAimId,
     q: search || undefined,
     limit: PAGE_SIZE,
     offset: 0,
   });
 
-  // campaignId → nicheName, for the per-prospect niche filter.
-  const campaignNiche = useMemo(() => {
-    const map = new Map<string, string | null>();
-    for (const c of campaigns) map.set(c.id, c.nicheName);
-    return map;
-  }, [campaigns]);
-
-  const filteredItems = useMemo<ProspectDto[]>(() => {
+  const filteredItems = useMemo<ReachBoardLeadDto[]>(() => {
     const items = boardQ.data?.items ?? [];
     const cutoff =
       datePreset === 'all'
         ? null
         : Date.now() - Number(datePreset) * 24 * 60 * 60 * 1000;
     return items.filter((p) => {
-      if (niche !== ALL_NICHES && campaignNiche.get(p.campaignId) !== niche) {
-        return false;
-      }
+      // Each lead carries its aim's niche (joined server-side).
+      if (niche !== ALL_NICHES && p.niche !== niche) return false;
       if (cutoff != null) {
-        const ts = Date.parse(p.lastContactedAt ?? p.createdAt);
+        const ts = Date.parse(p.createdAt);
         if (Number.isNaN(ts) || ts < cutoff) return false;
       }
       return true;
     });
-  }, [boardQ.data, niche, datePreset, campaignNiche]);
+  }, [boardQ.data, niche, datePreset]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -219,7 +219,7 @@ function NurtureView() {
         />
       ) : tab === 'pipeline' ? (
         <PipelineBoard
-          campaignId={effectiveCampaignId}
+          aimId={effectiveAimId}
           q={search || undefined}
           items={filteredItems}
         />

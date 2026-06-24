@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, count, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
+import type { PipelineStage } from '@evertrust/shared';
 
 import { DB, type DbClient } from '../db/db.tokens';
 
@@ -21,6 +22,7 @@ import {
   type AimStatus,
   type PromoteLeadResult,
   type ReachAim,
+  type ReachBoardResult,
   type ReachLead,
   type ReachNewsBrief,
   type ReachRound,
@@ -109,6 +111,8 @@ function rowToLead(row: LeadRow): ReachLead {
     qualificationReason: row.qualificationReason ?? undefined,
     confidence: row.confidence ?? undefined,
     status: row.status,
+    pipelineStage: row.pipelineStage,
+    dealValue: row.dealValue,
     createdAt: toIso(row.createdAt),
     updatedAt: toIso(row.updatedAt),
   };
@@ -267,6 +271,93 @@ export class ReachRepository {
       )
       .orderBy(desc(schema.reachLeads.confidence));
     return rows.map(rowToLead);
+  }
+
+  // ---- Nurture board (reach_leads ARE the pipeline cards) ----
+
+  // All of the org's leads (optionally one aim), with their aim's niche joined for
+  // the card tag + niche filter. Tallies stageCounts + statusCounts over the FULL
+  // filtered set (org [+ aim] [+ company search]), then pages `items`. Counts are
+  // independent of the page window so the column headers stay correct while scrolling.
+  async boardLeads(
+    orgId: string,
+    opts: { aimId?: string; q?: string; limit?: number; offset?: number },
+  ): Promise<ReachBoardResult> {
+    const where = and(
+      tenantScope(orgId, schema.reachLeads),
+      opts.aimId ? eq(schema.reachLeads.aimId, opts.aimId) : undefined,
+      opts.q
+        ? sql`lower(${schema.reachLeads.company}) like ${'%' + opts.q.toLowerCase() + '%'}`
+        : undefined,
+    );
+
+    const rows = await this.db
+      .select({ lead: schema.reachLeads, niche: schema.reachAims.niche })
+      .from(schema.reachLeads)
+      .innerJoin(schema.reachAims, eq(schema.reachLeads.aimId, schema.reachAims.id))
+      .where(where)
+      .orderBy(desc(schema.reachLeads.dealValue), desc(schema.reachLeads.confidence));
+
+    const stageCounts = {} as Record<PipelineStage, number>;
+    const statusCounts: Record<string, number> = {};
+    for (const r of rows) {
+      stageCounts[r.lead.pipelineStage] =
+        (stageCounts[r.lead.pipelineStage] ?? 0) + 1;
+      statusCounts[r.lead.status] = (statusCounts[r.lead.status] ?? 0) + 1;
+    }
+
+    const offset = opts.offset ?? 0;
+    const limit = opts.limit ?? 500;
+    const items = rows
+      .slice(offset, offset + limit)
+      .map((r) => ({ ...rowToLead(r.lead), niche: r.niche ?? undefined }));
+
+    return { items, total: rows.length, statusCounts, stageCounts };
+  }
+
+  // Move a lead to another pipeline stage (the Nurture drag). Org-scoped; undefined
+  // if the lead is missing or cross-org.
+  async updateLeadStage(
+    orgId: string,
+    leadId: string,
+    stage: PipelineStage,
+  ): Promise<ReachLead | undefined> {
+    const [row] = await this.db
+      .update(schema.reachLeads)
+      .set({ pipelineStage: stage, updatedAt: new Date() })
+      .where(
+        and(
+          eq(schema.reachLeads.id, leadId),
+          tenantScope(orgId, schema.reachLeads),
+        ),
+      )
+      .returning();
+    return row ? rowToLead(row) : undefined;
+  }
+
+  // Inline-edit a lead's deal value / contact fields on the Nurture card. Only the
+  // provided fields change. Org-scoped; undefined if missing or cross-org.
+  async updateLeadDeal(
+    orgId: string,
+    leadId: string,
+    patch: { dealValue?: number; contactName?: string | null; phone?: string | null },
+  ): Promise<ReachLead | undefined> {
+    const set: Partial<LeadRow> = { updatedAt: new Date() };
+    if (patch.dealValue !== undefined) set.dealValue = patch.dealValue;
+    if (patch.contactName !== undefined) set.contactName = patch.contactName;
+    if (patch.phone !== undefined) set.phone = patch.phone;
+
+    const [row] = await this.db
+      .update(schema.reachLeads)
+      .set(set)
+      .where(
+        and(
+          eq(schema.reachLeads.id, leadId),
+          tenantScope(orgId, schema.reachLeads),
+        ),
+      )
+      .returning();
+    return row ? rowToLead(row) : undefined;
   }
 
   // One lead of this aim, org-scoped (the promote path). undefined if the lead is

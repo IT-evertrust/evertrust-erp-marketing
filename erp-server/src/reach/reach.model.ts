@@ -1,3 +1,5 @@
+import type { PipelineStage } from '@evertrust/shared';
+
 export type AimStatus = 'DRAFT' | 'READY' | 'RUNNING' | 'COMPLETED' | 'FAILED';
 
 export type EmailBlock = { subject: string; body: string };
@@ -121,6 +123,20 @@ export type ReachLead = {
   qualificationReason?: string;
   confidence?: number;
   status: ReachLeadStatus;
+  // Nurture pipeline fields (the lead IS the Nurture card).
+  pipelineStage: PipelineStage;
+  dealValue: number;
+  // The lead's campaign niche (from reach_aims), for the Nurture card tag + filter.
+  niche?: string;
   createdAt: string;
   updatedAt: string;
+};
+
+// The Nurture board payload: leads for the org (optionally one aim), plus full-set
+// tallies by pipeline stage + outreach status (independent of the page window).
+export type ReachBoardResult = {
+  items: ReachLead[];
+  total: number;
+  statusCounts: Record<string, number>;
+  stageCounts: Record<PipelineStage, number>;
 };

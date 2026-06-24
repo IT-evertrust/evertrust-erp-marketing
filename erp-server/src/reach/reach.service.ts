@@ -6,6 +6,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 
+import type { PipelineStage } from '@evertrust/shared';
 import { AppConfigService } from '../config/app-config.service';
 import type { CreateAimDto } from './dto/create-aim.dto';
 import { ReachAgentClient } from './reach.agent';
@@ -182,6 +183,33 @@ export class ReachService {
     const aim = await this.repo.findAimById(orgId, aimId);
     if (!aim) throw new NotFoundException('Aim not found');
     return aim;
+  }
+
+  // ---- Nurture board (reach_leads ARE the pipeline) ----
+
+  // The Nurture pipeline: every org lead (optionally one aim) grouped client-side by
+  // pipeline stage, plus the full-set stage/status tallies.
+  board(
+    orgId: string,
+    opts: { aimId?: string; q?: string; limit?: number; offset?: number },
+  ) {
+    return this.repo.boardLeads(orgId, opts);
+  }
+
+  async updateLeadStage(orgId: string, leadId: string, stage: PipelineStage) {
+    const lead = await this.repo.updateLeadStage(orgId, leadId, stage);
+    if (!lead) throw new NotFoundException('Lead not found');
+    return lead;
+  }
+
+  async updateLeadDeal(
+    orgId: string,
+    leadId: string,
+    patch: { dealValue?: number; contactName?: string | null; phone?: string | null },
+  ) {
+    const lead = await this.repo.updateLeadDeal(orgId, leadId, patch);
+    if (!lead) throw new NotFoundException('Lead not found');
+    return lead;
   }
 
   // Lead Satellite: activated with the aim's config; scrapes leads and stores them

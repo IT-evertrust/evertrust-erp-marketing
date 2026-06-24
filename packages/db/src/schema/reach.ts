@@ -12,11 +12,9 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { organizations } from './org';
-<<<<<<< HEAD
 import { campaigns } from './campaigns';
-=======
 import { personas } from './personas';
->>>>>>> d56e8c0 (db rework)
+import { pipelineStageEnum } from './enums';
 
 // Reach (Growth Engine) owns its own lean tables, separate from the heavier
 // campaigns/prospects pipeline. An "aim" is a Reach campaign: the AIM input
@@ -141,7 +139,17 @@ export const reachLeads = pgTable(
     qualificationReason: text('qualification_reason'),
     // 0.0-1.0 fit score from the agent.
     confidence: doublePrecision('confidence'),
+    // Outreach progress (driven by the send sequence + reply classification).
     status: reachLeadStatusEnum('status').notNull().default('NEW'),
+    // Nurture SALES funnel stage — orthogonal to `status` (outreach) above. The Reach
+    // lead IS the Nurture pipeline card now (no separate prospects table); every lead
+    // starts at INTEREST and is dragged across the six stages on the Nurture board.
+    pipelineStage: pipelineStageEnum('pipeline_stage')
+      .notNull()
+      .default('INTEREST'),
+    // Deal value in whole euros, shown + inline-edited on the Nurture card. Auto-set
+    // from meeting pricing (Activate after-sales) by company match.
+    dealValue: integer('deal_value').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

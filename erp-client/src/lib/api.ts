@@ -87,6 +87,10 @@ import {
   UpdateProspectStatusDto,
   UpdateProspectStageBody,
   UpdateProspectDealBody,
+  ReachBoardResultDto,
+  ReachBoardLeadDto,
+  UpdateReachLeadStageBody,
+  UpdateReachLeadDealBody,
   ReplyDraftDto,
   OutreachMessageDto,
   ContractDto,
@@ -561,6 +565,46 @@ export const api = {
         body: UpdateProspectDealBody.parse(input),
         schema: ProspectDto,
       }),
+  },
+
+  // The Nurture pipeline, now backed by reach_leads (the prospects board is retired
+  // for Nurture). Mirrors `prospects` so the Nurture UI is a drop-in swap.
+  reachBoard: {
+    board: (
+      filters: { aimId?: string; q?: string; limit?: number; offset?: number } = {},
+      signal?: AbortSignal,
+    ) => {
+      const q = new URLSearchParams();
+      if (filters.aimId) q.set('aimId', filters.aimId);
+      if (filters.q) q.set('q', filters.q);
+      if (filters.limit != null) q.set('limit', String(filters.limit));
+      if (filters.offset != null) q.set('offset', String(filters.offset));
+      const qs = q.toString();
+      return request<z.infer<typeof ReachBoardResultDto>>(
+        `/growth/reach/board${qs ? `?${qs}` : ''}`,
+        { schema: ReachBoardResultDto, signal },
+      );
+    },
+
+    updateStage: (id: string, input: z.infer<typeof UpdateReachLeadStageBody>) =>
+      request<z.infer<typeof ReachBoardLeadDto>>(
+        `/growth/reach/leads/${encodeURIComponent(id)}/stage`,
+        {
+          method: 'PATCH',
+          body: UpdateReachLeadStageBody.parse(input),
+          schema: ReachBoardLeadDto,
+        },
+      ),
+
+    updateDeal: (id: string, input: z.infer<typeof UpdateReachLeadDealBody>) =>
+      request<z.infer<typeof ReachBoardLeadDto>>(
+        `/growth/reach/leads/${encodeURIComponent(id)}/deal`,
+        {
+          method: 'PATCH',
+          body: UpdateReachLeadDealBody.parse(input),
+          schema: ReachBoardLeadDto,
+        },
+      ),
   },
 
   replyDrafts: {

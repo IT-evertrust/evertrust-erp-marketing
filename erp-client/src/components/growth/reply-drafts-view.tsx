@@ -80,7 +80,10 @@ function matchesFilter(reply: EngageReplyDto, filter: FilterKey): boolean {
 
 export function ReplyDraftsView() {
   const t = useTranslations('engage');
-  const q = useEngageReplies();
+  // Legacy prospect-centric Engage view (only routed from the quarantined advanced/
+  // area). The hooks now require an accountId; this view has no mailbox selector, so
+  // it passes undefined → the org default mailbox.
+  const q = useEngageReplies(undefined);
   const scan = useScanReplies();
   const [openProspect, setOpenProspect] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -124,7 +127,7 @@ export function ReplyDraftsView() {
       <Button
         size="sm"
         variant="outline"
-        onClick={() => scan.mutate()}
+        onClick={() => scan.mutate(undefined)}
         disabled={scan.isPending}
       >
         {scan.isPending ? <Loader2 className="animate-spin" /> : <RefreshCw />}

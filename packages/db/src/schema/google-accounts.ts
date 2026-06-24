@@ -51,6 +51,16 @@ export const googleAccounts = pgTable(
     // 'CONNECTED' | 'REVOKED' | 'ERROR'. Plain text, not an enum.
     status: text('status').notNull().default('CONNECTED'),
     lastError: text('last_error'),
+    // ---- Engage real-time scan state ----
+    // Last Gmail historyId we've processed for this mailbox. Advanced by both the
+    // gmail.watch push handler and the historyId poll fallback; the delta since this
+    // value is what triggers a targeted Engage scan. Null = not yet baselined.
+    gmailHistoryId: text('gmail_history_id'),
+    // When the active gmail.watch registration expires (Google caps watches at ~7
+    // days). The renewal scheduler re-registers before this. Null = no active watch.
+    gmailWatchExpiration: timestamp('gmail_watch_expiration', {
+      withTimezone: true,
+    }),
     connectedAt: timestamp('connected_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

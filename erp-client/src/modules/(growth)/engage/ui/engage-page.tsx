@@ -1,5 +1,7 @@
 'use client';
 
+import { Loader2, RefreshCw } from 'lucide-react';
+
 import { GrowthCard } from '@/modules/(growth)/shared';
 
 import { EngageCampaignTable } from '../components/engage-campaign-table';
@@ -65,6 +67,23 @@ export function EngagePage() {
               </select>
             </div>
           )}
+
+          {/* Manual "Scan now" — classify the selected campaign's mailbox for new
+              replies. Slow on the local model, so it shows a spinner while running. */}
+          <button
+            type="button"
+            onClick={engage.scanNow}
+            disabled={!engage.selectedCampaignId || engage.scanning}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-[7px] border border-[#15171c] bg-[#15171c] px-[11px] py-[7px] text-[10px] font-bold uppercase tracking-[0.08em] text-white transition-colors hover:bg-[#2a2d33] disabled:cursor-not-allowed disabled:opacity-50"
+            title="Scan this campaign's inbox for new replies"
+          >
+            {engage.scanning ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="size-3.5" />
+            )}
+            {engage.scanning ? 'Scanning…' : 'Scan now'}
+          </button>
         </div>
 
         <EngageCampaignTable

@@ -149,6 +149,22 @@ export class ActivateResearchService {
         },
       });
 
+    // Propagate a discussed deal value onto the matching Nurture card. The pipeline is
+    // now reach_leads (the prospects table is retired), and gather() already joins the
+    // company there — so match by company name within the org. No-op when no lead
+    // shares the company or pricing wasn't discussed.
+    if (dealDiscussed) {
+      await this.db
+        .update(schema.reachLeads)
+        .set({ dealValue: Math.round(deal.value as number), updatedAt: new Date() })
+        .where(
+          and(
+            tenantScope(orgId, schema.reachLeads),
+            dsql`lower(${schema.reachLeads.company}) = lower(${name})`,
+          ),
+        );
+    }
+
     return this.getResearch(orgId, name);
   }
 
