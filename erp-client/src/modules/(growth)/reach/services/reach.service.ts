@@ -45,6 +45,9 @@ interface BackendAim {
   stats: ReachStats | null;
   autoSend: boolean;
   sender: string;
+  // When the org has a default template, `templates` IS that org default and
+  // this flag is true (the org default is the single source of truth).
+  usingOrgDefault?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -272,6 +275,7 @@ function mapAim(a: BackendAim): ReachCampaignView {
     stats: a.stats ?? EMPTY_STATS,
     autoSend: a.autoSend,
     sender: a.sender,
+    usingOrgDefault: a.usingOrgDefault ?? false,
   };
 }
 

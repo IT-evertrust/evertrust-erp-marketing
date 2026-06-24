@@ -118,4 +118,8 @@ export type ReachCampaignView = Campaign & {
   stats: ReachStats;
   autoSend: boolean;
   sender: string;
+  // True when `templates` is the org-wide default (the single source of truth)
+  // rather than a per-campaign template. Drives the Email Generator's read-only
+  // "org default" treatment.
+  usingOrgDefault?: boolean;
 };

@@ -12,6 +12,9 @@ type EmailGeneratorPanelProps = {
   emails: CampaignEmail[];
   loadingCampaigns?: boolean;
   onSend: (round: ReachRound) => void;
+  // True when the selected campaign's templates are the org-wide default. The
+  // bodies become read-only and an info banner explains where to edit them.
+  usingOrgDefault?: boolean;
 };
 
 export function EmailGeneratorPanel({
@@ -21,6 +24,7 @@ export function EmailGeneratorPanel({
   emails,
   loadingCampaigns = false,
   onSend,
+  usingOrgDefault = false,
 }: EmailGeneratorPanelProps) {
   return (
     <div className="flex flex-col gap-4">
@@ -41,6 +45,12 @@ export function EmailGeneratorPanel({
           </div>
         ) : (
         <div className="flex flex-col gap-4">
+          {usingOrgDefault ? (
+            <div className="rounded-lg border border-[#d6dade] bg-[#f6f7f9] p-3 text-[11.5px] font-bold text-[#5b626d]">
+              Showing the org-wide default template. Edit it in the Templates tab
+              — per-campaign edits here are not used.
+            </div>
+          ) : null}
           {emails.map((email) => {
             const sent = email.sent || 1;
 
@@ -77,13 +87,19 @@ export function EmailGeneratorPanel({
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
-                  <div
-                    contentEditable
-                    suppressContentEditableWarning
-                    className="min-h-[120px] whitespace-pre-wrap rounded-lg border border-[#d6dade] bg-[#f6f7f9] p-3 text-[12.5px] leading-relaxed text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
-                  >
-                    {`Subject: ${email.subject}\n\n${email.body ?? ''}`}
-                  </div>
+                  {usingOrgDefault ? (
+                    <div className="min-h-[120px] whitespace-pre-wrap rounded-lg border border-[#d6dade] bg-[#f6f7f9] p-3 text-[12.5px] leading-relaxed text-[#15171c]">
+                      {`Subject: ${email.subject}\n\n${email.body ?? ''}`}
+                    </div>
+                  ) : (
+                    <div
+                      contentEditable
+                      suppressContentEditableWarning
+                      className="min-h-[120px] whitespace-pre-wrap rounded-lg border border-[#d6dade] bg-[#f6f7f9] p-3 text-[12.5px] leading-relaxed text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
+                    >
+                      {`Subject: ${email.subject}\n\n${email.body ?? ''}`}
+                    </div>
+                  )}
 
                   <div className="rounded-lg border border-[#d6dade] bg-[#f6f7f9] p-3">
                     <div className="mb-3 text-[9px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">

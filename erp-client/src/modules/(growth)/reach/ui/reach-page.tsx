@@ -36,6 +36,7 @@ export function ReachPage() {
           emails={reach.emails}
           loadingCampaigns={reach.loadingCampaigns}
           onSend={reach.sendRound}
+          usingOrgDefault={reach.selectedCampaign?.usingOrgDefault ?? false}
         />
       ) : null}
 

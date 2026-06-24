@@ -166,8 +166,14 @@ export class ReachService {
     }
   }
 
-  getAims(orgId: string): Promise<ReachAim[]> {
-    return this.repo.findAims(orgId);
+  async getAims(orgId: string): Promise<ReachAim[]> {
+    const aims = await this.repo.findAims(orgId);
+    const orgDefault = await this.repo.getDefaultTemplate(orgId);
+    if (!orgDefault) return aims;
+    // Org default is the single source: every campaign shows AND sends it (the
+    // per-campaign AI-generated template is only a fallback when no org default is set).
+    // `usingOrgDefault` lets the Email Generator render it read-only ("edit in Templates").
+    return aims.map((aim) => ({ ...aim, templates: orgDefault, usingOrgDefault: true }));
   }
 
   // The org-wide default outreach template (or null when none is set).

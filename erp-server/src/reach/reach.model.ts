@@ -70,8 +70,12 @@ export type ReachAim = {
   campaignId: string | null;
   // Which mailbox the campaign sends from (info | hanna).
   sender: string;
-  // Ammo Forge output (null until generated).
+  // Ammo Forge output (null until generated). When the org has a default template,
+  // getAims overrides this with that default and sets `usingOrgDefault`.
   templates: ReachTemplates | null;
+  // True when `templates` above is the org-wide default (not this campaign's own) —
+  // the Email Generator renders it read-only and points edits to the Templates tab.
+  usingOrgDefault?: boolean;
   newsBrief: ReachNewsBrief | null;
   generatedBy: string | null;
   // Per-round send/engagement stats (always present; zeros until sends happen).
