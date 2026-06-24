@@ -1911,21 +1911,7 @@ export const CampaignConfigDto = z.object({
 });
 export type CampaignConfigDto = z.infer<typeof CampaignConfigDto>;
 
-// Machine campaign-list row (GET /campaigns/machine/list?lifecycle=ACTIVE).
-export const CampaignMachineListItemDto = z.object({
-  id: z.string().uuid(),
-  name: z.string().nullable(),
-  project: z.string(),
-  country: z.string(),
-  region: z.string(),
-  sender: z.string(),
-  gmailLabel: z.string(),
-  driveFolderId: z.string().nullable(),
-  nicheId: z.string().uuid(),
-});
-export type CampaignMachineListItemDto = z.infer<
-  typeof CampaignMachineListItemDto
->;
+// (Retired: CampaignMachineListItemDto — the n8n machine campaign list is gone.)
 
 // ---- Prospects ----
 // Mirror of the prospect_status pgEnum. A PROJECTION of the conversation; the

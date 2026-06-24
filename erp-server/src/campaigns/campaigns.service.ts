@@ -13,12 +13,10 @@ import {
   type CampaignConfigDto,
   type CampaignFilesDto,
   type CampaignLifecycle,
-  type CampaignMachineListItemDto,
   type CreateCampaignDto,
 } from '@evertrust/shared';
 import { DB, type DbClient } from '../db/db.tokens';
 import { tenantScope } from '../common/tenant';
-import { driveFolderUrl } from '../common/machine-audit';
 import { NichesService } from '../niches/niches.service';
 import {
   type ResolvedAutomation,
@@ -53,15 +51,6 @@ export interface CampaignLaunchResult {
 export type CampaignConfigResult = Omit<CampaignConfigDto, 'automation'> & {
   automation: ResolvedAutomation;
 };
-
-// Shape of the AIM "deploy campaign" n8n webhook response. The NEW AIM workflow no
-// longer returns Drive refs at launch (the folder is created lazily by Ammo Forge),
-// so folderId/folderUrl are optional — absent is the normal case now.
-interface AimDeployResult {
-  success?: boolean;
-  folderId?: string;
-  folderUrl?: string;
-}
 
 // Legal campaign-lifecycle transitions (PATCH /campaigns/:id/lifecycle). DRAFT can
 // only go ACTIVE; ACTIVE↔PAUSED both ways; ARCHIVED is terminal (stamps archivedAt).
@@ -142,7 +131,7 @@ export class CampaignsService {
   async create(
     orgId: string,
     dto: CreateCampaignDto,
-    userId: string,
+    _userId: string, // retained for the controller signature; AIM deploy retired
   ): Promise<CampaignLaunchResult> {
     // The campaign's sender must be one of the org's RESOLVED sender keys (its own
     // org_senders, or the product DEFAULT_SENDERS when it has none — so legacy
@@ -174,38 +163,15 @@ export class CampaignsService {
         lifecycle: 'DRAFT',
       })
       .returning();
-    let row = inserted[0];
+    const row = inserted[0];
     if (!row) throw new Error('Failed to create campaign');
 
-    const webhookUrl = await this.workflowConfig.getAimWebhook();
-    // No webhook configured → the campaign persists as DRAFT (safe to run before the
-    // webhook is set); the operator activates it later once AIM is wired.
-    if (!webhookUrl) {
-      return {
-        campaign: { ...row, nicheName: niche.name },
-        deployError:
-          'AIM webhook is not configured (set N8N_AIM_WEBHOOK_URL); campaign saved as DRAFT.',
-      };
-    }
-
-    const { patch, deployError } = await this.runAimDeploy(
-      webhookUrl,
-      row,
-      niche.name,
-      userId,
-    );
-    // A failed deploy returns an EMPTY patch: the campaign stays DRAFT and the error is
-    // surfaced. Skip the write in that case — there is nothing to persist, and an empty
-    // `.set()` is itself a SQL error ("No values to set").
-    if (Object.keys(patch).length > 0) {
-      const updated = await this.db
-        .update(schema.campaigns)
-        .set(patch)
-        .where(eq(schema.campaigns.id, row.id))
-        .returning();
-      row = updated[0] ?? row;
-    }
-    return { campaign: { ...row, nicheName: niche.name }, deployError };
+    // Campaigns are created as DRAFT and processed by Reach (the Python agents + Gmail
+    // funnel). The old n8n AIM-webhook deploy on create has been RETIRED — no external
+    // dispatch here. (Reach aims create their own DRAFT campaign via this same insert
+    // path's repository equivalent.) deployError stays in the response shape (always
+    // null now) for API back-compat.
+    return { campaign: { ...row, nicheName: niche.name }, deployError: null };
   }
 
   // Move a campaign through its lifecycle (PATCH /campaigns/:id/lifecycle). Rejects
@@ -294,29 +260,8 @@ export class CampaignsService {
     };
   }
 
-  // Machine campaign list filtered by lifecycle (GET /campaigns/machine/list?
-  // lifecycle=ACTIVE). NOT org-scoped — the daily scheduler in n8n needs every active
-  // campaign across orgs. Newest-first.
-  async machineList(
-    lifecycle: CampaignLifecycle,
-  ): Promise<CampaignMachineListItemDto[]> {
-    const rows = await this.db
-      .select()
-      .from(schema.campaigns)
-      .where(eq(schema.campaigns.lifecycle, lifecycle))
-      .orderBy(desc(schema.campaigns.createdAt));
-    return rows.map((c) => ({
-      id: c.id,
-      name: c.name,
-      project: c.project,
-      country: c.country,
-      region: c.region,
-      sender: c.sender,
-      gmailLabel: c.gmailLabel,
-      driveFolderId: c.driveFolderId,
-      nicheId: c.nicheId,
-    }));
-  }
+  // (Retired: machineList — the n8n daily scheduler that pulled active campaigns is
+  // gone; Reach (Python) owns processing.)
 
   // Delete a campaign — ALLOWED ONLY when it holds no data. prospects.campaign_id
   // is NOT NULL and leads/contracts/campaign_assets also reference the campaign with
@@ -358,63 +303,6 @@ export class CampaignsService {
       .where(eq(schema.arsenalRuns.campaignId, id));
     await this.db.delete(schema.campaigns).where(eq(schema.campaigns.id, id));
     return before;
-  }
-
-  // POST the AIM payload to the n8n webhook; return the column patch reflecting the
-  // outcome (ACTIVE + activatedBy/At, persisting Drive refs IF the response carries
-  // them) or {} + deployError. Pure I/O, no throw.
-  private async runAimDeploy(
-    webhookUrl: string,
-    campaign: CampaignRow,
-    nicheName: string,
-    userId: string,
-  ): Promise<{ patch: CampaignPatch; deployError: string | null }> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20_000);
-    try {
-      // The AIM "Write config.json" node reads these fields; `niche` is the resolved
-      // display name and `region` is the location zone (Lead Satellite's city seed).
-      const aimPayload = {
-        campaignId: campaign.id,
-        name: campaign.name,
-        niche: nicheName,
-        country: campaign.country,
-        region: campaign.region,
-        project: campaign.project,
-        gmailLabel: campaign.gmailLabel,
-        salesCalendarId: campaign.salesCalendarId,
-        whatsappNumber: campaign.whatsappNumber,
-        sender: campaign.sender,
-        source: 'erp',
-      };
-      const res = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(aimPayload),
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        return { patch: {}, deployError: `AIM webhook HTTP ${res.status}` };
-      }
-      const data = (await res.json().catch(() => ({}))) as AimDeployResult;
-      const patch: CampaignPatch = {
-        lifecycle: 'ACTIVE',
-        activatedBy: userId,
-        activatedAt: new Date(),
-      };
-      // The new AIM won't carry Drive refs — that's fine (nullable). Persist them
-      // only if a (legacy) response does.
-      if (data.folderId) {
-        patch.driveFolderId = data.folderId;
-        patch.driveFolderUrl = data.folderUrl ?? driveFolderUrl(data.folderId);
-      }
-      return { patch, deployError: null };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'AIM webhook call failed';
-      return { patch: {}, deployError: msg };
-    } finally {
-      clearTimeout(timeout);
-    }
   }
 
   // The campaign's generated files, read from the campaign_assets registry (the
