@@ -72,6 +72,7 @@ function rowToAim(row: AimRow): ReachAim {
     source: row.source ?? undefined,
     status: row.status,
     companies: row.companies,
+    campaignId: row.campaignId ?? null,
     sender: row.sender,
     templates: (row.templates as ReachTemplates | null) ?? null,
     newsBrief: (row.newsBrief as ReachNewsBrief | null) ?? null,

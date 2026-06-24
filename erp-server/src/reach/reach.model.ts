@@ -60,6 +60,9 @@ export type ReachAim = {
   country?: string;
   status: AimStatus;
   companies: number;
+  // Optional CRM hand-off link — the campaigns row this aim feeds (meetings/
+  // contracts hang off campaigns). Null until a campaign is attached.
+  campaignId: string | null;
   // Which mailbox the campaign sends from (info | hanna).
   sender: string;
   // Ammo Forge output (null until generated).
