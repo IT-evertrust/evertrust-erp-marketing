@@ -18,13 +18,100 @@ import type {
   EngineActivityItem,
   EngineAlert,
   FunnelStage,
+  FunnelStageKey,
   OverviewKpi,
+  OverviewKpiKey,
 } from '../types';
 
 type OverviewActivityResponse = {
   activity: EngineActivityItem[];
   alerts: EngineAlert[];
 };
+
+// The real metrics endpoint. KPIs/funnel arrive as display-ready strings; the
+// components keep rendering their i18n labels, so we only adopt the live numbers.
+type OverviewMetricsKpi = {
+  label: string;
+  value: string;
+  delta: string;
+  spark: string;
+};
+
+type OverviewMetricsFunnelStage = {
+  name: string;
+  value: string;
+  width: number;
+  conversion: string;
+};
+
+type OverviewMetricsResponse = {
+  kpis: OverviewMetricsKpi[];
+  funnel: OverviewMetricsFunnelStage[];
+};
+
+// Fixed order the backend returns its 6 KPIs in — used to re-attach the stable
+// i18n label keys the cards render with (so backend `label` strings stay unused
+// and the copy remains locale-driven).
+const KPI_KEY_ORDER: OverviewKpiKey[] = [
+  'newLeads',
+  'contacted',
+  'replyRate',
+  'interested',
+  'meetings',
+  'pipelineValue',
+];
+
+// Fixed order of the backend's 5 funnel stages (Reach/Engage/Activate/Nurture/Won).
+const FUNNEL_KEY_ORDER: FunnelStageKey[] = [
+  'reach',
+  'engage',
+  'activate',
+  'nurture',
+  'won',
+];
+
+// The live cross-system KPIs + R-E-A-N funnel from the backend. Polled like the
+// activity feed; falls back to the client-synthesized values if it errors.
+function useOverviewMetrics() {
+  return useQuery<OverviewMetricsResponse, Error>({
+    queryKey: ['growth', 'overview', 'metrics'],
+    queryFn: async ({ signal }) => {
+      const res = await fetch(`${API_URL}/growth/overview`, {
+        credentials: 'include',
+        headers: { Accept: 'application/json' },
+        signal,
+      });
+      if (!res.ok) throw new Error(`overview metrics -> ${res.status}`);
+      return (await res.json()) as OverviewMetricsResponse;
+    },
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+  });
+}
+
+// Map the backend KPI rows onto the key-based shape the cards expect, preserving
+// the i18n label keys by index. Empty input -> [] so the grid renders nothing.
+function mapMetricsKpis(rows: OverviewMetricsKpi[] | undefined): OverviewKpi[] {
+  if (!rows || rows.length === 0) return [];
+  return rows.map((row, index) => ({
+    labelKey: KPI_KEY_ORDER[index] ?? 'pipelineValue',
+    value: row.value,
+    delta: row.delta,
+    spark: row.spark,
+  }));
+}
+
+function mapMetricsFunnel(
+  rows: OverviewMetricsFunnelStage[] | undefined,
+): FunnelStage[] {
+  if (!rows || rows.length === 0) return [];
+  return rows.map((row, index) => ({
+    nameKey: FUNNEL_KEY_ORDER[index] ?? 'won',
+    value: row.value,
+    width: row.width,
+    conversion: row.conversion,
+  }));
+}
 
 // The real cross-system Engine Activity feed + alerts from the backend. Polled so the
 // dashboard stays roughly live; falls back to the client-synthesized feed if it errors.
@@ -226,19 +313,34 @@ export function useOverview() {
   const campaigns = useCampaigns();
   const meetings = useMeetings();
   const engine = useEngineActivity();
+  const metrics = useOverviewMetrics();
 
   const campaignRows = campaigns.data ?? [];
   const meetingRows = meetings.data ?? [];
 
-  const kpis = useMemo(
+  // Real backend KPIs/funnel (mapped onto the key-based shape the components want).
+  const serverKpis = useMemo(
+    () => mapMetricsKpis(metrics.data?.kpis),
+    [metrics.data?.kpis],
+  );
+  const serverFunnel = useMemo(
+    () => mapMetricsFunnel(metrics.data?.funnel),
+    [metrics.data?.funnel],
+  );
+
+  // Client-synthesized KPIs/funnel — the graceful fallback while the real
+  // endpoint is loading or if it errors, so the cards are never blank.
+  const clientKpis = useMemo(
     () => buildKpis(campaignRows, meetingRows),
     [campaignRows, meetingRows],
   );
-
-  const funnel = useMemo(
+  const clientFunnel = useMemo(
     () => buildFunnel(campaignRows, meetingRows),
     [campaignRows, meetingRows],
   );
+
+  const kpis = serverKpis.length > 0 ? serverKpis : clientKpis;
+  const funnel = serverFunnel.length > 0 ? serverFunnel : clientFunnel;
 
   // Prefer the real backend feed; fall back to the client-synthesized one if it's
   // unavailable or empty (so the card is never blank).
@@ -255,7 +357,7 @@ export function useOverview() {
     funnel,
     activity,
     alerts,
-    isLoading: campaigns.isLoading || meetings.isLoading,
-    isError: campaigns.isError || meetings.isError,
+    isLoading: campaigns.isLoading || meetings.isLoading || metrics.isLoading,
+    isError: campaigns.isError || meetings.isError || metrics.isError,
   };
 }
