@@ -95,6 +95,110 @@ export function useUpdateProspectStatus() {
   });
 }
 
+// Set a card's € deal value on the Nurture board. Optimistically writes the new
+// dealValue on every cached board page so the card + column total update instantly;
+// rolls back on error; invalidates the prospect tree on settle. Mirrors the
+// optimistic shape of useUpdateProspectStage.
+export function useUpdateProspectDeal() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    Awaited<ReturnType<typeof api.prospects.updateDeal>>,
+    ApiError,
+    { id: string; dealValue: number },
+    { snapshots: [readonly unknown[], ProspectListDto][] }
+  >({
+    mutationFn: ({ id, dealValue }) => api.prospects.updateDeal(id, dealValue),
+    onMutate: async ({ id, dealValue }) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.prospects.all });
+      const snapshots = queryClient.getQueriesData<ProspectListDto>({
+        queryKey: queryKeys.prospects.board(),
+        exact: false,
+      });
+      for (const [key, data] of snapshots) {
+        if (!data) continue;
+        const target = data.items.find((p) => p.id === id);
+        if (!target || target.dealValue === dealValue) continue;
+        queryClient.setQueryData<ProspectListDto>(key, {
+          ...data,
+          items: data.items.map((p) =>
+            p.id === id ? { ...p, dealValue } : p,
+          ),
+        });
+      }
+      return {
+        snapshots: snapshots.filter(
+          (s): s is [readonly unknown[], ProspectListDto] => !!s[1],
+        ),
+      };
+    },
+    onError: (_e, _vars, ctx) => {
+      for (const [key, data] of ctx?.snapshots ?? []) {
+        queryClient.setQueryData(key, data);
+      }
+    },
+    onSettled: (_data, _err, vars) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.prospects.all });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.prospects.detail(vars.id),
+      });
+    },
+  });
+}
+
+// Remove a card from the Nurture board. Optimistically drops the prospect from every
+// cached board page (and decrements its stage tally) so the card disappears instantly;
+// rolls back on error; invalidates the prospect tree on settle.
+export function useDeleteProspect() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    Awaited<ReturnType<typeof api.prospects.removeCard>>,
+    ApiError,
+    { id: string },
+    { snapshots: [readonly unknown[], ProspectListDto][] }
+  >({
+    mutationFn: ({ id }) => api.prospects.removeCard(id),
+    onMutate: async ({ id }) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.prospects.all });
+      const snapshots = queryClient.getQueriesData<ProspectListDto>({
+        queryKey: queryKeys.prospects.board(),
+        exact: false,
+      });
+      for (const [key, data] of snapshots) {
+        if (!data) continue;
+        const target = data.items.find((p) => p.id === id);
+        if (!target) continue;
+        const counts = { ...data.stageCounts };
+        counts[target.pipelineStage] = Math.max(
+          0,
+          (counts[target.pipelineStage] ?? 1) - 1,
+        );
+        queryClient.setQueryData<ProspectListDto>(key, {
+          ...data,
+          items: data.items.filter((p) => p.id !== id),
+          total: Math.max(0, data.total - 1),
+          stageCounts: counts,
+        });
+      }
+      return {
+        snapshots: snapshots.filter(
+          (s): s is [readonly unknown[], ProspectListDto] => !!s[1],
+        ),
+      };
+    },
+    onError: (_e, _vars, ctx) => {
+      for (const [key, data] of ctx?.snapshots ?? []) {
+        queryClient.setQueryData(key, data);
+      }
+    },
+    onSettled: (_data, _err, vars) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.prospects.all });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.prospects.detail(vars.id),
+      });
+    },
+  });
+}
+
 // Move a card on the Nurture kanban (drag-and-drop). Optimistically flips the
 // prospect's pipelineStage and re-tallies stageCounts on every cached board page so
 // the card jumps columns instantly; rolls back on error; invalidates on settle.

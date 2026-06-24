@@ -23,6 +23,12 @@
     "moveForward": "Move to next stage",
     "movedToast": "{name} moved to {stage}",
     "moveError": "Could not move the deal",
+    "dealLabel": "Deal value",
+    "dealError": "Could not update the deal value",
+    "deleteCard": "Remove card",
+    "deleteConfirm": "Remove {name} from the pipeline?",
+    "deletedToast": "{name} removed from the pipeline",
+    "deleteError": "Could not remove the card",
     "stages": {
       "INTEREST": "Interest",
       "INTENT": "Intent",

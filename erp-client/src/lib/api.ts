@@ -86,6 +86,7 @@ import {
   ProspectStatus,
   UpdateProspectStatusDto,
   UpdateProspectStageDto,
+  UpdateProspectDealDto,
   ReplyDraftDto,
   OutreachMessageDto,
   ContractDto,
@@ -175,6 +176,11 @@ const UpsertOrgSenderBodyDto = z.object({
 export type UpsertOrgSenderBody = z.infer<typeof UpsertOrgSenderBodyDto>;
 
 const ConnectedGoogleAccountListDto = z.array(ConnectedGoogleAccountDto);
+
+// Result of DELETE /prospects/:id/card — the removed prospect's id.
+const RemoveCardResultDto = z.object({
+  id: z.string(),
+});
 
 const GoogleConnectStartDto = z.object({
   url: z.string().url(),
@@ -564,6 +570,24 @@ export const api = {
         body: UpdateProspectStageDto.parse(input),
         schema: ProspectDto,
       }),
+
+    // Set a card's € deal value on the Nurture board (whole euros, >= 0).
+    updateDeal: (id: string, dealValue: number) =>
+      request<ProspectDto>(`/prospects/${encodeURIComponent(id)}/deal`, {
+        method: 'PATCH',
+        body: UpdateProspectDealDto.parse({ dealValue }),
+        schema: ProspectDto,
+      }),
+
+    // Remove a card from the Nurture board (DELETE /prospects/:id/card).
+    removeCard: (id: string) =>
+      request<z.infer<typeof RemoveCardResultDto>>(
+        `/prospects/${encodeURIComponent(id)}/card`,
+        {
+          method: 'DELETE',
+          schema: RemoveCardResultDto,
+        },
+      ),
   },
 
   replyDrafts: {

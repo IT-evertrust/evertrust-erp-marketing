@@ -23,6 +23,12 @@
     "moveForward": "Eine Stufe weiter",
     "movedToast": "{name} verschoben nach {stage}",
     "moveError": "Deal konnte nicht verschoben werden",
+    "dealLabel": "Deal-Wert",
+    "dealError": "Deal-Wert konnte nicht aktualisiert werden",
+    "deleteCard": "Karte entfernen",
+    "deleteConfirm": "{name} aus der Pipeline entfernen?",
+    "deletedToast": "{name} aus der Pipeline entfernt",
+    "deleteError": "Karte konnte nicht entfernt werden",
     "stages": {
       "INTEREST": "Interesse",
       "INTENT": "Absicht",
