@@ -231,6 +231,10 @@ function mapAim(a: BackendAim): ReachCampaignView {
     niche: a.niche,
     region: a.region,
     companies: a.companies,
+    sent:
+      (a.stats?.cold.sent ?? 0) +
+      (a.stats?.followup.sent ?? 0) +
+      (a.stats?.final.sent ?? 0),
     status: mapAimStatus(a.status),
     aimStatus: a.status,
     templates: a.templates,

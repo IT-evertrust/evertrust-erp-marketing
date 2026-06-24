@@ -31,9 +31,11 @@ export function EmailGeneratorPanel({
         selectedCampaignId={selectedCampaignId}
         onSelectCampaign={onSelectCampaign}
         loading={loadingCampaigns}
+        metricLabel="Sent"
+        metricValue={(c) => c.sent}
       />
 
-      <GrowthCard title={`Emails · ${selectedCampaignName ?? 'Campaign'}`}>
+      <GrowthCard title="Emails">
         {emails.length === 0 ? (
           <div className="rounded-lg border border-dashed border-[#d6dade] bg-[#f6f7f9] p-6 text-center text-[12.5px] font-bold text-[#959ca7]">
             No templates generated yet. Launch an Aim to generate the cold

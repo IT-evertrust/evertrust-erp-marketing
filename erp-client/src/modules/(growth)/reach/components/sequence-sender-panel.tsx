@@ -174,9 +174,18 @@ export function SequenceSenderPanel({
         </div>
 
         <div className="mt-3 flex flex-wrap gap-4 text-[9px] font-bold uppercase tracking-[0.06em] text-[#959ca7]">
-          <span>■ Sent</span>
-          <span>■ Today</span>
-          <span>□ Projected</span>
+          <span className="inline-flex items-center gap-1.5">
+            <i className="inline-block h-2.5 w-2.5 rounded-[2px] bg-[#15171c]" />
+            Sent
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <i className="inline-block h-2.5 w-2.5 rounded-[2px] bg-[#959ca7]" />
+            Today
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <i className="inline-block h-2.5 w-2.5 rounded-[2px] border border-dashed border-[#c2c7ce] bg-transparent" />
+            Projected
+          </span>
         </div>
       </GrowthCard>
     </div>

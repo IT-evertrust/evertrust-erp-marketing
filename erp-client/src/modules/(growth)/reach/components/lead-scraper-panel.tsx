@@ -34,13 +34,14 @@ export function LeadScraperPanel({
         selectedCampaignId={selectedCampaignId}
         onSelectCampaign={onSelectCampaign}
         showAction
-        actionLabel="Aim"
+        actionLabel="+ Campaign"
+        statusLabel="Scraper active"
         onActionClick={onCreateCampaign}
         loading={loadingCampaigns}
         />
 
       <GrowthCard
-        title={`Leads · ${selectedCampaignName ?? 'Selected Campaign'}`}
+        title="Leads"
         hint={scraping ? 'SCRAPING…' : `${leads.length} COMPANIES`}
       >
         {scraping ? (

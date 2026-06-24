@@ -12,6 +12,11 @@ type CampaignTableProps = {
   actionLabel?: string;
   onActionClick?: () => void;
   loading?: boolean;
+  // Optional live status pill in the card header (mock's "SCRAPER ACTIVE").
+  statusLabel?: string;
+  // The 4th column — defaults to Companies; e.g. Email Generator shows "Sent".
+  metricLabel?: string;
+  metricValue?: (c: Campaign) => number | string;
 };
 
 export function CampaignTable({
@@ -20,30 +25,38 @@ export function CampaignTable({
   onSelectCampaign,
   title = 'Campaigns',
   showAction = false,
-  actionLabel = 'Aim',
+  actionLabel = '+ Campaign',
   onActionClick,
   loading = false,
+  statusLabel,
+  metricLabel = 'Companies',
+  metricValue = (c) => c.companies,
 }: CampaignTableProps) {
   return (
     <GrowthCard
       title={title}
       hint={
-        showAction ? (
-            <button
-            type="button"
-            onClick={onActionClick}
-            className="rounded-md border border-[#15171c] bg-[#15171c] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-white"
-            >
-            {actionLabel}
-            </button>
+        statusLabel || showAction ? (
+          <div className="flex items-center gap-3">
+            {statusLabel ? <StatusPill live>{statusLabel}</StatusPill> : null}
+            {showAction ? (
+              <button
+                type="button"
+                onClick={onActionClick}
+                className="rounded-md border border-[#15171c] bg-[#15171c] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-white"
+              >
+                {actionLabel}
+              </button>
+            ) : null}
+          </div>
         ) : null
-        }
+      }
     >
       {loading && campaigns.length === 0 ? (
         <Spinner label="Loading campaigns…" />
       ) : campaigns.length === 0 ? (
         <div className="rounded-lg border border-dashed border-[#d6dade] bg-[#f6f7f9] p-6 text-center text-[12.5px] font-bold text-[#959ca7]">
-          No campaigns yet. Click Aim to launch one.
+          No campaigns yet. Click + Campaign to launch one.
         </div>
       ) : (
       <div className="max-h-[280px] overflow-auto">
@@ -60,7 +73,7 @@ export function CampaignTable({
                 Region
               </th>
               <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
-                Companies
+                {metricLabel}
               </th>
               <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
                 Status
@@ -92,7 +105,7 @@ export function CampaignTable({
                     {campaign.region}
                   </td>
                   <td className="px-3 py-3 text-[12.5px] text-[#5b626d]">
-                    {campaign.companies}
+                    {metricValue(campaign)}
                   </td>
                   <td className="px-3 py-3">
                     <StatusPill live={live}>{campaign.status}</StatusPill>

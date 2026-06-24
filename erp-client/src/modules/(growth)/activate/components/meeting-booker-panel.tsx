@@ -84,6 +84,17 @@ function sameDay(iso: string | null | undefined, d: Date): boolean {
 const monthYearLabel = (d: Date): string =>
   mondayOf(d).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
+// ISO-8601 week number of the week containing `d` (mock shows "Calendar · Week 25").
+function isoWeek(d: Date): number {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = (t.getUTCDay() + 6) % 7; // Mon=0
+  t.setUTCDate(t.getUTCDate() - dayNum + 3); // nearest Thursday
+  const firstThursday = new Date(Date.UTC(t.getUTCFullYear(), 0, 4));
+  const firstDayNum = (firstThursday.getUTCDay() + 6) % 7;
+  firstThursday.setUTCDate(firstThursday.getUTCDate() - firstDayNum + 3);
+  return 1 + Math.round((t.getTime() - firstThursday.getTime()) / (7 * 86400000));
+}
+
 // "Jun 23 – 27" / "Jun 30 – Jul 4" for the visible Mon–Fri span.
 function weekRangeLabel(dates: Date[]): string {
   const a = dates[0];
@@ -127,7 +138,7 @@ export function MeetingBookerPanel({
 
   return (
     <GrowthCard
-      title={`Calendar · ${monthYearLabel(viewDate)}`}
+      title={`Calendar · Week ${isoWeek(viewDate)}`}
       hint={
         <span className="inline-flex items-center gap-2">
           <LiveDot />

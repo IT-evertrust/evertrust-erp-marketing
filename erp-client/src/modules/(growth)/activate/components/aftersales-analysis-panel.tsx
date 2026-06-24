@@ -314,7 +314,7 @@ function AnalysisDetail({
 
           {analysis.actionItems.length > 0 ? (
             <section>
-              <SectionTitle>Implement Next Time</SectionTitle>
+              <SectionTitle>Action Items</SectionTitle>
               <div className="flex flex-col">
                 {analysis.actionItems.map((item) => (
                   <label

@@ -8,6 +8,8 @@ export type Campaign = {
   niche: string;
   region: string;
   companies: number;
+  // Total emails sent across all rounds (Email Generator table's "Sent" column).
+  sent: number;
   status: CampaignStatus;
 };
 
