@@ -18,6 +18,7 @@ import {
   templatesToEmails,
 } from '../services/reach.service';
 import type {
+  DailySend,
   Lead,
   NewCampaignFormValues,
   ReachCampaignView,
@@ -33,6 +34,7 @@ export function useReach() {
   const [isCampaignFormOpen, setIsCampaignFormOpen] = useState(false);
 
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [dailySends, setDailySends] = useState<DailySend[]>([]);
   const [loadingCampaigns, setLoadingCampaigns] = useState(true);
   const [loadingLeads, setLoadingLeads] = useState(false);
   const [creatingAim, setCreatingAim] = useState(false);
@@ -56,6 +58,22 @@ export function useReach() {
       })
       .finally(() => {
         if (!ignore) setLoadingCampaigns(false);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  // Load the real 10-day daily-sends series once (drives the Sequence Sender
+  // chart). On failure we leave it empty so the chart renders blank, not broken.
+  useEffect(() => {
+    let ignore = false;
+    getDailySends()
+      .then((data) => {
+        if (!ignore) setDailySends(data);
+      })
+      .catch(() => {
+        if (!ignore) setDailySends([]);
       });
     return () => {
       ignore = true;
@@ -174,7 +192,6 @@ export function useReach() {
     () => getSenderSchedule(campaigns),
     [campaigns],
   );
-  const dailySends = useMemo(() => getDailySends(), []);
 
   function openCampaignForm() {
     setIsCampaignFormOpen(true);

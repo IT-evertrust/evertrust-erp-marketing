@@ -128,6 +128,14 @@ export const GROWTH_NAV_ITEMS: GrowthNavItem[] = [
     group: 'settings',
   },
   {
+    label: 'Reach',
+    i18nKey: 'reachSettings',
+    href: '/settings/reach',
+    icon: Radio,
+    permission: 'admin:config',
+    group: 'settings',
+  },
+  {
     label: 'Configuration',
     i18nKey: 'configuration',
     href: '/settings/configuration',
@@ -193,6 +201,7 @@ export function getGrowthPageMeta(pathname: string) {
     analytics: 'Performance · Metrics',
     reports: 'Exports · Summaries',
     general: 'Account · Display · Preferences',
+    reachSettings: 'Reach send policy · Test send',
     configuration: 'Sending · Integrations · Branding',
     userManagement: 'Roles · Access',
     automation: 'Workflows · Triggers',

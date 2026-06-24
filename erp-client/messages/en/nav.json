@@ -9,6 +9,7 @@
   "analytics": "Analytics",
   "reports": "Reports",
   "general": "General",
+  "reachSettings": "Reach",
   "configuration": "Configuration",
   "userManagement": "User management",
   "brandTagline": "Growth Engine",
@@ -28,6 +29,7 @@
     "analytics": "Performance · Metrics",
     "reports": "Exports · Summaries",
     "general": "Account · Display · Preferences",
+    "reachSettings": "Reach send policy · Test send",
     "configuration": "Sending · Integrations · Branding",
     "userManagement": "Roles · Access",
     "automation": "Workflows · Triggers"

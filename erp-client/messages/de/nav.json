@@ -9,6 +9,7 @@
   "analytics": "Analysen",
   "reports": "Berichte",
   "general": "Allgemein",
+  "reachSettings": "Reichweite",
   "configuration": "Konfiguration",
   "userManagement": "Benutzer",
   "brandTagline": "Growth Engine",
@@ -28,6 +29,7 @@
     "analytics": "Leistung · Kennzahlen",
     "reports": "Exporte · Zusammenfassungen",
     "general": "Konto · Anzeige · Einstellungen",
+    "reachSettings": "Reichweiten-Versandregeln · Testversand",
     "configuration": "Versand · Integrationen · Branding",
     "userManagement": "Rollen · Zugriff",
     "automation": "Workflows · Auslöser"
