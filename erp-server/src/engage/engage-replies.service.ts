@@ -241,6 +241,12 @@ export class EngageRepliesService {
       .from(schema.reachLeads)
       .where(and(tenantScope(orgId, schema.reachLeads), eq(schema.reachLeads.aimId, aimId)));
 
+    // Only leads this campaign has actually emailed get scanned. A lead with no send was
+    // never contacted by THIS campaign, so any Gmail thread it has is pre-existing /
+    // cross-campaign history we must not ingest (otherwise deleting + re-creating a
+    // campaign re-classifies stale conversations).
+    const contactedLeadIds = await this.reach.leadIdsWithSends(orgId, aimId);
+
     const byCategory: Record<string, number> = {};
     let scanned = 0;
     let classified = 0;
@@ -248,7 +254,7 @@ export class EngageRepliesService {
 
     for (const lead of leads) {
       const email = lead.email?.trim().toLowerCase();
-      if (!email) {
+      if (!email || !contactedLeadIds.has(lead.id)) {
         skipped++;
         continue;
       }

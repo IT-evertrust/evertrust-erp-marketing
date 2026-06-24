@@ -792,6 +792,23 @@ export class ReachRepository {
       });
   }
 
+  // Lead ids this campaign has sent at least one email to. The Engage scan only
+  // classifies contacted leads — a 0-send lead's Gmail thread is a pre-existing /
+  // cross-campaign conversation we must not ingest (else deleting + re-creating a
+  // campaign re-classifies stale history).
+  async leadIdsWithSends(orgId: string, aimId: string): Promise<Set<string>> {
+    const rows = await this.db
+      .selectDistinct({ leadId: schema.reachSends.leadId })
+      .from(schema.reachSends)
+      .where(
+        and(
+          tenantScope(orgId, schema.reachSends),
+          eq(schema.reachSends.aimId, aimId),
+        ),
+      );
+    return new Set(rows.map((r) => r.leadId));
+  }
+
   // ---- Org default outreach template + signature (org_config) ----
 
   // The org-wide default 3-round outreach template the bazooka sends, or null (none set
