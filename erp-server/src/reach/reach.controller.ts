@@ -7,6 +7,7 @@ import {
   Param,
   Post,
   Patch,
+  Put,
   Query,
   Redirect,
 } from '@nestjs/common';
@@ -43,6 +44,37 @@ export class ReachController {
   @Get('aims')
   getAims(@OrgId() orgId: string) {
     return this.reachService.getAims(orgId);
+  }
+
+  // ---- Org default outreach template (paste/upload + set default) ----
+  @RequirePermissions('campaigns:write')
+  @Get('default-template')
+  getDefaultTemplate(@OrgId() orgId: string) {
+    return this.reachService.getDefaultTemplate(orgId);
+  }
+
+  // Accepts a pasted template in any round spelling (COLD/FOLLOWUP/FINALPUSH or the
+  // stored keys); the service normalizes + validates and 400s on a bad shape.
+  @RequirePermissions('campaigns:write')
+  @Put('default-template')
+  async setDefaultTemplate(@OrgId() orgId: string, @Body() body: unknown) {
+    await this.reachService.setDefaultTemplate(orgId, body);
+    return { ok: true };
+  }
+
+  // ---- Signature image embedded in every outgoing email (org_config; the image
+  // itself is uploaded/served by the arsenal SignatureAssetsService) ----
+  @RequirePermissions('campaigns:write')
+  @Get('signature')
+  async getSignature(@OrgId() orgId: string) {
+    return { signatureImageUrl: await this.reachService.getSignatureImageUrl(orgId) };
+  }
+
+  @RequirePermissions('campaigns:write')
+  @Put('signature')
+  async setSignature(@OrgId() orgId: string, @Body() body: { url?: string | null }) {
+    await this.reachService.setSignatureImageUrl(orgId, body?.url ?? null);
+    return { ok: true };
   }
 
   @RequirePermissions('campaigns:read')

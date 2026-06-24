@@ -51,6 +51,12 @@ interface BackendAim {
   stats: ReachStats | null;
   autoSend: boolean;
   sender: string;
+  // When the org has a default template, `templates` IS that org default and
+  // this flag is true (the org default is the single source of truth).
+  usingOrgDefault?: boolean;
+  targetType?: string;
+  industryFocus?: string;
+  tenderFocus?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -87,7 +93,7 @@ async function getJson<T>(path: string): Promise<T> {
 }
 
 async function mutate<T>(
-  method: 'POST' | 'PATCH',
+  method: 'POST' | 'PATCH' | 'PUT',
   path: string,
   body?: unknown,
 ): Promise<T> {
@@ -134,6 +140,9 @@ export async function createReachAim(
     whatsappNumber: values.whatsappNumber || undefined,
     sender: values.sender || undefined,
     salesCalendarId: values.salesCalendarId || undefined,
+    targetType: values.targetType || undefined,
+    industryFocus: values.industryFocus || undefined,
+    tenderFocus: values.tenderFocus || undefined,
   });
   return mapAim(aim);
 }
@@ -230,6 +239,34 @@ export async function getDailySends(): Promise<DailySend[]> {
   return getJson<DailySend[]>('/growth/reach/daily-sends');
 }
 
+// ---- Default template + signature (org-wide, used by the Reach Bazooka) ----
+
+// The org's default three-round template; null until one has been saved.
+export async function getDefaultTemplate(): Promise<ReachTemplates | null> {
+  return getJson<ReachTemplates | null>('/growth/reach/default-template');
+}
+
+// Save the org's default template. The backend normalizes either the stored
+// keys (cold_outreach/follow_up/final_push) or the pasted
+// { COLD, FOLLOWUP, FINALPUSH } shape.
+export async function setDefaultTemplate(body: unknown): Promise<void> {
+  await mutate<{ ok: true }>('PUT', '/growth/reach/default-template', body);
+}
+
+// The org's signature image URL (shown beneath every outbound email).
+export async function getSignature(): Promise<{
+  signatureImageUrl: string | null;
+}> {
+  return getJson<{ signatureImageUrl: string | null }>(
+    '/growth/reach/signature',
+  );
+}
+
+// Save (or clear) the org's signature image URL.
+export async function setSignature(url: string | null): Promise<void> {
+  await mutate<{ ok: true }>('PUT', '/growth/reach/signature', { url });
+}
+
 // ---- mappers: backend -> the UI's local view types (UI structure untouched) ----
 function mapAimStatus(status: AimStatus): CampaignStatus {
   if (status === 'COMPLETED') return 'IN CAMPAIGN';
@@ -252,6 +289,10 @@ function mapAim(a: BackendAim): ReachCampaignView {
     stats: a.stats ?? EMPTY_STATS,
     autoSend: a.autoSend,
     sender: a.sender,
+    usingOrgDefault: a.usingOrgDefault ?? false,
+    targetType: a.targetType,
+    industryFocus: a.industryFocus,
+    tenderFocus: a.tenderFocus,
     scrapeStartedAt: a.scrapeStartedAt ?? null,
     scrapeEtaSeconds: a.scrapeEtaSeconds ?? null,
     scrapeError: a.scrapeError ?? null,

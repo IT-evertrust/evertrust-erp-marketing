@@ -73,6 +73,9 @@ function rowToAim(row: AimRow): ReachAim {
     salesCalendarId: row.salesCalendarId ?? undefined,
     segment: row.segment ?? undefined,
     source: row.source ?? undefined,
+    targetType: row.targetType ?? undefined,
+    industryFocus: row.industryFocus ?? undefined,
+    tenderFocus: row.tenderFocus ?? undefined,
     campaignId: row.campaignId ?? null,
     status: row.status,
     companies: row.companies,
@@ -141,6 +144,9 @@ export class ReachRepository {
         salesCalendarId: dto.salesCalendarId ?? null,
         segment: dto.segment ?? null,
         source: dto.source ?? null,
+        targetType: dto.targetType ?? null,
+        industryFocus: dto.industryFocus ?? null,
+        tenderFocus: dto.tenderFocus ?? null,
         sender: dto.sender || 'info',
         status: 'DRAFT',
       })
@@ -705,12 +711,51 @@ export class ReachRepository {
     return new Set(rows.map((r) => r.leadId));
   }
 
-  // The org's outbound signature image URL, embedded as an <img> on every sent email.
-  // Phase 11 stub: the per-org signature store ships with the Reach Templates feature
-  // (Phase 12). Until then there is no signature image, so sends go out plain — return
-  // null so `buildMimeEmail` simply omits the <img> block.
-  async getSignatureImageUrl(_orgId: string): Promise<string | null> {
-    return null;
+  // ---- Org default outreach template + signature (org_config) ----
+
+  // The org-wide default 3-round outreach template the bazooka sends, or null (none set
+  // → fall back to the campaign's AI-generated templates).
+  async getDefaultTemplate(orgId: string): Promise<ReachTemplates | null> {
+    const [row] = await this.db
+      .select({ t: schema.orgConfig.defaultTemplate })
+      .from(schema.orgConfig)
+      .where(eq(schema.orgConfig.organizationId, orgId))
+      .limit(1);
+    return (row?.t as ReachTemplates | null) ?? null;
+  }
+
+  // Save the org-wide default outreach template (find-or-creates the org_config row).
+  async setDefaultTemplate(orgId: string, template: ReachTemplates): Promise<void> {
+    await this.db
+      .insert(schema.orgConfig)
+      .values({ organizationId: orgId, defaultTemplate: template })
+      .onConflictDoUpdate({
+        target: schema.orgConfig.organizationId,
+        set: { defaultTemplate: template, updatedAt: new Date() },
+      });
+  }
+
+  // The org's configured signature image URL (embedded in outgoing emails), or null.
+  // The image itself is managed by the arsenal SignatureAssetsService (upload/serve);
+  // this reads the same canonical org_config.signature_image_url it writes.
+  async getSignatureImageUrl(orgId: string): Promise<string | null> {
+    const [row] = await this.db
+      .select({ url: schema.orgConfig.signatureImageUrl })
+      .from(schema.orgConfig)
+      .where(eq(schema.orgConfig.organizationId, orgId))
+      .limit(1);
+    return row?.url ?? null;
+  }
+
+  // Set (or clear, with null) the org signature image URL (find-or-creates the row).
+  async setSignatureImageUrl(orgId: string, url: string | null): Promise<void> {
+    await this.db
+      .insert(schema.orgConfig)
+      .values({ organizationId: orgId, signatureImageUrl: url })
+      .onConflictDoUpdate({
+        target: schema.orgConfig.organizationId,
+        set: { signatureImageUrl: url, updatedAt: new Date() },
+      });
   }
 
   // ---- Reach send-policy settings (per-org override columns on org_config) ----
