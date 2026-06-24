@@ -9,7 +9,6 @@ type LeadScraperPanelProps = {
   selectedCampaignId: string;
   onSelectCampaign: (campaignId: string) => void;
   onCreateCampaign: () => void;
-  selectedCampaignName?: string;
   leads: Lead[];
   loadingCampaigns?: boolean;
   loadingLeads?: boolean;
@@ -21,7 +20,6 @@ export function LeadScraperPanel({
   selectedCampaignId,
   onSelectCampaign,
   onCreateCampaign,
-  selectedCampaignName,
   leads,
   loadingCampaigns = false,
   loadingLeads = false,

@@ -20,7 +20,6 @@ export function ReachPage() {
           selectedCampaignId={reach.selectedCampaignId}
           onSelectCampaign={reach.setSelectedCampaignId}
           onCreateCampaign={reach.openCampaignForm}
-          selectedCampaignName={reach.selectedCampaign?.name}
           leads={reach.leads}
           loadingCampaigns={reach.loadingCampaigns}
           loadingLeads={reach.loadingLeads}
@@ -33,7 +32,6 @@ export function ReachPage() {
           campaigns={reach.campaigns}
           selectedCampaignId={reach.selectedCampaignId}
           onSelectCampaign={reach.setSelectedCampaignId}
-          selectedCampaignName={reach.selectedCampaign?.name}
           emails={reach.emails}
           loadingCampaigns={reach.loadingCampaigns}
           onSend={reach.sendRound}

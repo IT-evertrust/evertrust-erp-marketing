@@ -3,6 +3,7 @@ import {
   CalendarDays,
   LayoutGrid,
   Mail,
+  Settings,
   Target,
   Workflow,
 } from 'lucide-react';
@@ -50,6 +51,12 @@ export const GROWTH_NAV_ITEMS: GrowthNavItem[] = [
     step: '04',
     group: 'funnel',
   },
+  {
+    label: 'Settings',
+    href: '/settings',
+    icon: Settings,
+    group: 'system',
+  },
 ];
 
 export function getActiveGrowthNavItem(pathname: string) {
@@ -68,6 +75,7 @@ export function getGrowthPageMeta(pathname: string) {
     Engage: '02 · SORT REPLIES',
     Activate: '03 · BOOKER · RESEARCH · ANALYSIS',
     Nurture: '04 · PIPELINE · CONTRACT',
+    Settings: 'ACCOUNT · SENDING · INTEGRATIONS',
   };
 
   return {

@@ -45,6 +45,13 @@ function mondayOf(d: Date): Date {
   return m;
 }
 
+// Sunday of the week containing `d` (the calendar renders a Sun–Sat 7-day week).
+function sundayOf(d: Date): Date {
+  const s = startOfDay(d);
+  s.setDate(s.getDate() - s.getDay()); // getDay(): 0 = Sunday
+  return s;
+}
+
 const addDays = (d: Date, n: number): Date => {
   const x = new Date(d);
   x.setDate(x.getDate() + n);
@@ -64,8 +71,8 @@ function clampToYear(d: Date): Date {
 
 // The five weekday Date objects (Mon–Fri) of the week containing `anchor`.
 function weekDates(anchor: Date): Date[] {
-  const monday = mondayOf(anchor);
-  return Array.from({ length: 5 }, (_, i) => addDays(monday, i));
+  const sunday = sundayOf(anchor);
+  return Array.from({ length: 7 }, (_, i) => addDays(sunday, i));
 }
 
 const dayLabel = (d: Date): string => `${WEEKDAYS[d.getDay()]} ${d.getDate()}`;
@@ -122,7 +129,7 @@ export function MeetingBookerPanel({
   // ±1 year — the window the backend now fetches — so every view has real data.
   const [viewDate, setViewDate] = useState<Date>(() => new Date());
   const dates = weekDates(viewDate);
-  const isThisWeek = mondayOf(viewDate).getTime() === mondayOf(new Date()).getTime();
+  const isThisWeek = sundayOf(viewDate).getTime() === sundayOf(new Date()).getTime();
   const go = (next: Date) => setViewDate(clampToYear(next));
   // Events on a given day: by real start date, falling back to the day-label for any
   // DB-seeded meeting that lacks an ISO start.
@@ -271,7 +278,7 @@ export function MeetingBookerPanel({
         </div>
       ) : (
         <div className="overflow-hidden rounded-[10px] border border-[#e4e7eb]">
-          <div className="grid grid-cols-[64px_repeat(5,minmax(0,1fr))] border-b border-[#e4e7eb] bg-white">
+          <div className="grid grid-cols-[64px_repeat(7,minmax(0,1fr))] border-b border-[#e4e7eb] bg-white">
             <div className="flex items-end justify-end px-2 pb-2 text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#959ca7]">
               GMT+02
             </div>
@@ -295,7 +302,7 @@ export function MeetingBookerPanel({
             })}
           </div>
 
-          <div className="grid max-h-[560px] grid-cols-[64px_repeat(5,minmax(0,1fr))] overflow-y-auto">
+          <div className="grid max-h-[560px] grid-cols-[64px_repeat(7,minmax(0,1fr))] overflow-y-auto">
             <div className="relative bg-white">
               {HOURS.map((hour) => (
                 <div

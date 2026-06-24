@@ -9,7 +9,6 @@ type EmailGeneratorPanelProps = {
   campaigns: Campaign[];
   selectedCampaignId: string;
   onSelectCampaign: (campaignId: string) => void;
-  selectedCampaignName?: string;
   emails: CampaignEmail[];
   loadingCampaigns?: boolean;
   onSend: (round: ReachRound) => void;
@@ -19,7 +18,6 @@ export function EmailGeneratorPanel({
   campaigns,
   selectedCampaignId,
   onSelectCampaign,
-  selectedCampaignName,
   emails,
   loadingCampaigns = false,
   onSend,

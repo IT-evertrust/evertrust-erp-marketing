@@ -17,6 +17,7 @@ export function GrowthSidebar() {
 
   const mainItems = GROWTH_NAV_ITEMS.filter((item) => item.group === 'main');
   const funnelItems = GROWTH_NAV_ITEMS.filter((item) => item.group === 'funnel');
+  const systemItems = GROWTH_NAV_ITEMS.filter((item) => item.group === 'system');
 
   return (
     <aside className="sticky top-0 flex h-screen w-[240px] shrink-0 flex-col border-r border-[#e4e7eb] bg-white">
@@ -38,6 +39,15 @@ export function GrowthSidebar() {
           R.E.A.N Funnel
         </div>
         <NavSection items={funnelItems} pathname={pathname} />
+
+        {systemItems.length > 0 ? (
+          <>
+            <div className="px-2 pb-1 pt-4 text-[9.5px] font-bold uppercase tracking-[0.18em] text-[#959ca7]">
+              System
+            </div>
+            <NavSection items={systemItems} pathname={pathname} />
+          </>
+        ) : null}
       </nav>
 
       <SidebarProfile />
