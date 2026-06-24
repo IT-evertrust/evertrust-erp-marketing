@@ -23,6 +23,7 @@ import type {
   ReachTemplates,
   TrackKind,
 } from './reach.model';
+import { renderTemplate } from './reach-template';
 
 type SentLead = { company: string; email: string | null };
 
@@ -354,7 +355,9 @@ export class ReachService {
     round: ReachRound,
     leads: SentLead[],
   ): Promise<number> {
-    const tmpl = this.templateFor(aim, round);
+    // Org-wide default template wins when set, else the campaign's generated templates.
+    const orgDefault = await this.repo.getDefaultTemplate(orgId);
+    const tmpl = this.templateFor(aim, round, orgDefault);
     if (!tmpl || leads.length === 0) return 0;
 
     const { mode, testRecipient, cap } = await this.resolveSendConfig(orgId);
@@ -364,8 +367,14 @@ export class ReachService {
     for (const lead of targets) {
       const recipient = mode === 'live' ? lead.email : testRecipient;
       if (!recipient) continue;
-      const subject = tmpl.subject.replace(/\{\{Company Name\}\}/g, lead.company);
-      let body = tmpl.body.replace(/\{\{Company Name\}\}/g, lead.company);
+      const vars = {
+        company: lead.company,
+        type: aim.targetType ?? '',
+        industryFocus: aim.industryFocus ?? '',
+        tenderFocus: aim.tenderFocus ?? aim.niche,
+      };
+      const subject = renderTemplate(tmpl.subject, vars);
+      let body = renderTemplate(tmpl.body, vars);
       if (mode !== 'live') {
         body =
           `[TEST MODE — would be sent to ${lead.email ?? '(no email)'} for ${lead.company}]\n\n` +
@@ -391,8 +400,12 @@ export class ReachService {
     return delivered;
   }
 
-  private templateFor(aim: ReachAim, round: ReachRound): EmailBlock | null {
-    const t = aim.templates;
+  private templateFor(
+    aim: ReachAim,
+    round: ReachRound,
+    orgDefault?: ReachTemplates | null,
+  ): EmailBlock | null {
+    const t = orgDefault ?? aim.templates;
     if (!t) return null;
     return round === 'cold'
       ? t.cold_outreach

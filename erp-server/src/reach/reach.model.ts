@@ -53,6 +53,11 @@ export type ReachAim = {
   region: string;
   segment?: string;
   source?: string;
+  // Per-campaign template placeholders for the org default outreach template:
+  //   {{Type}} → targetType, {{IndustryFocus}} → industryFocus, {{TenderFocus}} → tenderFocus.
+  targetType?: string;
+  industryFocus?: string;
+  tenderFocus?: string;
   // Optional config fields consumed by the agent CampaignConfig. The reach_aims
   // table does not yet expose these columns in this build, so they are undefined
   // until surfaced from the DB; buildAgentConfig falls back to name / 'Germany'.

@@ -70,6 +70,9 @@ function rowToAim(row: AimRow): ReachAim {
     region: row.region,
     segment: row.segment ?? undefined,
     source: row.source ?? undefined,
+    targetType: row.targetType ?? undefined,
+    industryFocus: row.industryFocus ?? undefined,
+    tenderFocus: row.tenderFocus ?? undefined,
     status: row.status,
     companies: row.companies,
     campaignId: row.campaignId ?? null,
@@ -784,5 +787,39 @@ export class ReachRepository {
         target: schema.orgConfig.organizationId,
         set: { ...set, updatedAt: new Date() },
       });
+  }
+
+  // ---- Org default outreach template + signature (org_config) ----
+
+  // The org-wide default 3-round outreach template the bazooka sends, or null (none set
+  // → fall back to the campaign's AI-generated templates).
+  async getDefaultTemplate(orgId: string): Promise<ReachTemplates | null> {
+    const [row] = await this.db
+      .select({ t: schema.orgConfig.defaultTemplate })
+      .from(schema.orgConfig)
+      .where(eq(schema.orgConfig.organizationId, orgId))
+      .limit(1);
+    return (row?.t as ReachTemplates | null) ?? null;
+  }
+
+  // Save the org-wide default outreach template (find-or-creates the org_config row).
+  async setDefaultTemplate(orgId: string, template: ReachTemplates): Promise<void> {
+    await this.db
+      .insert(schema.orgConfig)
+      .values({ organizationId: orgId, defaultTemplate: template })
+      .onConflictDoUpdate({
+        target: schema.orgConfig.organizationId,
+        set: { defaultTemplate: template, updatedAt: new Date() },
+      });
+  }
+
+  // The org's configured signature image URL (embedded in outgoing emails), or null.
+  async getSignatureImageUrl(orgId: string): Promise<string | null> {
+    const [row] = await this.db
+      .select({ url: schema.orgConfig.signatureImageUrl })
+      .from(schema.orgConfig)
+      .where(eq(schema.orgConfig.organizationId, orgId))
+      .limit(1);
+    return row?.url ?? null;
   }
 }
