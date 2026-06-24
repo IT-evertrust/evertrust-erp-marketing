@@ -18,6 +18,9 @@ function fakeCalendar(opts: {
     async alternativesNear() {
       return opts.alternatives ?? [];
     },
+    async getOrgTimeZones() {
+      return { primary: 'Europe/Berlin', secondary: null };
+    },
   };
 }
 

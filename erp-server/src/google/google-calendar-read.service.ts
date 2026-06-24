@@ -42,6 +42,29 @@ const MAX_UPCOMING_EVENTS = 10;
 // existing Berlin-pinned unit tests stay green without passing a zone explicitly.
 const DEFAULT_TIME_ZONE = 'Europe/Berlin';
 
+// True when `at` falls inside the org's business-hours window (Mon–Fri,
+// BUSINESS_START_HOUR ≤ hour < BUSINESS_END_HOUR) in `timeZone` — the SAME window
+// computeFreeSlots offers from, so a counter-proposed time is validated against the hours
+// we'd actually book. Invalid dates / bad zones return false (never throws). Used by the
+// meeting-loop gate so a free-but-2am instant is not auto-booked.
+export function isWithinBusinessHours(at: Date, timeZone: string): boolean {
+  if (Number.isNaN(at.getTime())) return false;
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      weekday: 'short',
+      hour: 'numeric',
+      hour12: false,
+    }).formatToParts(at);
+    const weekday = parts.find((p) => p.type === 'weekday')?.value ?? '';
+    const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 'NaN') % 24;
+    if (weekday === 'Sat' || weekday === 'Sun') return false;
+    return hour >= BUSINESS_START_HOUR && hour < BUSINESS_END_HOUR;
+  } catch {
+    return false;
+  }
+}
+
 type CalendarRangeInput = {
   timeMin?: string;
   timeMax?: string;
