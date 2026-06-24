@@ -58,6 +58,11 @@ export const reachLeadReplies = pgTable(
     proposedSlots: jsonb('proposed_slots').$type<{ start: string; end: string }[]>(),
     // NONE | PROPOSED | ACCEPTED | COUNTER | BOOKED — drives the reply-card banner.
     meetingStatus: text('meeting_status').notNull().default('NONE'),
+    // The Gmail message id of the inbound counter-proposal we last resolved into a
+    // COUNTER round. The scan makes the COUNTER resolution idempotent per inbound: while
+    // this matches the latest inbound (and status is still COUNTER) it skips re-fetching
+    // alternatives and re-running the (expensive, edit-clobbering) draft regeneration.
+    counterResolvedInboundId: text('counter_resolved_inbound_id'),
     // The resolved slot to book {start,end} when meetingStatus = ACCEPTED.
     acceptedSlot: jsonb('accepted_slot').$type<{ start: string; end: string }>(),
     // The Activate meeting created when BOOKED — CRM link + idempotency guard.

@@ -258,6 +258,7 @@ export class EngageRepliesService {
             lead,
             out.scheduling,
             offeredSlots,
+            inbound.id,
           );
         }
         // Propagate the classification into the Reach plane (stats cache + lead status)
@@ -352,6 +353,13 @@ export class EngageRepliesService {
   //   COUNTER  → meetingStatus='COUNTER', overwrite proposedSlots with the alternatives,
   //              and regenerate the draft to propose those alternative times.
   //   NONE     → leave meeting fields untouched.
+  // `inboundId` is the Gmail message id of the latest inbound (the lead's reply being
+  // resolved). The COUNTER branch is idempotent per inbound: once it has resolved a
+  // counter for this inbound (status already COUNTER, stamped with this id) it skips
+  // re-fetching alternatives and re-drafting — that round is a no-op until the lead
+  // sends a NEW reply — so a re-scan never wastes an LLM pass or clobbers manual draft
+  // edits. (ACCEPTED re-sets the same slot and NONE returns early, so neither needs
+  // gating; a COUNTER that flips to ACCEPTED when the calendar frees up still applies.)
   // Wrapped in try/catch: a scheduling failure must NOT fail the scan.
   private async applyScheduling(
     orgId: string,
@@ -360,6 +368,7 @@ export class EngageRepliesService {
     lead: { company: string; email: string | null; contactName: string | null },
     verdict: SchedulingVerdict,
     proposedSlots: Slot[],
+    inboundId: string,
   ): Promise<void> {
     try {
       const resolution = await this.resolveScheduling(orgId, verdict, proposedSlots);
@@ -384,12 +393,26 @@ export class EngageRepliesService {
       }
 
       // COUNTER: the lead's requested time is busy — offer the nearest alternatives.
-      // Overwrite proposedSlots with them and regenerate the draft to propose them.
+      // Idempotency guard: if we already resolved THIS inbound's counter (status is still
+      // COUNTER and stamped with this inbound id), the round is settled — don't overwrite
+      // the offered slots or re-run redraftReply (an LLM pass that would clobber manual
+      // edits). Only a fresh inbound (a new counter) re-resolves and re-drafts.
+      const existing = await this.loadExistingReply(orgId, aim.id, leadId);
+      if (
+        existing?.meetingStatus === 'COUNTER' &&
+        existing.counterResolvedInboundId === inboundId
+      ) {
+        return;
+      }
+
+      // Overwrite proposedSlots with the alternatives, stamp the inbound we resolved, and
+      // regenerate the draft to propose them.
       await this.db
         .update(schema.reachLeadReplies)
         .set({
           meetingStatus: 'COUNTER',
           proposedSlots: resolution.alternatives,
+          counterResolvedInboundId: inboundId,
           updatedAt: new Date(),
         })
         .where(
@@ -400,17 +423,14 @@ export class EngageRepliesService {
           ),
         );
 
-      if (resolution.alternatives.length > 0) {
+      if (resolution.alternatives.length > 0 && existing) {
         const formatted = resolution.alternatives
           .map((s) => `${s.start} – ${s.end}`)
           .join(', ');
         const instruction =
           'Their requested time is unavailable. Propose these alternative times instead: ' +
           `${formatted}.`;
-        const existing = await this.loadExistingReply(orgId, aim.id, leadId);
-        if (existing) {
-          await this.redraftReply(orgId, existing.id, instruction);
-        }
+        await this.redraftReply(orgId, existing.id, instruction);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown error';
