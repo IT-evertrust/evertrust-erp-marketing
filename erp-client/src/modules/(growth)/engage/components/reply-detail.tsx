@@ -189,7 +189,14 @@ export function ReplyDetail({
       setSelectedSlot(null);
       setProposedSlots([]);
       if (result.meeting?.ok) {
-        toast.success('Reply sent + calendar invite created.');
+        // An ACCEPTED reply auto-books on send (server already persisted BOOKED) — flip the
+        // banner optimistically so the "Book it?" prompt clears without waiting for a refetch.
+        if (reply.meetingStatus === 'ACCEPTED') {
+          setBookedLocally(true);
+          toast.success('Reply sent — meeting booked + invite sent to the client.');
+        } else {
+          toast.success('Reply sent + calendar invite created.');
+        }
       } else {
         toast.success(`Reply sent to ${reply.contact} from your campaign mailbox.`);
       }
