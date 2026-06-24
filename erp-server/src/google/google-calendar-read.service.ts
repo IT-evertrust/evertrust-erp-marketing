@@ -275,6 +275,39 @@ export function computeFreeSlots(
   return out;
 }
 
+// PURE overlap check (exported for unit testing). True when [start,end) overlaps NO
+// busy interval — i.e. the proposed window is entirely free. Busy intervals and the
+// window are ISO-8601 instant strings; comparison is on epoch ms.
+export function computeWindowFree(
+  busy: { start: string; end: string }[],
+  start: string,
+  end: string,
+): boolean {
+  const s = new Date(start).getTime();
+  const e = new Date(end).getTime();
+  return !busy.some((b) => {
+    const bs = new Date(b.start).getTime();
+    const be = new Date(b.end).getTime();
+    return s < be && bs < e; // overlap
+  });
+}
+
+// PURE nearest-slot picker (exported for unit testing). Returns the `n` slots whose
+// START is closest (absolute distance) to the `around` instant, nearest first.
+export function pickNearest(
+  slots: { start: string; end: string }[],
+  around: string,
+  n: number,
+): { start: string; end: string }[] {
+  const a = new Date(around).getTime();
+  return [...slots]
+    .sort(
+      (x, y) =>
+        Math.abs(new Date(x.start).getTime() - a) - Math.abs(new Date(y.start).getTime() - a),
+    )
+    .slice(0, n);
+}
+
 function resolveCalendarRange(
   input: CalendarRangeInput = {},
   defaultTimeZone: string = DEFAULT_TIME_ZONE,
@@ -550,31 +583,33 @@ export class GoogleCalendarReadService {
     }
   }
 
-  // Proposed free slots over the next 7 days within Europe/Berlin business hours.
-  // Never throws — returns a `configured: false` shell on any failure.
-  async freeSlots(orgId: string, rangeInput: CalendarRangeInput = {}): Promise<CalendarFreeSlotsDto> {
-    const { primary: timeZone, secondary: secondaryTimeZone } =
-      await this.resolveOrgTimeZones(orgId);
+  // Shared freeBusy fetch for the CALLING org's primary calendar over [timeMin,timeMax]
+  // (ISO instants). Returns the org's busy intervals as ISO-string pairs (the shape the
+  // pure helpers consume). Never throws — degrades to `{ ok:false, busy:[], reason }` on
+  // no default mailbox / non-2xx / network error / bad body, so every caller can render
+  // a `configured:false` shell. Used by freeSlots, isWindowFree, and alternativesNear.
+  private async fetchBusy(
+    orgId: string,
+    timeMin: string,
+    timeMax: string,
+    timeZone: string,
+  ): Promise<{ ok: boolean; busy: { start: string; end: string }[]; reason: string | null }> {
     const access = await this.googleAccounts.resolveMailbox(orgId, 'calendar');
     if (!access.ok) {
-      return { configured: false, slots: [], reason: access.reason, timeZone, secondaryTimeZone };
+      return { ok: false, busy: [], reason: access.reason };
     }
-    const perOrg = access;
-    const range = resolveCalendarRange(rangeInput, timeZone);
-    const durationMinutes = rangeInput.durationMinutes ?? 30;
 
     try {
-      const now = new Date();
       const res = await fetch('https://www.googleapis.com/calendar/v3/freeBusy', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${perOrg.accessToken}`,
+          Authorization: `Bearer ${access.accessToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          timeMin: range.timeMin,
-          timeMax: range.timeMax,
-          timeZone: range.timeZone,
+          timeMin,
+          timeMax,
+          timeZone,
           items: [{ id: 'primary' }],
         }),
       });
@@ -584,11 +619,9 @@ export class GoogleCalendarReadService {
         this.logger.warn(`Calendar freeBusy returned HTTP ${res.status} for org ${orgId}: ${body}`);
 
         return {
-          configured: false,
-          slots: [],
+          ok: false,
+          busy: [],
           reason: `Google Calendar API error (HTTP ${res.status}). Reconnect the account and allow Calendar.`,
-          timeZone,
-          secondaryTimeZone,
         };
       }
 
@@ -599,31 +632,78 @@ export class GoogleCalendarReadService {
         // account's calendar id, so fall back to merging every returned calendar.
         Object.values(data.calendars ?? {}).flatMap((c) => c.busy ?? []);
 
-      const busy: BusyInterval[] = busyRaw
-        .map((b) => ({
-          start: b.start ? Date.parse(b.start) : NaN,
-          end: b.end ? Date.parse(b.end) : NaN,
-        }))
-        .filter((b) => Number.isFinite(b.start) && Number.isFinite(b.end));
+      const busy = busyRaw
+        .map((b) => ({ start: b.start ?? '', end: b.end ?? '' }))
+        .filter((b) => !Number.isNaN(Date.parse(b.start)) && !Number.isNaN(Date.parse(b.end)));
 
-      return {
-        configured: true,
-        slots: computeFreeSlots(busy, now, timeZone, durationMinutes),
-        reason: null,
-        timeZone,
-        secondaryTimeZone,
-      };
+      return { ok: true, busy, reason: null };
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown error';
-      this.logger.warn(`Calendar freeSlots failed for org ${orgId}: ${msg}`);
+      this.logger.warn(`Calendar fetchBusy failed for org ${orgId}: ${msg}`);
       return {
-        configured: false,
-        slots: [],
+        ok: false,
+        busy: [],
         reason: 'Could not reach Google Calendar. Try again, or reconnect the account.',
-        timeZone,
-        secondaryTimeZone,
       };
     }
+  }
+
+  // Proposed free slots over the next 7 days within Europe/Berlin business hours.
+  // Never throws — returns a `configured: false` shell on any failure.
+  async freeSlots(orgId: string, rangeInput: CalendarRangeInput = {}): Promise<CalendarFreeSlotsDto> {
+    const { primary: timeZone, secondary: secondaryTimeZone } =
+      await this.resolveOrgTimeZones(orgId);
+    const range = resolveCalendarRange(rangeInput, timeZone);
+    const durationMinutes = rangeInput.durationMinutes ?? 30;
+
+    const now = new Date();
+    const fetched = await this.fetchBusy(orgId, range.timeMin, range.timeMax, range.timeZone);
+    if (!fetched.ok) {
+      return { configured: false, slots: [], reason: fetched.reason, timeZone, secondaryTimeZone };
+    }
+
+    const busy: BusyInterval[] = fetched.busy.map((b) => ({
+      start: Date.parse(b.start),
+      end: Date.parse(b.end),
+    }));
+
+    return {
+      configured: true,
+      slots: computeFreeSlots(busy, now, timeZone, durationMinutes),
+      reason: null,
+      timeZone,
+      secondaryTimeZone,
+    };
+  }
+
+  // Whether a specific proposed window [start,end] (ISO instants) is free on the CALLING
+  // org's primary calendar — used by the Engage meeting loop to validate a client's
+  // counter-proposed time. Reuses the SAME freeBusy fetch as freeSlots (fetchBusy).
+  // Never throws — a non-ok fetch degrades to { configured:false, free:false, reason }.
+  async isWindowFree(
+    orgId: string,
+    start: string,
+    end: string,
+  ): Promise<{ configured: boolean; free: boolean; reason: string | null }> {
+    const { primary: timeZone } = await this.resolveOrgTimeZones(orgId);
+    const fetched = await this.fetchBusy(orgId, start, end, timeZone);
+    if (!fetched.ok) {
+      return { configured: false, free: false, reason: fetched.reason };
+    }
+    return { configured: true, free: computeWindowFree(fetched.busy, start, end), reason: null };
+  }
+
+  // Up to 3 free slots nearest the requested `around` instant on the CALLING org's
+  // primary calendar — used by the Engage meeting loop to offer alternatives when a
+  // client's counter-proposed time is busy. Reuses freeSlots (already org-scoped).
+  // Never throws — returns [] when the org has no calendar / freeBusy fails.
+  async alternativesNear(
+    orgId: string,
+    around: string,
+  ): Promise<{ start: string; end: string }[]> {
+    const result = await this.freeSlots(orgId);
+    if (!result.configured) return [];
+    return pickNearest(result.slots, around, 3);
   }
   async createEvent(
     orgId: string,
