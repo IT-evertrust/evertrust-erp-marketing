@@ -7,9 +7,10 @@
 // owns neither the page title nor an <AppShell> — the shared GrowthTopbar renders
 // the "Nurture" header (matches Activate/Reach/Engage).
 import { useEffect, useMemo, useState } from 'react';
-import type { CampaignDto } from '@evertrust/shared';
+import type { CampaignDto, ProspectDto } from '@evertrust/shared';
 import { useRequirePermission } from '@/lib/permissions';
 import { useCampaigns } from '@/hooks/use-campaigns';
+import { useProspectsBoard } from '@/hooks/use-prospects';
 import {
   Select,
   SelectContent,
@@ -17,10 +18,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import { PipelineBoard } from './pipeline-board';
 import { ContractAssist } from './contract-assist';
 
 type Tab = 'pipeline' | 'contract';
+
+// The campaign Select's "show everything" sentinel — Radix Select can't hold an
+// empty-string value, so we map this to `undefined` campaignId (no filter).
+const ALL_CAMPAIGNS = '__all__';
+const ALL_NICHES = '__all__';
+
+type DatePreset = 'all' | '7' | '30' | '90';
+
+const DATE_PRESETS: Array<{ value: DatePreset; label: string }> = [
+  { value: 'all', label: 'All time' },
+  { value: '7', label: 'Last 7 days' },
+  { value: '30', label: 'Last 30 days' },
+  { value: '90', label: 'Last 90 days' },
+];
+
+const PAGE_SIZE = 200;
 
 function campaignLabel(c: CampaignDto): string {
   return c.name || c.project || c.nicheName || c.region;
@@ -47,17 +65,73 @@ function NurtureView() {
   const campaigns = useMemo(() => campaignsQ.data ?? [], [campaignsQ.data]);
 
   const [tab, setTab] = useState<Tab>('pipeline');
-  const [campaignId, setCampaignId] = useState<string | null>(null);
+  const [campaignId, setCampaignId] = useState<string>(ALL_CAMPAIGNS);
+  const [niche, setNiche] = useState<string>(ALL_NICHES);
+  const [datePreset, setDatePreset] = useState<DatePreset>('all');
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
 
-  // Default to the first ACTIVE campaign (or the first overall), keeping the
-  // selection valid if it disappears from the list.
+  // Default view is "All campaigns" (the full pipeline). If a specific campaign was
+  // selected and later disappears from the list, fall back to All campaigns.
   useEffect(() => {
-    const first = campaigns[0];
-    if (!first) return;
-    if (campaignId && campaigns.some((c) => c.id === campaignId)) return;
-    const active = campaigns.find((c) => c.lifecycle === 'ACTIVE');
-    setCampaignId((active ?? first).id);
+    if (
+      campaignId !== ALL_CAMPAIGNS &&
+      !campaigns.some((c) => c.id === campaignId)
+    ) {
+      setCampaignId(ALL_CAMPAIGNS);
+    }
   }, [campaigns, campaignId]);
+
+  // Debounce the search box (~300ms) before it hits the server-side `q` filter.
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  // Distinct niches across the org's campaigns, for the niche Select.
+  const niches = useMemo(() => {
+    const set = new Set<string>();
+    for (const c of campaigns) if (c.nicheName) set.add(c.nicheName);
+    return [...set].sort();
+  }, [campaigns]);
+
+  // campaignId === null means "All campaigns" (server returns all org prospects).
+  const effectiveCampaignId =
+    campaignId === ALL_CAMPAIGNS || campaignId == null ? undefined : campaignId;
+
+  // The board fetches the same query; we re-read it here (React Query dedupes by
+  // key) to apply the CLIENT-SIDE niche + date filters before the columns group.
+  const boardQ = useProspectsBoard({
+    campaignId: effectiveCampaignId,
+    q: search || undefined,
+    limit: PAGE_SIZE,
+    offset: 0,
+  });
+
+  // campaignId → nicheName, for the per-prospect niche filter.
+  const campaignNiche = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const c of campaigns) map.set(c.id, c.nicheName);
+    return map;
+  }, [campaigns]);
+
+  const filteredItems = useMemo<ProspectDto[]>(() => {
+    const items = boardQ.data?.items ?? [];
+    const cutoff =
+      datePreset === 'all'
+        ? null
+        : Date.now() - Number(datePreset) * 24 * 60 * 60 * 1000;
+    return items.filter((p) => {
+      if (niche !== ALL_NICHES && campaignNiche.get(p.campaignId) !== niche) {
+        return false;
+      }
+      if (cutoff != null) {
+        const ts = Date.parse(p.lastContactedAt ?? p.createdAt);
+        if (Number.isNaN(ts) || ts < cutoff) return false;
+      }
+      return true;
+    });
+  }, [boardQ.data, niche, datePreset, campaignNiche]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -74,14 +148,12 @@ function NurtureView() {
 
         {campaigns.length > 0 ? (
           <div className="pb-2">
-            <Select
-              value={campaignId ?? undefined}
-              onValueChange={setCampaignId}
-            >
+            <Select value={campaignId} onValueChange={setCampaignId}>
               <SelectTrigger className="h-8 w-[260px] border-[#d6dade] text-[12.5px]">
                 <SelectValue placeholder="Select a campaign" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value={ALL_CAMPAIGNS}>All campaigns</SelectItem>
                 {campaigns.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {campaignLabel(c)}
@@ -92,6 +164,47 @@ function NurtureView() {
           </div>
         ) : null}
       </div>
+
+      {tab === 'pipeline' && campaigns.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={niche} onValueChange={setNiche}>
+            <SelectTrigger className="h-8 w-[180px] border-[#d6dade] text-[12.5px]">
+              <SelectValue placeholder="Niche" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_NICHES}>All niches</SelectItem>
+              {niches.map((n) => (
+                <SelectItem key={n} value={n}>
+                  {n}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={datePreset}
+            onValueChange={(v) => setDatePreset(v as DatePreset)}
+          >
+            <SelectTrigger className="h-8 w-[150px] border-[#d6dade] text-[12.5px]">
+              <SelectValue placeholder="Date" />
+            </SelectTrigger>
+            <SelectContent>
+              {DATE_PRESETS.map((d) => (
+                <SelectItem key={d.value} value={d.value}>
+                  {d.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search company…"
+            className="h-8 w-[220px] border-[#d6dade] text-[12.5px]"
+          />
+        </div>
+      ) : null}
 
       {campaignsQ.isLoading ? (
         <div className="h-72 w-full animate-pulse rounded-[10px] border border-[#e4e7eb] bg-[#f6f7f9]" />
@@ -104,13 +217,17 @@ function NurtureView() {
           title="No campaigns yet"
           body="Create a campaign in Reach to start nurturing its pipeline."
         />
-      ) : !campaignId ? (
+      ) : tab === 'pipeline' ? (
+        <PipelineBoard
+          campaignId={effectiveCampaignId}
+          q={search || undefined}
+          items={filteredItems}
+        />
+      ) : !campaignId || campaignId === ALL_CAMPAIGNS ? (
         <EmptyPanel
           title="Pick a campaign"
-          body="Choose a campaign above to see its pipeline."
+          body="Choose a campaign above to use Contract Assist."
         />
-      ) : tab === 'pipeline' ? (
-        <PipelineBoard campaignId={campaignId} />
       ) : (
         <ContractAssist campaignId={campaignId} />
       )}

@@ -5,6 +5,7 @@ import type {
   GraduateProspectDto,
   GraduateProspectResultDto,
   LeadDto,
+  PipelineStage,
   ProspectStatus,
   UpdateProspectDto,
 } from '@evertrust/shared';
@@ -52,12 +53,14 @@ export interface ProspectBoardFilters {
   offset?: number;
 }
 
-// One org-scoped board page: the page rows, the post-filter pre-page total, and
-// the per-status tally for the campaign columns.
+// One org-scoped board page: the page rows, the post-filter pre-page total, the
+// per-status tally for the campaign columns, and the per-pipeline_stage tally for
+// the Nurture kanban columns.
 export interface ProspectBoardResult {
   items: ProspectRow[];
   total: number;
   statusCounts: Record<string, number>;
+  stageCounts: Record<string, number>;
 }
 
 const SEND_LIST_STATUSES: ProspectStatus[] = ['NEW', 'EMAILED'];
@@ -293,6 +296,13 @@ export class ProspectsService {
       statusCounts[r.status] = (statusCounts[r.status] ?? 0) + 1;
     }
 
+    // stageCounts: same full org(+campaign) set, tallied by pipeline_stage for the
+    // Nurture kanban columns (independent of status/q/page, like statusCounts).
+    const stageCounts: Record<string, number> = {};
+    for (const r of scoped) {
+      stageCounts[r.pipelineStage] = (stageCounts[r.pipelineStage] ?? 0) + 1;
+    }
+
     // Apply the page narrowing (status, then q) to get the filtered set.
     let filtered = scoped;
     if (filters.status) {
@@ -312,7 +322,7 @@ export class ProspectsService {
     const limit = filters.limit && filters.limit > 0 ? filters.limit : 50;
     const items = filtered.slice(offset, offset + limit);
 
-    return { items, total, statusCounts };
+    return { items, total, statusCounts, stageCounts };
   }
 
   // One prospect IN THE CALLER'S ORG (the UI drawer). 404 if missing or cross-org.
@@ -372,6 +382,65 @@ export class ProspectsService {
     if (patch.snoozeUntil !== undefined) {
       set.snoozeUntil = patch.snoozeUntil ? new Date(patch.snoozeUntil) : null;
     }
+
+    const updated = await this.db
+      .update(schema.prospects)
+      .set(set)
+      .where(
+        and(
+          eq(schema.prospects.organizationId, orgId),
+          eq(schema.prospects.id, id),
+        ),
+      )
+      .returning();
+    return updated[0] ?? before;
+  }
+
+  // Nurture kanban stage move from the UI (drag a card between columns). ORG-SCOPED:
+  // 404 if the prospect is not in `orgId`. Sets pipelineStage only. The JWT audit row
+  // is written by the global AuditInterceptor (the controller sets the context).
+  async updateStageForOrg(
+    orgId: string,
+    id: string,
+    patch: { stage: PipelineStage },
+  ): Promise<ProspectRow> {
+    // Confine to the tenant first (404 cross-org) — never patch another org's row.
+    const before = await this.getForOrg(orgId, id);
+
+    const updated = await this.db
+      .update(schema.prospects)
+      .set({ pipelineStage: patch.stage, updatedAt: new Date() })
+      .where(
+        and(
+          eq(schema.prospects.organizationId, orgId),
+          eq(schema.prospects.id, id),
+        ),
+      )
+      .returning();
+    return updated[0] ?? before;
+  }
+
+  // Nurture card deal-fields edit from the UI (deal value + contact name/phone).
+  // ORG-SCOPED: 404 if the prospect is not in `orgId`. PARTIAL — only the provided
+  // fields change. The JWT audit row is written by the global AuditInterceptor.
+  async updateDealForOrg(
+    orgId: string,
+    id: string,
+    patch: {
+      dealValue?: number;
+      contactName?: string | null;
+      contactPhone?: string | null;
+    },
+  ): Promise<ProspectRow> {
+    // Confine to the tenant first (404 cross-org) — never patch another org's row.
+    const before = await this.getForOrg(orgId, id);
+
+    const set: Partial<typeof schema.prospects.$inferInsert> = {
+      updatedAt: new Date(),
+    };
+    if (patch.dealValue !== undefined) set.dealValue = patch.dealValue;
+    if (patch.contactName !== undefined) set.contactName = patch.contactName;
+    if (patch.contactPhone !== undefined) set.contactPhone = patch.contactPhone;
 
     const updated = await this.db
       .update(schema.prospects)

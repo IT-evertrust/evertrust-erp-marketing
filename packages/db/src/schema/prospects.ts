@@ -12,7 +12,7 @@ import { organizations } from './org';
 import { campaigns } from './campaigns';
 import { nicheTargets } from './niches';
 import { leads } from './leads';
-import { prospectStatusEnum } from './enums';
+import { pipelineStageEnum, prospectStatusEnum } from './enums';
 
 // Cold-outreach target, written by Lead Satellite via POST /prospects/bulk
 // (upsert on the (campaignId, email) key) — the per-campaign leads-sheet
@@ -43,6 +43,16 @@ export const prospects = pgTable(
     sourceUrl: text('source_url'),
     emailVerified: boolean('email_verified').notNull().default(false),
     status: prospectStatusEnum('status').notNull().default('NEW'),
+    // Sales-pipeline stage for the Nurture kanban board. Additive to and
+    // independent of `status` (the cold-outreach funnel projection).
+    pipelineStage: pipelineStageEnum('pipeline_stage')
+      .notNull()
+      .default('INTEREST'),
+    // Deal value in whole euros.
+    dealValue: integer('deal_value').notNull().default(0),
+    // Named point of contact at the prospect company.
+    contactName: text('contact_name'),
+    contactPhone: text('contact_phone'),
     // Re-engage no earlier than this (set by a SNOOZE verdict).
     snoozeUntil: timestamp('snooze_until', { withTimezone: true }),
     followupCount: integer('followup_count').notNull().default(0),

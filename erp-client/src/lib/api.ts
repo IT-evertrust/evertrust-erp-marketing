@@ -85,6 +85,8 @@ import {
   ProspectListDto,
   ProspectStatus,
   UpdateProspectStatusDto,
+  UpdateProspectStageBody,
+  UpdateProspectDealBody,
   ReplyDraftDto,
   OutreachMessageDto,
   ContractDto,
@@ -543,6 +545,20 @@ export const api = {
       request<ProspectDto>(`/prospects/${encodeURIComponent(id)}/status`, {
         method: 'PATCH',
         body: UpdateProspectStatusDto.parse(input),
+        schema: ProspectDto,
+      }),
+
+    updateStage: (id: string, input: z.infer<typeof UpdateProspectStageBody>) =>
+      request<ProspectDto>(`/prospects/${encodeURIComponent(id)}/stage`, {
+        method: 'PATCH',
+        body: UpdateProspectStageBody.parse(input),
+        schema: ProspectDto,
+      }),
+
+    updateDeal: (id: string, input: z.infer<typeof UpdateProspectDealBody>) =>
+      request<ProspectDto>(`/prospects/${encodeURIComponent(id)}/deal`, {
+        method: 'PATCH',
+        body: UpdateProspectDealBody.parse(input),
         schema: ProspectDto,
       }),
   },

@@ -156,6 +156,17 @@ export const prospectStatusEnum = pgEnum('prospect_status', [
   'DO_NOT_CONTACT',
 ]);
 
+// Sales-pipeline stage of a prospect — the Nurture kanban board columns.
+// Independent of and additive to `status` (the cold-outreach funnel projection).
+export const pipelineStageEnum = pgEnum('pipeline_stage', [
+  'INTEREST',
+  'INTENT',
+  'CONSIDERATION',
+  'DECISION',
+  'WON',
+  'LOST',
+]);
+
 // Direction of an outreach_messages row: OUTBOUND = we sent it (Bazooka),
 // INBOUND = the prospect replied.
 export const messageDirectionEnum = pgEnum('message_direction', [

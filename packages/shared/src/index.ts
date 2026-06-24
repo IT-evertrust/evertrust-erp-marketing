@@ -1943,6 +1943,18 @@ export const ProspectStatus = z.enum([
 ]);
 export type ProspectStatus = z.infer<typeof ProspectStatus>;
 
+// Mirror of the pipeline_stage pgEnum — the Nurture sales-pipeline kanban column
+// a prospect currently sits in (distinct from `status`, the outreach projection).
+export const PipelineStage = z.enum([
+  'INTEREST',
+  'INTENT',
+  'CONSIDERATION',
+  'DECISION',
+  'WON',
+  'LOST',
+]);
+export type PipelineStage = z.infer<typeof PipelineStage>;
+
 // Read shape of a prospect row.
 export const ProspectDto = z.object({
   id: z.string().uuid(),
@@ -1957,6 +1969,10 @@ export const ProspectDto = z.object({
   sourceUrl: z.string().nullable(),
   emailVerified: z.boolean(),
   status: ProspectStatus,
+  pipelineStage: PipelineStage,
+  dealValue: z.number().int(),
+  contactName: z.string().nullable(),
+  contactPhone: z.string().nullable(),
   snoozeUntil: z.string().nullable(),
   followupCount: z.number().int().nonnegative(),
   lastContactedAt: z.string().nullable(),
@@ -2017,6 +2033,7 @@ export const ProspectListDto = z.object({
   items: z.array(ProspectDto),
   total: z.number().int().nonnegative(),
   statusCounts: z.record(ProspectStatus, z.number().int().nonnegative()),
+  stageCounts: z.record(PipelineStage, z.number().int().nonnegative()),
 });
 export type ProspectListDto = z.infer<typeof ProspectListDto>;
 
@@ -2029,6 +2046,22 @@ export const UpdateProspectStatusDto = z.object({
   snoozeUntil: z.string().datetime().nullable().optional(),
 });
 export type UpdateProspectStatusDto = z.infer<typeof UpdateProspectStatusDto>;
+
+// Body for PATCH /prospects/:id/stage — the Nurture kanban drag. Moves a prospect
+// to a new pipeline stage; org-scoped + audited, mirrors the status override.
+export const UpdateProspectStageBody = z.object({
+  stage: PipelineStage,
+});
+export type UpdateProspectStageBody = z.infer<typeof UpdateProspectStageBody>;
+
+// Body for PATCH /prospects/:id/deal — partial edit of the deal fields from the
+// Nurture card (deal value + contact name/phone). At least one is supplied.
+export const UpdateProspectDealBody = z.object({
+  dealValue: z.number().int().min(0).optional(),
+  contactName: z.string().nullable().optional(),
+  contactPhone: z.string().nullable().optional(),
+});
+export type UpdateProspectDealBody = z.infer<typeof UpdateProspectDealBody>;
 
 // ---- Reply classifications ----
 // Body for POST /reply-classifications — Reply Glock / RAG verdict. Inserted as

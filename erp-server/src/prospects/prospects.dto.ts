@@ -2,7 +2,9 @@ import { createZodDto } from 'nestjs-zod';
 import {
   GraduateProspectDto as GraduateProspectSchema,
   ProspectBulkDto as ProspectBulkSchema,
+  UpdateProspectDealBody as UpdateProspectDealSchema,
   UpdateProspectDto as UpdateProspectSchema,
+  UpdateProspectStageBody as UpdateProspectStageSchema,
   UpdateProspectStatusDto as UpdateProspectStatusSchema,
 } from '@evertrust/shared';
 
@@ -16,4 +18,12 @@ export class GraduateProspectBodyDto extends createZodDto(
 // JWT manual status override (PATCH /prospects/:id/status).
 export class UpdateProspectStatusBodyDto extends createZodDto(
   UpdateProspectStatusSchema,
+) {}
+// Nurture kanban stage move (PATCH /prospects/:id/stage).
+export class UpdateProspectStageBodyDto extends createZodDto(
+  UpdateProspectStageSchema,
+) {}
+// Nurture card deal-fields edit (PATCH /prospects/:id/deal).
+export class UpdateProspectDealBodyDto extends createZodDto(
+  UpdateProspectDealSchema,
 ) {}

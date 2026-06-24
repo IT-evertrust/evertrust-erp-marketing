@@ -30,6 +30,8 @@ import {
   GraduateProspectBodyDto,
   ProspectBulkBodyDto,
   UpdateProspectBodyDto,
+  UpdateProspectDealBodyDto,
+  UpdateProspectStageBodyDto,
   UpdateProspectStatusBodyDto,
 } from './prospects.dto';
 
@@ -50,6 +52,10 @@ function toDto(r: ProspectRow): ProspectDto {
     sourceUrl: r.sourceUrl,
     emailVerified: r.emailVerified,
     status: r.status,
+    pipelineStage: r.pipelineStage,
+    dealValue: r.dealValue,
+    contactName: r.contactName,
+    contactPhone: r.contactPhone,
     snoozeUntil: r.snoozeUntil ? r.snoozeUntil.toISOString() : null,
     followupCount: r.followupCount,
     lastContactedAt: r.lastContactedAt ? r.lastContactedAt.toISOString() : null,
@@ -102,6 +108,7 @@ export class ProspectsController {
       items: result.items.map(toDto),
       total: result.total,
       statusCounts: result.statusCounts as ProspectListDto['statusCounts'],
+      stageCounts: result.stageCounts as ProspectListDto['stageCounts'],
     };
   }
 
@@ -137,6 +144,57 @@ export class ProspectsController {
       entityId: row.id,
       action: 'STATUS_OVERRIDE',
       after: { status: row.status },
+    });
+    return toDto(row);
+  }
+
+  // Nurture kanban stage move from the UI (drag a card between columns). org-scoped
+  // + audited (campaigns:write). Mirrors PATCH /:id/status — distinct from the
+  // machine PATCH /:id which the outreach stages use.
+  @RequirePermissions('campaigns:write')
+  @Patch(':id/stage')
+  async updateStage(
+    @OrgId() orgId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateProspectStageBodyDto,
+    @Req() req: Request,
+  ): Promise<ProspectDto> {
+    const row = await this.prospects.updateStageForOrg(orgId, id, {
+      stage: body.stage,
+    });
+    setAuditContext(req, {
+      entity: 'prospects',
+      entityId: row.id,
+      action: 'STAGE_OVERRIDE',
+      after: { pipelineStage: row.pipelineStage },
+    });
+    return toDto(row);
+  }
+
+  // Nurture card deal-fields edit from the UI (deal value + contact name/phone).
+  // org-scoped + audited (campaigns:write). Partial — only provided fields change.
+  @RequirePermissions('campaigns:write')
+  @Patch(':id/deal')
+  async updateDeal(
+    @OrgId() orgId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateProspectDealBodyDto,
+    @Req() req: Request,
+  ): Promise<ProspectDto> {
+    const row = await this.prospects.updateDealForOrg(orgId, id, {
+      dealValue: body.dealValue,
+      contactName: body.contactName,
+      contactPhone: body.contactPhone,
+    });
+    setAuditContext(req, {
+      entity: 'prospects',
+      entityId: row.id,
+      action: 'DEAL_UPDATE',
+      after: {
+        dealValue: row.dealValue,
+        contactName: row.contactName,
+        contactPhone: row.contactPhone,
+      },
     });
     return toDto(row);
   }
