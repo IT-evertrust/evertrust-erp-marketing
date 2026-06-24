@@ -21,7 +21,7 @@ import {
   type SchedulingVerdict,
   type Slot,
 } from './meeting-loop';
-import { renderMeetingProse, type MeetingKind } from './meeting-time-format';
+import { renderMeetingProse, renderSlotBullets, type MeetingKind } from './meeting-time-format';
 
 // Invisible HTML-comment markers fence the system-owned meeting-time prose so re-stamping
 // replaces (never duplicates) it. They are stripped wherever the body is rendered (the
@@ -85,13 +85,41 @@ function stripProposedTimeSentences(body: string): string {
   return kept.join('\n\n');
 }
 
-// Stamp the authoritative dual-zone meeting time onto an email body as a NATURAL sentence
-// (rendered from the structured slot(s) — the SAME ones the calendar books — so the email
-// can never disagree with the invite; the LLM never writes the time). `kind` shapes the
-// phrasing (propose / accept / counter). Idempotent: any prior block is stripped before
-// re-inserting, so re-stamping (e.g. ACCEPTED after PROPOSED) never duplicates it. Any
-// LLM-invented clock time in the body is scrubbed first, so there's exactly ONE time
-// statement — the grounded block — placed just above the sign-off, not beneath it.
+// A line the drafter writes to introduce the time options, e.g. "Please find the proposed
+// time slots below:" or "Here are some times that work:". The grounded bullets are injected
+// right after it so they flow inside the LLM's own prose — not as a detached block. Requires
+// a cue word AND a trailing colon, so ordinary sentences are never mistaken for it.
+const SLOT_LEADIN_RE =
+  /^(?=.*\b(?:time|times|slot|slots|below|follow(?:ing)?|availability|option|options|propos(?:e|ed|ing))\b).*:\s*$/i;
+
+// Inject `block` immediately after the drafter's slot lead-in line, if present, so the times
+// sit between the LLM's "…below:" and its follow-up ask. Returns null when there's no such
+// lead-in (caller falls back to placing the block above the sign-off).
+function insertAtSlotLeadIn(body: string, block: string): string | null {
+  const lines = body.split('\n');
+  const idx = lines.findIndex((l) => SLOT_LEADIN_RE.test(l.trim()));
+  if (idx === -1) return null;
+  const head = lines.slice(0, idx + 1).join('\n').trimEnd();
+  const tail = lines.slice(idx + 1).join('\n').trim();
+  return tail ? `${head}\n\n${block}\n\n${tail}` : `${head}\n\n${block}`;
+}
+
+// A short, natural lead-in used ONLY when the drafter wrote none of its own — so the bullets
+// are never contextless. The trailing ask is left to the LLM, never a fixed wrapper.
+function fallbackLeadIn(kind: MeetingKind): string {
+  return kind === 'counter'
+    ? 'That time was just taken on our side — a couple of alternatives that work:'
+    : 'Here are a couple of times that work on my end:';
+}
+
+// Stamp the authoritative dual-zone meeting time onto an email body. The system owns ONLY
+// the TIMES (rendered from the SAME slot the calendar books, so the email can never disagree
+// with the invite); the surrounding wording is the drafter's natural prose. For propose /
+// counter the grounded bullets are injected at the drafter's "…below:" lead-in (or, lacking
+// one, above the sign-off with a short lead-in) — NO robotic "would either of these times
+// work for you? … let me know which suits you best" wrapper. `accept` keeps a one-line
+// confirmation. Idempotent + scrubs any LLM-invented clock time first, so there is exactly
+// one time statement.
 export function withMeetingTime(
   body: string,
   slots: Slot[],
@@ -102,8 +130,22 @@ export function withMeetingTime(
   const stripped = body.replace(MTG_BLOCK, '').trimEnd();
   if (slots.length === 0) return stripped;
   const scrubbed = stripProposedTimeSentences(stripped);
-  const prose = renderMeetingProse(slots, primaryTz, secondaryTz, kind);
-  return placeBeforeSignoff(scrubbed, `${MTG_OPEN}${prose}${MTG_CLOSE}`);
+
+  // accept: a single confirmed time → keep the short confirmation sentence above the sign-off.
+  if (kind === 'accept') {
+    const prose = renderMeetingProse(slots, primaryTz, secondaryTz, 'accept');
+    return placeBeforeSignoff(scrubbed, `${MTG_OPEN}${prose}${MTG_CLOSE}`);
+  }
+
+  // propose / counter: inject ONLY the grounded bullets, into the drafter's own flow.
+  const bullets = renderSlotBullets(slots, primaryTz, secondaryTz);
+  const atLeadIn = insertAtSlotLeadIn(scrubbed, `${MTG_OPEN}${bullets}${MTG_CLOSE}`);
+  if (atLeadIn) return atLeadIn;
+  // No lead-in from the drafter → a short natural lead-in + bullets, above the sign-off.
+  return placeBeforeSignoff(
+    scrubbed,
+    `${MTG_OPEN}${fallbackLeadIn(kind)}\n${bullets}${MTG_CLOSE}`,
+  );
 }
 
 // ===========================================================================

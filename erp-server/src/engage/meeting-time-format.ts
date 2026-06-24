@@ -52,6 +52,18 @@ function formatSlot(slot: Slot, primaryTz: string, secondaryTz: string | null): 
   return phrase;
 }
 
+// The grounded slot(s) as bare dual-zone bullet lines — no wrapper sentences. The
+// surrounding prose (a lead-in + the "which works for you?" ask) is the drafter LLM's
+// natural wording; the system only owns the authoritative TIMES, injected as these
+// bullets so they read as part of the email, not a robotic appended block.
+export function renderSlotBullets(
+  slots: Slot[],
+  primaryTz: string,
+  secondaryTz: string | null,
+): string {
+  return slots.map((s) => `• ${formatSlot(s, primaryTz, secondaryTz)}`).join('\n');
+}
+
 // Render the meeting time(s) as a natural sentence in Hanna's voice. `kind`:
 //   propose → offer the slot(s) and invite a pick or a counter-suggestion
 //   accept  → confirm the agreed slot (a calendar invite follows)
