@@ -84,6 +84,14 @@ export const reachAims = pgTable(
     region: text('region').notNull(),
     segment: text('segment'),
     source: text('source'),
+    // Per-campaign template placeholders used by the org default outreach template:
+    //   {{Type}}          -> targetType    (provider / supplier / …)
+    //   {{IndustryFocus}} -> industryFocus (IT / Power / Transportation / …)
+    //   {{TenderFocus}}   -> tenderFocus   (niche-in-sector, e.g. Cloud Infrastructure;
+    //                                       resolver falls back to `niche` when null)
+    targetType: text('target_type'),
+    industryFocus: text('industry_focus'),
+    tenderFocus: text('tender_focus'),
     // Which mailbox the campaign sends from (info | hanna) -> a connected
     // google_accounts row (resolved by email) for real Gmail delivery.
     sender: text('sender').notNull().default('info'),
