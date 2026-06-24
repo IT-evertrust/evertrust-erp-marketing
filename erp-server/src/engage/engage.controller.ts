@@ -63,6 +63,14 @@ export class EngageController {
     return this.scanService.scanAllForOrg(orgId);
   }
 
+  // Scan one inbox (all campaigns that send from it) for new replies — the inbox
+  // toggle's "Scan now". Campaigns sharing the mailbox share the rescan.
+  @RequirePermissions('campaigns:write')
+  @Post('scan-inbox')
+  scanInbox(@OrgId() orgId: string, @Query('email') email: string) {
+    return this.scanService.scanForMailbox(orgId, email);
+  }
+
   // --- gmail.watch real-time controls ---
 
   // Register a gmail.watch on every connected mailbox (needs GMAIL_PUBSUB_TOPIC).

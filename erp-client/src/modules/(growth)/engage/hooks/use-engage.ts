@@ -10,6 +10,7 @@ import {
   getEngageCampaigns,
   getEngagePersonas,
   scanCampaign,
+  scanInbox,
   setCampaignPersona,
   syncEngageInbox,
 } from '../services/engage.service';
@@ -133,27 +134,41 @@ export function useEngage() {
   // then refresh its queue in place. Slow (local Hermes) — the button shows a spinner.
   async function scanNow() {
     const aimId = selectedCampaignId;
-    if (!aimId || scanning) return;
+    if (scanning) return;
+    // If an inbox is selected in the toggle, rescan that whole inbox (every campaign
+    // that sends from it) for new replies; otherwise scan the selected campaign.
+    if (!inboxFilter && !aimId) return;
     setScanning(true);
     try {
-      const result = await scanCampaign(aimId);
-      if (!result.configured) {
-        toast.error(
-          result.reason ?? 'This campaign’s mailbox isn’t connected for reading.',
+      if (inboxFilter) {
+        const r = await scanInbox(inboxFilter);
+        toast.success(
+          r.scanned > 0
+            ? `Scanned ${inboxFilter}: ${r.scanned} thread${r.scanned === 1 ? '' : 's'} across ${r.aims} campaign${r.aims === 1 ? '' : 's'} · ${r.classified} classified.`
+            : `No new replies in ${inboxFilter}.`,
         );
-        return;
+      } else {
+        const result = await scanCampaign(aimId);
+        if (!result.configured) {
+          toast.error(
+            result.reason ?? 'This campaign’s mailbox isn’t connected for reading.',
+          );
+          return;
+        }
+        toast.success(
+          result.scanned > 0
+            ? `Scanned ${result.scanned} thread${result.scanned === 1 ? '' : 's'} · ${result.classified} classified.`
+            : 'No new replies found.',
+        );
       }
-      toast.success(
-        result.scanned > 0
-          ? `Scanned ${result.scanned} thread${result.scanned === 1 ? '' : 's'} · ${result.classified} classified.`
-          : 'No new replies found.',
-      );
-      // Re-read the queue so freshly-classified replies show without a reload.
-      const data = await getCampaignReplies(aimId);
-      setReplies(data);
-      setSelectedReplyId((prev) =>
-        data.some((r) => r.id === prev) ? prev : (data[0]?.id ?? ''),
-      );
+      // Re-read the selected campaign's queue so freshly-classified replies show.
+      if (aimId) {
+        const data = await getCampaignReplies(aimId);
+        setReplies(data);
+        setSelectedReplyId((prev) =>
+          data.some((r) => r.id === prev) ? prev : (data[0]?.id ?? ''),
+        );
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Scan failed.');
     } finally {

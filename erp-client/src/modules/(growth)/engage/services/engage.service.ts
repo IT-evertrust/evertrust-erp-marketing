@@ -117,6 +117,14 @@ export async function scanCampaign(aimId: string): Promise<EngageScanResult> {
   return mutate<EngageScanResult>('POST', `/engage/campaigns/${aimId}/scan`);
 }
 
+// Scan a whole inbox: rescans every campaign that sends from `email` for new replies
+// to its outreaches. Used by the inbox toggle's "Scan now".
+export async function scanInbox(
+  email: string,
+): Promise<{ aims: number; scanned: number; classified: number }> {
+  return mutate('POST', `/engage/scan-inbox?email=${encodeURIComponent(email)}`);
+}
+
 // The reply-sorter queue for a campaign: the persisted, reply_glock-classified
 // replies (category + AI draft + thread), read instantly from the server.
 export async function getCampaignReplies(

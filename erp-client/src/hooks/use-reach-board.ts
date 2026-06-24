@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  CreateReachLeadBody,
   PipelineStage,
   ReachBoardResultDto,
   UpdateReachLeadDealBody,
@@ -61,6 +62,71 @@ export function useUpdateReachLeadStage() {
           items: data.items.map((p) =>
             p.id === id ? { ...p, pipelineStage: stage } : p,
           ),
+          stageCounts: counts,
+        });
+      }
+      return {
+        snapshots: snapshots.filter(
+          (s): s is [readonly unknown[], ReachBoardResultDto] => !!s[1],
+        ),
+      };
+    },
+    onError: (_e, _vars, ctx) => {
+      for (const [key, data] of ctx?.snapshots ?? []) {
+        queryClient.setQueryData(key, data);
+      }
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.reachBoard.all });
+    },
+  });
+}
+
+// Add a Nurture card (the board's "+ Add deal"). Invalidates the board on success.
+export function useCreateReachLead() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    Awaited<ReturnType<typeof api.reachBoard.create>>,
+    ApiError,
+    CreateReachLeadBody
+  >({
+    mutationFn: (body) => api.reachBoard.create(body),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.reachBoard.all });
+    },
+  });
+}
+
+// Delete a Nurture card (the × on hover). Optimistically drops it from every cached
+// board page (and re-tallies its stage), then invalidates on settle.
+export function useDeleteReachLead() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    Awaited<ReturnType<typeof api.reachBoard.remove>>,
+    ApiError,
+    { id: string },
+    { snapshots: [readonly unknown[], ReachBoardResultDto][] }
+  >({
+    mutationFn: ({ id }) => api.reachBoard.remove(id),
+    onMutate: async ({ id }) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.reachBoard.all });
+      const snapshots = queryClient.getQueriesData<ReachBoardResultDto>({
+        queryKey: queryKeys.reachBoard.board(),
+        exact: false,
+      });
+      for (const [key, data] of snapshots) {
+        if (!data) continue;
+        const target = data.items.find((p) => p.id === id);
+        if (!target) continue;
+        const counts = { ...data.stageCounts };
+        counts[target.pipelineStage] = Math.max(
+          0,
+          (counts[target.pipelineStage] ?? 1) - 1,
+        );
+        queryClient.setQueryData<ReachBoardResultDto>(key, {
+          ...data,
+          items: data.items.filter((p) => p.id !== id),
+          total: Math.max(0, data.total - 1),
           stageCounts: counts,
         });
       }

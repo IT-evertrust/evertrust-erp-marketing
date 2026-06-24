@@ -91,6 +91,7 @@ import {
   ReachBoardLeadDto,
   UpdateReachLeadStageBody,
   UpdateReachLeadDealBody,
+  CreateReachLeadBody,
   ReplyDraftDto,
   OutreachMessageDto,
   ContractDto,
@@ -604,6 +605,19 @@ export const api = {
           body: UpdateReachLeadDealBody.parse(input),
           schema: ReachBoardLeadDto,
         },
+      ),
+
+    create: (input: z.infer<typeof CreateReachLeadBody>) =>
+      request<z.infer<typeof ReachBoardLeadDto>>('/growth/reach/leads', {
+        method: 'POST',
+        body: CreateReachLeadBody.parse(input),
+        schema: ReachBoardLeadDto,
+      }),
+
+    remove: (id: string) =>
+      request<{ deleted: boolean }>(
+        `/growth/reach/leads/${encodeURIComponent(id)}`,
+        { method: 'DELETE' },
       ),
   },
 

@@ -73,7 +73,10 @@ export function EngagePage() {
           <button
             type="button"
             onClick={engage.scanNow}
-            disabled={!engage.selectedCampaignId || engage.scanning}
+            disabled={
+              (!engage.selectedCampaignId && !engage.inboxFilter) ||
+              engage.scanning
+            }
             className="ml-auto inline-flex items-center gap-1.5 rounded-[7px] border border-[#15171c] bg-[#15171c] px-[11px] py-[7px] text-[10px] font-bold uppercase tracking-[0.08em] text-white transition-colors hover:bg-[#2a2d33] disabled:cursor-not-allowed disabled:opacity-50"
             title="Scan this campaign's inbox for new replies"
           >

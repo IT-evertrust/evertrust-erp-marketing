@@ -338,9 +338,16 @@ export class ReachRepository {
   async updateLeadDeal(
     orgId: string,
     leadId: string,
-    patch: { dealValue?: number; contactName?: string | null; phone?: string | null },
+    patch: {
+      company?: string;
+      dealValue?: number;
+      contactName?: string | null;
+      phone?: string | null;
+    },
   ): Promise<ReachLead | undefined> {
     const set: Partial<LeadRow> = { updatedAt: new Date() };
+    if (patch.company !== undefined && patch.company.trim())
+      set.company = patch.company.trim();
     if (patch.dealValue !== undefined) set.dealValue = patch.dealValue;
     if (patch.contactName !== undefined) set.contactName = patch.contactName;
     if (patch.phone !== undefined) set.phone = patch.phone;
@@ -356,6 +363,60 @@ export class ReachRepository {
       )
       .returning();
     return row ? rowToLead(row) : undefined;
+  }
+
+  // Manually add a Nurture card (a reach_lead) to an aim at a given stage — the
+  // board's "+ Add deal". The aim is verified org-scoped by the caller.
+  async createLead(
+    orgId: string,
+    input: {
+      aimId: string;
+      company: string;
+      pipelineStage: PipelineStage;
+      dealValue: number;
+      contactName?: string | null;
+      phone?: string | null;
+    },
+  ): Promise<ReachLead> {
+    const [row] = await this.db
+      .insert(schema.reachLeads)
+      .values({
+        organizationId: orgId,
+        aimId: input.aimId,
+        company: input.company,
+        pipelineStage: input.pipelineStage,
+        dealValue: input.dealValue,
+        contactName: input.contactName ?? null,
+        phone: input.phone ?? null,
+        status: 'NEW',
+        source: 'manual',
+      })
+      .returning();
+    return rowToLead(row!);
+  }
+
+  // Remove a Nurture card (the × on hover). Org-scoped; returns whether a row went.
+  async deleteLead(orgId: string, leadId: string): Promise<boolean> {
+    const rows = await this.db
+      .delete(schema.reachLeads)
+      .where(
+        and(
+          eq(schema.reachLeads.id, leadId),
+          tenantScope(orgId, schema.reachLeads),
+        ),
+      )
+      .returning({ id: schema.reachLeads.id });
+    return rows.length > 0;
+  }
+
+  // Verify an aim belongs to the org (guard before creating a lead under it).
+  async aimExists(orgId: string, aimId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: schema.reachAims.id })
+      .from(schema.reachAims)
+      .where(and(eq(schema.reachAims.id, aimId), tenantScope(orgId, schema.reachAims)))
+      .limit(1);
+    return !!row;
   }
 
   // One lead of this aim, org-scoped (the promote path). undefined if the lead is

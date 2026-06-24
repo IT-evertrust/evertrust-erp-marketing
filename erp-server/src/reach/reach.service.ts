@@ -194,11 +194,47 @@ export class ReachService {
   async updateLeadDeal(
     orgId: string,
     leadId: string,
-    patch: { dealValue?: number; contactName?: string | null; phone?: string | null },
+    patch: {
+      company?: string;
+      dealValue?: number;
+      contactName?: string | null;
+      phone?: string | null;
+    },
   ) {
     const lead = await this.repo.updateLeadDeal(orgId, leadId, patch);
     if (!lead) throw new NotFoundException('Lead not found');
     return lead;
+  }
+
+  // Add a Nurture card under an aim (the board's "+ Add deal").
+  async createLead(
+    orgId: string,
+    input: {
+      aimId: string;
+      company?: string;
+      pipelineStage?: PipelineStage;
+      dealValue?: number;
+      contactName?: string | null;
+      phone?: string | null;
+    },
+  ) {
+    if (!(await this.repo.aimExists(orgId, input.aimId))) {
+      throw new NotFoundException('Campaign not found');
+    }
+    return this.repo.createLead(orgId, {
+      aimId: input.aimId,
+      company: (input.company ?? '').trim() || 'New deal',
+      pipelineStage: input.pipelineStage ?? 'INTEREST',
+      dealValue: input.dealValue ?? 0,
+      contactName: input.contactName,
+      phone: input.phone,
+    });
+  }
+
+  async deleteLead(orgId: string, leadId: string) {
+    const ok = await this.repo.deleteLead(orgId, leadId);
+    if (!ok) throw new NotFoundException('Lead not found');
+    return { deleted: true };
   }
 
   // Lead Satellite: activated with the aim's config; scrapes leads and stores them

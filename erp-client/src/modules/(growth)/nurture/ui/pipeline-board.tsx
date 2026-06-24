@@ -1,9 +1,12 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { GripVertical, Loader2, Plus, X } from 'lucide-react';
+import { toast } from 'sonner';
 import type { PipelineStage, ReachBoardLeadDto } from '@evertrust/shared';
 import {
+  useCreateReachLead,
+  useDeleteReachLead,
   useReachBoard,
   useUpdateReachLeadStage,
   useUpdateReachLeadDeal,
@@ -14,9 +17,9 @@ import { cn } from '@/lib/utils';
 const PAGE_SIZE = 500;
 
 // The marketing department's pipeline (attached design) is a six-stage SALES funnel:
-// INTEREST → INTENT → CONSIDERATION → DECISION → WON / LOST. Cards are grouped by the
-// reach lead's `pipelineStage`; dragging a card to another column re-stages it, and the
-// € value is inline-editable. The Nurture pipeline IS reach_leads now (no prospects).
+// INTEREST → INTENT → CONSIDERATION → DECISION → WON / LOST. Cards are reach leads,
+// dragged between columns via the top-right grip, with an × to delete on hover, an
+// inline-editable company + € value, and a per-column "+ Add deal".
 const STAGES: Array<{
   key: PipelineStage;
   label: string;
@@ -36,10 +39,6 @@ function formatEuros(value: number): string {
   return `€${Math.round(value)}`;
 }
 
-// Faithful re-creation of the attached design's `.kanban.six`, white-themed with the
-// app's light tokens. Six columns, each a stack of `.lead` cards with a per-column
-// footer total (summed deal value). Data is REAL reach leads (GET /growth/reach/board);
-// `items` is the niche/date-filtered slice the page hands down.
 export function PipelineBoard({
   aimId,
   q: search,
@@ -51,12 +50,7 @@ export function PipelineBoard({
 }) {
   const [dragOverStage, setDragOverStage] = useState<PipelineStage | null>(null);
 
-  const query = useReachBoard({
-    aimId,
-    q: search,
-    limit: PAGE_SIZE,
-    offset: 0,
-  });
+  const query = useReachBoard({ aimId, q: search, limit: PAGE_SIZE, offset: 0 });
   const items = useMemo(
     () => filteredItems ?? query.data?.items ?? [],
     [filteredItems, query.data],
@@ -64,6 +58,7 @@ export function PipelineBoard({
   const stageCounts = query.data?.stageCounts ?? {};
 
   const updateStage = useUpdateReachLeadStage();
+  const createLead = useCreateReachLead();
 
   // Group the (filtered) page's leads into the six stages by pipelineStage.
   const byStage = useMemo(() => {
@@ -79,6 +74,18 @@ export function PipelineBoard({
     const moving = items.find((p) => p.id === id);
     if (!moving || moving.pipelineStage === stage) return;
     updateStage.mutate({ id, stage });
+  }
+
+  // "+ Add deal": needs a specific campaign (a reach lead belongs to one aim).
+  function handleAddDeal(stage: PipelineStage) {
+    if (!aimId) {
+      toast.error('Pick a campaign above to add a deal.');
+      return;
+    }
+    createLead.mutate(
+      { aimId, pipelineStage: stage, company: 'New deal' },
+      { onError: (e) => toast.error(e.message || 'Could not add the deal.') },
+    );
   }
 
   if (query.isLoading) {
@@ -115,7 +122,6 @@ export function PipelineBoard({
                   if (dragOverStage !== stage.key) setDragOverStage(stage.key);
                 }}
                 onDragLeave={(e) => {
-                  // Only clear when leaving the column itself (not a child).
                   if (!e.currentTarget.contains(e.relatedTarget as Node)) {
                     setDragOverStage((s) => (s === stage.key ? null : s));
                   }
@@ -126,9 +132,7 @@ export function PipelineBoard({
                 }}
                 className={cn(
                   'flex min-h-[440px] flex-col rounded-[10px] border bg-[#f6f7f9] p-2.5 transition-colors',
-                  isOver
-                    ? 'border-[#15171c] bg-[#eef0f3]'
-                    : 'border-[#e4e7eb]',
+                  isOver ? 'border-[#15171c] bg-[#eef0f3]' : 'border-[#e4e7eb]',
                 )}
               >
                 <div className="mb-[9px] flex items-center justify-between border-b border-[#e4e7eb] px-0.5 pb-[9px] text-[9.5px] font-bold uppercase tracking-[0.08em] text-[#959ca7]">
@@ -148,10 +152,19 @@ export function PipelineBoard({
                           : 'Empty'}
                     </div>
                   ) : (
-                    cards.map((p) => (
-                      <LeadCard key={p.id} lead={p} tone={stage.tone} />
-                    ))
+                    cards.map((p) => <LeadCard key={p.id} lead={p} tone={stage.tone} />)
                   )}
+
+                  {/* + Add deal (mock's .addlead) — appends a card to this stage. */}
+                  <button
+                    type="button"
+                    onClick={() => handleAddDeal(stage.key)}
+                    disabled={createLead.isPending}
+                    className="mt-1 flex items-center justify-center gap-1 rounded-[8px] border border-dashed border-[#c2c7ce] py-2 text-[10.5px] font-bold uppercase tracking-[0.06em] text-[#959ca7] transition-colors hover:border-[#15171c] hover:text-[#15171c] disabled:opacity-50"
+                  >
+                    <Plus className="size-3" />
+                    Add deal
+                  </button>
                 </div>
 
                 <div className="mt-[9px] border-t border-[#e4e7eb] pt-[9px] text-center">
@@ -168,10 +181,10 @@ export function PipelineBoard({
   );
 }
 
-// One `.lead` card. Company (bold) on top, contact name below, and a footer row with
-// the niche tag (left) + deal value €X.XK (right) — matching the design's `.lf`. WON
-// cards get a ✓; LOST cards are dimmed. The whole card is draggable (re-stages on drop).
-// The € value is an inline edit: click it → number input → blur/Enter saves.
+// One `.lead` card. Company (bold, inline-editable) on top, contact name + phone, and
+// a footer row with the niche tag (left) + deal value €X.XK (right). A top-right grip
+// drags the card to another stage; an × (on hover) deletes it. WON cards get a ✓;
+// LOST cards are dimmed.
 function LeadCard({
   lead: p,
   tone,
@@ -179,47 +192,108 @@ function LeadCard({
   lead: ReachBoardLeadDto;
   tone?: 'won' | 'lost';
 }) {
+  const cardRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
+  const [editingCompany, setEditingCompany] = useState(false);
+  const [companyDraft, setCompanyDraft] = useState('');
   const updateDeal = useUpdateReachLeadDeal();
+  const deleteLead = useDeleteReachLead();
 
   const company = p.company || p.email || 'Unknown';
 
-  function startEdit() {
-    setDraft(String(p.dealValue));
-    setEditing(true);
-  }
-
-  function commitEdit() {
+  function commitDeal() {
     setEditing(false);
     const next = Math.max(0, Math.round(Number(draft)));
     if (!Number.isFinite(next) || next === p.dealValue) return;
     updateDeal.mutate({ id: p.id, patch: { dealValue: next } });
   }
 
+  function commitCompany() {
+    setEditingCompany(false);
+    const next = companyDraft.trim();
+    if (!next || next === p.company) return;
+    updateDeal.mutate({ id: p.id, patch: { company: next } });
+  }
+
   return (
     <div
-      draggable
-      onDragStart={(e) => {
-        setDragging(true);
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', p.id);
-      }}
-      onDragEnd={() => setDragging(false)}
+      ref={cardRef}
       className={cn(
-        'relative w-full rounded-[8px] border border-[#d6dade] bg-white p-2.5 text-left transition-colors hover:border-[#c2c7ce] hover:bg-[#fbfbfc]',
+        'group relative w-full rounded-[8px] border border-[#d6dade] bg-white p-2.5 text-left transition-colors hover:border-[#c2c7ce]',
         tone === 'lost' ? 'opacity-60' : '',
         dragging ? 'opacity-40' : '',
       )}
     >
-      <div className="truncate text-[12px] font-bold text-[#15171c]">
-        {company}
-        {tone === 'won' ? <span className="text-[#15171c]"> ✓</span> : null}
-      </div>
+      {/* delete × — appears on hover, left of the grip */}
+      <button
+        type="button"
+        title="Remove deal"
+        onClick={() => deleteLead.mutate({ id: p.id })}
+        className="absolute right-[26px] top-1.5 grid size-4 place-items-center rounded text-[#959ca7] opacity-0 transition group-hover:opacity-100 hover:bg-[#f6f7f9] hover:text-[#c0392b]"
+      >
+        <X className="size-3.5" />
+      </button>
+
+      {/* grip — the drag handle (drags the whole card to another stage) */}
+      <span
+        draggable
+        title="Drag to another stage"
+        onDragStart={(e) => {
+          setDragging(true);
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', p.id);
+          if (cardRef.current) e.dataTransfer.setDragImage(cardRef.current, 14, 14);
+        }}
+        onDragEnd={() => setDragging(false)}
+        className="absolute right-2 top-2 cursor-grab text-[#8a9099] opacity-50 transition hover:opacity-95 active:cursor-grabbing"
+      >
+        <GripVertical className="size-3.5" />
+      </span>
+
+      {editingCompany ? (
+        <input
+          autoFocus
+          value={companyDraft}
+          onChange={(e) => setCompanyDraft(e.target.value)}
+          onBlur={commitCompany}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') commitCompany();
+            if (e.key === 'Escape') setEditingCompany(false);
+          }}
+          className="w-[calc(100%-34px)] rounded-[4px] border border-[#c2c7ce] px-1 text-[12px] font-bold text-[#15171c] outline-none"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            setCompanyDraft(p.company ?? '');
+            setEditingCompany(true);
+          }}
+          title="Edit company"
+          className="block max-w-[calc(100%-34px)] truncate pr-1 text-left text-[12px] font-bold text-[#15171c] hover:underline"
+        >
+          {company}
+          {tone === 'won' ? <span className="text-[#15171c]"> ✓</span> : null}
+        </button>
+      )}
+
       {p.contactName ? (
         <div className="mt-px truncate text-[10.5px] text-[#959ca7]">
           {p.contactName}
+        </div>
+      ) : null}
+
+      {/* phone row (mock's .ph) */}
+      {p.phone ? (
+        <div className="mt-1 flex items-center gap-1.5">
+          <span className="rounded-[4px] border border-[#d6dade] px-1 text-[8px] font-bold leading-[14px] tracking-[0.06em] text-[#959ca7]">
+            TEL
+          </span>
+          <span className="text-[10.5px] font-semibold text-[#5b626d]">
+            {p.phone}
+          </span>
         </div>
       ) : null}
 
@@ -238,11 +312,9 @@ function LeadCard({
             autoFocus
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            onClick={(e) => e.stopPropagation()}
-            onBlur={commitEdit}
+            onBlur={commitDeal}
             onKeyDown={(e) => {
-              e.stopPropagation();
-              if (e.key === 'Enter') commitEdit();
+              if (e.key === 'Enter') commitDeal();
               if (e.key === 'Escape') setEditing(false);
             }}
             className="h-6 w-[88px] rounded-[5px] border border-[#c2c7ce] bg-white px-1.5 text-right text-[11px] font-bold text-[#15171c] outline-none focus-visible:border-[#15171c]"
@@ -250,9 +322,9 @@ function LeadCard({
         ) : (
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              startEdit();
+            onClick={() => {
+              setDraft(String(p.dealValue));
+              setEditing(true);
             }}
             className="rounded-[5px] px-1 text-[11.5px] font-bold text-[#15171c] hover:bg-[#eceef1]"
             title="Edit deal value"

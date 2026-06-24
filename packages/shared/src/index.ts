@@ -2107,11 +2107,24 @@ export type UpdateReachLeadStageBody = z.infer<typeof UpdateReachLeadStageBody>;
 
 // Body for PATCH /growth/reach/leads/:leadId/deal — inline deal/contact edit.
 export const UpdateReachLeadDealBody = z.object({
+  company: z.string().max(200).optional(),
   dealValue: z.number().int().min(0).optional(),
   contactName: z.string().nullable().optional(),
   contactPhone: z.string().nullable().optional(),
 });
 export type UpdateReachLeadDealBody = z.infer<typeof UpdateReachLeadDealBody>;
+
+// Body for POST /growth/reach/leads — manually add a Nurture card under an aim
+// (the board's "+ Add deal"). company defaults to "New deal" server-side if blank.
+export const CreateReachLeadBody = z.object({
+  aimId: z.string().uuid(),
+  company: z.string().max(200).optional(),
+  pipelineStage: PipelineStage.optional(),
+  dealValue: z.number().int().min(0).optional(),
+  contactName: z.string().max(200).nullable().optional(),
+  contactPhone: z.string().max(80).nullable().optional(),
+});
+export type CreateReachLeadBody = z.infer<typeof CreateReachLeadBody>;
 
 // ---- Reply classifications ----
 // Body for POST /reply-classifications — Reply Glock / RAG verdict. Inserted as

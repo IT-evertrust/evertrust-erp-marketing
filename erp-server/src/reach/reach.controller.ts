@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Header,
   Param,
@@ -20,6 +21,7 @@ import { OrgId } from '../common/tenant';
 import { setAuditContext } from '../common/audit-context';
 import { CreateAimBodyDto, SetAutoSendBodyDto } from './dto/create-aim.dto';
 import {
+  CreateReachLeadBodyDto,
   UpdateReachLeadDealBodyDto,
   UpdateReachLeadStageBodyDto,
 } from './dto/nurture-board.dto';
@@ -127,6 +129,41 @@ export class ReachController {
     return lead;
   }
 
+  // Add a Nurture card under an aim (the board's "+ Add deal"). org-scoped + audited.
+  @RequirePermissions('campaigns:write')
+  @Post('leads')
+  async createLead(
+    @OrgId() orgId: string,
+    @Body() body: CreateReachLeadBodyDto,
+    @Req() req: Request,
+  ) {
+    const lead = await this.reachService.createLead(orgId, body);
+    setAuditContext(req, {
+      entity: 'reach_leads',
+      entityId: lead.id,
+      action: 'CREATE_DEAL',
+      after: { aimId: body.aimId, stage: lead.pipelineStage },
+    });
+    return lead;
+  }
+
+  // Delete a Nurture card (the × on hover). org-scoped + audited.
+  @RequirePermissions('campaigns:write')
+  @Delete('leads/:leadId')
+  async deleteLead(
+    @OrgId() orgId: string,
+    @Param('leadId', ParseUUIDPipe) leadId: string,
+    @Req() req: Request,
+  ) {
+    const result = await this.reachService.deleteLead(orgId, leadId);
+    setAuditContext(req, {
+      entity: 'reach_leads',
+      entityId: leadId,
+      action: 'DELETE_DEAL',
+    });
+    return result;
+  }
+
   // Inline-edit a lead's deal value / contact fields. org-scoped + audited.
   @RequirePermissions('campaigns:write')
   @Patch('leads/:leadId/deal')
@@ -137,6 +174,7 @@ export class ReachController {
     @Req() req: Request,
   ) {
     const lead = await this.reachService.updateLeadDeal(orgId, leadId, {
+      company: body.company,
       dealValue: body.dealValue,
       contactName: body.contactName,
       phone: body.contactPhone,
