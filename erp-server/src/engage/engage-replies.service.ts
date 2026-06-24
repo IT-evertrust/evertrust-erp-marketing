@@ -568,6 +568,11 @@ export class EngageRepliesService {
     followUpWindow: string | null;
     scheduling: SchedulingVerdict;
   } | null> {
+    // Ground the agent's time parsing: the actual current instant + the org's timezone,
+    // so "Friday this week at 10:00 CET" resolves correctly (and not to a quoted footer
+    // timestamp). Resolved per-scan-lead — a single indexed org_config read, dwarfed by
+    // the LLM call.
+    const { primary: orgTimeZone } = await this.calendar.getOrgTimeZones(aim.organizationId);
     const input = {
       reply_id: `${aim.id}:${inbound.id}`,
       campaign_id: aim.id,
@@ -577,6 +582,8 @@ export class EngageRepliesService {
       subject: inbound.subject ?? '(no subject)',
       body: inbound.body.slice(0, THREAD_BODY_MAX),
       received_at: new Date(inbound.internalMs).toISOString(),
+      now: new Date().toISOString(),
+      timezone: orgTimeZone,
       proposed_slots: proposedSlots,
       previous_thread: thread
         .filter((m) => m.id !== inbound.id)

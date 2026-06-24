@@ -28,8 +28,13 @@ OFFERED SLOTS in the user message, numbered from 0). Return a "scheduling" objec
 - accepted_index: the 0-based number of the offered slot they accepted, when the reply
   references one of the numbered options ("the first works", "Wednesday's fine", "option 2",
   "let's do the 10am one"). Otherwise null.
-- counter_time: an ISO-8601 timestamp ONLY when they propose a concrete DIFFERENT time we did
-  NOT offer ("can we do Friday at 3pm instead?"). Otherwise null.
+- counter_time: an ISO-8601 UTC timestamp ONLY when they propose a concrete DIFFERENT time we
+  did NOT offer ("can we do Friday at 3pm instead?"). Resolve relative dates/times against the
+  CURRENT DATE/TIME and org timezone shown in the user message: e.g. "Friday this week at
+  10:00 CET" -> that Friday's date at 10:00 in that zone, converted to UTC (trailing "Z"). A
+  time stated with NO zone is in the org timezone. IGNORE quoted earlier-message footers and
+  their timestamps ("On ... wrote:", "Vao ... da viet:") — only the lead's NEW request counts.
+  If you cannot pin BOTH a concrete date AND time, set counter_time null. Otherwise null.
 - Set BOTH to null when there is no scheduling signal, when no slots were offered, or when the
   reply is too vague to pin to a slot or a concrete time. Never set both at once — prefer
   accepted_index when the reply clearly picks an offered slot.
@@ -57,7 +62,9 @@ Respond with exactly this JSON shape:
   }
 }"""
 
-CLASSIFY_USER_PROMPT_TEMPLATE = """CAMPAIGN CONTEXT:
+CLASSIFY_USER_PROMPT_TEMPLATE = """CURRENT DATE/TIME: {now} (org timezone: {timezone})
+
+CAMPAIGN CONTEXT:
 {campaign_context}
 
 OFFERED SLOTS (meeting times we already proposed to this lead, numbered from 0):
