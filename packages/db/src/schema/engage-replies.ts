@@ -9,6 +9,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
+import { meetings } from './meetings';
 import { organizations } from './org';
 import { reachAims } from './reach';
 import { reachLeads } from './reach';
@@ -52,6 +53,20 @@ export const reachLeadReplies = pgTable(
     thread: jsonb('thread'),
     // For TEMPORARY: the follow-up window the lead suggested.
     followUpWindow: text('follow_up_window'),
+    // --- meeting loop (propose → accept/counter → book) ---
+    // The slots we offered the client (set on a Propose-Times send / a COUNTER round).
+    proposedSlots: jsonb('proposed_slots').$type<{ start: string; end: string }[]>(),
+    // NONE | PROPOSED | ACCEPTED | COUNTER | BOOKED — drives the reply-card banner.
+    meetingStatus: text('meeting_status').notNull().default('NONE'),
+    // The Gmail message id of the inbound counter-proposal we last resolved into a
+    // COUNTER round. The scan makes the COUNTER resolution idempotent per inbound: while
+    // this matches the latest inbound (and status is still COUNTER) it skips re-fetching
+    // alternatives and re-drafting.
+    counterResolvedInboundId: text('counter_resolved_inbound_id'),
+    // The resolved slot to book {start,end} when meetingStatus = ACCEPTED.
+    acceptedSlot: jsonb('accepted_slot').$type<{ start: string; end: string }>(),
+    // The Activate meeting created when BOOKED — CRM link + idempotency guard.
+    bookedMeetingId: uuid('booked_meeting_id').references(() => meetings.id),
     // Operator state: a reply has been sent for this thread.
     handled: boolean('handled').notNull().default(false),
     sentAt: timestamp('sent_at', { withTimezone: true }),

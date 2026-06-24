@@ -14,7 +14,9 @@ from erp_agents.workflows.engage.reply_glock.models import (
     ReplyDraft,
     ReplyGlockInput,
     ReplyGlockOutput,
+    SchedulingVerdict,
     ThreadMessage,
+    parse_scheduling,
 )
 from erp_agents.workflows.engage.reply_glock.prompts import (
     CLASSIFY_SYSTEM_PROMPT,
@@ -51,6 +53,40 @@ def detect_language(text: str) -> str:
     words = re.findall(r"[a-zäöüß]+", t)
     hits = sum(1 for w in words if w in _GERMAN_WORDS)
     return "de" if hits >= 2 else "en"
+
+
+# Call-coaching / transcript scaffolding the drafter must never emit or be primed by.
+# A persona is the SAME `personas.system_prompt` Activate uses for call coaching, so it
+# can carry rubric scaffolding ("[00:00] - [00:10] Value Equation\nStrengths:\n- ...").
+# A weak local draft model then echoes that rubric after the sign-off.
+#
+# Both markers are anchored to keep a legitimate email body intact:
+#   - a transcript timestamp ONLY at the start of a line ("[00:00] - [00:10] ...") — so an
+#     inline bracketed time like "meet at [14:00]" is NOT a match;
+#   - a coaching-rubric header ONLY when it is the WHOLE line ("Strengths:") — so inline
+#     prose like "Strengths: durability and price." is NOT a match.
+_COACHING_SCAFFOLDING_RE = re.compile(
+    r"^[ \t]*\[\d{1,2}:\d{2}\]"  # transcript timestamp line, e.g. "[00:00] - [00:10] ..."
+    r"|^[ \t]*(?:strengths|weaknesses|areas?\s+for\s+improvement"
+    r"|what\s+worked|what\s+to\s+improve|improvements?)[ \t]*:[ \t]*$",  # rubric header line
+    flags=re.IGNORECASE | re.MULTILINE,
+)
+
+
+def strip_coaching_scaffolding(text: str | None) -> str:
+    """Drop a call-coaching / transcript-rubric block (and everything after it).
+
+    Used both to keep the scaffolding out of the draft prompt (so it never primes the
+    model) and as the final guard on the produced body (so it can never reach the email).
+    Content-only / org-agnostic — it inspects the text, not any tenant config, so it is
+    safe for every organization. Returns "" for falsy input.
+    """
+    if not text:
+        return ""
+    match = _COACHING_SCAFFOLDING_RE.search(text)
+    if not match:
+        return text
+    return text[: match.start()].rstrip()
 
 
 # Maps each status to the draft's purpose when the LLM omits/garbles it.
@@ -96,13 +132,14 @@ class ReplyGlockWorkflow(Workflow):
                     reasoning="interactive re-draft",
                     extracted_signals=ExtractedSignals(),
                 )
+                scheduling = SchedulingVerdict()
                 trace.append(
                     self.trace_step(
                         "redraft_skip_classify", None, {"status": classification.status}
                     )
                 )
             else:
-                classification, classify_trace = self.classify_reply(
+                classification, scheduling, classify_trace = self.classify_reply(
                     workflow_input=workflow_input, normalized=normalized
                 )
                 trace.extend(classify_trace)
@@ -117,6 +154,7 @@ class ReplyGlockWorkflow(Workflow):
                 normalized=normalized,
                 classification=classification,
                 draft=draft,
+                scheduling=scheduling,
             )
             trace.append(self.trace_step("compose_output", None, output.model_dump()))
 
@@ -157,10 +195,13 @@ class ReplyGlockWorkflow(Workflow):
 
     def classify_reply(
         self, *, workflow_input: ReplyGlockInput, normalized: NormalizedReply
-    ) -> tuple[ReplyClassification, list[AgentTraceStep]]:
+    ) -> tuple[ReplyClassification, SchedulingVerdict, list[AgentTraceStep]]:
         trace: list[AgentTraceStep] = []
         user_prompt = CLASSIFY_USER_PROMPT_TEMPLATE.format(
+            now=workflow_input.now or "(not provided)",
+            timezone=workflow_input.timezone or "(not provided)",
             campaign_context=self.serialize_campaign_context(workflow_input.campaign_context),
+            proposed_slots=self.serialize_proposed_slots(workflow_input.proposed_slots),
             thread=self.serialize_previous_thread(workflow_input.previous_thread),
             sender_name=workflow_input.sender_name or "Unknown",
             company=workflow_input.company or "Unknown",
@@ -175,7 +216,13 @@ class ReplyGlockWorkflow(Workflow):
         trace.append(self.trace_step("classify_llm", {"model_call": "classify"}, raw))
 
         classification = ReplyClassification.model_validate(raw)
-        return classification, trace
+        # Map the model's raw scheduling JSON through the pure validator (clamps a bad
+        # index to None). Tolerate a missing/garbled "scheduling" key by passing {}.
+        raw_sched = raw.get("scheduling") if isinstance(raw, dict) else None
+        scheduling = parse_scheduling(
+            raw_sched if isinstance(raw_sched, dict) else {}, workflow_input.proposed_slots
+        )
+        return classification, scheduling, trace
 
     def draft_reply(
         self,
@@ -207,14 +254,21 @@ class ReplyGlockWorkflow(Workflow):
         # Persona (F4): imitate a salesperson's voice/pattern. Training notes (F3):
         # accumulated operator preferences the draft must always honour. Instruction:
         # a one-off interactive revision of the current draft ("Write & Fix").
-        if workflow_input.persona:
+        # Scrub coaching-rubric scaffolding out of the persona/guidance BEFORE they reach
+        # the prompt — a coaching persona must not prime the drafter to emit a rubric.
+        persona = strip_coaching_scaffolding(workflow_input.persona)
+        if persona:
             user_prompt += (
                 "\n\nPERSONA — write in this salesperson's voice, rhythm, and "
                 "persuasion pattern (embody the style; do NOT name or mention them):\n"
-                f"{workflow_input.persona}"
+                f"{persona}"
             )
         if workflow_input.guidance:
-            notes = "\n".join(f"- {g}" for g in workflow_input.guidance if g)
+            notes = "\n".join(
+                f"- {scrubbed}"
+                for g in workflow_input.guidance
+                if g and (scrubbed := strip_coaching_scaffolding(g))
+            )
             if notes:
                 user_prompt += (
                     "\n\nLEARNED PREFERENCES — operator instructions you must ALWAYS "
@@ -222,11 +276,13 @@ class ReplyGlockWorkflow(Workflow):
                 )
         if workflow_input.instruction:
             cur = workflow_input.current_draft or {}
-            if cur.get("body"):
+            # Scrub a re-fed prior draft too, so a once-leaked draft can't re-prime the model.
+            cur_body = strip_coaching_scaffolding(cur.get("body"))
+            if cur_body:
                 user_prompt += (
                     "\n\nCURRENT DRAFT (revise THIS — keep what works, change only "
                     f"what the instruction asks):\nSubject: {cur.get('subject', '')}\n"
-                    f"{cur.get('body', '')}"
+                    f"{cur_body}"
                 )
             user_prompt += (
                 "\n\nOPERATOR INSTRUCTION — apply this change to the draft:\n"
@@ -303,6 +359,9 @@ class ReplyGlockWorkflow(Workflow):
             maxsplit=1,
             flags=re.IGNORECASE,
         )[0].strip()
+        # Final guard: drop any call-coaching / transcript-rubric scaffolding the model
+        # echoed from a coaching persona — it must never reach the outbound email body.
+        t = strip_coaching_scaffolding(t)
         if len(t) >= 2 and t[0] in "\"'" and t[-1] == t[0]:
             t = t[1:-1].strip()
         return t.strip()
@@ -314,6 +373,7 @@ class ReplyGlockWorkflow(Workflow):
         normalized: NormalizedReply,
         classification: ReplyClassification,
         draft: ReplyDraft,
+        scheduling: SchedulingVerdict,
     ) -> ReplyGlockOutput:
         signals = classification.extracted_signals
         follow_up_needed = classification.status in ("TEMPORARY", "UNSURE")
@@ -339,6 +399,7 @@ class ReplyGlockWorkflow(Workflow):
             draft=draft,
             follow_up_needed=follow_up_needed,
             follow_up_date_or_window=follow_up_window,
+            scheduling=scheduling,
             ui=ui_bucket_for_status(classification.status),
         )
 
@@ -353,6 +414,18 @@ class ReplyGlockWorkflow(Workflow):
             f"Offer: {ctx.offer}\n"
             f"Sender: {ctx.sender_name} ({ctx.sender_company})"
         )
+
+    @staticmethod
+    def serialize_proposed_slots(slots: list[dict]) -> str:
+        """Number the offered slots from 0 so the model can accept one BY INDEX."""
+        if not slots:
+            return "No slots were offered to this lead yet."
+        lines = []
+        for i, slot in enumerate(slots):
+            start = slot.get("start", "?") if isinstance(slot, dict) else str(slot)
+            end = slot.get("end", "?") if isinstance(slot, dict) else "?"
+            lines.append(f"[{i}] {start} -> {end}")
+        return "\n".join(lines)
 
     @staticmethod
     def serialize_previous_thread(thread: list[ThreadMessage]) -> str:

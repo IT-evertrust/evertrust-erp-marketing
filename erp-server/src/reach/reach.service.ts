@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   Logger,
   NotFoundException,
@@ -8,6 +9,7 @@ import {
 
 import { AppConfigService } from '../config/app-config.service';
 import type { CreateAimDto } from './dto/create-aim.dto';
+import { normalizeTemplateInput, renderTemplate } from './reach-template';
 import { ReachAgentClient } from './reach.agent';
 import { GmailSenderService } from './gmail-sender.service';
 import { ReachRepository, type LeadInsert } from './reach.repository';
@@ -185,21 +187,33 @@ export class ReachService {
     // mid-run) leaves the aim stuck at RUNNING. If it's older than the hard cap,
     // flip it to FAILED so the UI's countdown ends instead of hanging forever. The
     // cap uses the org's configured scrape timeout (resolved once, only when needed).
-    if (!aims.some((a) => a.status === 'RUNNING')) return aims;
-    const timeoutMs = this.resolveScrapeTimeoutMs(
-      await this.workflowConfig.getLeadScraper(orgId),
-    );
-    return Promise.all(
-      aims.map(async (a) =>
-        a.status === 'RUNNING' && this.isScrapeStale(a, timeoutMs)
-          ? (await this.repo.markScrapeFailed(
-              orgId,
-              a.id,
-              'The scrape did not finish in time and was interrupted. Try again, or raise the scrape timeout in Configuration.',
-            )) ?? { ...a, status: 'FAILED' as const, scrapeError: null }
-          : a,
-      ),
-    );
+    let healed = aims;
+    if (aims.some((a) => a.status === 'RUNNING')) {
+      const timeoutMs = this.resolveScrapeTimeoutMs(
+        await this.workflowConfig.getLeadScraper(orgId),
+      );
+      healed = await Promise.all(
+        aims.map(async (a) =>
+          a.status === 'RUNNING' && this.isScrapeStale(a, timeoutMs)
+            ? (await this.repo.markScrapeFailed(
+                orgId,
+                a.id,
+                'The scrape did not finish in time and was interrupted. Try again, or raise the scrape timeout in Configuration.',
+              )) ?? { ...a, status: 'FAILED' as const, scrapeError: null }
+            : a,
+        ),
+      );
+    }
+    // Org default is the single source: every campaign shows AND sends it (the
+    // per-campaign AI-generated template is only a fallback when no org default is set).
+    // `usingOrgDefault` lets the Email Generator render it read-only ("edit in Templates").
+    const orgDefault = await this.repo.getDefaultTemplate(orgId);
+    if (!orgDefault) return healed;
+    return healed.map((aim) => ({
+      ...aim,
+      templates: orgDefault,
+      usingOrgDefault: true,
+    }));
   }
 
   async getAim(orgId: string, aimId: string): Promise<ReachAim> {
@@ -367,8 +381,11 @@ export class ReachService {
     round: ReachRound,
     leads: SentLead[],
   ): Promise<number> {
-    const tmpl = this.templateFor(aim, round);
+    // Org-wide default template wins when set, else the campaign's generated templates.
+    const orgDefault = await this.repo.getDefaultTemplate(orgId);
+    const tmpl = this.templateFor(aim, round, orgDefault);
     if (!tmpl || leads.length === 0) return 0;
+    const signatureImageUrl = await this.repo.getSignatureImageUrl(orgId);
 
     const { mode, testRecipient, cap } = await this.resolveSendConfig(orgId);
     const targets = mode === 'live' ? leads : leads.slice(0, cap);
@@ -377,8 +394,14 @@ export class ReachService {
     for (const lead of targets) {
       const recipient = mode === 'live' ? lead.email : testRecipient;
       if (!recipient) continue;
-      const subject = tmpl.subject.replace(/\{\{Company Name\}\}/g, lead.company);
-      let body = tmpl.body.replace(/\{\{Company Name\}\}/g, lead.company);
+      const vars = {
+        company: lead.company,
+        type: aim.targetType ?? '',
+        industryFocus: aim.industryFocus ?? '',
+        tenderFocus: aim.tenderFocus ?? aim.niche,
+      };
+      const subject = renderTemplate(tmpl.subject, vars);
+      let body = renderTemplate(tmpl.body, vars);
       if (mode !== 'live') {
         body =
           `[TEST MODE — would be sent to ${lead.email ?? '(no email)'} for ${lead.company}]\n\n` +
@@ -390,6 +413,7 @@ export class ReachService {
           subject,
           body,
           fromName: 'EVERTRUST GmbH',
+          signatureImageUrl,
         });
         delivered++;
       } catch (err) {
@@ -404,14 +428,48 @@ export class ReachService {
     return delivered;
   }
 
-  private templateFor(aim: ReachAim, round: ReachRound): EmailBlock | null {
-    const t = aim.templates;
+  private templateFor(
+    aim: ReachAim,
+    round: ReachRound,
+    orgDefault?: ReachTemplates | null,
+  ): EmailBlock | null {
+    const t = orgDefault ?? aim.templates;
     if (!t) return null;
     return round === 'cold'
       ? t.cold_outreach
       : round === 'followup'
         ? t.follow_up
         : t.final_push;
+  }
+
+  // The org-wide default outreach template (or null when none is set).
+  getDefaultTemplate(orgId: string): Promise<ReachTemplates | null> {
+    return this.repo.getDefaultTemplate(orgId);
+  }
+
+  // Save the org-wide default template from a pasted/uploaded payload (any round
+  // spelling). Normalizes + validates; a bad shape becomes a 400.
+  async setDefaultTemplate(orgId: string, raw: unknown): Promise<void> {
+    let normalized;
+    try {
+      normalized = normalizeTemplateInput(raw);
+    } catch (e) {
+      throw new BadRequestException(e instanceof Error ? e.message : 'Invalid template');
+    }
+    await this.repo.setDefaultTemplate(orgId, normalized);
+  }
+
+  // The org signature image URL embedded in every outgoing email (or null). The image
+  // is uploaded/served by the arsenal SignatureAssetsService; this reads the same
+  // canonical org_config.signature_image_url.
+  getSignatureImageUrl(orgId: string): Promise<string | null> {
+    return this.repo.getSignatureImageUrl(orgId);
+  }
+
+  // Set (or clear with null/empty) the org signature image URL.
+  setSignatureImageUrl(orgId: string, url: string | null): Promise<void> {
+    const trimmed = url?.trim();
+    return this.repo.setSignatureImageUrl(orgId, trimmed ? trimmed : null);
   }
 
   // The effective Reach send policy for an org: PER-ORG override (org_config) ?? env

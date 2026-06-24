@@ -8,7 +8,8 @@
       "campaigns": "Kampagnen",
       "scraper": "Lead-Scraper",
       "email": "E-Mail-Generator",
-      "sequence": "Sequenz-Sender"
+      "sequence": "Sequenz-Sender",
+      "templates": "Vorlagen"
     },
     "campaigns": {
       "tiles": {
@@ -42,10 +43,25 @@
       "colCompanies": "Firmen",
       "leadsTitle": "Leads",
       "leadsCount": "{count, plural, =0 {Keine Firmen} one {# Firma} other {# Firmen}} · Vollständige Liste",
-      "leadCol": { "company": "Firma", "contact": "Kontakt", "location": "Ort", "source": "Quelle", "status": "Status" },
+      "leadCol": {
+        "company": "Firma",
+        "contact": "Kontakt",
+        "location": "Ort",
+        "source": "Quelle",
+        "status": "Status"
+      },
       "noLeads": "Noch keine Leads — Scraper für diese Kampagne ausführen.",
       "selectToView": "Oben eine Kampagne wählen, um ihre gescrapten Leads anzuzeigen.",
-      "leadStatus": { "NEW": "Neu", "EMAILED": "Gesendet", "REPLIED": "Geantwortet", "INTERESTED": "Interessiert", "MEETING_SCHEDULED": "Meeting", "NOT_INTERESTED": "Kein Interesse", "RE_ENGAGED": "Reaktiviert", "DO_NOT_CONTACT": "Nicht kontaktieren" },
+      "leadStatus": {
+        "NEW": "Neu",
+        "EMAILED": "Gesendet",
+        "REPLIED": "Geantwortet",
+        "INTERESTED": "Interessiert",
+        "MEETING_SCHEDULED": "Meeting",
+        "NOT_INTERESTED": "Kein Interesse",
+        "RE_ENGAGED": "Reaktiviert",
+        "DO_NOT_CONTACT": "Nicht kontaktieren"
+      },
       "run": "Lead-Scraper ausführen",
       "progress": {
         "running": "Wird gescrapt…",
@@ -118,9 +134,91 @@
         "description": "Mehrstufige Outbound-Sequenzen werden von der REACH-BAZOOKA-Arsenalstufe nach eigenem Zeitplan versendet. Ein eigenständiger Sequenz-Builder folgt in einer späteren Phase."
       },
       "steps": {
-        "intro": { "title": "Intro-E-Mail", "sub": "Sofort bei Aufnahme gesendet", "badge": "62% geöffnet" },
-        "follow": { "title": "Follow-up", "sub": "3 Tage warten", "badge": "28% Antwort" },
-        "breakup": { "title": "Abschluss-E-Mail", "sub": "7 Tage warten", "badge": "in Warteschlange" }
+        "intro": {
+          "title": "Intro-E-Mail",
+          "sub": "Sofort bei Aufnahme gesendet",
+          "badge": "62% geöffnet"
+        },
+        "follow": {
+          "title": "Follow-up",
+          "sub": "3 Tage warten",
+          "badge": "28% Antwort"
+        },
+        "breakup": {
+          "title": "Abschluss-E-Mail",
+          "sub": "7 Tage warten",
+          "badge": "in Warteschlange"
+        }
+      }
+    },
+    "generator": {
+      "orgDefault": "Es wird die organisationsweite Standardvorlage angezeigt. Bearbeiten Sie sie im Tab „Vorlagen“ — kampagnenspezifische Änderungen hier werden nicht verwendet."
+    },
+    "modal": {
+      "field": {
+        "targetType": "Typ",
+        "targetTypePlaceholder": "z. B. Anbieter, Lieferant",
+        "industryFocus": "Branchenfokus",
+        "industryFocusPlaceholder": "z. B. IT, Energie, Transport",
+        "tenderFocus": "Ausschreibungsfokus",
+        "tenderFocusPlaceholder": "z. B. Cloud-Infrastruktur, KI-Plattform",
+        "focusHint": "Wird von der Standard-E-Mail-Vorlage verwendet ({{Type}} / {{IndustryFocus}} / {{TenderFocus}})."
+      }
+    },
+    "templates": {
+      "orgWide": "Organisationsweit",
+      "optional": "Optional",
+      "saving": "Wird gespeichert…",
+      "saveDefault": "Als Standard speichern",
+      "default": {
+        "title": "Standard-E-Mail-Vorlage",
+        "intro": "Der organisationsweite Standard, den die Reach Bazooka sendet, wenn eine Kampagne keine eigene Vorlage hat. Verwenden Sie die Platzhalter",
+        "and": "und",
+        "outro": ", um jeden Versand zu personalisieren."
+      },
+      "round": {
+        "cold": {
+          "label": "Kaltakquise",
+          "hint": "Runde 1"
+        },
+        "followUp": {
+          "label": "Nachfassen",
+          "hint": "Runde 2"
+        },
+        "final": {
+          "label": "Letzter Anstoß",
+          "hint": "Runde 3"
+        }
+      },
+      "field": {
+        "subject": "Betreff",
+        "subjectPlaceholder": "Betreffzeile",
+        "body": "Text",
+        "bodyPlaceholder": "E-Mail-Text…"
+      },
+      "import": {
+        "title": "Aus JSON importieren",
+        "intro": "Fügen Sie ein",
+        "outro": "-Objekt ein oder laden Sie es hoch (gespeicherte Schlüssel funktionieren ebenfalls), um die drei Runden oben zu füllen.",
+        "hidePaste": "Einfügen ausblenden",
+        "pasteJson": "JSON einfügen",
+        "upload": ".json hochladen",
+        "loadFromJson": "Aus JSON laden"
+      },
+      "signature": {
+        "title": "Signaturbild",
+        "urlLabel": "URL des Signaturbilds",
+        "previewAlt": "Signaturvorschau"
+      },
+      "toast": {
+        "loadFailed": "Die Standardvorlage konnte nicht geladen werden.",
+        "invalidJson": "Ungültiges JSON — die Vorlage konnte nicht gelesen werden.",
+        "expectedObject": "Es wurde ein JSON-Objekt mit den drei Runden erwartet.",
+        "noRounds": "Keine COLD / FOLLOWUP / FINALPUSH-Runden im JSON gefunden.",
+        "loaded": "Vorlage aus JSON geladen.",
+        "readFailed": "Die hochgeladene Datei konnte nicht gelesen werden.",
+        "saved": "Gespeichert",
+        "saveFailed": "Speichern fehlgeschlagen."
       }
     }
   },

@@ -1,4 +1,4 @@
-export type ReachTab = 'scraper' | 'generator' | 'sender';
+export type ReachTab = 'scraper' | 'generator' | 'sender' | 'templates';
 
 export type CampaignStatus = 'NEW' | 'SCRAPING' | 'IN CAMPAIGN' | 'OVER';
 
@@ -84,6 +84,11 @@ export type NewCampaignFormValues = {
     whatsappNumber: string;
     sender: string;
     salesCalendarId: string;
+    // Optional targeting hints threaded into the default email template's
+    // {{Type}} / {{IndustryFocus}} / {{TenderFocus}} placeholders (org default).
+    targetType: string;
+    industryFocus: string;
+    tenderFocus: string;
 }
 
 // A campaign enriched with the Ammo Forge output (templates + news brief) and the
@@ -120,6 +125,15 @@ export type ReachCampaignView = Campaign & {
   stats: ReachStats;
   autoSend: boolean;
   sender: string;
+  // True when `templates` is the org-wide default (the single source of truth)
+  // rather than a per-campaign template. Drives the Email Generator's read-only
+  // "org default" treatment.
+  usingOrgDefault?: boolean;
+  // Targeting hints carried back from the create-aim payload; feed the default
+  // template's placeholders.
+  targetType?: string;
+  industryFocus?: string;
+  tenderFocus?: string;
   // Async scrape tracking — server-seeded so the ETA countdown is correct even
   // after navigating away and back (null unless the aim is/has been scraping).
   scrapeStartedAt: string | null;

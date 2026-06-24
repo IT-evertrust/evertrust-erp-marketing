@@ -19,6 +19,13 @@ type BookMeetingDialogProps = {
   suggestedText?: string;
   // The campaign's mailbox google_accounts id — books on that calendar. null = org default.
   mailboxAccountId: string | null;
+  // An exact, pre-agreed window (ISO start/end). When present it overrides the text
+  // heuristic so the one-click "Book it" from an accepted slot is precise, and the
+  // duration defaults to the slot's own length.
+  presetSlot?: { start: string; end: string };
+  // Fired with the created meeting's id after a successful book, so the caller can
+  // close the meeting loop (link the meeting to the campaign reply).
+  onBooked?: (meetingId: string) => void;
 };
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -125,6 +132,14 @@ function deriveSlot(text?: string): { date: Date; matched: boolean } {
 
 const DURATIONS = [15, 30, 45, 60];
 
+// Minutes between two ISO instants, clamped to the supported durations (default 30).
+function slotDuration(slot: { start: string; end: string }): number {
+  const mins = Math.round(
+    (new Date(slot.end).getTime() - new Date(slot.start).getTime()) / 60_000,
+  );
+  return DURATIONS.includes(mins) ? mins : 30;
+}
+
 export function BookMeetingDialog({
   open,
   onClose,
@@ -133,24 +148,39 @@ export function BookMeetingDialog({
   contactName,
   suggestedText,
   mailboxAccountId,
+  presetSlot,
+  onBooked,
 }: BookMeetingDialogProps) {
-  const derived = deriveSlot(suggestedText);
+  // An exact pre-agreed window wins over the free-text heuristic.
+  const initial = presetSlot
+    ? { date: new Date(presetSlot.start), matched: true }
+    : deriveSlot(suggestedText);
   const [name, setName] = useState(contactName ?? '');
   const [email, setEmail] = useState(clientEmail);
-  const [slot, setSlot] = useState(fmtLocal(derived.date));
-  const [fromReply, setFromReply] = useState(derived.matched);
-  const [duration, setDuration] = useState(30);
+  const [slot, setSlot] = useState(fmtLocal(initial.date));
+  const [fromReply, setFromReply] = useState(initial.matched);
+  const [duration, setDuration] = useState(
+    presetSlot ? slotDuration(presetSlot) : 30,
+  );
   const [booking, setBooking] = useState(false);
 
-  // Re-derive the proposed slot from the reply each time the dialog opens for a reply.
+  // Re-derive the proposed slot each time the dialog opens. A `presetSlot` is exact;
+  // otherwise fall back to parsing the client's reply text.
   useEffect(() => {
     if (!open) return;
-    const next = deriveSlot(suggestedText);
-    setSlot(fmtLocal(next.date));
-    setFromReply(next.matched);
+    if (presetSlot) {
+      setSlot(fmtLocal(new Date(presetSlot.start)));
+      setFromReply(true);
+      setDuration(slotDuration(presetSlot));
+    } else {
+      const next = deriveSlot(suggestedText);
+      setSlot(fmtLocal(next.date));
+      setFromReply(next.matched);
+      setDuration(30);
+    }
     setName(contactName ?? '');
     setEmail(clientEmail);
-  }, [open, suggestedText, contactName, clientEmail]);
+  }, [open, suggestedText, contactName, clientEmail, presetSlot]);
 
   if (!open) return null;
 
@@ -177,6 +207,7 @@ export function BookMeetingDialog({
           ? `Meeting booked — invite + Meet link sent to ${email.trim()}. It’s now in Activate.`
           : `Meeting booked for ${company}. It’s now in Activate.`,
       );
+      onBooked?.(meeting.id);
       onClose();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not book the meeting.');

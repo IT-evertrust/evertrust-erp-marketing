@@ -13,6 +13,7 @@ import { DB, type DbClient } from '../db/db.tokens';
 import { GoogleAccountsService } from '../google/google-accounts.service';
 import { GoogleGmailService } from '../google/google-gmail.service';
 import { ClaudeService } from '../ai/claude.service';
+import { buildMimeEmail } from '../common/mime-email';
 import { tenantScope } from '../common/tenant';
 import { writeMachineAudit } from '../common/machine-audit';
 
@@ -200,31 +201,22 @@ export function buildRawReply(args: {
   body: string;
   inReplyTo: string | null;
   references: string | null;
+  signatureImageUrl?: string | null;
 }): string {
   const subject = /^(re:|aw:)/i.test(args.subject.trim())
     ? args.subject
     : `Re: ${args.subject}`;
-  // RFC2047-encode the Subject so non-ASCII (em dashes, umlauts) survive the header
-  // (a raw UTF-8 subject is mangled into mojibake by mail transport).
-  const encodedSubject = `=?UTF-8?B?${Buffer.from(subject, 'utf8').toString('base64')}?=`;
-  const lines = [
-    `From: ${args.from}`,
-    `To: ${args.to}`,
-    `Subject: ${encodedSubject}`,
-    'Content-Type: text/plain; charset="UTF-8"',
-    'MIME-Version: 1.0',
-    'Content-Transfer-Encoding: 8bit',
-  ];
-  if (args.inReplyTo) lines.push(`In-Reply-To: ${args.inReplyTo}`);
-  // References = prior chain + the message we're replying to (RFC 5322 §3.6.4).
-  const refs = [args.references, args.inReplyTo].filter(Boolean).join(' ').trim();
-  if (refs) lines.push(`References: ${refs}`);
-  const raw = `${lines.join('\r\n')}\r\n\r\n${args.body}`;
-  return Buffer.from(raw, 'utf8')
-    .toString('base64')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
+  // multipart/alternative (text + html) so the org signature image embeds; the helper
+  // RFC2047-encodes the Subject and threads via In-Reply-To/References.
+  return buildMimeEmail({
+    to: args.to,
+    from: args.from,
+    subject,
+    body: args.body,
+    signatureImageUrl: args.signatureImageUrl,
+    inReplyTo: args.inReplyTo,
+    references: args.references,
+  });
 }
 
 // Coerce any string into one of the three Engage verdicts (defensive — Claude is

@@ -23,14 +23,27 @@ export const proposedSlotSchema = z
 
 // Body for the CAMPAIGN-centric reply save-draft / send routes: an editable subject
 // + body. (subject defaults to empty; body emptiness is enforced per-route.) The
-// send route additionally accepts an optional proposedSlot to book a meeting.
+// send route additionally accepts an optional proposedSlot to book a meeting, and an
+// optional proposedSlots[] — the set of times offered to the lead in this round, which
+// the meeting loop persists so a later scan can resolve the lead's accept/counter reply.
 export const campaignReplyBodySchema = z.object({
   subject: z.string().optional().default(''),
   body: z.string(),
   proposedSlot: proposedSlotSchema.optional(),
+  proposedSlots: z.array(proposedSlotSchema).max(10).optional(),
 });
 
 export class CampaignReplyBodyDto extends createZodDto(campaignReplyBodySchema) {}
+
+// Body for marking a campaign reply BOOKED — the operator confirmed the meeting in
+// Activate and hands its id back so the reply threads into the CRM (and, when the
+// campaign is attributed, the meeting links to the campaign).
+export const campaignReplyBookedBodySchema = z.object({
+  meetingId: z.string().uuid(),
+});
+export class CampaignReplyBookedBodyDto extends createZodDto(
+  campaignReplyBookedBodySchema,
+) {}
 
 // Body for setting a campaign's drafting persona (null clears it → default voice).
 export const campaignPersonaBodySchema = z.object({

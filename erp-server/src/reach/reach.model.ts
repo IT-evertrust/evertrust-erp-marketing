@@ -58,6 +58,11 @@ export type ReachAim = {
   // Legacy reach fields (no longer collected by the AIM modal).
   segment?: string;
   source?: string;
+  // Per-campaign template placeholders for the org default outreach template:
+  //   {{Type}} → targetType, {{IndustryFocus}} → industryFocus, {{TenderFocus}} → tenderFocus.
+  targetType?: string;
+  industryFocus?: string;
+  tenderFocus?: string;
   // The Growth-Engine campaign this aim is linked to (1:1). Null on legacy aims.
   campaignId: string | null;
   status: AimStatus;
@@ -73,8 +78,10 @@ export type ReachAim = {
   scrapeError: string | null;
   // Which mailbox the campaign sends from (info | hanna).
   sender: string;
-  // Ammo Forge output (null until generated).
+  // Ammo Forge output (null until generated). getAims overrides this with the org
+  // default template (single source) and sets `usingOrgDefault` when one is set.
   templates: ReachTemplates | null;
+  usingOrgDefault?: boolean;
   newsBrief: ReachNewsBrief | null;
   generatedBy: string | null;
   // Per-round send/engagement stats (always present; zeros until sends happen).

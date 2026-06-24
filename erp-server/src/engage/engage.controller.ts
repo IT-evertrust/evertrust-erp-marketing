@@ -22,6 +22,7 @@ import { GmailWatchService } from './gmail-watch.service';
 import {
   CampaignPersonaBodyDto,
   CampaignReplyBodyDto,
+  CampaignReplyBookedBodyDto,
   CreatePersonaBodyDto,
   EngageSendBodyDto,
   RedraftBodyDto,
@@ -138,7 +139,27 @@ export class EngageController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: CampaignReplyBodyDto,
   ) {
-    return this.campaignReplies.sendReply(orgId, id, body.subject, body.body, body.proposedSlot);
+    return this.campaignReplies.sendReply(
+      orgId,
+      id,
+      body.subject,
+      body.body,
+      body.proposedSlot,
+      body.proposedSlots,
+    );
+  }
+
+  // Mark a campaign reply BOOKED — the operator confirmed the meeting in Activate and
+  // hands its id back, so the reply threads into the CRM (and, when the campaign is
+  // attributed, the meeting links to the campaign). Idempotent; 400 if not in the org.
+  @RequirePermissions('campaigns:write')
+  @Patch('campaign-replies/:id/booked')
+  markCampaignReplyBooked(
+    @OrgId() orgId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: CampaignReplyBookedBodyDto,
+  ) {
+    return this.campaignReplies.markBooked(orgId, id, body.meetingId);
   }
 
   // Proposed free meeting slots for a campaign (org's default calendar, next 7 days,

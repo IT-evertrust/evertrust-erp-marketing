@@ -21,6 +21,11 @@ export const createAimSchema = z.object({
   // (targeting comes from the niche's Sector targets). Kept optional for back-compat.
   segment: z.string().optional(),
   source: z.string().optional(),
+  // Per-campaign template placeholders for the org default outreach template:
+  //   {{Type}} -> targetType, {{IndustryFocus}} -> industryFocus, {{TenderFocus}} -> tenderFocus.
+  targetType: z.string().optional(),
+  industryFocus: z.string().optional(),
+  tenderFocus: z.string().optional(),
 });
 
 export type CreateAimDto = z.infer<typeof createAimSchema>;
