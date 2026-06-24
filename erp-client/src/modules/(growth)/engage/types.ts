@@ -54,4 +54,11 @@ export type CampaignReply = {
   // the KB citations the unsure-drafter pulled from (Phase 4).
   draftSource?: string | null;
   citations?: string[];
+  // Meeting-loop state (Engage→Activate): where this reply sits in the propose→
+  // accept/counter→book cycle. ACCEPTED carries the agreed `acceptedSlot`; PROPOSED/
+  // COUNTER carry the offered `proposedSlots`; BOOKED links the Activate meeting.
+  meetingStatus: 'NONE' | 'PROPOSED' | 'ACCEPTED' | 'COUNTER' | 'BOOKED';
+  acceptedSlot?: { start: string; end: string };
+  proposedSlots?: { start: string; end: string }[];
+  bookedMeetingId?: string;
 };

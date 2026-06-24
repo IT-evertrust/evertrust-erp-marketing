@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-import { CalendarPlus } from 'lucide-react';
+import { CalendarCheck, CalendarPlus } from 'lucide-react';
 
 import { LiveDot } from '@/modules/(growth)/shared';
 
@@ -11,6 +11,7 @@ import {
   addCampaignTraining,
   type CalendarSlot,
   getCampaignFreeSlots,
+  markReplyBooked,
   redraftReply,
   saveReplyDraft,
   sendReply,
@@ -20,21 +21,24 @@ import { AiAgentBox } from './ai-agent-box';
 import { BookMeetingDialog } from './book-meeting-dialog';
 
 // Compact slot label in the calendar's own time zone, e.g. "Tue 24 Jun · 15:00–15:30".
-function formatSlot(slot: CalendarSlot, timeZone: string): string {
+// `timeZone` is optional — the accepted-slot banner renders before any free-slots
+// fetch, so it falls back to the viewer's local zone.
+function formatSlot(slot: CalendarSlot, timeZone?: string): string {
   const start = new Date(slot.start);
   const end = new Date(slot.end);
+  const tz = timeZone || undefined;
   const day = new Intl.DateTimeFormat('en-GB', {
     weekday: 'short',
     day: '2-digit',
     month: 'short',
-    timeZone,
+    timeZone: tz,
   }).format(start);
   const time = (date: Date) =>
     new Intl.DateTimeFormat('en-GB', {
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
-      timeZone,
+      timeZone: tz,
     }).format(date);
   return `${day} · ${time(start)}–${time(end)}`;
 }
@@ -89,6 +93,13 @@ export function ReplyDetail({
   const [slots, setSlots] = useState<CalendarSlot[]>([]);
   const [slotsTimeZone, setSlotsTimeZone] = useState('');
   const [selectedSlot, setSelectedSlot] = useState<CalendarSlot | null>(null);
+  // The full set of windows the rep has offered this round — passed to Send so the
+  // backend persists exactly what was put on the table (for later accept/counter match).
+  const [proposedSlots, setProposedSlots] = useState<CalendarSlot[]>([]);
+  // When set, BookMeetingDialog opens pre-filled with this exact accepted window.
+  const [bookPreset, setBookPreset] = useState<CalendarSlot | null>(null);
+  // Optimistic BOOKED state after a one-click book, so the chip flips without a refetch.
+  const [bookedLocally, setBookedLocally] = useState(false);
 
   const replyId = reply?.id;
   useEffect(() => {
@@ -100,6 +111,9 @@ export function ReplyDetail({
     setSlots([]);
     setSlotsTimeZone('');
     setSelectedSlot(null);
+    setProposedSlots([]);
+    setBookPreset(null);
+    setBookedLocally(false);
   }, [replyId, reply?.draftSubject, reply?.draftBody]);
 
   if (!reply) {
@@ -137,9 +151,14 @@ export function ReplyDetail({
     }
     setSending(true);
     try {
-      const result = selectedSlot
-        ? await sendReply(reply.id, subject, body, selectedSlot)
-        : await sendReply(reply.id, subject, body);
+      const offered = proposedSlots.length > 0 ? proposedSlots : undefined;
+      const result = await sendReply(
+        reply.id,
+        subject,
+        body,
+        selectedSlot ?? undefined,
+        offered,
+      );
       // Show the just-sent reply in the thread immediately (it's now in Gmail too).
       setSentMessages((prev) => [
         ...prev,
@@ -155,6 +174,7 @@ export function ReplyDetail({
       ]);
       setJustSent(true);
       setSelectedSlot(null);
+      setProposedSlots([]);
       if (result.meeting?.ok) {
         toast.success('Reply sent + calendar invite created.');
       } else {
@@ -192,11 +212,37 @@ export function ReplyDetail({
     }
   }
 
-  // Pick a slot: hold it for Send and append a human-readable line to the editable draft.
+  // Pick a slot: hold it for Send, add it to the offered set (deduped), and append a
+  // human-readable line to the editable draft.
   function handleSelectSlot(slot: CalendarSlot) {
     setSelectedSlot(slot);
+    setProposedSlots((prev) =>
+      prev.some((s) => s.start === slot.start && s.end === slot.end)
+        ? prev
+        : [...prev, slot],
+    );
     const line = proposalLine(slot, slotsTimeZone);
     setBody((prev) => (prev.trim() ? `${prev.trimEnd()}\n\n${line}` : line));
+  }
+
+  // One-click "Book it" from the accepted-slot banner: open the dialog pre-filled with
+  // the exact agreed window.
+  function handleBookAccepted(slot: CalendarSlot) {
+    setBookPreset(slot);
+    setBookOpen(true);
+  }
+
+  // Close the meeting loop after a successful book: link the Activate meeting to the
+  // reply and flip the local BOOKED chip.
+  async function handleBooked(meetingId: string) {
+    if (!reply) return;
+    try {
+      await markReplyBooked(reply.id, meetingId);
+      setBookedLocally(true);
+      toast.success('Meeting booked.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not link the meeting.');
+    }
   }
 
   // Write & Fix: ask the agent to revise the current draft, then load the result
@@ -230,6 +276,14 @@ export function ReplyDetail({
 
   const threadMessages = [...(reply?.thread ?? []), ...sentMessages];
 
+  // Meeting-loop state (server value, or optimistic after a one-click book).
+  const isBooked = bookedLocally || reply.meetingStatus === 'BOOKED';
+  const showAcceptedBanner =
+    !isBooked &&
+    reply.meetingStatus === 'ACCEPTED' &&
+    Boolean(reply.acceptedSlot);
+  const showCounterBanner = !isBooked && reply.meetingStatus === 'COUNTER';
+
   // The client's words to scan for a proposed meeting time — the latest inbound thread
   // message, falling back to the classified reply's inbound body.
   function bookingHintText(r: CampaignReply): string {
@@ -250,23 +304,57 @@ export function ReplyDetail({
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Engage→Activate: book a meeting straight from an interested reply. */}
-          {reply.category === 'INTERESTED' && (
-            <button
-              type="button"
-              onClick={() => setBookOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-[7px] border border-[#15171c] bg-[#15171c] px-[10px] py-[6px] text-[10px] font-bold uppercase tracking-[0.08em] text-white transition-colors hover:bg-[#2a2d33]"
-              title="Create a calendar invite + Meet link, added to Activate"
-            >
-              <CalendarPlus className="size-3.5" />
-              Book meeting
-            </button>
+          {isBooked ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#9bd3b0] bg-[#eaf7ef] px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#1f7a45]">
+              <CalendarCheck className="size-3.5" />
+              Meeting booked
+            </span>
+          ) : (
+            /* Engage→Activate: book a meeting straight from an interested reply. */
+            reply.category === 'INTERESTED' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setBookPreset(null);
+                  setBookOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 rounded-[7px] border border-[#15171c] bg-[#15171c] px-[10px] py-[6px] text-[10px] font-bold uppercase tracking-[0.08em] text-white transition-colors hover:bg-[#2a2d33]"
+                title="Create a calendar invite + Meet link, added to Activate"
+              >
+                <CalendarPlus className="size-3.5" />
+                Book meeting
+              </button>
+            )
           )}
           <span className="rounded-full border border-[#c2c7ce] px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#5b626d]">
             {reply.category}
           </span>
         </div>
       </div>
+
+      {/* Meeting-loop banner: the client agreed to a time — book it in one click. */}
+      {showAcceptedBanner && reply.acceptedSlot && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-[#9bd3b0] bg-[#eaf7ef] px-4 py-3">
+          <div className="text-[12.5px] font-bold text-[#15171c]">
+            Client accepted {formatSlot(reply.acceptedSlot)} — Book it?
+          </div>
+          <button
+            type="button"
+            onClick={() => handleBookAccepted(reply.acceptedSlot!)}
+            className="inline-flex items-center gap-1.5 rounded-[7px] border border-[#1f7a45] bg-[#1f7a45] px-[12px] py-[7px] text-[10px] font-bold uppercase tracking-[0.08em] text-white transition-colors hover:bg-[#196138]"
+          >
+            <CalendarCheck className="size-3.5" />
+            Book meeting
+          </button>
+        </div>
+      )}
+
+      {/* Meeting-loop banner: the client's time conflicts — alternatives are drafted below. */}
+      {showCounterBanner && (
+        <div className="rounded-[10px] border border-[#e6cf8b] bg-[#fbf4dd] px-4 py-3 text-[12.5px] font-bold text-[#7a5b15]">
+          Client&rsquo;s time conflicts — alternatives drafted below; review &amp; send.
+        </div>
+      )}
 
       <div className="max-h-[300px] overflow-auto rounded-[10px] border border-[#c2c7ce] p-3">
         <div className="flex flex-col gap-2.5">
@@ -394,11 +482,16 @@ export function ReplyDetail({
 
       <BookMeetingDialog
         open={bookOpen}
-        onClose={() => setBookOpen(false)}
+        onClose={() => {
+          setBookOpen(false);
+          setBookPreset(null);
+        }}
         company={reply.company}
         clientEmail={reply.contact}
         suggestedText={bookingHintText(reply)}
         mailboxAccountId={mailboxAccountId}
+        presetSlot={bookPreset ?? undefined}
+        onBooked={handleBooked}
       />
     </section>
   );
