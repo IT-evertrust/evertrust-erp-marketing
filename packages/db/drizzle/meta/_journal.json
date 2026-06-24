@@ -337,6 +337,13 @@
       "when": 1780595000000,
       "tag": "0047_client_research",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1780596000000,
+      "tag": "0048_reach_send_settings",
+      "breakpoints": true
     }
   ]
 }

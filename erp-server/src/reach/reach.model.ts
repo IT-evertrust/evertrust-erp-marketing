@@ -85,6 +85,13 @@ export type ReachAim = {
   updatedAt: string;
 };
 
+// One day on the Reach daily-sends timeline (10-day window, oldest first).
+export type DailySendPoint = {
+  date: string;
+  value: number;
+  type: 'past' | 'today' | 'future';
+};
+
 // Summary returned by a Reach Bazooka run.
 export type BazookaRunSummary = {
   campaignsProcessed: number;
