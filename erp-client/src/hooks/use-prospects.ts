@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   ProspectListDto,
   ProspectStatus,
+  UpdateProspectStageDto,
   UpdateProspectStatusDto,
 } from '@evertrust/shared';
 import { ApiError, api, type ProspectDetail } from '@/lib/api';
@@ -13,6 +14,9 @@ export type ProspectBoardFilters = {
   campaignId?: string;
   status?: ProspectStatus;
   q?: string;
+  nicheTargetId?: string;
+  createdFrom?: string;
+  createdTo?: string;
   limit?: number;
   offset?: number;
 };
@@ -69,6 +73,62 @@ export function useUpdateProspectStatus() {
             p.id === id ? { ...p, status: patch.status } : p,
           ),
           statusCounts: counts,
+        });
+      }
+      return {
+        snapshots: snapshots.filter(
+          (s): s is [readonly unknown[], ProspectListDto] => !!s[1],
+        ),
+      };
+    },
+    onError: (_e, _vars, ctx) => {
+      for (const [key, data] of ctx?.snapshots ?? []) {
+        queryClient.setQueryData(key, data);
+      }
+    },
+    onSettled: (_data, _err, vars) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.prospects.all });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.prospects.detail(vars.id),
+      });
+    },
+  });
+}
+
+// Move a card on the Nurture kanban (drag-and-drop). Optimistically flips the
+// prospect's pipelineStage and re-tallies stageCounts on every cached board page so
+// the card jumps columns instantly; rolls back on error; invalidates on settle.
+export function useUpdateProspectStage() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    Awaited<ReturnType<typeof api.prospects.setStage>>,
+    ApiError,
+    { id: string; patch: UpdateProspectStageDto },
+    { snapshots: [readonly unknown[], ProspectListDto][] }
+  >({
+    mutationFn: ({ id, patch }) => api.prospects.setStage(id, patch),
+    onMutate: async ({ id, patch }) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.prospects.all });
+      const snapshots = queryClient.getQueriesData<ProspectListDto>({
+        queryKey: queryKeys.prospects.board(),
+        exact: false,
+      });
+      for (const [key, data] of snapshots) {
+        if (!data) continue;
+        const target = data.items.find((p) => p.id === id);
+        if (!target || target.pipelineStage === patch.pipelineStage) continue;
+        const counts = { ...data.stageCounts };
+        counts[target.pipelineStage] = Math.max(
+          0,
+          (counts[target.pipelineStage] ?? 1) - 1,
+        );
+        counts[patch.pipelineStage] = (counts[patch.pipelineStage] ?? 0) + 1;
+        queryClient.setQueryData<ProspectListDto>(key, {
+          ...data,
+          items: data.items.map((p) =>
+            p.id === id ? { ...p, pipelineStage: patch.pipelineStage } : p,
+          ),
+          stageCounts: counts,
         });
       }
       return {

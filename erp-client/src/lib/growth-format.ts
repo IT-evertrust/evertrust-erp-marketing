@@ -1,5 +1,6 @@
 import type {
   ContractStatus,
+  PipelineStage,
   ProspectStatus,
   ReplyVerdict,
 } from '@evertrust/shared';
@@ -42,6 +43,27 @@ export const PROSPECT_STATUS_CLASS: Record<ProspectStatus, string> = {
   NOT_INTERESTED: 'border-border bg-muted/40 text-muted-foreground',
   RE_ENGAGED: 'border-amber-500/30 bg-amber-500/10 text-amber-400',
   DO_NOT_CONTACT: 'border-rose-500/30 bg-rose-500/10 text-rose-400',
+};
+
+// The Nurture sales-pipeline stages (the kanban columns, Interest → Lost). A
+// SEPARATE axis from PROSPECT_STATUS — the human deal funnel. WON = emerald,
+// LOST = muted, the middle stages ramp sky → violet → amber per DESIGN.md.
+export const PIPELINE_STAGE_LABEL: Record<PipelineStage, string> = {
+  INTEREST: 'Interest',
+  INTENT: 'Intent',
+  CONSIDERATION: 'Consideration',
+  DECISION: 'Decision',
+  WON: 'Won',
+  LOST: 'Lost',
+};
+
+export const PIPELINE_STAGE_CLASS: Record<PipelineStage, string> = {
+  INTEREST: 'border-slate-500/30 bg-slate-500/10 text-slate-400',
+  INTENT: 'border-sky-500/30 bg-sky-500/10 text-sky-400',
+  CONSIDERATION: 'border-violet-500/30 bg-violet-500/10 text-violet-400',
+  DECISION: 'border-amber-500/30 bg-amber-500/10 text-amber-400',
+  WON: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
+  LOST: 'border-border bg-muted/40 text-muted-foreground',
 };
 
 export const REPLY_VERDICT_LABEL: Record<ReplyVerdict, string> = {

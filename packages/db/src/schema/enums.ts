@@ -156,6 +156,18 @@ export const prospectStatusEnum = pgEnum('prospect_status', [
   'DO_NOT_CONTACT',
 ]);
 
+// The HUMAN sales-pipeline stage of a prospect (the Nurture board, drag-and-drop).
+// A SEPARATE axis from prospect_status (the agent-driven outreach lifecycle): a
+// prospect can be EMAILED yet sit in CONSIDERATION. WON/LOST are terminal.
+export const pipelineStageEnum = pgEnum('pipeline_stage', [
+  'INTEREST',
+  'INTENT',
+  'CONSIDERATION',
+  'DECISION',
+  'WON',
+  'LOST',
+]);
+
 // Direction of an outreach_messages row: OUTBOUND = we sent it (Bazooka),
 // INBOUND = the prospect replied.
 export const messageDirectionEnum = pgEnum('message_direction', [

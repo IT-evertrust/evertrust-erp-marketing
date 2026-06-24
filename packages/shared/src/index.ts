@@ -1942,6 +1942,30 @@ export const ProspectStatus = z.enum([
 ]);
 export type ProspectStatus = z.infer<typeof ProspectStatus>;
 
+// The HUMAN sales-pipeline stage of a prospect — a manual funnel the team drags a
+// card through on the Nurture board. Distinct from `status` (the agent-driven
+// outreach lifecycle): a prospect can be EMAILED (status) yet sit in CONSIDERATION
+// (stage). WON/LOST are terminal.
+export const PipelineStage = z.enum([
+  'INTEREST',
+  'INTENT',
+  'CONSIDERATION',
+  'DECISION',
+  'WON',
+  'LOST',
+]);
+export type PipelineStage = z.infer<typeof PipelineStage>;
+
+// Board column order (the funnel left→right).
+export const PIPELINE_STAGE_ORDER: readonly PipelineStage[] = [
+  'INTEREST',
+  'INTENT',
+  'CONSIDERATION',
+  'DECISION',
+  'WON',
+  'LOST',
+];
+
 // Read shape of a prospect row.
 export const ProspectDto = z.object({
   id: z.string().uuid(),
@@ -1956,6 +1980,7 @@ export const ProspectDto = z.object({
   sourceUrl: z.string().nullable(),
   emailVerified: z.boolean(),
   status: ProspectStatus,
+  pipelineStage: PipelineStage,
   snoozeUntil: z.string().nullable(),
   followupCount: z.number().int().nonnegative(),
   lastContactedAt: z.string().nullable(),
@@ -2016,6 +2041,9 @@ export const ProspectListDto = z.object({
   items: z.array(ProspectDto),
   total: z.number().int().nonnegative(),
   statusCounts: z.record(ProspectStatus, z.number().int().nonnegative()),
+  // Full per-stage tally for the Nurture pipeline board columns (unaffected by the
+  // page window), parallel to statusCounts.
+  stageCounts: z.record(PipelineStage, z.number().int().nonnegative()),
 });
 export type ProspectListDto = z.infer<typeof ProspectListDto>;
 
@@ -2028,6 +2056,14 @@ export const UpdateProspectStatusDto = z.object({
   snoozeUntil: z.string().datetime().nullable().optional(),
 });
 export type UpdateProspectStatusDto = z.infer<typeof UpdateProspectStatusDto>;
+
+// Body for PATCH /prospects/:id/stage — the human moving a card on the Nurture
+// pipeline board (drag-and-drop). Only the manual sales stage; never touches the
+// agent-driven outreach `status`.
+export const UpdateProspectStageDto = z.object({
+  pipelineStage: PipelineStage,
+});
+export type UpdateProspectStageDto = z.infer<typeof UpdateProspectStageDto>;
 
 // ---- Reply classifications ----
 // Body for POST /reply-classifications — Reply Glock / RAG verdict. Inserted as

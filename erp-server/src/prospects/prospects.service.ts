@@ -1,10 +1,11 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, gte, lte } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 import type {
   GraduateProspectDto,
   GraduateProspectResultDto,
   LeadDto,
+  PipelineStage,
   ProspectStatus,
   UpdateProspectDto,
 } from '@evertrust/shared';
@@ -46,18 +47,25 @@ export interface ProspectListFilters {
 // set (ignoring status/q/page) so the board columns show full tallies.
 export interface ProspectBoardFilters {
   campaignId?: string;
+  // SCOPE filters (narrow both the page AND the column tallies), alongside campaignId.
+  nicheTargetId?: string;
+  createdFrom?: Date;
+  createdTo?: Date;
+  // WITHIN-SCOPE narrowing (page only; tallies show the full scope).
   status?: ProspectStatus;
   q?: string;
   limit?: number;
   offset?: number;
 }
 
-// One org-scoped board page: the page rows, the post-filter pre-page total, and
-// the per-status tally for the campaign columns.
+// One org-scoped board page: the page rows, the post-filter pre-page total, and the
+// per-status + per-stage tallies for the board columns (the Nurture kanban groups by
+// stage; the Engage board groups by status).
 export interface ProspectBoardResult {
   items: ProspectRow[];
   total: number;
   statusCounts: Record<string, number>;
+  stageCounts: Record<string, number>;
 }
 
 const SEND_LIST_STATUSES: ProspectStatus[] = ['NEW', 'EMAILED'];
@@ -281,16 +289,29 @@ export class ProspectsService {
     if (filters.campaignId) {
       conds.push(eq(schema.prospects.campaignId, filters.campaignId));
     }
+    if (filters.nicheTargetId) {
+      conds.push(eq(schema.prospects.nicheTargetId, filters.nicheTargetId));
+    }
+    if (filters.createdFrom) {
+      conds.push(gte(schema.prospects.createdAt, filters.createdFrom));
+    }
+    if (filters.createdTo) {
+      conds.push(lte(schema.prospects.createdAt, filters.createdTo));
+    }
     const scoped = await this.db
       .select()
       .from(schema.prospects)
       .where(and(...conds))
       .orderBy(desc(schema.prospects.createdAt));
 
-    // statusCounts: the full tally over org(+campaign), independent of status/q/page.
+    // status/stageCounts: the full tally over the SCOPE set (org + campaign + niche +
+    // date), independent of the status/q/page narrowing — so the columns show real
+    // totals. statusCounts backs the Engage board; stageCounts the Nurture kanban.
     const statusCounts: Record<string, number> = {};
+    const stageCounts: Record<string, number> = {};
     for (const r of scoped) {
       statusCounts[r.status] = (statusCounts[r.status] ?? 0) + 1;
+      stageCounts[r.pipelineStage] = (stageCounts[r.pipelineStage] ?? 0) + 1;
     }
 
     // Apply the page narrowing (status, then q) to get the filtered set.
@@ -312,7 +333,7 @@ export class ProspectsService {
     const limit = filters.limit && filters.limit > 0 ? filters.limit : 50;
     const items = filtered.slice(offset, offset + limit);
 
-    return { items, total, statusCounts };
+    return { items, total, statusCounts, stageCounts };
   }
 
   // One prospect IN THE CALLER'S ORG (the UI drawer). 404 if missing or cross-org.
@@ -376,6 +397,28 @@ export class ProspectsService {
     const updated = await this.db
       .update(schema.prospects)
       .set(set)
+      .where(
+        and(
+          eq(schema.prospects.organizationId, orgId),
+          eq(schema.prospects.id, id),
+        ),
+      )
+      .returning();
+    return updated[0] ?? before;
+  }
+
+  // Manual pipeline-stage move from the Nurture board (drag-and-drop). ORG-SCOPED:
+  // 404 if the prospect is not in `orgId`. Sets ONLY pipeline_stage — never touches
+  // the agent-driven `status`. The JWT audit row is set by the controller.
+  async updateStageForOrg(
+    orgId: string,
+    id: string,
+    pipelineStage: PipelineStage,
+  ): Promise<ProspectRow> {
+    const before = await this.getForOrg(orgId, id); // 404 cross-org / unknown
+    const updated = await this.db
+      .update(schema.prospects)
+      .set({ pipelineStage, updatedAt: new Date() })
       .where(
         and(
           eq(schema.prospects.organizationId, orgId),

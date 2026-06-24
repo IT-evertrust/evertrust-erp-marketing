@@ -21,7 +21,23 @@
     "followups": "{count} Follow-up gesendet",
     "moveBack": "Eine Stufe zurück",
     "moveForward": "Eine Stufe weiter",
-    "movedToast": "{name} verschoben nach {stage}"
+    "movedToast": "{name} verschoben nach {stage}",
+    "moveError": "Deal konnte nicht verschoben werden",
+    "stages": {
+      "INTEREST": "Interesse",
+      "INTENT": "Absicht",
+      "CONSIDERATION": "Erwägung",
+      "DECISION": "Entscheidung",
+      "WON": "Gewonnen",
+      "LOST": "Verloren"
+    },
+    "filters": {
+      "search": "Firma oder E-Mail suchen…",
+      "allNiches": "Alle Nischen",
+      "from": "Von",
+      "to": "Bis",
+      "clear": "Zurücksetzen"
+    }
   },
   "contracts": {
     "listTitle": "Verträge",

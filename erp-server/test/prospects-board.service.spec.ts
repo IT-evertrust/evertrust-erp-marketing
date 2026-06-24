@@ -16,6 +16,9 @@ const PA2 = 'aaaa0002-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const PA3 = 'aaaa0003-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const PB1 = 'bbbb0001-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
+const NT1 = '77770001-0000-0000-0000-000000000000';
+const NT2 = '77770002-0000-0000-0000-000000000000';
+
 const config = { get: () => '' } as unknown as AppConfigService;
 
 // A campaigns row satisfying the NOT-NULL AIM columns (nicheId/country/region/
@@ -44,9 +47,9 @@ async function makeService() {
     campaignRow(CAMP_B, ORG_B, 'Camp B', 'B'),
   ]);
   await seed(schema.prospects, [
-    { id: PA1, organizationId: ORG_A, campaignId: CAMP_A, email: 'alpha@aco.com', companyName: 'Alpha GmbH', status: 'NEW', followupCount: 0 },
-    { id: PA2, organizationId: ORG_A, campaignId: CAMP_A, email: 'beta@aco.com', companyName: 'Beta AG', status: 'EMAILED', followupCount: 1 },
-    { id: PA3, organizationId: ORG_A, campaignId: CAMP_A, email: 'gamma@aco.com', companyName: null, status: 'NEW', followupCount: 0 },
+    { id: PA1, organizationId: ORG_A, campaignId: CAMP_A, email: 'alpha@aco.com', companyName: 'Alpha GmbH', status: 'NEW', followupCount: 0, nicheTargetId: NT1, createdAt: new Date('2026-01-01T00:00:00Z') },
+    { id: PA2, organizationId: ORG_A, campaignId: CAMP_A, email: 'beta@aco.com', companyName: 'Beta AG', status: 'EMAILED', followupCount: 1, nicheTargetId: NT2, createdAt: new Date('2026-02-01T00:00:00Z') },
+    { id: PA3, organizationId: ORG_A, campaignId: CAMP_A, email: 'gamma@aco.com', companyName: null, status: 'NEW', followupCount: 0, nicheTargetId: NT1, createdAt: new Date('2026-03-01T00:00:00Z') },
     { id: PB1, organizationId: ORG_B, campaignId: CAMP_B, email: 'alpha@bco.com', companyName: 'Other', status: 'NEW', followupCount: 0 },
   ]);
   const db = getDb();
@@ -100,6 +103,56 @@ describe('ProspectsService.boardList — org scoping', () => {
     const page2 = await service.boardList(ORG_A, { limit: 2, offset: 2 });
     expect(page2.items).toHaveLength(1);
     expect(page2.total).toBe(3);
+  });
+});
+
+describe('ProspectsService.boardList — pipeline stage + scope filters', () => {
+  it('returns stageCounts + each row carries its pipelineStage (defaults INTEREST)', async () => {
+    const { service } = await makeService();
+    const res = await service.boardList(ORG_A, {});
+    // Seeded rows have no explicit stage → the column default INTEREST.
+    expect(res.stageCounts).toEqual({ INTEREST: 3 });
+    expect(res.items.every((r) => r.pipelineStage === 'INTEREST')).toBe(true);
+  });
+
+  it('nicheTargetId is a SCOPE filter — narrows items AND the tallies', async () => {
+    const { service } = await makeService();
+    const res = await service.boardList(ORG_A, { nicheTargetId: NT1 });
+    expect(res.items.map((r) => r.id).sort()).toEqual([PA1, PA3].sort());
+    expect(res.total).toBe(2);
+    expect(res.stageCounts).toEqual({ INTEREST: 2 }); // scope tally, not the full org
+  });
+
+  it('createdFrom/createdTo bound the set by creation date', async () => {
+    const { service } = await makeService();
+    const recent = await service.boardList(ORG_A, {
+      createdFrom: new Date('2026-02-15T00:00:00Z'),
+    });
+    expect(recent.items.map((r) => r.id)).toEqual([PA3]); // only the 2026-03-01 row
+    const middle = await service.boardList(ORG_A, {
+      createdFrom: new Date('2026-01-15T00:00:00Z'),
+      createdTo: new Date('2026-02-15T00:00:00Z'),
+    });
+    expect(middle.items.map((r) => r.id)).toEqual([PA2]); // only the 2026-02-01 row
+  });
+});
+
+describe('ProspectsService.updateStageForOrg', () => {
+  it('moves a card in-org, leaves the outreach status untouched, 404s cross-org', async () => {
+    const { service } = await makeService();
+    const moved = await service.updateStageForOrg(ORG_A, PA1, 'WON');
+    expect(moved.pipelineStage).toBe('WON');
+    expect(moved.status).toBe('NEW'); // stage move never touches the agent-driven status
+
+    const res = await service.boardList(ORG_A, {});
+    expect(res.stageCounts).toEqual({ INTEREST: 2, WON: 1 });
+
+    // ORG_A cannot move ORG_B's card.
+    await expect(
+      service.updateStageForOrg(ORG_A, PB1, 'LOST'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    const after = await getDb().select().from(schema.prospects);
+    expect(after.find((r) => r.id === PB1)!.pipelineStage).toBe('INTEREST');
   });
 });
 
