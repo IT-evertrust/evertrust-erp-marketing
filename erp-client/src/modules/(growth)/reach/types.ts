@@ -26,6 +26,9 @@ export type Lead = {
   location: string;
   source: string;
   status: LeadStatus;
+  // The lead's email (when the scraper found one). Drives the "Move to pipeline"
+  // action — a prospect can't be created without an email.
+  email?: string;
 };
 
 export type CampaignEmail = {

@@ -5,15 +5,19 @@ import {
   Get,
   Header,
   Param,
+  ParseUUIDPipe,
   Post,
   Patch,
   Query,
   Redirect,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Public } from '../auth/decorators/public.decorator';
 import { OrgId } from '../common/tenant';
+import { setAuditContext } from '../common/audit-context';
 import { CreateAimBodyDto, SetAutoSendBodyDto } from './dto/create-aim.dto';
 import {
   ReachTestSendBodyDto,
@@ -77,6 +81,27 @@ export class ReachController {
   @Get('aims/:aimId/leads')
   getAimLeads(@OrgId() orgId: string, @Param('aimId') aimId: string) {
     return this.reachService.getAimLeads(orgId, aimId);
+  }
+
+  // Reach → Nurture bridge: promote a lead into the Nurture pipeline (creates/links
+  // the aim's CRM campaign and upserts the prospect at the INTEREST stage). org-scoped
+  // + audited (campaigns:write). Returns { campaignId, prospectId, created }.
+  @RequirePermissions('campaigns:write')
+  @Post('aims/:aimId/leads/:leadId/promote')
+  async promoteLead(
+    @OrgId() orgId: string,
+    @Param('aimId', ParseUUIDPipe) aimId: string,
+    @Param('leadId', ParseUUIDPipe) leadId: string,
+    @Req() req: Request,
+  ) {
+    const result = await this.reachService.promoteLead(orgId, aimId, leadId);
+    setAuditContext(req, {
+      entity: 'prospects',
+      entityId: result.prospectId,
+      action: 'PROMOTE_FROM_REACH',
+      after: { campaignId: result.campaignId, created: result.created },
+    });
+    return result;
   }
 
   // Manual send for one round (cold | followup | final). Records the send +

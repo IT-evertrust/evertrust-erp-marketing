@@ -13,6 +13,7 @@ import {
   getDailySends,
   getReachCampaigns,
   getSenderSchedule,
+  promoteReachLead,
   runReachBazooka,
   scrapeReachAim,
   sendCampaignRound,
@@ -39,6 +40,8 @@ export function useReach() {
   const [creatingAim, setCreatingAim] = useState(false);
   const [scrapingLeads, setScrapingLeads] = useState(false);
   const [bazookaRunning, setBazookaRunning] = useState(false);
+  // The lead currently being moved into the Nurture pipeline (its row spinner).
+  const [promotingLeadId, setPromotingLeadId] = useState<string | null>(null);
 
   // When a freshly-created campaign is auto-scraped, we manage its leads directly
   // (via the scrape result) and skip the selection effect's fetch to avoid a race.
@@ -197,6 +200,35 @@ export function useReach() {
     }
   }
 
+  // Reach → Nurture bridge: move a scraped lead into the Nurture pipeline. On
+  // success the lead is marked Interested in place (so the row reflects the move)
+  // and a toast points to the Nurture board. A lead with no email can't become a
+  // prospect — the server rejects it and we surface that message.
+  async function promoteLead(leadId: string) {
+    const lead = leads.find((l) => l.id === leadId);
+    if (!lead || !selectedCampaignId) return;
+    setPromotingLeadId(leadId);
+    try {
+      const result = await promoteReachLead(selectedCampaignId, leadId);
+      setLeads((current) =>
+        current.map((l) =>
+          l.id === leadId ? { ...l, status: 'Interested' } : l,
+        ),
+      );
+      toast.success(
+        result.created
+          ? `${lead.company} added to the Nurture pipeline.`
+          : `${lead.company} is already in the Nurture pipeline.`,
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : 'Could not move lead to pipeline',
+      );
+    } finally {
+      setPromotingLeadId(null);
+    }
+  }
+
   // Record a send for one round; updates the campaign's stats in place. Delivery
   // is deferred server-side, so the toast says "recorded", not "delivered".
   async function sendRound(round: ReachRound) {
@@ -236,6 +268,9 @@ export function useReach() {
     bazookaRunning,
     toggleAutoSend,
     runBazooka,
+
+    promotingLeadId,
+    promoteLead,
 
     isCampaignFormOpen,
     openCampaignForm,

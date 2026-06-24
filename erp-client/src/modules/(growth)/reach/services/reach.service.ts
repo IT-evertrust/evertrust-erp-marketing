@@ -260,7 +260,27 @@ function mapLead(l: BackendLead): Lead {
     location: l.location || '—',
     source: l.source || '—',
     status: LEAD_STATUS[l.status] ?? 'New',
+    email: l.email || undefined,
   };
+}
+
+// Result of promoting a reach lead into the Nurture pipeline.
+export type PromoteResult = {
+  campaignId: string;
+  prospectId: string;
+  created: boolean;
+};
+
+// Reach → Nurture bridge: promote a lead into the Nurture pipeline (server
+// find-or-creates the aim's CRM campaign and upserts the prospect at INTEREST).
+export async function promoteReachLead(
+  aimId: string,
+  leadId: string,
+): Promise<PromoteResult> {
+  return mutate<PromoteResult>(
+    'POST',
+    `/growth/reach/aims/${aimId}/leads/${leadId}/promote`,
+  );
 }
 
 // Build the three Email Generator rows from an aim's templates + real stats.
