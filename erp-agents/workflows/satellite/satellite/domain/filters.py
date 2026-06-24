@@ -89,33 +89,13 @@ def niche_tokens(niche: str, buzzwords=None) -> list[str]:
     return out
 
 
-# Ultra-generic IT/web vocabulary (+ their 5-char roots) that appears on a huge slice of the
-# web. These must NOT, on their own, qualify a page as on-niche — otherwise broad niches like
-# "Cloud Infrastructure" (buzzwords: server/online/platform/compute/network) let chess.com,
-# lichess, video sites etc. pass the gate. A page must match a DISTINCTIVE niche term
-# (e.g. "cloud", "infrastructure", "hosting", "cyber") to count. Niche-specific words are
-# deliberately absent here, so distinctive vocab still gates normally.
-GENERIC_GATE_TOKENS = frozenset({
-    "online", "onlin", "server", "servers", "platform", "platf", "technology", "techn",
-    "technologies", "digital", "digit", "internet", "intern", "web", "app", "apps",
-    "application", "appli", "software", "softw", "system", "systems", "syste", "solution",
-    "solutions", "solut", "service", "services", "servi", "data", "network", "networks",
-    "netwo", "compute", "computer", "computers", "computing", "compu", "tech", "comp",
-    "company", "compa", "business", "busin", "provider", "provi", "global", "group",
-})
-
-
 def mentions_niche(text: str, tokens) -> bool:
-    """True if the text mentions the niche via a DISTINCTIVE token. Generic IT/web tokens
-    (GENERIC_GATE_TOKENS) are ignored so they can't alone qualify off-niche pages. Short
-    tokens (<=4, e.g. 'led') require a word-boundary match; longer tokens match as substrings.
-    If every token is generic (degenerate niche), fall back to all tokens to avoid over-filtering."""
+    """True if the text mentions the niche. Short tokens (<=4, e.g. 'led') require a word-boundary
+    match to avoid 'led' inside 'scheduled'; longer tokens match as substrings."""
     if not tokens:
         return True
-    distinctive = [t for t in tokens if t not in GENERIC_GATE_TOKENS]
-    use = distinctive or list(tokens)
     low = (text or "").lower()
-    for tok in use:
+    for tok in tokens:
         if len(tok) <= 4:
             if re.search(r"\b" + re.escape(tok) + r"\b", low):
                 return True

@@ -96,39 +96,36 @@ def test_profile_country_parses_regions_for_any_country(monkeypatch):
     from satellite.clients import llm
     from satellite.settings import Settings
 
-    # A FICTIONAL country: proves nothing is hardcoded — the regions come straight from the model.
-    canned = (
-        '{"countryName":"Narnia","iso2":"NA","language":"Narnian","langCode":"na",'
-        '"regions":[{"name":"Északföld","cities":["Aslan City","Cair Paravel"]},'
-        '{"name":"Délvidék","cities":["Archenland"]}],'
-        '"nicheKeywordsLocal":"alfa, béta","nicheKeywordsEnglish":"widgets, gadgets"}'
-    )
-
-    class _Msg:
-        content = canned
-
-    class _Choice:
-        message = _Msg()
-
-    class _Resp:
-        choices = [_Choice()]
+    # A FICTIONAL country (Narnia) proves nothing is hardcoded — every field comes from the model.
+    # profile_country now asks in small ROUNDS, so the fake answers the right shape per round.
+    def _for(prompt):
+        if "ISO 3166" in prompt:
+            return '{"iso2":"NA","language":"Narnian","langCode":"na"}'
+        if "keywordsLocal" in prompt:
+            return '{"keywordsLocal":["alfa","beta"],"keywordsEnglish":["widgets","gadgets"]}'
+        if "FIRST-LEVEL administrative regions" in prompt:
+            return '{"regions":["Northshire","Southshire"]}'
+        if "largest cities" in prompt:
+            return '{"Northshire":["Aslan City","Cair Paravel"],"Southshire":["Archenland"]}'
+        return "{}"
 
     class _Completions:
         def create(self, **k):
-            self.kwargs = k
-            return _Resp()
+            content = _for(k["messages"][-1]["content"])
+            msg = type("M", (), {"content": content})()
+            return type("R", (), {"choices": [type("C", (), {"message": msg})()]})()
 
     class FakeOpenAI:
         def __init__(self, **k):
-            self.chat = type("C", (), {"completions": _Completions()})()
+            self.chat = type("Chat", (), {"completions": _Completions()})()
 
     monkeypatch.setattr("openai.OpenAI", FakeOpenAI)
     out = llm.profile_country(Settings(llm_base_url="http://gw", profile_model="qwen3"), "Narnia", "widgets")
 
-    assert out["iso2"] == "NA"
-    assert [r["name"] for r in out["regions"]] == ["Északföld", "Délvidék"]   # regions, local spelling
-    assert "Aslan City" in out["cities"] and "Archenland" in out["cities"]    # flattened cities
-    assert "alfa" in out["keywordsLocal"] and "widgets" in out["keywordsEnglish"]
+    assert out["iso2"] == "NA" and out["langCode"] == "na"                       # round 1
+    assert [r["name"] for r in out["regions"]] == ["Northshire", "Southshire"]   # round 3 (model-driven)
+    assert "Aslan City" in out["cities"] and "Archenland" in out["cities"]       # round 4 cities
+    assert "alfa" in out["keywordsLocal"] and "widgets" in out["keywordsEnglish"]  # round 2
 
 
 def test_profile_country_empty_without_gateway():

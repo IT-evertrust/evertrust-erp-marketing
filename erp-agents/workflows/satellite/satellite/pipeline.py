@@ -44,12 +44,6 @@ class RunOptions:
     persist: bool = False
     use_llm: bool = True
     max_segments: int | None = None  # cap segments this run (testing / training wheels)
-    # region_focus: a ZONE word ("North"/"South"/"East"/"West"/"Border-DE"…) — a relative part of
-    # the country, NOT a real place. It is never passed to geo.cities_for as a literal (that would
-    # search a garbage term); instead it is fed to the LLM country profiler ("focus on the {zone} of
-    # {country}") and treated like nationwide-within-zone (use the profiler's cities). Empty / None /
-    # "Anywhere" => whole country (the normal nationwide path). Set by the Reach adapter only.
-    region_focus: str | None = None
 
 
 def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetcher: UrlFetcher) -> dict:
@@ -80,18 +74,7 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
     # keywords (local script + English). There are NO hardcoded country tables — discovery + the
     # niche gate work in the country's own language and find native-named firms. Needs a capable
     # model; with no LLM the run degrades to the country name as a single geo term.
-    # A ZONE focus ("North"/"South"/…) narrows the profiler to a part of the country; it is NOT a
-    # real place name, so it never reaches geo.cities_for as a literal. Empty / "Anywhere" => whole
-    # country. The zone is resolved by the LLM profiler (which returns real cities in that zone).
-    zone_focus = (opts.region_focus or "").strip()
-    if zone_focus and geo.is_nationwide(zone_focus):
-        zone_focus = ""
-    profile = (
-        llm.profile_country(settings, cfg.country, cfg.niche, cfg.industry, region_focus=zone_focus)
-        if (opts.use_llm and settings.llm_base_url) else {}
-    )
-    if zone_focus:
-        result["regionFocus"] = zone_focus
+    profile = llm.profile_country(settings, cfg.country, cfg.niche, cfg.industry) if (opts.use_llm and settings.llm_base_url) else {}
     iso2 = (profile.get("iso2") or "").lower()
     market_tld = ("." + iso2) if iso2 else ""
     if profile:
@@ -115,6 +98,8 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
         buzz = tender.fallback_buzzwords(cfg.niche)
     buzz = list(dict.fromkeys([b for b in buzz if b]))
     result["buzzwords"] = len(buzz)
+    result["buzzList"] = buzz          # the AIM niche's own keywords — used to build the qualify ICP
+    result["marketTld"] = market_tld   # exposed for the qualify geo gate
 
     lang = (profile.get("langCode") if profile else "") or ""
     result["searchLanguage"] = lang or "any"
@@ -130,12 +115,8 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
     # 2) REGION BATCHES — "Anywhere" loops EVERY region of the AIM country (count = whatever the
     #    country has: 16 / 28 / 63…), one batch at a time with a cooldown, so each region gets its own
     #    query budget and the search backend isn't overloaded. A specific region/city list = 1 batch.
-    # A ZONE focus is "nationwide within the zone": the profiler already returned only the zone's
-    # cities, so use the profiler geography exactly as we do for "Anywhere" (never expand the zone
-    # word as a literal via cities_for).
-    use_profile_geo = geo.is_nationwide(cfg.region) or bool(zone_focus)
     region_batches = []
-    if use_profile_geo:
+    if geo.is_nationwide(cfg.region):
         if profile.get("regions"):     # model gave real regions -> use them
             region_batches = [(str(r.get("name") or f"region {i + 1}"), list(r.get("cities") or []))
                               for i, r in enumerate(profile["regions"]) if r.get("cities")]
@@ -143,13 +124,7 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
             cs, n = profile["cities"], max(1, settings.region_chunk)
             region_batches = [(f"batch {i // n + 1}", cs[i:i + n]) for i in range(0, len(cs), n)]
     if not region_batches:
-        if use_profile_geo:
-            # Anywhere / zone with no profiler geography (no LLM, or it failed): degrade to the
-            # country as a single geo term. NEVER pass a zone word ("North") to cities_for — it
-            # would be searched as a literal place. The zone already steered the (skipped) profiler.
-            cities0 = [country] if country else []
-        else:
-            cities0 = geo.cities_for(cfg.country, cfg.region, cfg.default_regions) or ([country] if country else [])
+        cities0 = geo.cities_for(cfg.country, cfg.region, cfg.default_regions) or ([country] if country else [])
         region_batches = [("all", cities0)]
     # max_regions caps how many region batches one run sweeps (bounds time + SearXNG load). 0 = no
     # cap = cover EVERY region the country has (paired with the per-region cooldown so it stays kind
@@ -211,7 +186,7 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
     hits_total = dropped_blocked = dropped_offniche = queries_run = regions_scanned = 0
     # Anywhere/nationwide + exhaust flag: keep sweeping ALL regions for full coverage instead of
     # stopping once lead_target is hit (a specific region/city list is one batch, unaffected).
-    exhaust = use_profile_geo and settings.exhaust_anywhere_regions
+    exhaust = geo.is_nationwide(cfg.region) and settings.exhaust_anywhere_regions
     for _rname, rcities in region_batches:
         segs, lm, ht, blk, off, nq = _discover(rcities)
         all_segments.extend(segs)
@@ -308,6 +283,31 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
     leads.sort(key=lambda l: l.score, reverse=True)
 
     prospects = leads_to_prospects(leads, settings.min_keep_score)
+
+    # 7b) QUALITY STAGE (LLM-driven, niche/country-agnostic) — only when an LLM is available, so the
+    #     offline/test path keeps its raw behaviour. Replaces the raw prospect list with QUALIFIED,
+    #     on-niche, tiered companies AND mines on-niche directories/associations for their member
+    #     companies (with a headless-render fallback for JS member lists). Same code as the local
+    #     dev driver, so web runs match what we validate locally. Defensive: any failure leaves the
+    #     raw prospects untouched.
+    if opts.use_llm and settings.llm_base_url:
+        from .clients.render import PlaywrightRenderer
+        from .refine import refine_prospects
+        renderer = PlaywrightRenderer()
+        try:
+            ref = refine_prospects(
+                prospects, settings=settings, fetcher=fetcher, renderer=renderer,
+                niche=cfg.niche, country=country, market_tld=market_tld, buzz=result.get("buzzList"))
+            prospects = ref["qualified"]
+            result["qualified"] = len(prospects)
+            result["hubsMined"] = ref["hubsMined"]
+            result["hubCompanies"] = ref["hubCompanies"]
+            result["excludedByQualify"] = ref["excluded"]
+        except Exception as e:  # noqa: BLE001 — never let the quality stage abort a run
+            result["qualifyError"] = str(e)[:200]
+        finally:
+            renderer.close()
+
     # QUALITY FLOOR — drop tier C (score below settings.min_keep_score = noise). Keep B and above
     # only; the dropped count is reported so a sweep that yields all-C is visible.
     dropped_c = sum(1 for p in prospects if p.get("tier") == "C")
