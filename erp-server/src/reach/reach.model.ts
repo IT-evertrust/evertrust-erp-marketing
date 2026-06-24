@@ -58,6 +58,8 @@ export type ReachAim = {
   // Legacy reach fields (no longer collected by the AIM modal).
   segment?: string;
   source?: string;
+  // The Growth-Engine campaign this aim is linked to (1:1). Null on legacy aims.
+  campaignId: string | null;
   status: AimStatus;
   companies: number;
   // Async scrape tracking (Lead Satellite runs in the background). startedAt + eta

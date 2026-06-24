@@ -143,8 +143,22 @@ export class ReachService {
   // agent is unreachable the aim is still created (DRAFT) so it can be regenerated.
   async createAim(orgId: string, dto: CreateAimDto): Promise<ReachAim> {
     const aim = await this.repo.createAim(orgId, dto);
+    // Link a 1:1 DRAFT campaign so the aim's scraped leads flow into the shared
+    // prospects/Nurture pipeline. Bare insert — NO AIM webhook / n8n (Reach owns
+    // processing). Best-effort: a link failure must not block aim creation.
+    let linked = aim;
     try {
-      const config = await this.buildAgentConfig(orgId, aim);
+      const niche = await this.niches.findOrCreate(orgId, aim.niche);
+      const campaignId = await this.repo.createDraftCampaign(orgId, niche.id, aim);
+      await this.repo.setAimCampaign(orgId, aim.id, campaignId);
+      linked = { ...aim, campaignId };
+    } catch (err) {
+      this.logger.warn(
+        `Could not link aim ${aim.id} to a campaign: ${err instanceof Error ? err.message : 'error'}`,
+      );
+    }
+    try {
+      const config = await this.buildAgentConfig(orgId, linked);
       const result = await this.agent.run('reach.ammo_forge', {
         campaign_id: aim.id,
         returnOnly: true,
@@ -156,11 +170,11 @@ export class ReachService {
         generatedBy: asString(result.output.generated_by) || 'unknown',
         status: 'READY',
       });
-      return updated ?? aim;
+      return updated ?? linked;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'ammo_forge failed';
       this.logger.warn(`Ammo Forge failed for aim ${aim.id}: ${msg}`);
-      return aim; // keep the DRAFT aim; templates can be regenerated later
+      return linked; // keep the DRAFT aim; templates can be regenerated later
     }
   }
 
@@ -251,6 +265,18 @@ export class ReachService {
       const leads = sanitizeLeads(result.output);
       const elapsed = Math.round((Date.now() - startedMs) / 1000);
       await this.repo.replaceLeads(orgId, aim.id, leads, elapsed);
+      // Mirror the email-bearing leads into the linked campaign's prospects so they
+      // show up in the shared Nurture / Engage pipeline. Best-effort (the scrape itself
+      // already succeeded); a mirror failure is logged, not fatal.
+      if (aim.campaignId) {
+        await this.repo
+          .mirrorLeadsToProspects(orgId, aim.campaignId, leads, aim.country ?? null)
+          .catch((err) =>
+            this.logger.warn(
+              `Mirror leads→prospects failed for aim ${aim.id}: ${err instanceof Error ? err.message : 'error'}`,
+            ),
+          );
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'lead_satellite failed';
       this.logger.warn(`Lead Satellite failed for aim ${aim.id}: ${msg}`);

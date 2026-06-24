@@ -12,6 +12,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { organizations } from './org';
+import { campaigns } from './campaigns';
 
 // Reach (Growth Engine) owns its own lean tables, separate from the heavier
 // campaigns/prospects pipeline. An "aim" is a Reach campaign: the AIM input
@@ -83,6 +84,10 @@ export const reachAims = pgTable(
     gmailLabel: text('gmail_label'),
     whatsappNumber: text('whatsapp_number'),
     salesCalendarId: text('sales_calendar_id'),
+    // The Growth-Engine campaign this aim is linked to (1:1, created as a DRAFT when
+    // the aim is launched). Lets the aim's scraped leads flow into the shared
+    // prospects/Nurture pipeline. Nullable: legacy aims created before the link.
+    campaignId: uuid('campaign_id').references(() => campaigns.id),
     // ---- generated assets ----
     status: reachAimStatusEnum('status').notNull().default('DRAFT'),
     // Ammo Forge output: cold / follow-up / final-push email blocks.
@@ -117,7 +122,10 @@ export const reachAims = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (t) => [index('reach_aims_organization_id_idx').on(t.organizationId)],
+  (t) => [
+    index('reach_aims_organization_id_idx').on(t.organizationId),
+    index('reach_aims_campaign_id_idx').on(t.campaignId),
+  ],
 );
 
 export const reachLeads = pgTable(
