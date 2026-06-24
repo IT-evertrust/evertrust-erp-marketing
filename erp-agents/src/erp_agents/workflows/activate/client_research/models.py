@@ -53,6 +53,14 @@ class Personality(BaseModel):
     detail: str = ""        # e.g. 'detail-seeking', 'big-picture'
 
 
+class Deal(BaseModel):
+    # Deal economics extracted ONLY from pricing explicitly discussed in a meeting.
+    value: float | None = None      # total deal value (unit_price x qty, or a stated total)
+    currency: str = "EUR"
+    basis: str = ""                 # how it was derived, e.g. '40 units x EUR 155'
+    discussed: bool = False         # False when no concrete pricing was in the transcript
+
+
 class ClientResearchOutput(BaseModel):
     company: str
     profile: list[ProfileItem] = Field(default_factory=list)
@@ -66,3 +74,4 @@ class ClientResearchOutput(BaseModel):
     mbti_confidence: float = 0.0
     mbti_reasoning: str = ""
     personality: Personality = Field(default_factory=Personality)
+    deal: Deal = Field(default_factory=Deal)

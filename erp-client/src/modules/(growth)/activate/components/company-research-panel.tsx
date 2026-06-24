@@ -97,18 +97,48 @@ function DossierDetail({ dossier }: { dossier: ResearchDossier }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-[15px] font-bold text-[#15171c]">
-            {dossier.company} · Pre-Meeting Dossier
+            {dossier.company} ·{' '}
+            {dossier.stage === 'POST_MEETING'
+              ? 'Post-Meeting Dossier'
+              : 'Pre-Meeting Dossier'}
           </div>
           <div className="mt-1 text-[11px] text-[#959ca7]">
             Meeting: {dossier.meetingTime} · {dossier.contact}
           </div>
         </div>
 
-        <span className="inline-flex items-center gap-2 rounded-full border border-[#d6dade] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-[#5b626d]">
-          <LiveDot />
-          Auto-generated
-        </span>
+        {dossier.stage === 'POST_MEETING' ? (
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#15171c] bg-[#15171c] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-white">
+            <LiveDot />
+            Enriched from call
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#d6dade] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-[#5b626d]">
+            <LiveDot />
+            From emails · pre-meeting
+          </span>
+        )}
       </div>
+
+      {typeof dossier.dealValue === 'number' ? (
+        <section className="flex items-center justify-between rounded-[10px] border border-[#e4e7eb] bg-[#f6f7f9] p-4">
+          <div>
+            <SectionTitle>Deal value · from meeting</SectionTitle>
+            <div className="text-[20px] font-bold text-[#15171c]">
+              {(dossier.dealCurrency ?? 'EUR') === 'EUR' ? '€' : ''}
+              {dossier.dealValue.toLocaleString()}
+              {(dossier.dealCurrency ?? 'EUR') !== 'EUR'
+                ? ` ${dossier.dealCurrency}`
+                : ''}
+            </div>
+          </div>
+          {dossier.dealBasis ? (
+            <div className="max-w-[55%] text-right text-[11.5px] text-[#5b626d]">
+              {dossier.dealBasis}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       {dossier.mbti || dossier.personality || dossier.mbtiReasoning ? (
         <section className="rounded-[10px] border border-[#e4e7eb] bg-[#f6f7f9] p-4">

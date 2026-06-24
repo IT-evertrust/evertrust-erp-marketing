@@ -2,9 +2,14 @@
 
 import { useEffect, useState } from 'react';
 
+import { toast } from 'sonner';
+
 import {
+  type EngagePersona,
   getCampaignReplies,
   getEngageCampaigns,
+  getEngagePersonas,
+  setCampaignPersona,
   syncEngageInbox,
 } from '../services/engage.service';
 import type {
@@ -22,6 +27,8 @@ export function useEngage() {
   const [replies, setReplies] = useState<CampaignReply[]>([]);
   const [selectedReplyId, setSelectedReplyId] = useState('');
   const [aiMode, setAiMode] = useState<AiAgentMode>('write');
+  // F4: the org's drafting personas + the per-campaign selection.
+  const [personas, setPersonas] = useState<EngagePersona[]>([]);
   // Inbox (sender mailbox) filter. '' = all inboxes. Lets a user review the replies
   // that landed in another worker's mailbox; data is org-scoped, so any inbox is visible.
   const [inboxFilter, setInboxFilter] = useState('');
@@ -56,6 +63,40 @@ export function useEngage() {
       active = false;
     };
   }, []);
+
+  // Load the org's drafting personas once.
+  useEffect(() => {
+    let active = true;
+    getEngagePersonas()
+      .then((data) => active && setPersonas(data))
+      .catch(() => active && setPersonas([]));
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // F4: set the selected campaign's drafting persona (optimistic local update).
+  function changePersona(personaId: string | null) {
+    const aimId = selectedCampaignId;
+    if (!aimId) return;
+    setCampaigns((prev) =>
+      prev.map((c) => (c.id === aimId ? { ...c, personaId } : c)),
+    );
+    setCampaignPersona(aimId, personaId)
+      .then(() => {
+        const name = personas.find((p) => p.id === personaId)?.name;
+        toast.success(
+          personaId
+            ? `Drafts will use the ${name ?? 'selected'} persona.`
+            : 'Drafts will use the default voice.',
+        );
+      })
+      .catch((err: unknown) => {
+        toast.error(
+          err instanceof Error ? err.message : 'Could not set the persona.',
+        );
+      });
+  }
 
   // Load replies whenever the selected campaign changes.
   useEffect(() => {
@@ -157,5 +198,7 @@ export function useEngage() {
     loadingReplies,
     aiMode,
     setAiMode,
+    personas,
+    changePersona,
   };
 }

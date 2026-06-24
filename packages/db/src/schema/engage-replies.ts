@@ -1,6 +1,7 @@
 import {
   boolean,
   doublePrecision,
+  index,
   jsonb,
   pgTable,
   text,
@@ -62,4 +63,29 @@ export const reachLeadReplies = pgTable(
       .defaultNow(),
   },
   (t) => [uniqueIndex('reach_lead_replies_aim_lead_uq').on(t.aimId, t.leadId)],
+);
+
+// "Teach the AI" memory for Engage drafting. Each row is a piece of operator
+// feedback the draft agent should ALWAYS apply going forward (e.g. "always quote
+// 4-6 week delivery", "never promise certifications we don't have"). Scoped to a
+// campaign via aimId, or org-wide when aimId is null. reply_glock reads the active
+// notes and injects them into the draft prompt so future drafts "remember".
+export const engageTraining = pgTable(
+  'engage_training',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    // Null = applies to every campaign in the org; set = scoped to one campaign.
+    aimId: uuid('aim_id').references(() => reachAims.id, { onDelete: 'cascade' }),
+    note: text('note').notNull(),
+    // 'feedback' (manual "teach the AI") | 'auto' (learned from an edit/redraft).
+    source: text('source').notNull().default('feedback'),
+    active: boolean('active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index('engage_training_org_aim_idx').on(t.organizationId, t.aimId)],
 );

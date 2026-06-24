@@ -14,3 +14,23 @@ export const campaignReplyBodySchema = z.object({
 });
 
 export class CampaignReplyBodyDto extends createZodDto(campaignReplyBodySchema) {}
+
+// Body for setting a campaign's drafting persona (null clears it → default voice).
+export const campaignPersonaBodySchema = z.object({
+  personaId: z.string().uuid().nullable(),
+});
+export class CampaignPersonaBodyDto extends createZodDto(
+  campaignPersonaBodySchema,
+) {}
+
+// Body for adding a "teach the AI" training note to a campaign.
+export const trainingNoteBodySchema = z.object({
+  note: z.string().min(1).max(500),
+});
+export class TrainingNoteBodyDto extends createZodDto(trainingNoteBodySchema) {}
+
+// Body for an interactive draft revision ("Write & Fix").
+export const redraftBodySchema = z.object({
+  instruction: z.string().min(1).max(500),
+});
+export class RedraftBodyDto extends createZodDto(redraftBodySchema) {}

@@ -16,6 +16,7 @@ from erp_agents.core.workflow import Workflow
 from erp_agents.workflows.activate.client_research.models import (
     ClientResearchInput,
     ClientResearchOutput,
+    Deal,
     HistoryItem,
     Personality,
     ProfileItem,
@@ -150,6 +151,19 @@ class ClientResearchWorkflow(Workflow):
             conf = float(raw.get("mbti_confidence", 0.0))
         except (TypeError, ValueError):
             conf = 0.0
+        d = raw.get("deal") or {}
+        deal_value: float | None = None
+        if isinstance(d, dict) and d.get("value") is not None:
+            try:
+                deal_value = float(d["value"])
+            except (TypeError, ValueError):
+                deal_value = None
+        deal = Deal(
+            value=deal_value,
+            currency=str(d.get("currency") or "EUR") if isinstance(d, dict) else "EUR",
+            basis=str(d.get("basis") or "") if isinstance(d, dict) else "",
+            discussed=bool(d.get("discussed")) if isinstance(d, dict) else False,
+        )
         return ClientResearchOutput(
             company=company,
             profile=profile,
@@ -161,6 +175,7 @@ class ClientResearchWorkflow(Workflow):
             mbti_confidence=max(0.0, min(1.0, conf)),
             mbti_reasoning=str(raw.get("mbti_reasoning") or ""),
             personality=personality,
+            deal=deal,
         )
 
     @staticmethod

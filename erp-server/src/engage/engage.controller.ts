@@ -12,12 +12,18 @@ import type {
   EngageReplyListDto,
   EngageScanResultDto,
 } from '@evertrust/shared';
-import { Patch } from '@nestjs/common';
+import { Delete, Patch } from '@nestjs/common';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { OrgId } from '../common/tenant';
 import { EngageService } from './engage.service';
 import { EngageRepliesService } from './engage-replies.service';
-import { CampaignReplyBodyDto, EngageSendBodyDto } from './engage.dto';
+import {
+  CampaignPersonaBodyDto,
+  CampaignReplyBodyDto,
+  EngageSendBodyDto,
+  RedraftBodyDto,
+  TrainingNoteBodyDto,
+} from './engage.dto';
 
 // Engage · ERP-DIRECT Gmail reply pipeline. JWT-auth + tenant-scoped (@OrgId),
 // gated by the campaigns RBAC (read for the queue, write for scan/send/redraft).
@@ -43,6 +49,17 @@ export class EngageController {
     @Param('aimId', ParseUUIDPipe) aimId: string,
   ) {
     return this.campaignReplies.scanCampaign(orgId, aimId);
+  }
+
+  // DEV/TEST (F2): seed synthetic outreach→reply Gmail threads into the campaign
+  // mailbox so a scan has real threads to classify. No real send (messages.insert).
+  @RequirePermissions('campaigns:write')
+  @Post('campaigns/:aimId/seed-threads')
+  seedThreads(
+    @OrgId() orgId: string,
+    @Param('aimId', ParseUUIDPipe) aimId: string,
+  ) {
+    return this.campaignReplies.seedSyntheticThreads(orgId, aimId);
   }
 
   // The persisted, classified replies for a campaign (the reply-sorter queue).
@@ -75,6 +92,65 @@ export class EngageController {
     @Body() body: CampaignReplyBodyDto,
   ) {
     return this.campaignReplies.sendReply(orgId, id, body.subject, body.body);
+  }
+
+  // --- PERSONA (F4): draft in a salesperson's voice ---
+  // The org's personas (shared with Activate coaching) — feeds the persona picker.
+  @RequirePermissions('campaigns:read')
+  @Get('personas')
+  personas(@OrgId() orgId: string) {
+    return this.campaignReplies.listPersonas(orgId);
+  }
+
+  // Set (or clear, personaId=null) the drafting persona for a campaign.
+  @RequirePermissions('campaigns:write')
+  @Patch('campaigns/:aimId/persona')
+  setCampaignPersona(
+    @OrgId() orgId: string,
+    @Param('aimId', ParseUUIDPipe) aimId: string,
+    @Body() body: CampaignPersonaBodyDto,
+  ) {
+    return this.campaignReplies.setCampaignPersona(orgId, aimId, body.personaId);
+  }
+
+  // --- TRAINING (F3): "teach the AI" notes the drafter always applies ---
+  @RequirePermissions('campaigns:read')
+  @Get('campaigns/:aimId/training')
+  listTraining(
+    @OrgId() orgId: string,
+    @Param('aimId', ParseUUIDPipe) aimId: string,
+  ) {
+    return this.campaignReplies.listTraining(orgId, aimId);
+  }
+
+  @RequirePermissions('campaigns:write')
+  @Post('campaigns/:aimId/training')
+  addTraining(
+    @OrgId() orgId: string,
+    @Param('aimId', ParseUUIDPipe) aimId: string,
+    @Body() body: TrainingNoteBodyDto,
+  ) {
+    return this.campaignReplies.addTraining(orgId, aimId, body.note);
+  }
+
+  @RequirePermissions('campaigns:write')
+  @Delete('campaign-training/:id')
+  removeTraining(
+    @OrgId() orgId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.campaignReplies.removeTraining(orgId, id);
+  }
+
+  // --- RE-DRAFT (F3 "Write & Fix"): interactive revision of a draft ---
+  @RequirePermissions('campaigns:write')
+  @Post('campaign-replies/:id/redraft')
+  redraftCampaignReply(
+    @OrgId() orgId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: RedraftBodyDto,
+  ) {
+    return this.campaignReplies.redraftReply(orgId, id, body.instruction);
   }
 
   // The org's connected Google mailboxes — feeds the inbox account switcher.

@@ -38,6 +38,14 @@ export const clientResearch = pgTable(
     personality: jsonb('personality'), // {tone, decisiveness, formality, detail}
     // --- deferred web-enrichment (filled in a later phase) ---
     businessMetrics: jsonb('business_metrics'),
+    // Lifecycle stage: PRE_MEETING = grounded in emails only (built before the call,
+    // useful but weaker); POST_MEETING = enriched with the actual Read AI meeting
+    // transcript + analysis (the strong dossier).
+    stage: text('stage').notNull().default('PRE_MEETING'),
+    // --- deal economics (from pricing discussed in the meeting) ---
+    dealValue: doublePrecision('deal_value'),
+    dealCurrency: text('deal_currency'),
+    dealBasis: text('deal_basis'), // how the value was derived (e.g. "40 units × €155")
     // --- provenance ---
     sources: jsonb('sources'), // what the research drew from (emails/meetings/web)
     status: text('status').notNull().default('ready'), // 'ready' | 'pending' | 'failed'

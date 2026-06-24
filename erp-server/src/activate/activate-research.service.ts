@@ -78,6 +78,15 @@ export class ActivateResearchService {
     });
     const o = (result.output ?? {}) as Record<string, unknown>;
 
+    // Deal economics — only when pricing was actually discussed in a meeting.
+    const deal = (o.deal ?? {}) as {
+      value?: number;
+      currency?: string;
+      basis?: string;
+      discussed?: boolean;
+    };
+    const dealDiscussed = !!deal.discussed && typeof deal.value === 'number';
+
     const values = {
       organizationId: orgId,
       company: name,
@@ -94,9 +103,15 @@ export class ActivateResearchService {
         typeof o.mbti_confidence === 'number' ? o.mbti_confidence : null,
       mbtiReasoning: String(o.mbti_reasoning ?? ''),
       personality: (o.personality ?? {}) as never,
+      // Graduate to POST_MEETING once we have actual call transcripts to ground on.
+      stage: ctx.hasTranscript ? 'POST_MEETING' : 'PRE_MEETING',
+      dealValue: dealDiscussed ? (deal.value as number) : null,
+      dealCurrency: dealDiscussed ? (deal.currency ?? 'EUR') : null,
+      dealBasis: dealDiscussed ? (deal.basis ?? null) : null,
       sources: {
         messages: ctx.messages.length,
         transcripts: ctx.transcripts.length,
+        meetings: ctx.meetingCount,
       } as never,
       status: 'ready',
       generatedBy: 'activate.client_research',
@@ -122,6 +137,10 @@ export class ActivateResearchService {
           mbtiConfidence: values.mbtiConfidence,
           mbtiReasoning: values.mbtiReasoning,
           personality: values.personality,
+          stage: values.stage,
+          dealValue: values.dealValue,
+          dealCurrency: values.dealCurrency,
+          dealBasis: values.dealBasis,
           sources: values.sources,
           status: values.status,
           generatedBy: values.generatedBy,
@@ -179,7 +198,40 @@ export class ActivateResearchService {
       messages.push({ direction: 'inbound', text: String(row.inbound) });
     }
 
+    // Read AI meetings for this company — the strongest signal. Their transcripts
+    // feed the agent's transcript slot; their summaries/analysis become known facts.
+    // When ANY meeting transcript exists the dossier graduates to POST_MEETING.
+    const meetings = await this.db
+      .select({
+        title: schema.meetings.title,
+        summary: schema.meetings.summary,
+        transcript: schema.meetings.transcript,
+        analysis: schema.meetings.analysis,
+        meetingDate: schema.meetings.meetingDate,
+      })
+      .from(schema.meetings)
+      .where(
+        and(
+          tenantScope(orgId, schema.meetings),
+          dsql`lower(${schema.meetings.clientCompany}) = lower(${company})`,
+        ),
+      )
+      .orderBy(desc(schema.meetings.createdAt))
+      .limit(5);
+
+    const transcripts: string[] = [];
+    const meetingFacts: string[] = [];
+    for (const m of meetings) {
+      const label = [m.title, m.meetingDate].filter(Boolean).join(' · ') || 'Meeting';
+      const body = (m.transcript ?? '').trim() || (m.summary ?? '').trim();
+      if (body) transcripts.push(`[${label}] ${body}`);
+      if ((m.summary ?? '').trim() && m.summary !== body) {
+        meetingFacts.push(`Meeting (${label}): ${m.summary!.trim()}`);
+      }
+    }
+
     const knownFacts = [
+      ...meetingFacts,
       row?.category ? `Engage reply category: ${row.category}` : null,
       row?.niche ? `Niche: ${row.niche}` : null,
       row?.region ? `Region: ${row.region}` : null,
@@ -195,7 +247,9 @@ export class ActivateResearchService {
       niche: row?.niche ?? null,
       knownFacts,
       messages,
-      transcripts: [] as string[],
+      transcripts,
+      meetingCount: meetings.length,
+      hasTranscript: transcripts.length > 0,
     };
   }
 }

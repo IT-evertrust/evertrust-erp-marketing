@@ -78,12 +78,10 @@ Strategy by status:
 - UNINTERESTED: short and respectful, no pressure; if they asked to be removed, confirm removal.
   purpose = CLOSE_POLITELY.
 
-Respond with exactly this JSON shape (JSON only, no prose, no code fences):
-{
-  "subject": "Re: ...",
-  "body": "the full email body, with real line breaks",
-  "purpose": "MOVE_TO_MEETING|ANSWER_QUESTION|CLOSE_POLITELY|SCHEDULE_FUTURE_FOLLOW_UP"
-}"""
+OUTPUT — write ONLY the email body as plain text. No subject line, no "Subject:"
+header, no JSON, no code fences, no surrounding quotes, no meta-commentary or
+explanation. Start with the greeting (e.g. "Hi <first name>,") and end with the
+sign-off. Output the email body and nothing else."""
 
 DRAFT_USER_PROMPT_TEMPLATE = """CAMPAIGN CONTEXT:
 {campaign_context}

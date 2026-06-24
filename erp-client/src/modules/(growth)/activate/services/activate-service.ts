@@ -140,6 +140,10 @@ export type ClientResearch = {
   mbtiReasoning: string | null;
   personality: ResearchDossier['personality'];
   status: string;
+  stage?: string | null;
+  dealValue?: number | null;
+  dealCurrency?: string | null;
+  dealBasis?: string | null;
 };
 
 export function getClientResearch(): Promise<ClientResearch[]> {
@@ -173,6 +177,10 @@ export function mapDossier(
     mbtiConfidence: research?.mbtiConfidence ?? undefined,
     mbtiReasoning: research?.mbtiReasoning ?? undefined,
     personality: research?.personality ?? undefined,
+    stage: research?.stage ?? undefined,
+    dealValue: research?.dealValue ?? undefined,
+    dealCurrency: research?.dealCurrency ?? undefined,
+    dealBasis: research?.dealBasis ?? undefined,
   };
 }
 

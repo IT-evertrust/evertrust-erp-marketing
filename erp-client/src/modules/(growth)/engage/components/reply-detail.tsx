@@ -5,7 +5,12 @@ import { toast } from 'sonner';
 
 import { LiveDot } from '@/modules/(growth)/shared';
 
-import { saveReplyDraft, sendReply } from '../services/engage.service';
+import {
+  addCampaignTraining,
+  redraftReply,
+  saveReplyDraft,
+  sendReply,
+} from '../services/engage.service';
 import type { AiAgentMode, CampaignReply, ReplyThreadMessage } from '../types';
 import { AiAgentBox } from './ai-agent-box';
 
@@ -26,6 +31,7 @@ export function ReplyDetail({
   const [body, setBody] = useState('');
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
+  const [applying, setApplying] = useState(false);
   // Messages sent this session, appended to the thread so the rep immediately SEES
   // their reply land in the conversation (the server has it; this avoids a slow refetch).
   const [sentMessages, setSentMessages] = useState<ReplyThreadMessage[]>([]);
@@ -94,6 +100,35 @@ export function ReplyDetail({
       toast.error(err instanceof Error ? err.message : 'Could not send reply.');
     } finally {
       setSending(false);
+    }
+  }
+
+  // Write & Fix: ask the agent to revise the current draft, then load the result
+  // into the editor. Slow (LLM) — guard with `applying`.
+  async function handleApply(instruction: string) {
+    if (!reply) return;
+    setApplying(true);
+    try {
+      const next = await redraftReply(reply.id, instruction);
+      setSubject(next.draftSubject);
+      setBody(next.draftBody);
+      toast.success('Draft updated.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not revise the draft.');
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  // Train · Feedback: persist a note the drafter applies to all future drafts for
+  // this campaign.
+  async function handleSaveTraining(note: string) {
+    if (!reply) return;
+    try {
+      await addCampaignTraining(reply.campaignId, note);
+      toast.success('Got it — future drafts will apply this.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not save feedback.');
     }
   }
 
@@ -184,7 +219,13 @@ export function ReplyDetail({
           </div>
         </div>
 
-        <AiAgentBox mode={aiMode} onChangeMode={onChangeAiMode} />
+        <AiAgentBox
+          mode={aiMode}
+          onChangeMode={onChangeAiMode}
+          onApply={handleApply}
+          onSaveTraining={handleSaveTraining}
+          applying={applying}
+        />
       </div>
     </section>
   );

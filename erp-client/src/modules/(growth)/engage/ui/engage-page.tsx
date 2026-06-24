@@ -22,25 +22,50 @@ export function EngagePage() {
       </div>
 
       <div className="flex flex-col gap-4">
-        {engage.inboxes.length > 1 && (
-          <div className="flex items-center gap-2">
-            <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
-              Inbox
-            </span>
-            <select
-              value={engage.inboxFilter}
-              onChange={(event) => engage.setInboxFilter(event.target.value)}
-              className="rounded-[8px] border border-[#e4e7eb] bg-white px-3 py-1.5 text-[12.5px] text-[#15171c]"
-            >
-              <option value="">All inboxes</option>
-              {engage.inboxes.map((inbox) => (
-                <option key={inbox} value={inbox}>
-                  {inbox}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-4">
+          {engage.inboxes.length > 1 && (
+            <div className="flex items-center gap-2">
+              <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+                Inbox
+              </span>
+              <select
+                value={engage.inboxFilter}
+                onChange={(event) => engage.setInboxFilter(event.target.value)}
+                className="rounded-[8px] border border-[#e4e7eb] bg-white px-3 py-1.5 text-[12.5px] text-[#15171c]"
+              >
+                <option value="">All inboxes</option>
+                {engage.inboxes.map((inbox) => (
+                  <option key={inbox} value={inbox}>
+                    {inbox}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* F4: the salesperson persona reply drafts are written in. */}
+          {engage.selectedCampaign && engage.personas.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+                Draft persona
+              </span>
+              <select
+                value={engage.selectedCampaign.personaId ?? ''}
+                onChange={(event) =>
+                  engage.changePersona(event.target.value || null)
+                }
+                className="rounded-[8px] border border-[#e4e7eb] bg-white px-3 py-1.5 text-[12.5px] text-[#15171c]"
+              >
+                <option value="">Default voice</option>
+                {engage.personas.map((persona) => (
+                  <option key={persona.id} value={persona.id}>
+                    {persona.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
 
         <EngageCampaignTable
           campaigns={engage.campaigns}

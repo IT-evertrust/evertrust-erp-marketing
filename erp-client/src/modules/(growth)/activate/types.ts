@@ -63,6 +63,12 @@ export type ResearchDossier = {
     formality?: string;
     detail?: string;
   } | null;
+  // PRE_MEETING (email-grounded) vs POST_MEETING (enriched from the call transcript).
+  stage?: string;
+  // Deal economics from pricing discussed in a meeting.
+  dealValue?: number | null;
+  dealCurrency?: string | null;
+  dealBasis?: string | null;
 };
 
 // A coaching persona (the After-Sales analysis lens).

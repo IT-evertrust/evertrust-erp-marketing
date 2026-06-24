@@ -12,6 +12,8 @@ class LlmClient:
     def __init__(self) -> None:
         self.provider = settings.llm_provider
         self.model = settings.llm_model
+        # Model used for writing reply drafts — falls back to the default model.
+        self.draft_model = settings.draft_model or settings.llm_model
         # A bounded timeout so a slow/overloaded local Hermes fails fast and workflows can fall
         # back to their offline path instead of hanging (and dropping the ERP's connection).
         self.client = OpenAI(
@@ -49,6 +51,28 @@ class LlmClient:
             )
         content = response.choices[0].message.content or "{}"
         return self._parse_json(content)
+
+    # Free-form text completion — NO response_format. Small local models (Hermes)
+    # reliably produce prose but frequently mangle a requested JSON SHAPE (returning
+    # e.g. {"response": "..."} instead of the asked-for fields). For content that is
+    # naturally text — an email body — ask for text and structure it in code.
+    def complete_text(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float = 0.3,
+        model: str | None = None,
+    ) -> str:
+        response = self.client.chat.completions.create(
+            model=model or self.model,
+            temperature=temperature,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+        return response.choices[0].message.content or ""
 
     @staticmethod
     def _parse_json(content: str) -> dict[str, Any]:

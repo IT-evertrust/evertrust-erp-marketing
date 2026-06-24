@@ -270,6 +270,7 @@ export class EngageService {
         region: schema.reachAims.region,
         sender: schema.reachAims.sender,
         status: schema.reachAims.status,
+        personaId: schema.reachAims.personaId,
       })
       .from(schema.reachAims)
       .where(tenantScope(orgId, schema.reachAims))
@@ -302,6 +303,7 @@ export class EngageService {
         leadCount: countByAim.get(a.aimId) ?? 0,
         mailboxAccountId: mailbox?.id ?? null,
         mailboxEmail: mailbox?.email ?? null,
+        personaId: a.personaId ?? null,
       };
     });
   }

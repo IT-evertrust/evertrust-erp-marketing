@@ -13,6 +13,7 @@ interface BackendCampaign {
   leadCount: number;
   mailboxAccountId: string | null;
   mailboxEmail: string | null;
+  personaId: string | null;
 }
 
 interface BackendThreadMessage {
@@ -56,7 +57,7 @@ async function getJson<T>(path: string): Promise<T> {
 }
 
 async function mutate<T>(
-  method: 'POST' | 'PATCH',
+  method: 'POST' | 'PATCH' | 'DELETE',
   path: string,
   body?: unknown,
 ): Promise<T> {
@@ -136,6 +137,64 @@ export async function sendReply(
   });
 }
 
+// ---- F4 persona + F3 training/redraft ----
+export interface EngagePersona {
+  id: string;
+  name: string;
+}
+export interface EngageTrainingNote {
+  id: string;
+  note: string;
+  source: string;
+  active: boolean;
+  createdAt: string;
+}
+
+// The org's drafting personas (shared with Activate coaching).
+export async function getEngagePersonas(): Promise<EngagePersona[]> {
+  return getJson<EngagePersona[]>('/engage/personas');
+}
+
+// Set (or clear, personaId=null) the campaign's drafting persona.
+export async function setCampaignPersona(
+  aimId: string,
+  personaId: string | null,
+): Promise<void> {
+  await mutate('PATCH', `/engage/campaigns/${aimId}/persona`, { personaId });
+}
+
+// The campaign's "teach the AI" notes.
+export async function getCampaignTraining(
+  aimId: string,
+): Promise<EngageTrainingNote[]> {
+  if (!aimId) return [];
+  return getJson<EngageTrainingNote[]>(`/engage/campaigns/${aimId}/training`);
+}
+
+// Add a "teach the AI" note (applied to all future drafts for the campaign).
+export async function addCampaignTraining(
+  aimId: string,
+  note: string,
+): Promise<void> {
+  await mutate('POST', `/engage/campaigns/${aimId}/training`, { note });
+}
+
+export async function removeCampaignTraining(id: string): Promise<void> {
+  await mutate('DELETE', `/engage/campaign-training/${id}`);
+}
+
+// Interactively revise a reply's draft ("Write & Fix"). Returns the new draft.
+export async function redraftReply(
+  replyId: string,
+  instruction: string,
+): Promise<{ draftSubject: string; draftBody: string }> {
+  return mutate<{ draftSubject: string; draftBody: string }>(
+    'POST',
+    `/engage/campaign-replies/${replyId}/redraft`,
+    { instruction },
+  );
+}
+
 // ---- mappers: backend shape -> the UI's local view types (UI is untouched) ----
 function mapCampaign(c: BackendCampaign): EngageCampaign {
   return {
@@ -147,6 +206,7 @@ function mapCampaign(c: BackendCampaign): EngageCampaign {
     status: mapStatus(c.status),
     sender: c.sender,
     senderEmail: c.mailboxEmail ?? c.sender,
+    personaId: c.personaId ?? null,
   };
 }
 

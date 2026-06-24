@@ -14,6 +14,8 @@ export type EngageCampaign = {
   // The mailbox this campaign sends from — the axis the inbox filter works on.
   sender: string;
   senderEmail: string;
+  // The drafting persona reply_glock writes in (F4). null = default voice.
+  personaId: string | null;
 };
 
 export type ReplyThreadMessage = {
