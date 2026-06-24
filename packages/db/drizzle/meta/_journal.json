@@ -344,6 +344,13 @@
       "when": 1780596000000,
       "tag": "0048_reach_send_settings",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1780597000000,
+      "tag": "0049_prospect_deal_value",
+      "breakpoints": true
     }
   ]
 }

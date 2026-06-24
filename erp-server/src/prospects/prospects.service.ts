@@ -365,6 +365,42 @@ export class ProspectsService {
     return updated[0] ?? before;
   }
 
+  // Manual € deal-value set from the Nurture card. ORG-SCOPED (404 if not in orgId).
+  // Sets ONLY deal_value — never touches stage or the agent-driven status.
+  async updateDealForOrg(
+    orgId: string,
+    id: string,
+    dealValue: number,
+  ): Promise<ProspectRow> {
+    const before = await this.getForOrg(orgId, id); // 404 cross-org / unknown
+    const updated = await this.db
+      .update(schema.prospects)
+      .set({ dealValue, updatedAt: new Date() })
+      .where(
+        and(
+          eq(schema.prospects.organizationId, orgId),
+          eq(schema.prospects.id, id),
+        ),
+      )
+      .returning();
+    return updated[0] ?? before;
+  }
+
+  // Delete a prospect card from the Nurture board. ORG-SCOPED (404 if not in orgId).
+  // Returns the deleted row (for the audit trail).
+  async removeForOrg(orgId: string, id: string): Promise<ProspectRow> {
+    const before = await this.getForOrg(orgId, id); // 404 cross-org / unknown
+    await this.db
+      .delete(schema.prospects)
+      .where(
+        and(
+          eq(schema.prospects.organizationId, orgId),
+          eq(schema.prospects.id, id),
+        ),
+      );
+    return before;
+  }
+
   // Partial update of one prospect (the send + reply stages stamp status/snooze/
   // followup/lastContacted/leadId). 404 if the id is unknown. Audited.
   async update(id: string, patch: UpdateProspectDto): Promise<ProspectRow> {
