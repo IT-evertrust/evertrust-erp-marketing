@@ -9,7 +9,9 @@ export type EngageCampaign = {
   name: string;
   niche: string;
   region: string;
-  replies: number;
+  // Number of scraped leads in this campaign (NOT replies — replies are classified
+  // separately by the scan and shown in the Reply Sorter buckets).
+  leadCount: number;
   status: 'NEW' | 'IN CAMPAIGN' | 'OVER';
   // The mailbox this campaign sends from — the axis the inbox filter works on.
   sender: string;

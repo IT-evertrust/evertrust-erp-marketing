@@ -59,7 +59,7 @@ export function useEngage() {
       .then((data) => {
         if (!active) return;
         setCampaigns(data);
-        const first = data.find((campaign) => campaign.replies > 0) ?? data[0];
+        const first = data.find((campaign) => campaign.leadCount > 0) ?? data[0];
         setSelectedCampaignId((prev) => prev || (first?.id ?? ''));
       })
       .catch(() => {
@@ -289,7 +289,7 @@ export function useEngage() {
       return;
     }
     const next =
-      visibleCampaigns.find((campaign) => campaign.replies > 0) ??
+      visibleCampaigns.find((campaign) => campaign.leadCount > 0) ??
       visibleCampaigns[0];
     setSelectedCampaignId(next?.id ?? '');
   }, [inboxFilter, campaigns, selectedCampaignId, visibleCampaigns]);

@@ -313,7 +313,7 @@ function mapCampaign(c: BackendCampaign): EngageCampaign {
     name: c.name,
     niche: c.niche,
     region: c.region,
-    replies: c.leadCount,
+    leadCount: c.leadCount,
     status: mapStatus(c.status),
     sender: c.sender,
     senderEmail: c.mailboxEmail ?? c.sender,
