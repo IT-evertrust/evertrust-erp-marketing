@@ -149,16 +149,49 @@ export async function saveReplyDraft(
   });
 }
 
+// A single proposable meeting window (ISO-8601 start/end), as returned by the
+// calendar free-slots endpoint.
+export interface CalendarSlot {
+  start: string;
+  end: string;
+}
+
+// GET /engage/campaigns/:aimId/free-slots. `configured:false` (with `reason`) means
+// the campaign's calendar isn't readable, so no slots can be offered.
+export interface FreeSlots {
+  configured: boolean;
+  slots: CalendarSlot[];
+  reason: string | null;
+  timeZone: string;
+  secondaryTimeZone?: string;
+}
+
+// Result of sending a reply, including the optional tentative calendar event the
+// server creates when a `proposedSlot` is supplied.
+export interface SendReplyResult {
+  ok: true;
+  meeting: { ok: boolean; eventId: string | null; htmlLink: string | null } | null;
+}
+
+// Read the campaign calendar's bookable windows so the rep can propose a meeting time.
+export async function getCampaignFreeSlots(aimId: string): Promise<FreeSlots> {
+  return getJson<FreeSlots>(`/engage/campaigns/${aimId}/free-slots`);
+}
+
 // Send the (edited) draft to the lead, threaded onto the existing conversation.
+// When `proposedSlot` is supplied the server also creates a tentative calendar event
+// (with a Meet link) for that window and invites the lead.
 export async function sendReply(
   replyId: string,
   subject: string,
   body: string,
-): Promise<void> {
-  await mutate('POST', `/engage/campaign-replies/${replyId}/send`, {
-    subject,
-    body,
-  });
+  proposedSlot?: CalendarSlot,
+): Promise<SendReplyResult> {
+  return mutate<SendReplyResult>(
+    'POST',
+    `/engage/campaign-replies/${replyId}/send`,
+    proposedSlot ? { subject, body, proposedSlot } : { subject, body },
+  );
 }
 
 // ---- F4 persona + F3 training/redraft ----

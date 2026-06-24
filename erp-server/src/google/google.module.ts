@@ -48,6 +48,6 @@ import { GoogleCalendarReadController } from './google-calendar-read.controller'
     GoogleGmailService,
     GoogleCalendarReadService,
   ],
-  exports: [GoogleAccountsService, GoogleGmailService],
+  exports: [GoogleAccountsService, GoogleGmailService, GoogleCalendarReadService],
 })
 export class GoogleModule {}
