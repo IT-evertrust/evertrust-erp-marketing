@@ -143,13 +143,13 @@ export class ReachService {
   // agent is unreachable the aim is still created (DRAFT) so it can be regenerated.
   async createAim(orgId: string, dto: CreateAimDto): Promise<ReachAim> {
     const aim = await this.repo.createAim(orgId, dto);
-    // Link a 1:1 DRAFT campaign so the aim's scraped leads flow into the shared
+    // Link a 1:1 ACTIVE campaign so the aim's scraped leads flow into the shared
     // prospects/Nurture pipeline. Bare insert — NO AIM webhook / n8n (Reach owns
     // processing). Best-effort: a link failure must not block aim creation.
     let linked = aim;
     try {
       const niche = await this.niches.findOrCreate(orgId, aim.niche);
-      const campaignId = await this.repo.createDraftCampaign(orgId, niche.id, aim);
+      const campaignId = await this.repo.createLinkedCampaign(orgId, niche.id, aim);
       await this.repo.setAimCampaign(orgId, aim.id, campaignId);
       linked = { ...aim, campaignId };
     } catch (err) {

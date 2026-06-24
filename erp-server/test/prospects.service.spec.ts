@@ -5,7 +5,7 @@ import { ProspectsService } from '../src/prospects/prospects.service';
 import { LeadsService } from '../src/leads/leads.service';
 import { NichesService } from '../src/niches/niches.service';
 import type { AppConfigService } from '../src/config/app-config.service';
-import { getDb, makeWorkflowConfig, rowsOf, seed } from './real-db';
+import { getDb, rowsOf, seed } from './real-db';
 
 const ORG_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const CAMP = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
@@ -42,7 +42,7 @@ async function makeService() {
   const db = getDb();
   const leadsService = new LeadsService(db, config, new NichesService(db));
   return {
-    service: new ProspectsService(db, leadsService, makeWorkflowConfig(db, config)),
+    service: new ProspectsService(db, leadsService),
   };
 }
 
@@ -108,69 +108,8 @@ describe('ProspectsService — bulk upsert idempotency', () => {
   });
 });
 
-describe('ProspectsService — send-list + snooze filters', () => {
-  it('sendList includes only eligible prospects (active, NEW|EMAILED, <3 followups, not suppressed)', async () => {
-    const { service } = await makeService();
-    const base = { organizationId: ORG_A, campaignId: CAMP, followupCount: 0 };
-    await seed(schema.prospects, [
-      { ...base, id: 'a0000001-0000-0000-0000-000000000001', email: 'new@co.com', status: 'NEW' },
-      // capped: 3 follow-ups already
-      { ...base, id: 'a0000001-0000-0000-0000-000000000002', email: 'capped@co.com', status: 'EMAILED', followupCount: 3 },
-      // wrong status
-      { ...base, id: 'a0000001-0000-0000-0000-000000000003', email: 'replied@co.com', status: 'REPLIED' },
-      // suppressed
-      { ...base, id: 'a0000001-0000-0000-0000-000000000004', email: 'supp@co.com', status: 'NEW' },
-      // cooled down too recently
-      { ...base, id: 'a0000001-0000-0000-0000-000000000005', email: 'recent@co.com', status: 'EMAILED', lastContactedAt: new Date() },
-    ]);
-    await seed(schema.suppressions, [
-      { organizationId: ORG_A, email: 'supp@co.com' },
-    ]);
-
-    const list = await service.list({ sendList: true });
-    expect(list.map((r) => r.email)).toEqual(['new@co.com']);
-  });
-
-  it('sendList honours a custom automation.leads.dedupDays cooldown', async () => {
-    // A prospect last contacted 4 days ago: eligible under the default 3-day
-    // cooldown, but a dedupDays=7 override (PER-ORG) must now exclude it.
-    const { service } = await makeService();
-    await seed(schema.orgConfig, [
-      { organizationId: ORG_A, dedupDays: 7 },
-    ]);
-    const fourDaysAgo = new Date(Date.now() - 4 * 86_400_000);
-    const base = { organizationId: ORG_A, campaignId: CAMP, followupCount: 0 };
-    await seed(schema.prospects, [
-      { ...base, id: 'a0000002-0000-0000-0000-000000000001', email: 'fresh@co.com', status: 'NEW' },
-      { ...base, id: 'a0000002-0000-0000-0000-000000000002', email: 'fourdays@co.com', status: 'EMAILED', lastContactedAt: fourDaysAgo },
-    ]);
-
-    const list = await service.list({ sendList: true });
-    // p-4d excluded by the 7-day window; only the never-contacted prospect remains.
-    expect(list.map((r) => r.email)).toEqual(['fresh@co.com']);
-  });
-
-  it('sendList stops excluding suppressed prospects when respectSuppressions is false', async () => {
-    const { service } = await makeService();
-    await seed(schema.orgConfig, [
-      { organizationId: ORG_A, respectSuppressions: false },
-    ]);
-    const base = { organizationId: ORG_A, campaignId: CAMP, followupCount: 0 };
-    // list() orders by createdAt desc — seed p-new with a LATER createdAt so it
-    // precedes p-supp deterministically (the fake emulated this via __seq desc).
-    await seed(schema.prospects, [
-      { ...base, id: 'a0000003-0000-0000-0000-000000000001', email: 'supp@co.com', status: 'NEW', createdAt: new Date('2026-01-01T00:00:00.000Z') },
-      { ...base, id: 'a0000003-0000-0000-0000-000000000002', email: 'new@co.com', status: 'NEW', createdAt: new Date('2026-01-02T00:00:00.000Z') },
-    ]);
-    await seed(schema.suppressions, [
-      { organizationId: ORG_A, email: 'supp@co.com' },
-    ]);
-
-    const list = await service.list({ sendList: true });
-    // The suppression gate is off → the suppressed prospect is included.
-    expect(list.map((r) => r.email)).toEqual(['new@co.com', 'supp@co.com']);
-  });
-
+describe('ProspectsService — snooze filter', () => {
+  // (The n8n sendList send-queue gate was retired with the n8n marketing flow.)
   it('snoozeDue includes only NOT_INTERESTED prospects whose snooze has elapsed', async () => {
     const { service } = await makeService();
     await seed(schema.prospects, [

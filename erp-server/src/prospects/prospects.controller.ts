@@ -195,7 +195,7 @@ export class ProspectsController {
   }
 
   // The prospect list with the arsenal filters (campaignId, status, email,
-  // snoozeDue, sendList, limit). sendList = Reach Bazooka's eligible queue.
+  // snoozeDue, limit). (The n8n sendList send-queue gate was retired.)
   @Public()
   @UseGuards(ArsenalTokenGuard)
   @Get()
@@ -204,7 +204,6 @@ export class ProspectsController {
     @Query('status') statusParam?: string,
     @Query('email') email?: string,
     @Query('snoozeDue') snoozeDue?: string,
-    @Query('sendList') sendList?: string,
     @Query('limit') limitParam?: string,
   ): Promise<ProspectDto[]> {
     const status = ProspectStatus.safeParse(statusParam);
@@ -214,7 +213,6 @@ export class ProspectsController {
       status: status.success ? status.data : undefined,
       email: email || undefined,
       snoozeDue: snoozeDue === 'true',
-      sendList: sendList === 'true',
       limit: Number.isFinite(limit) ? limit : undefined,
     });
     return rows.map(toDto);

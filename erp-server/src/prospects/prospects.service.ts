@@ -12,7 +12,6 @@ import type {
 import { DB, type DbClient } from '../db/db.tokens';
 import { writeMachineAudit } from '../common/machine-audit';
 import { LeadsService } from '../leads/leads.service';
-import { WorkflowConfigService } from '../arsenal/workflow-config.service';
 
 type ProspectRow = typeof schema.prospects.$inferSelect;
 type CampaignRow = typeof schema.campaigns.$inferSelect;
@@ -37,7 +36,6 @@ export interface ProspectListFilters {
   status?: ProspectStatus;
   email?: string;
   snoozeDue?: boolean;
-  sendList?: boolean;
   limit?: number;
 }
 
@@ -67,13 +65,6 @@ export interface ProspectBoardResult {
   statusCounts: Record<string, number>;
   stageCounts: Record<string, number>;
 }
-
-const SEND_LIST_STATUSES: ProspectStatus[] = ['NEW', 'EMAILED'];
-const FOLLOWUP_CAP = 3;
-// Default follow-up cooldown (days) when automation.leads.dedupDays is unset (null).
-// Preserves the pre-config 3-day window; the send-list predicate multiplies it by
-// 86_400_000 to get the cooldown in ms.
-const FOLLOWUP_COOLDOWN_DEFAULT_DAYS = 3;
 
 // Map a leads row to its HTTP DTO (timestamps → ISO strings). Local to the
 // graduation response so prospects need not depend on the leads controller.
@@ -113,7 +104,6 @@ export class ProspectsService {
   constructor(
     @Inject(DB) private readonly db: DbClient,
     private readonly leads: LeadsService,
-    private readonly workflowConfig: WorkflowConfigService,
   ) {}
 
   // Upsert prospects on (campaignId, email). On conflict the SCRAPED fields update
@@ -185,15 +175,9 @@ export class ProspectsService {
     return { created, updated };
   }
 
-  // The machine prospect list. campaignId/status/email are SQL-filtered; snoozeDue
-  // and sendList are the derived gates (computed in-process so the rules stay one
-  // readable predicate). sendList enforces: campaign ACTIVE, status NEW|EMAILED,
-  // followupCount<3, last contact null or older than the cooldown, and NOT
-  // suppressed (org,email). The cooldown + suppression gate are config-driven via
-  // automation.leads (WorkflowConfigService): dedupDays sets the cooldown window
-  // (falling back to FOLLOWUP_COOLDOWN_DEFAULT_DAYS when null), and
-  // respectSuppressions toggles the do-not-contact gate. Both default to today's
-  // behaviour (3-day cooldown, suppressions honoured) until an admin overrides them.
+  // The machine prospect list. campaignId/status/email are SQL-filtered; snoozeDue is
+  // a derived gate computed in-process. (The n8n `sendList` send-queue gate was retired
+  // with the rest of the n8n marketing flow — Reach owns sending now.)
   async list(filters: ProspectListFilters): Promise<ProspectRow[]> {
     const conds = [];
     if (filters.campaignId) {
@@ -220,54 +204,6 @@ export class ProspectsService {
           r.snoozeUntil !== null &&
           new Date(r.snoozeUntil).getTime() <= now,
       );
-    }
-
-    if (filters.sendList) {
-      // Admin-tunable lead governance is now PER-ORG (org_config). The send list is a
-      // machine pull that can span orgs, so resolve each prospect's org governance
-      // (dedupDays → cooldown, respectSuppressions → do-not-contact gate), memoized
-      // per org for the duration of this call. dedupDays null → the built-in default
-      // cooldown; respectSuppressions defaults true.
-      const govByOrg = new Map<
-        string,
-        { cooldownMs: number; respectSuppressions: boolean }
-      >();
-      const govFor = async (orgId: string) => {
-        const cached = govByOrg.get(orgId);
-        if (cached) return cached;
-        const { leads } = await this.workflowConfig.getAutomation(orgId);
-        const gov = {
-          cooldownMs:
-            (leads.dedupDays ?? FOLLOWUP_COOLDOWN_DEFAULT_DAYS) * 86_400_000,
-          respectSuppressions: leads.respectSuppressions,
-        };
-        govByOrg.set(orgId, gov);
-        return gov;
-      };
-      // Active campaigns only.
-      const activeCampaignIds = await this.activeCampaignIdSet();
-      // Suppressed (org,email) pairs — the do-not-contact gate. Built once and only
-      // consulted for prospects whose org has respectSuppressions on.
-      const suppressed = await this.suppressedKeySet();
-      const filtered: ProspectRow[] = [];
-      for (const r of rows) {
-        if (!activeCampaignIds.has(r.campaignId)) continue;
-        if (!SEND_LIST_STATUSES.includes(r.status)) continue;
-        if (r.followupCount >= FOLLOWUP_CAP) continue;
-        const gov = await govFor(r.organizationId);
-        const lastMs = r.lastContactedAt
-          ? new Date(r.lastContactedAt).getTime()
-          : null;
-        if (lastMs !== null && now - lastMs < gov.cooldownMs) continue;
-        if (
-          gov.respectSuppressions &&
-          suppressed.has(`${r.organizationId}::${r.email}`)
-        ) {
-          continue;
-        }
-        filtered.push(r);
-      }
-      rows = filtered;
     }
 
     const limit = filters.limit && filters.limit > 0 ? filters.limit : undefined;
@@ -582,21 +518,4 @@ export class ProspectsService {
     return campaign;
   }
 
-  private async activeCampaignIdSet(): Promise<Set<string>> {
-    const rows = await this.db
-      .select({ id: schema.campaigns.id })
-      .from(schema.campaigns)
-      .where(eq(schema.campaigns.lifecycle, 'ACTIVE'));
-    return new Set(rows.map((r) => r.id));
-  }
-
-  private async suppressedKeySet(): Promise<Set<string>> {
-    const rows = await this.db
-      .select({
-        organizationId: schema.suppressions.organizationId,
-        email: schema.suppressions.email,
-      })
-      .from(schema.suppressions);
-    return new Set(rows.map((r) => `${r.organizationId}::${r.email.toLowerCase()}`));
-  }
 }

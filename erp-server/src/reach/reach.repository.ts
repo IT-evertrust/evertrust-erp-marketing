@@ -148,10 +148,12 @@ export class ReachRepository {
     return rowToAim(row!);
   }
 
-  // Create the DRAFT campaign an aim links to (1:1). A bare insert — NO AIM webhook,
-  // no n8n: Reach (Python) owns the processing. The campaign exists so the aim's
-  // leads can live in the shared prospects/Nurture pipeline. Returns the campaign id.
-  async createDraftCampaign(
+  // Create the campaign an aim links to (1:1). A bare insert — NO AIM webhook, no n8n:
+  // Reach (Python) owns the processing. The campaign is ACTIVE because the aim IS a
+  // live campaign (it shows as active, is the default on the Nurture board, and counts
+  // in active metrics). Safe to be ACTIVE: the n8n send paths that gated on ACTIVE are
+  // retired. Returns the campaign id.
+  async createLinkedCampaign(
     orgId: string,
     nicheId: string,
     aim: ReachAim,
@@ -169,7 +171,7 @@ export class ReachRepository {
         whatsappNumber: aim.whatsappNumber ?? '',
         salesCalendarId: aim.salesCalendarId ?? null,
         sender: aim.sender,
-        lifecycle: 'DRAFT',
+        lifecycle: 'ACTIVE',
       })
       .returning({ id: schema.campaigns.id });
     return row!.id;

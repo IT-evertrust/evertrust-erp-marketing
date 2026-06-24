@@ -24,15 +24,15 @@ async function makeAim() {
 }
 
 describe('ReachRepository — aim → campaign link', () => {
-  it('createDraftCampaign inserts a DRAFT campaign mapped from the aim', async () => {
+  it('createLinkedCampaign inserts an ACTIVE campaign mapped from the aim', async () => {
     const { repo, aim } = await makeAim();
-    const campaignId = await repo.createDraftCampaign(ORG, NICHE, aim);
+    const campaignId = await repo.createLinkedCampaign(ORG, NICHE, aim);
     const [c] = await getDb()
       .select()
       .from(schema.campaigns)
       .where(eq(schema.campaigns.id, campaignId));
     expect(c).toBeDefined();
-    expect(c!.lifecycle).toBe('DRAFT');
+    expect(c!.lifecycle).toBe('ACTIVE');
     expect(c!.organizationId).toBe(ORG);
     expect(c!.nicheId).toBe(NICHE);
     expect(c!.name).toBe('Poland Cyber');
@@ -42,7 +42,7 @@ describe('ReachRepository — aim → campaign link', () => {
 
   it('setAimCampaign links the aim to the campaign', async () => {
     const { repo, aim } = await makeAim();
-    const campaignId = await repo.createDraftCampaign(ORG, NICHE, aim);
+    const campaignId = await repo.createLinkedCampaign(ORG, NICHE, aim);
     await repo.setAimCampaign(ORG, aim.id, campaignId);
     const linked = await repo.findAimById(ORG, aim.id);
     expect(linked!.campaignId).toBe(campaignId);
@@ -52,7 +52,7 @@ describe('ReachRepository — aim → campaign link', () => {
 describe('ReachRepository.mirrorLeadsToProspects', () => {
   it('mirrors ONLY email-bearing leads, upserts, and never regresses status', async () => {
     const { repo, aim } = await makeAim();
-    const campaignId = await repo.createDraftCampaign(ORG, NICHE, aim);
+    const campaignId = await repo.createLinkedCampaign(ORG, NICHE, aim);
 
     const n = await repo.mirrorLeadsToProspects(
       ORG,
