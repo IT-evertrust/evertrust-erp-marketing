@@ -202,6 +202,12 @@ export interface CampaignScanResult {
 export class EngageRepliesService {
   private readonly logger = new Logger(EngageRepliesService.name);
 
+  // Campaigns with a scan currently running (key = `${orgId}:${aimId}`). A scan is
+  // slow (one LLM classify+draft per lead), so a second click while one is in flight
+  // must be a no-op — otherwise repeated clicks stack concurrent passes over the same
+  // leads and all contend for the one local model, making everything slower.
+  private readonly scansInFlight = new Set<string>();
+
   constructor(
     @Inject(DB) private readonly db: DbClient,
     private readonly googleAccounts: GoogleAccountsService,
@@ -243,6 +249,25 @@ export class EngageRepliesService {
       reason: null,
     };
 
+    // Single-flight: ignore a duplicate scan while one is already running for this
+    // campaign, so repeated clicks can't pile up concurrent LLM passes.
+    const key = `${orgId}:${aimId}`;
+    if (this.scansInFlight.has(key)) {
+      return { ...empty, configured: true, reason: 'A scan is already running for this campaign.' };
+    }
+    this.scansInFlight.add(key);
+    try {
+      return await this.runScan(orgId, aimId, empty);
+    } finally {
+      this.scansInFlight.delete(key);
+    }
+  }
+
+  private async runScan(
+    orgId: string,
+    aimId: string,
+    empty: CampaignScanResult,
+  ): Promise<CampaignScanResult> {
     const resolved = await this.resolveCampaign(orgId, aimId);
     if (!resolved) throw new BadRequestException('Unknown campaign');
     const { aim, mailboxAccountId } = resolved;
