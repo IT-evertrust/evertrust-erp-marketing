@@ -21,6 +21,33 @@ import {
   type SchedulingVerdict,
   type Slot,
 } from './meeting-loop';
+import { formatMeetingTimeBlock } from './meeting-time-format';
+
+// Markers fence the system-owned meeting-time block so re-application replaces (never
+// duplicates) it, and so the time is unmistakably system-rendered (not LLM prose). They
+// are HTML comments — invisible in rendered email, harmless in plain text.
+const MTG_OPEN = '<!--meeting-time-->';
+const MTG_CLOSE = '<!--/meeting-time-->';
+const MTG_BLOCK = new RegExp(`\\n*${MTG_OPEN}[\\s\\S]*?${MTG_CLOSE}`, 'g');
+
+// Stamp the authoritative dual-zone meeting time onto an email body. The time is rendered
+// from the structured slot(s) — the SAME ones the calendar books — so the email can never
+// disagree with the invite. Idempotent: any prior block is stripped before re-appending,
+// so re-stamping (e.g. ACCEPTED after PROPOSED) never duplicates it. No slots → unchanged.
+export function withMeetingTime(
+  body: string,
+  slots: Slot[],
+  primaryTz: string,
+  secondaryTz: string | null,
+): string {
+  const stripped = body.replace(MTG_BLOCK, '').trimEnd();
+  if (slots.length === 0) return stripped;
+  const label = slots.length > 1 ? 'Proposed times' : 'Proposed time';
+  const block =
+    `${MTG_OPEN}\n\n${label}:\n` +
+    `${formatMeetingTimeBlock(slots, primaryTz, secondaryTz)}\n${MTG_CLOSE}`;
+  return `${stripped}\n\n${block}`;
+}
 
 // ===========================================================================
 // Engage · CAMPAIGN-CENTRIC reply pipeline (reach_aims / reach_leads model).
@@ -336,6 +363,19 @@ export class EngageRepliesService {
     return rows[0] ?? null;
   }
 
+  // Resolve the org's zones and stamp the authoritative dual-zone time block onto a
+  // meeting email body (rendered from the structured slots, never the LLM). No slots →
+  // unchanged. Used at PROPOSED send, ACCEPTED confirmation, and COUNTER alternatives.
+  private async stampMeetingTime(
+    orgId: string,
+    body: string,
+    slots: Slot[],
+  ): Promise<string> {
+    if (!slots.length) return body;
+    const { primary, secondary } = await this.calendar.getOrgTimeZones(orgId);
+    return withMeetingTime(body, slots, primary, secondary);
+  }
+
   // Resolve a reply_glock scheduling verdict against the org's calendar — pure-ish,
   // delegates to the free `resolveScheduling` (testable with a fake calendar). The
   // calendar is `this.calendar` (GoogleCalendarReadService), which already implements
@@ -375,11 +415,20 @@ export class EngageRepliesService {
       if (resolution.status === 'NONE') return;
 
       if (resolution.status === 'ACCEPTED') {
+        // Normalize the stored draft so the confirmation email shows the REAL accepted
+        // time (the LLM's classify-time draft may state an invented time / none at all).
+        const existingAccepted = await this.loadExistingReply(orgId, aim.id, leadId);
+        const acceptedDraft = existingAccepted
+          ? await this.stampMeetingTime(orgId, existingAccepted.draftBody ?? '', [
+              resolution.acceptedSlot,
+            ])
+          : undefined;
         await this.db
           .update(schema.reachLeadReplies)
           .set({
             meetingStatus: 'ACCEPTED',
             acceptedSlot: resolution.acceptedSlot,
+            ...(acceptedDraft !== undefined ? { draftBody: acceptedDraft } : {}),
             updatedAt: new Date(),
           })
           .where(
@@ -424,13 +473,28 @@ export class EngageRepliesService {
         );
 
       if (resolution.alternatives.length > 0 && existing) {
-        const formatted = resolution.alternatives
-          .map((s) => `${s.start} – ${s.end}`)
-          .join(', ');
+        // Let the LLM write the prose but NOT the times — it must not invent a clock time
+        // (that's what diverged from the calendar). The exact alternatives are stamped on
+        // deterministically below, from the structured slots.
         const instruction =
-          'Their requested time is unavailable. Propose these alternative times instead: ' +
-          `${formatted}.`;
-        await this.redraftReply(orgId, existing.id, instruction);
+          'Their requested time is unavailable. Apologise briefly and propose alternative ' +
+          'times. Do NOT state any specific date or clock time — the exact alternative ' +
+          'times are appended below your message.';
+        const redrafted = await this.redraftReply(orgId, existing.id, instruction);
+        const stamped = await this.stampMeetingTime(
+          orgId,
+          redrafted.draftBody ?? '',
+          resolution.alternatives,
+        );
+        await this.db
+          .update(schema.reachLeadReplies)
+          .set({ draftBody: stamped, updatedAt: new Date() })
+          .where(
+            and(
+              tenantScope(orgId, schema.reachLeadReplies),
+              eq(schema.reachLeadReplies.id, existing.id),
+            ),
+          );
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown error';
@@ -1220,11 +1284,16 @@ export class EngageRepliesService {
     const lastInbound = [...thread].reverse().find((m) => m.direction === 'inbound');
     const inReplyTo = lastInbound?.rfc822MessageId ?? null;
 
+    // Ground the meeting time: when this reply offers slot(s), the body that goes out (and
+    // is persisted) carries the system-rendered dual-zone time block — matching the invite.
+    const offeredSlots: Slot[] = proposedSlots ?? (proposedSlot ? [proposedSlot] : []);
+    const finalBody = await this.stampMeetingTime(orgId, body, offeredSlots);
+
     const raw = buildRawReply({
       to: lead.email,
       from: access.account.email,
       subject: subject || row.inboundSubject || '(no subject)',
-      body,
+      body: finalBody,
       inReplyTo,
       references: inReplyTo,
     });
@@ -1241,7 +1310,7 @@ export class EngageRepliesService {
 
     await this.db
       .update(schema.reachLeadReplies)
-      .set({ handled: true, sentAt: new Date(), draftBody: body, draftSubject: subject, updatedAt: new Date() })
+      .set({ handled: true, sentAt: new Date(), draftBody: finalBody, draftSubject: subject, updatedAt: new Date() })
       .where(eq(schema.reachLeadReplies.id, row.id));
 
     // Record the slots offered to the lead in this round so a later scan can resolve
@@ -1266,11 +1335,12 @@ export class EngageRepliesService {
     let meeting: { ok: boolean; eventId: string | null; htmlLink: string | null } | null = null;
     if (proposedSlot) {
       try {
+        const { primary } = await this.calendar.getOrgTimeZones(orgId);
         const res = await this.calendar.createEvent(orgId, {
           title: `EVERTRUST × ${lead.company} — intro call`,
           start: proposedSlot.start,
           end: proposedSlot.end,
-          timeZone: 'Europe/Berlin',
+          timeZone: primary,
           attendees: [{ email: lead.email }],
           addGoogleMeet: true,
         });

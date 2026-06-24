@@ -43,6 +43,9 @@ function fakeCalendar(opts: { free: boolean; alternatives?: Slot[] }) {
     async alternativesNear() {
       return opts.alternatives ?? [];
     },
+    async getOrgTimeZones() {
+      return { primary: 'Europe/Berlin', secondary: 'Asia/Bangkok' };
+    },
   } as never;
 }
 
