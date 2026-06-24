@@ -8,8 +8,7 @@
       "campaigns": "Campaigns",
       "scraper": "Lead Scraper",
       "email": "Email Generator",
-      "sequence": "Sequence Sender",
-      "templates": "Templates"
+      "sequence": "Sequence Sender"
     },
     "campaigns": {
       "tiles": {
@@ -43,25 +42,10 @@
       "colCompanies": "Companies",
       "leadsTitle": "Leads",
       "leadsCount": "{count, plural, =0 {No companies} one {# company} other {# companies}} · Full list",
-      "leadCol": {
-        "company": "Company",
-        "contact": "Contact",
-        "location": "Location",
-        "source": "Source",
-        "status": "Status"
-      },
+      "leadCol": { "company": "Company", "contact": "Contact", "location": "Location", "source": "Source", "status": "Status" },
       "noLeads": "No leads yet — run the scraper for this campaign.",
       "selectToView": "Select a campaign above to view its scraped leads.",
-      "leadStatus": {
-        "NEW": "New",
-        "EMAILED": "Emailed",
-        "REPLIED": "Replied",
-        "INTERESTED": "Interested",
-        "MEETING_SCHEDULED": "Meeting",
-        "NOT_INTERESTED": "Not interested",
-        "RE_ENGAGED": "Re-engaged",
-        "DO_NOT_CONTACT": "Do not contact"
-      },
+      "leadStatus": { "NEW": "New", "EMAILED": "Emailed", "REPLIED": "Replied", "INTERESTED": "Interested", "MEETING_SCHEDULED": "Meeting", "NOT_INTERESTED": "Not interested", "RE_ENGAGED": "Re-engaged", "DO_NOT_CONTACT": "Do not contact" },
       "run": "Run Lead Scraper",
       "progress": {
         "running": "Scraping…",
@@ -134,91 +118,9 @@
         "description": "Multi-step outbound sequences are sent by the REACH BAZOOKA arsenal stage on its own schedule. A standalone sequence builder is coming in a later phase."
       },
       "steps": {
-        "intro": {
-          "title": "Intro email",
-          "sub": "Sent immediately on enrollment",
-          "badge": "62% open"
-        },
-        "follow": {
-          "title": "Follow-up",
-          "sub": "Wait 3 days",
-          "badge": "28% reply"
-        },
-        "breakup": {
-          "title": "Break-up email",
-          "sub": "Wait 7 days",
-          "badge": "queued"
-        }
-      }
-    },
-    "generator": {
-      "orgDefault": "Showing the org-wide default template. Edit it in the Templates tab — per-campaign edits here are not used."
-    },
-    "modal": {
-      "field": {
-        "targetType": "Type",
-        "targetTypePlaceholder": "e.g. provider, supplier",
-        "industryFocus": "Industry focus",
-        "industryFocusPlaceholder": "e.g. IT, Power, Transportation",
-        "tenderFocus": "Tender focus",
-        "tenderFocusPlaceholder": "e.g. Cloud Infrastructure, AI Platform",
-        "focusHint": "Used by the default email template ({{Type}} / {{IndustryFocus}} / {{TenderFocus}})."
-      }
-    },
-    "templates": {
-      "orgWide": "Org-wide",
-      "optional": "Optional",
-      "saving": "Saving…",
-      "saveDefault": "Save as default",
-      "default": {
-        "title": "Default email template",
-        "intro": "The org-wide default the Reach Bazooka sends when a campaign has no template of its own. Use the placeholders",
-        "and": "and",
-        "outro": "to personalise each send."
-      },
-      "round": {
-        "cold": {
-          "label": "Cold outreach",
-          "hint": "Round 1"
-        },
-        "followUp": {
-          "label": "Follow-up",
-          "hint": "Round 2"
-        },
-        "final": {
-          "label": "Final push",
-          "hint": "Round 3"
-        }
-      },
-      "field": {
-        "subject": "Subject",
-        "subjectPlaceholder": "Subject line",
-        "body": "Body",
-        "bodyPlaceholder": "Email body…"
-      },
-      "import": {
-        "title": "Import from JSON",
-        "intro": "Paste or upload a",
-        "outro": "object (stored keys also work) to fill the three rounds above.",
-        "hidePaste": "Hide paste",
-        "pasteJson": "Paste JSON",
-        "upload": "Upload .json",
-        "loadFromJson": "Load from JSON"
-      },
-      "signature": {
-        "title": "Signature image",
-        "urlLabel": "Signature image URL",
-        "previewAlt": "Signature preview"
-      },
-      "toast": {
-        "loadFailed": "Could not load the default template.",
-        "invalidJson": "Invalid JSON — could not parse the template.",
-        "expectedObject": "Expected a JSON object with the three rounds.",
-        "noRounds": "No COLD / FOLLOWUP / FINALPUSH rounds found in the JSON.",
-        "loaded": "Loaded template from JSON.",
-        "readFailed": "Could not read the uploaded file.",
-        "saved": "Saved",
-        "saveFailed": "Could not save."
+        "intro": { "title": "Intro email", "sub": "Sent immediately on enrollment", "badge": "62% open" },
+        "follow": { "title": "Follow-up", "sub": "Wait 3 days", "badge": "28% reply" },
+        "breakup": { "title": "Break-up email", "sub": "Wait 7 days", "badge": "queued" }
       }
     }
   },
