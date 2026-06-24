@@ -14,7 +14,9 @@ from erp_agents.workflows.engage.reply_glock.models import (
     ReplyDraft,
     ReplyGlockInput,
     ReplyGlockOutput,
+    SchedulingVerdict,
     ThreadMessage,
+    parse_scheduling,
 )
 from erp_agents.workflows.engage.reply_glock.prompts import (
     CLASSIFY_SYSTEM_PROMPT,
@@ -96,13 +98,14 @@ class ReplyGlockWorkflow(Workflow):
                     reasoning="interactive re-draft",
                     extracted_signals=ExtractedSignals(),
                 )
+                scheduling = SchedulingVerdict()
                 trace.append(
                     self.trace_step(
                         "redraft_skip_classify", None, {"status": classification.status}
                     )
                 )
             else:
-                classification, classify_trace = self.classify_reply(
+                classification, scheduling, classify_trace = self.classify_reply(
                     workflow_input=workflow_input, normalized=normalized
                 )
                 trace.extend(classify_trace)
@@ -117,6 +120,7 @@ class ReplyGlockWorkflow(Workflow):
                 normalized=normalized,
                 classification=classification,
                 draft=draft,
+                scheduling=scheduling,
             )
             trace.append(self.trace_step("compose_output", None, output.model_dump()))
 
@@ -157,10 +161,11 @@ class ReplyGlockWorkflow(Workflow):
 
     def classify_reply(
         self, *, workflow_input: ReplyGlockInput, normalized: NormalizedReply
-    ) -> tuple[ReplyClassification, list[AgentTraceStep]]:
+    ) -> tuple[ReplyClassification, SchedulingVerdict, list[AgentTraceStep]]:
         trace: list[AgentTraceStep] = []
         user_prompt = CLASSIFY_USER_PROMPT_TEMPLATE.format(
             campaign_context=self.serialize_campaign_context(workflow_input.campaign_context),
+            proposed_slots=self.serialize_proposed_slots(workflow_input.proposed_slots),
             thread=self.serialize_previous_thread(workflow_input.previous_thread),
             sender_name=workflow_input.sender_name or "Unknown",
             company=workflow_input.company or "Unknown",
@@ -175,7 +180,13 @@ class ReplyGlockWorkflow(Workflow):
         trace.append(self.trace_step("classify_llm", {"model_call": "classify"}, raw))
 
         classification = ReplyClassification.model_validate(raw)
-        return classification, trace
+        # Map the model's raw scheduling JSON through the pure validator (clamps a bad
+        # index to None). Tolerate a missing/garbled "scheduling" key by passing {}.
+        raw_sched = raw.get("scheduling") if isinstance(raw, dict) else None
+        scheduling = parse_scheduling(
+            raw_sched if isinstance(raw_sched, dict) else {}, workflow_input.proposed_slots
+        )
+        return classification, scheduling, trace
 
     def draft_reply(
         self,
@@ -314,6 +325,7 @@ class ReplyGlockWorkflow(Workflow):
         normalized: NormalizedReply,
         classification: ReplyClassification,
         draft: ReplyDraft,
+        scheduling: SchedulingVerdict,
     ) -> ReplyGlockOutput:
         signals = classification.extracted_signals
         follow_up_needed = classification.status in ("TEMPORARY", "UNSURE")
@@ -339,6 +351,7 @@ class ReplyGlockWorkflow(Workflow):
             draft=draft,
             follow_up_needed=follow_up_needed,
             follow_up_date_or_window=follow_up_window,
+            scheduling=scheduling,
             ui=ui_bucket_for_status(classification.status),
         )
 
@@ -353,6 +366,18 @@ class ReplyGlockWorkflow(Workflow):
             f"Offer: {ctx.offer}\n"
             f"Sender: {ctx.sender_name} ({ctx.sender_company})"
         )
+
+    @staticmethod
+    def serialize_proposed_slots(slots: list[dict]) -> str:
+        """Number the offered slots from 0 so the model can accept one BY INDEX."""
+        if not slots:
+            return "No slots were offered to this lead yet."
+        lines = []
+        for i, slot in enumerate(slots):
+            start = slot.get("start", "?") if isinstance(slot, dict) else str(slot)
+            end = slot.get("end", "?") if isinstance(slot, dict) else "?"
+            lines.append(f"[{i}] {start} -> {end}")
+        return "\n".join(lines)
 
     @staticmethod
     def serialize_previous_thread(thread: list[ThreadMessage]) -> str:

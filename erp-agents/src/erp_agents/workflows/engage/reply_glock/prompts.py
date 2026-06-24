@@ -23,6 +23,17 @@ Rules:
   wording / the resolved date in follow_up_date_or_window.
 - Extract concrete signals; leave a signal false/null when not present.
 
+SCHEDULING — match the reply against the meeting slots we already offered (listed under
+OFFERED SLOTS in the user message, numbered from 0). Return a "scheduling" object:
+- accepted_index: the 0-based number of the offered slot they accepted, when the reply
+  references one of the numbered options ("the first works", "Wednesday's fine", "option 2",
+  "let's do the 10am one"). Otherwise null.
+- counter_time: an ISO-8601 timestamp ONLY when they propose a concrete DIFFERENT time we did
+  NOT offer ("can we do Friday at 3pm instead?"). Otherwise null.
+- Set BOTH to null when there is no scheduling signal, when no slots were offered, or when the
+  reply is too vague to pin to a slot or a concrete time. Never set both at once — prefer
+  accepted_index when the reply clearly picks an offered slot.
+
 Respond with exactly this JSON shape:
 {
   "status": "INTERESTED|UNINTERESTED|UNSURE|TEMPORARY",
@@ -39,11 +50,18 @@ Respond with exactly this JSON shape:
     "follow_up_date_or_window": null,
     "requested_quantity": null,
     "requested_documents": []
+  },
+  "scheduling": {
+    "accepted_index": null,
+    "counter_time": null
   }
 }"""
 
 CLASSIFY_USER_PROMPT_TEMPLATE = """CAMPAIGN CONTEXT:
 {campaign_context}
+
+OFFERED SLOTS (meeting times we already proposed to this lead, numbered from 0):
+{proposed_slots}
 
 PREVIOUS THREAD (oldest first):
 {thread}
