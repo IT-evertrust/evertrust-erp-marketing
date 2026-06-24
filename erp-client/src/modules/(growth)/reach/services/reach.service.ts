@@ -1,10 +1,10 @@
 import { API_URL } from '@/lib/env';
 
-import { DAILY_SENDS } from '../constant';
 import type {
   AimStatus,
   CampaignEmail,
   CampaignStatus,
+  DailySend,
   Lead,
   LeadStatus,
   NewCampaignFormValues,
@@ -159,9 +159,9 @@ export async function sendCampaignRound(
   return mapAim(aim);
 }
 
-// The sender schedule + daily sends are derived from the campaigns. There is no
-// send pipeline yet, so stats are zero and the daily-sends chart stays a
-// placeholder shape (DAILY_SENDS) until Reach Bazooka lands.
+// The sender schedule is derived from the campaigns: each row aggregates the
+// three rounds' stats. (Daily sends now come from the backend — see
+// getDailySends below.)
 export function getSenderSchedule(
   campaigns: ReachCampaignView[],
 ): SenderSchedule[] {
@@ -211,8 +211,10 @@ export async function runReachBazooka(): Promise<BazookaSummary> {
   return mutate<BazookaSummary>('POST', '/growth/reach/bazooka/run');
 }
 
-export function getDailySends() {
-  return DAILY_SENDS;
+// The "Emails sent per day" chart: past + projected daily send volume,
+// org-scoped. Same cookie-authed GET shape as the other reach reads.
+export async function getDailySends(): Promise<DailySend[]> {
+  return getJson<DailySend[]>('/growth/reach/daily-sends');
 }
 
 // ---- mappers: backend -> the UI's local view types (UI structure untouched) ----

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, count, desc, eq, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, gte, inArray, sql } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 
 import { DB, type DbClient } from '../db/db.tokens';
@@ -348,6 +348,25 @@ export class ReachRepository {
       };
     }
     return stats;
+  }
+
+  // Daily send counts for this org over the last 10 calendar days (today + 9 prior),
+  // grouped by sent_at::date. Days with no sends are absent here — the service fills
+  // the gaps with zeros. The window/labels live in the service to keep TZ handling
+  // simple (server local date).
+  async dailySends(orgId: string): Promise<Array<{ day: Date; count: number }>> {
+    const day = sql<Date>`${schema.reachSends.sentAt}::date`;
+    const rows = await this.db
+      .select({ day, count: count() })
+      .from(schema.reachSends)
+      .where(
+        and(
+          tenantScope(orgId, schema.reachSends),
+          gte(schema.reachSends.sentAt, sql`now() - interval '9 days'`),
+        ),
+      )
+      .groupBy(day);
+    return rows.map((r) => ({ day: new Date(r.day), count: Number(r.count) }));
   }
 
   // Record a send for one round: create a reach_sends row per eligible lead, advance

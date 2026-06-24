@@ -180,6 +180,13 @@ export const queryKeys = {
     drafts: () => ['marketing', 'drafts'] as const,
   },
 
+  // Reach: the outbound sequence module. `dailySends` backs the Sequence
+  // Sender's "Emails sent per day" chart.
+  reach: {
+    all: ['reach'] as const,
+    dailySends: () => ['reach', 'daily-sends'] as const,
+  },
+
   // Engage: ERP-direct Gmail reply triage queue.
   engage: {
     all: ['engage'] as const,

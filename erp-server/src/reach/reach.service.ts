@@ -11,8 +11,10 @@ import type { CreateAimDto } from './dto/create-aim.dto';
 import { ReachAgentClient } from './reach.agent';
 import { GmailSenderService } from './gmail-sender.service';
 import { ReachRepository, type LeadInsert } from './reach.repository';
+import { NichesService } from '../niches/niches.service';
 import type {
   BazookaRunSummary,
+  DailySendPoint,
   EmailBlock,
   ReachAim,
   ReachNewsBrief,
@@ -96,7 +98,42 @@ export class ReachService {
     private readonly agent: ReachAgentClient,
     private readonly gmail: GmailSenderService,
     private readonly config: AppConfigService,
+    private readonly niches: NichesService,
   ) {}
+
+  // Build the agent CampaignConfig from a reach aim: resolve the niche (find-or-
+  // create by name) + its ENABLED Sector targets, so the satellite runs a real
+  // targets×cities search (not a niche-name-only fallback). The reach adapters
+  // inject this (no GET /campaigns/:id/config) and run return-only (no writes to
+  // campaigns tables — results come back in the agent response).
+  private async buildAgentConfig(
+    orgId: string,
+    aim: ReachAim,
+  ): Promise<Record<string, unknown>> {
+    const niche = await this.niches.findOrCreate(orgId, aim.niche);
+    const targets = await this.niches.targets(niche.id, true);
+    return {
+      campaignId: aim.id,
+      name: aim.name,
+      project: aim.project ?? aim.name,
+      // AIM zone (Anywhere|North|South|East|West|Border-DE) — the satellite resolves
+      // it to real cities via its LLM country profiler.
+      region: aim.region,
+      country: aim.country ?? 'Germany',
+      niche: {
+        id: niche.id,
+        name: niche.name,
+        slug: niche.slug,
+        industry: '',
+        targets: targets.map((t) => ({
+          id: t.id,
+          name: t.name,
+          slug: t.slug,
+          searchHint: t.searchHint ?? null,
+        })),
+      },
+    };
+  }
 
   // AIM: create the campaign row (config.json = the input fields), then run Ammo
   // Forge to generate the three templates + the news brief and store them. If the
@@ -104,13 +141,11 @@ export class ReachService {
   async createAim(orgId: string, dto: CreateAimDto): Promise<ReachAim> {
     const aim = await this.repo.createAim(orgId, dto);
     try {
+      const config = await this.buildAgentConfig(orgId, aim);
       const result = await this.agent.run('reach.ammo_forge', {
         campaign_id: aim.id,
-        name: dto.name,
-        niche: dto.niche,
-        region: dto.region,
-        segment: dto.segment ?? null,
-        source: dto.source ?? null,
+        returnOnly: true,
+        config,
       });
       const updated = await this.repo.setGenerated(orgId, aim.id, {
         templates: sanitizeTemplates(result.output),
@@ -143,14 +178,11 @@ export class ReachService {
     const aim = await this.getAim(orgId, aimId);
     await this.repo.setStatus(orgId, aimId, 'RUNNING');
     try {
+      const config = await this.buildAgentConfig(orgId, aim);
       const result = await this.agent.run('reach.lead_satellite', {
         campaign_id: aim.id,
-        name: aim.name,
-        niche: aim.niche,
-        region: aim.region,
-        segment: aim.segment ?? null,
-        source: aim.source ?? null,
-        max_leads: 12,
+        returnOnly: true,
+        config,
       });
       const leads = sanitizeLeads(result.output);
       return this.repo.replaceLeads(orgId, aimId, leads);
@@ -167,6 +199,35 @@ export class ReachService {
   async getAimLeads(orgId: string, aimId: string) {
     await this.getAim(orgId, aimId);
     return this.repo.findLeadsByAimId(orgId, aimId);
+  }
+
+  // Real daily email-send counts for the org's reach chart: the last 10 calendar
+  // days ending today (inclusive), oldest first. Days with no sends are filled with
+  // value 0. Today's point is labelled "Today" (type 'today'); earlier days use the
+  // "D/M" label with no leading zeros (type 'past'). No future data is ever emitted.
+  async dailySends(orgId: string): Promise<DailySendPoint[]> {
+    const rows = await this.repo.dailySends(orgId);
+
+    // Bucket counts by local "YYYY-M-D" key so DB ::date rows line up with our days.
+    const dayKey = (d: Date) =>
+      `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+    const counts = new Map<string, number>();
+    for (const r of rows) counts.set(dayKey(r.day), r.count);
+
+    const today = new Date();
+    const points: DailySendPoint[] = [];
+    // 9 days ago -> today (10 days total), chronological (oldest first).
+    for (let i = 9; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const isToday = i === 0;
+      points.push({
+        date: isToday ? 'Today' : `${d.getDate()}/${d.getMonth() + 1}`,
+        value: counts.get(dayKey(d)) ?? 0,
+        type: isToday ? 'today' : 'past',
+      });
+    }
+    return points;
   }
 
   // Manual send for one round: records the send (advances `sent` + lead statuses)

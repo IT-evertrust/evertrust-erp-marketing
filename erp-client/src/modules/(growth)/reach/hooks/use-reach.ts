@@ -1,7 +1,10 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+
+import { queryKeys } from '@/lib/query-keys';
 
 import {
   createReachAim,
@@ -106,7 +109,12 @@ export function useReach() {
     () => getSenderSchedule(campaigns),
     [campaigns],
   );
-  const dailySends = useMemo(() => getDailySends(), []);
+  // "Emails sent per day" chart data — org-scoped backend read.
+  const { data: dailySends = [] } = useQuery({
+    queryKey: queryKeys.reach.dailySends(),
+    queryFn: () => getDailySends(),
+    staleTime: 60_000,
+  });
 
   function openCampaignForm() {
     setIsCampaignFormOpen(true);

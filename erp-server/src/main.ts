@@ -28,7 +28,10 @@ async function bootstrap(): Promise<void> {
   }
 
   const port = config.get('PORT');
-  await app.listen(port);
+  // Bind host: default 0.0.0.0 (Docker/prod unchanged); set HOST=127.0.0.1 locally
+  // to keep the dev server off the LAN/tailnet.
+  const host = process.env.HOST || '0.0.0.0';
+  await app.listen(port, host);
 }
 
 void bootstrap();

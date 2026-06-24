@@ -29,6 +29,11 @@ _JUNK_HOST_FRAGMENTS = (
     # spam/parking/scraper-aggregator hosts seen in the wild
     "qanator.", "namepros.", "sedo.", "dan.com", "afternic.", "hugedomains.",
     "thegioididong.", "lazada.", "shopee.", "made-in-china.", "globalsources.", "thomasnet.",
+    # consumer / content / non-B2B hosts that slip past the niche gate as web noise
+    "chess.com", "lichess.", "bilibili.", "zhihu.", "yahoo.", "twitch.", "spotify.",
+    "netflix.", "imdb.", "pokemondb.", "serebii.", "stackoverflow.", "stackexchange.",
+    "codechef.", "leetcode.", "hackerrank.", "geeksforgeeks.", "w3schools.", "tutorialspoint.",
+    "microsoft.com", "komputronik.", "x-kom.", "ceneo.", "morele.",
 )
 
 _TAGS = re.compile(r"<[^>]+>")

@@ -51,6 +51,11 @@ export type ReachAim = {
   region: string;
   segment?: string;
   source?: string;
+  // Optional config fields consumed by the agent CampaignConfig. The reach_aims
+  // table does not yet expose these columns in this build, so they are undefined
+  // until surfaced from the DB; buildAgentConfig falls back to name / 'Germany'.
+  project?: string;
+  country?: string;
   status: AimStatus;
   companies: number;
   // Which mailbox the campaign sends from (info | hanna).
@@ -65,6 +70,13 @@ export type ReachAim = {
   autoSend: boolean;
   createdAt: string;
   updatedAt: string;
+};
+
+// One point on the daily email-send chart (last 10 days ending today).
+export type DailySendPoint = {
+  date: string;
+  value: number;
+  type: 'past' | 'today' | 'future';
 };
 
 // Summary returned by a Reach Bazooka run.

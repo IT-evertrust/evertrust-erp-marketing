@@ -45,6 +45,13 @@ export class ReachController {
     return this.reachService.getAims(orgId);
   }
 
+  // Real daily email-send counts (last 10 days ending today) for the reach chart.
+  @RequirePermissions('campaigns:read')
+  @Get('daily-sends')
+  getDailySends(@OrgId() orgId: string) {
+    return this.reachService.dailySends(orgId);
+  }
+
   @RequirePermissions('campaigns:read')
   @Get('aims/:aimId')
   getAim(@OrgId() orgId: string, @Param('aimId') aimId: string) {

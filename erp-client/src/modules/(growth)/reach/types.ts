@@ -95,6 +95,14 @@ export type ReachStats = {
   final: RoundStats;
 };
 
+// Sequence Sender · "Emails sent per day" chart. One bar per day; `type`
+// distinguishes already-sent days, today, and projected future volume.
+export type DailySend = {
+  date: string;
+  value: number;
+  type: 'past' | 'today' | 'future';
+};
+
 export type ReachCampaignView = Campaign & {
   aimStatus: AimStatus;
   templates: ReachTemplates | null;
