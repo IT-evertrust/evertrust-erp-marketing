@@ -39,7 +39,7 @@ export function EngageCampaignTable({
                 Region
               </th>
               <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                Replies
+                Leads
               </th>
               <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                 Status
@@ -72,7 +72,7 @@ export function EngageCampaignTable({
                     {campaign.region}
                   </td>
                   <td className="px-3 py-3 text-[12.5px] text-muted-foreground">
-                    {campaign.replies}
+                    {campaign.leadCount}
                   </td>
                   <td className="px-3 py-3">
                     <StatusPill live={campaign.status === 'IN CAMPAIGN'}>
