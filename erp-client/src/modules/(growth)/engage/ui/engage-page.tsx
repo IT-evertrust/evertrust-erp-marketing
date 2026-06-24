@@ -22,10 +22,10 @@ export function EngagePage() {
 
   return (
     <main className="px-6 py-5 duration-300 animate-in fade-in">
-      <div className="mb-4 border-b border-[#e4e7eb]">
+      <div className="mb-4 border-b border-border">
         <button
           type="button"
-          className="mb-[-1px] border-b-2 border-[#15171c] px-4 py-3 text-[13px] font-bold text-[#15171c]"
+          className="mb-[-1px] border-b-2 border-foreground px-4 py-3 text-[13px] font-bold text-foreground"
         >
           Reply Sorter
         </button>
@@ -35,13 +35,13 @@ export function EngagePage() {
         <div className="flex flex-wrap items-center gap-4">
           {engage.inboxes.length > 1 && (
             <div className="flex items-center gap-2">
-              <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+              <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                 Inbox
               </span>
               <select
                 value={engage.inboxFilter}
                 onChange={(event) => engage.setInboxFilter(event.target.value)}
-                className="rounded-[8px] border border-[#e4e7eb] bg-white px-3 py-1.5 text-[12.5px] text-[#15171c]"
+                className="rounded-[8px] border border-border bg-card px-3 py-1.5 text-[12.5px] text-foreground"
               >
                 <option value="">All inboxes</option>
                 {engage.inboxes.map((inbox) => (
@@ -58,7 +58,7 @@ export function EngagePage() {
               new persona (name + rules) and applies it. */}
           {engage.selectedCampaign && (
             <div className="flex items-center gap-2">
-              <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+              <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                 Draft persona
               </span>
               <select
@@ -67,7 +67,7 @@ export function EngagePage() {
                   void engage.changePersona(event.target.value || null)
                 }
                 disabled={engage.redrafting}
-                className="rounded-[8px] border border-[#e4e7eb] bg-white px-3 py-1.5 text-[12.5px] text-[#15171c] disabled:opacity-50"
+                className="rounded-[8px] border border-border bg-card px-3 py-1.5 text-[12.5px] text-foreground disabled:opacity-50"
               >
                 <option value="">Default voice</option>
                 {engage.personas.map((persona) => (
@@ -81,7 +81,7 @@ export function EngagePage() {
                 onClick={() => setPersonaDialog({ mode: 'create' })}
                 disabled={engage.redrafting}
                 title="Create a new draft persona"
-                className="inline-flex size-[30px] items-center justify-center rounded-[8px] border border-[#d6dade] bg-white text-[#15171c] transition-colors hover:border-[#15171c] disabled:opacity-50"
+                className="inline-flex size-[30px] items-center justify-center rounded-[8px] border border-border bg-card text-foreground transition-colors hover:border-foreground disabled:opacity-50"
               >
                 <Plus className="size-3.5" />
               </button>
@@ -97,13 +97,13 @@ export function EngagePage() {
                   }
                   disabled={engage.redrafting}
                   title={`Edit the ${activePersona.name} persona`}
-                  className="inline-flex size-[30px] items-center justify-center rounded-[8px] border border-[#d6dade] bg-white text-[#15171c] transition-colors hover:border-[#15171c] disabled:opacity-50"
+                  className="inline-flex size-[30px] items-center justify-center rounded-[8px] border border-border bg-card text-foreground transition-colors hover:border-foreground disabled:opacity-50"
                 >
                   <Pencil className="size-3.5" />
                 </button>
               )}
               {engage.redrafting && (
-                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-[#959ca7]">
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
                   <Spinner inline size={14} />
                   Re-drafting…
                 </span>
@@ -120,7 +120,7 @@ export function EngagePage() {
               (!engage.selectedCampaignId && !engage.inboxFilter) ||
               engage.scanning
             }
-            className="ml-auto inline-flex items-center gap-1.5 rounded-[7px] border border-[#15171c] bg-[#15171c] px-[11px] py-[7px] text-[10px] font-bold uppercase tracking-[0.08em] text-white transition-colors hover:bg-[#2a2d33] disabled:cursor-not-allowed disabled:opacity-50"
+            className="ml-auto inline-flex items-center gap-1.5 rounded-[7px] border border-foreground bg-foreground px-[11px] py-[7px] text-[10px] font-bold uppercase tracking-[0.08em] text-background transition-colors hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-50"
             title="Scan this campaign's inbox for new replies"
           >
             {engage.scanning ? (
@@ -140,7 +140,7 @@ export function EngagePage() {
         />
 
         <GrowthCard title="Reply Sorter">
-          <div className="grid min-h-[560px] grid-cols-[320px_1fr] overflow-hidden rounded-[10px] border border-[#e4e7eb]">
+          <div className="grid min-h-[560px] grid-cols-[320px_1fr] overflow-hidden rounded-[10px] border border-border">
             <ReplyList
               replies={engage.replies}
               selectedReplyId={engage.selectedReplyId}

@@ -22,8 +22,8 @@ export function Spinner({
   const icon = (
     <svg
       // Inline spinners inherit the parent's text color (so they read on dark buttons);
-      // block placeholders use the dark ink.
-      className={['animate-spin', inline ? '' : 'text-[#15171c]'].filter(Boolean).join(' ')}
+      // block placeholders use the foreground ink (token-based, dark-mode safe).
+      className={['animate-spin', inline ? '' : 'text-foreground'].filter(Boolean).join(' ')}
       style={{ width: size, height: size }}
       viewBox="0 0 24 24"
       fill="none"
@@ -62,7 +62,7 @@ export function Spinner({
       role="status"
       aria-live="polite"
       className={[
-        'flex flex-col items-center justify-center gap-3 p-8 text-[12.5px] font-bold text-[#959ca7]',
+        'flex flex-col items-center justify-center gap-3 p-8 text-[12.5px] font-bold text-muted-foreground',
         className,
       ]
         .filter(Boolean)

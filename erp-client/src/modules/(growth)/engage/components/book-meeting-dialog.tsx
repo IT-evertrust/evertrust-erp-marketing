@@ -191,39 +191,39 @@ export function BookMeetingDialog({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-[460px] rounded-[14px] border border-[#e4e7eb] bg-white p-5 shadow-xl"
+        className="w-full max-w-[460px] rounded-[14px] border border-border bg-card p-5 shadow-xl"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="text-[15px] font-bold text-[#15171c]">Book a meeting</div>
-        <div className="mt-1 text-[12px] text-[#959ca7]">
+        <div className="text-[15px] font-bold text-foreground">Book a meeting</div>
+        <div className="mt-1 text-[12px] text-muted-foreground">
           Creates a calendar invite with a Google Meet link for{' '}
-          <span className="font-bold text-[#15171c]">{company}</span> and adds it to
+          <span className="font-bold text-foreground">{company}</span> and adds it to
           Activate.
         </div>
 
-        <label className="mt-4 block text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+        <label className="mt-4 block text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
           Contact name
         </label>
         <input
           value={name}
           onChange={(event) => setName(event.target.value)}
           placeholder="Optional"
-          className="mt-1 w-full rounded-[8px] border border-[#d6dade] bg-white px-3 py-2 text-[13px] text-[#15171c] outline-none focus:border-[#15171c]"
+          className="mt-1 w-full rounded-[8px] border border-border bg-card px-3 py-2 text-[13px] text-foreground outline-none focus:border-foreground"
         />
 
-        <label className="mt-3 block text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+        <label className="mt-3 block text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
           Client email
         </label>
         <input
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           type="email"
-          className="mt-1 w-full rounded-[8px] border border-[#d6dade] bg-white px-3 py-2 text-[13px] text-[#15171c] outline-none focus:border-[#15171c]"
+          className="mt-1 w-full rounded-[8px] border border-border bg-card px-3 py-2 text-[13px] text-foreground outline-none focus:border-foreground"
         />
 
         <div className="mt-3 flex gap-3">
           <div className="flex-1">
-            <label className="block text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+            <label className="block text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
               Date & time
             </label>
             <input
@@ -233,22 +233,22 @@ export function BookMeetingDialog({
                 setFromReply(false);
               }}
               type="datetime-local"
-              className="mt-1 w-full rounded-[8px] border border-[#d6dade] bg-white px-3 py-2 text-[12.5px] text-[#15171c] outline-none focus:border-[#15171c]"
+              className="mt-1 w-full rounded-[8px] border border-border bg-card px-3 py-2 text-[12.5px] text-foreground outline-none focus:border-foreground"
             />
             {fromReply ? (
-              <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.06em] text-[#5b626d]">
+              <div className="mt-1 text-[10px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
                 Suggested from the client&apos;s reply
               </div>
             ) : null}
           </div>
           <div className="w-[110px]">
-            <label className="block text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+            <label className="block text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
               Duration
             </label>
             <select
               value={duration}
               onChange={(event) => setDuration(Number(event.target.value))}
-              className="mt-1 w-full rounded-[8px] border border-[#d6dade] bg-white px-3 py-2 text-[12.5px] text-[#15171c] outline-none focus:border-[#15171c]"
+              className="mt-1 w-full rounded-[8px] border border-border bg-card px-3 py-2 text-[12.5px] text-foreground outline-none focus:border-foreground"
             >
               {DURATIONS.map((d) => (
                 <option key={d} value={d}>
@@ -264,7 +264,7 @@ export function BookMeetingDialog({
             type="button"
             onClick={onClose}
             disabled={booking}
-            className="rounded-md border border-[#c2c7ce] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#15171c] disabled:opacity-50"
+            className="rounded-md border border-border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-foreground disabled:opacity-50"
           >
             Cancel
           </button>
@@ -272,7 +272,7 @@ export function BookMeetingDialog({
             type="button"
             onClick={handleBook}
             disabled={booking || !email.trim() || !slot}
-            className="rounded-md border border-[#15171c] bg-[#15171c] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-white disabled:opacity-50"
+            className="rounded-md border border-foreground bg-foreground px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-background disabled:opacity-50"
           >
             {booking ? 'Booking…' : 'Book meeting'}
           </button>

@@ -105,7 +105,7 @@ export function ReplyDetail({
   if (!reply) {
     return (
       <section className="flex min-h-[560px] items-center justify-center p-6">
-        <div className="rounded-lg border border-dashed border-[#d6dade] bg-[#f6f7f9] px-6 py-8 text-center text-[12.5px] font-bold text-[#959ca7]">
+        <div className="rounded-lg border border-dashed border-border bg-muted px-6 py-8 text-center text-[12.5px] font-bold text-muted-foreground">
           Pick a campaign with replies to draft responses.
         </div>
       </section>
@@ -243,10 +243,10 @@ export function ReplyDetail({
     <section className="flex min-h-[560px] flex-col gap-4 p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[15px] font-bold text-[#15171c]">
+          <div className="text-[15px] font-bold text-foreground">
             {reply.company}
           </div>
-          <div className="mt-1 text-[11px] text-[#959ca7]">{reply.contact}</div>
+          <div className="mt-1 text-[11px] text-muted-foreground">{reply.contact}</div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -255,38 +255,38 @@ export function ReplyDetail({
             <button
               type="button"
               onClick={() => setBookOpen(true)}
-              className="inline-flex items-center gap-1.5 rounded-[7px] border border-[#15171c] bg-[#15171c] px-[10px] py-[6px] text-[10px] font-bold uppercase tracking-[0.08em] text-white transition-colors hover:bg-[#2a2d33]"
+              className="inline-flex items-center gap-1.5 rounded-[7px] border border-foreground bg-foreground px-[10px] py-[6px] text-[10px] font-bold uppercase tracking-[0.08em] text-background transition-colors hover:bg-foreground/90"
               title="Create a calendar invite + Meet link, added to Activate"
             >
               <CalendarPlus className="size-3.5" />
               Book meeting
             </button>
           )}
-          <span className="rounded-full border border-[#c2c7ce] px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#5b626d]">
+          <span className="rounded-full border border-border px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
             {reply.category}
           </span>
         </div>
       </div>
 
-      <div className="max-h-[300px] overflow-auto rounded-[10px] border border-[#c2c7ce] p-3">
+      <div className="max-h-[300px] overflow-auto rounded-[10px] border border-border p-3">
         <div className="flex flex-col gap-2.5">
           {threadMessages.map((message) => (
             <div
               key={message.id}
               className={[
-                'max-w-[90%] rounded-[10px] border border-[#d6dade] bg-[#f6f7f9] px-4 py-3',
+                'max-w-[90%] rounded-[10px] border border-border bg-muted px-4 py-3',
                 message.direction === 'outbound'
                   ? 'self-end'
-                  : 'self-start bg-white',
+                  : 'self-start bg-card',
               ].join(' ')}
             >
-              <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-[#959ca7]">
+              <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
                 {message.header}
               </div>
-              <div className="mb-2 text-[12.5px] font-bold text-[#15171c]">
+              <div className="mb-2 text-[12.5px] font-bold text-foreground">
                 {message.subject}
               </div>
-              <div className="whitespace-pre-wrap break-words text-[12.5px] leading-relaxed text-[#5b626d]">
+              <div className="whitespace-pre-wrap break-words text-[12.5px] leading-relaxed text-muted-foreground">
                 {message.body}
               </div>
             </div>
@@ -294,19 +294,19 @@ export function ReplyDetail({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-[10px] border border-[#c2c7ce] bg-white">
+      <div className="overflow-hidden rounded-[10px] border border-border bg-card">
         <div className="p-4">
-          <div className="mb-2 flex items-center gap-2 text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#959ca7]">
+          <div className="mb-2 flex items-center gap-2 text-[9.5px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
             <LiveDot />
             Sorter: {reply.category} · AI Reply Draft
           </div>
 
-          <div className="overflow-hidden rounded-lg border border-[#e4e7eb] bg-[#f6f7f9]">
+          <div className="overflow-hidden rounded-lg border border-border bg-muted">
             <input
               value={subject}
               onChange={(event) => setSubject(event.target.value)}
               placeholder="Subject"
-              className="w-full border-b border-[#e4e7eb] bg-transparent px-3 py-2.5 text-[12.5px] font-bold text-[#15171c] outline-none focus:bg-white"
+              className="w-full border-b border-border bg-transparent px-3 py-2.5 text-[12.5px] font-bold text-foreground outline-none focus:bg-card"
             />
 
             <textarea
@@ -314,7 +314,7 @@ export function ReplyDetail({
               onChange={(event) => setBody(event.target.value)}
               rows={9}
               placeholder="Draft reply…"
-              className="w-full resize-y bg-transparent px-3 py-3 text-[12.5px] leading-relaxed text-[#15171c] outline-none focus:bg-white"
+              className="w-full resize-y bg-transparent px-3 py-3 text-[12.5px] leading-relaxed text-foreground outline-none focus:bg-card"
             />
           </div>
 
@@ -323,7 +323,7 @@ export function ReplyDetail({
               type="button"
               onClick={handleSend}
               disabled={sending || saving}
-              className="rounded-md border border-[#15171c] bg-[#15171c] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-white disabled:opacity-50"
+              className="rounded-md border border-foreground bg-foreground px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-background disabled:opacity-50"
             >
               {sending ? 'Sending…' : justSent ? 'Sent ✓' : 'Send'}
             </button>
@@ -331,7 +331,7 @@ export function ReplyDetail({
               type="button"
               onClick={handleSave}
               disabled={saving || sending}
-              className="rounded-md border border-[#c2c7ce] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#15171c] disabled:opacity-50"
+              className="rounded-md border border-border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-foreground disabled:opacity-50"
             >
               {saving ? 'Saving…' : 'Save draft'}
             </button>
@@ -339,15 +339,15 @@ export function ReplyDetail({
               type="button"
               onClick={handleProposeTimes}
               disabled={loadingSlots || sending}
-              className="rounded-md border border-[#c2c7ce] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#15171c] disabled:opacity-50"
+              className="rounded-md border border-border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-foreground disabled:opacity-50"
             >
               {loadingSlots ? 'Loading…' : 'Propose times'}
             </button>
           </div>
 
           {slots.length > 0 && (
-            <div className="mt-3 rounded-lg border border-[#e4e7eb] bg-[#f6f7f9] p-3">
-              <div className="mb-2 text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#959ca7]">
+            <div className="mt-3 rounded-lg border border-border bg-muted p-3">
+              <div className="mb-2 text-[9.5px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
                 Pick a slot to propose
                 {slotsTimeZone ? ` · ${slotsTimeZone}` : ''}
               </div>
@@ -364,8 +364,8 @@ export function ReplyDetail({
                       className={[
                         'rounded-full border px-3 py-1.5 text-[11px] font-bold tracking-[0.02em]',
                         active
-                          ? 'border-[#15171c] bg-[#15171c] text-white'
-                          : 'border-[#c2c7ce] bg-white text-[#15171c] hover:border-[#15171c]',
+                          ? 'border-foreground bg-foreground text-background'
+                          : 'border-border bg-card text-foreground hover:border-foreground',
                       ].join(' ')}
                     >
                       {formatSlot(slot, slotsTimeZone)}
@@ -374,7 +374,7 @@ export function ReplyDetail({
                 })}
               </div>
               {selectedSlot && (
-                <div className="mt-2 text-[10px] leading-relaxed text-[#959ca7]">
+                <div className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
                   Slot added to the draft — Send will hold it and invite{' '}
                   {reply.contact}.
                 </div>
