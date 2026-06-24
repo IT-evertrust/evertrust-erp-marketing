@@ -55,6 +55,20 @@ class ReplyGlockInput(BaseModel):
     previous_thread: list[ThreadMessage] = Field(default_factory=list)
     campaign_context: CampaignContext | None = None
 
+    # Engage drafting controls (optional):
+    #   persona  — a salesperson's voice/pattern the draft should imitate (the same
+    #              persona prompt Activate uses for call coaching).
+    #   guidance — accumulated "teach the AI" notes the draft must ALWAYS apply.
+    #   instruction — a one-off operator instruction for an interactive re-draft
+    #              ("make it shorter", "offer a Tuesday slot"); skips re-classification.
+    #   current_draft — the existing draft to revise when `instruction` is set.
+    persona: str | None = None
+    guidance: list[str] = Field(default_factory=list)
+    instruction: str | None = None
+    current_draft: dict[str, str] | None = None
+    # On an interactive re-draft we already know the bucket — skip re-classifying.
+    prior_status: ReplyGlockStatus | None = None
+
 
 class NormalizedReply(BaseModel):
     clean_body: str
