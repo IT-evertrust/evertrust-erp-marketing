@@ -1,6 +1,6 @@
 'use client';
 
-import { GrowthCard, LiveDot } from '@/modules/(growth)/shared';
+import { GrowthCard, LiveDot, Spinner } from '@/modules/(growth)/shared';
 
 import type { CallAnalysis, Persona } from '../types';
 
@@ -17,8 +17,6 @@ type AfterSalesAnalysisPanelProps = {
   onAnalyze: () => void;
   query: string;
   onQuery: (value: string) => void;
-  date: string;
-  onDate: (value: string) => void;
   onSyncReadAi: () => void;
   syncingReadAi: boolean;
 };
@@ -36,8 +34,6 @@ export function AfterSalesAnalysisPanel({
   onAnalyze,
   query,
   onQuery,
-  date,
-  onDate,
   onSyncReadAi,
   syncingReadAi,
 }: AfterSalesAnalysisPanelProps) {
@@ -61,41 +57,28 @@ export function AfterSalesAnalysisPanel({
               </button>
             </div>
 
-            {/* Search by name + calendar day (server-side). */}
-            <div className="mt-3 flex flex-col gap-2">
+            {/* Search by company / contact name (server-side). */}
+            <div className="mt-3 flex items-center gap-2">
               <input
                 value={query}
                 onChange={(event) => onQuery(event.target.value)}
                 placeholder="Search by company or contact…"
-                className="w-full rounded-[8px] border border-[#e4e7eb] bg-[#f6f7f9] px-2.5 py-1.5 text-[12px] text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
+                className="flex-1 rounded-[8px] border border-[#e4e7eb] bg-[#f6f7f9] px-2.5 py-1.5 text-[12px] text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
               />
-              <div className="flex items-center gap-2">
-                <input
-                  type="date"
-                  value={date}
-                  onChange={(event) => onDate(event.target.value)}
-                  className="flex-1 rounded-[8px] border border-[#e4e7eb] bg-[#f6f7f9] px-2.5 py-1.5 text-[12px] text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
-                />
-                {query || date ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onQuery('');
-                      onDate('');
-                    }}
-                    className="rounded-[8px] border border-[#e4e7eb] bg-white px-2.5 py-1.5 text-[11px] font-bold text-[#5b626d] hover:bg-[#f6f7f9]"
-                  >
-                    Clear
-                  </button>
-                ) : null}
-              </div>
+              {query ? (
+                <button
+                  type="button"
+                  onClick={() => onQuery('')}
+                  className="rounded-[8px] border border-[#e4e7eb] bg-white px-2.5 py-1.5 text-[11px] font-bold text-[#5b626d] hover:bg-[#f6f7f9]"
+                >
+                  Clear
+                </button>
+              ) : null}
             </div>
           </div>
 
           {loading && analyses.length === 0 ? (
-            <div className="p-6 text-center text-[12.5px] font-bold text-[#959ca7]">
-              Loading calls…
-            </div>
+            <Spinner label="Loading calls…" />
           ) : analyses.length === 0 ? (
             <div className="p-6 text-center text-[12.5px] font-bold text-[#959ca7]">
               No analyzable calls yet.

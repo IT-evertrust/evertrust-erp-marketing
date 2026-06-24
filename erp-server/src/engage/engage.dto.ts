@@ -34,3 +34,24 @@ export const redraftBodySchema = z.object({
   instruction: z.string().min(1).max(500),
 });
 export class RedraftBodyDto extends createZodDto(redraftBodySchema) {}
+
+// Body for creating a new drafting persona (the "+" beside the Draft-persona toggle).
+// `name` is the label shown in the picker; `rules` is the voice/style instruction the
+// drafter writes in (stored as personas.system_prompt). Both required.
+export const createPersonaBodySchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  rules: z.string().trim().min(1).max(8000),
+});
+export class CreatePersonaBodyDto extends createZodDto(createPersonaBodySchema) {}
+
+// Body for editing an existing persona (name and/or rules). Both optional, but at
+// least one must be present, so the picker label and/or the drafting voice can change.
+export const updatePersonaBodySchema = z
+  .object({
+    name: z.string().trim().min(1).max(120).optional(),
+    rules: z.string().trim().min(1).max(8000).optional(),
+  })
+  .refine((b) => b.name !== undefined || b.rules !== undefined, {
+    message: 'Provide a name or rules to update.',
+  });
+export class UpdatePersonaBodyDto extends createZodDto(updatePersonaBodySchema) {}

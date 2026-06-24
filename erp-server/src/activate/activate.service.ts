@@ -4,6 +4,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 
 import { ActivateAgentClient } from './activate.agent';
 import { ActivateRepository } from './activate.repository';
@@ -127,6 +128,73 @@ export class ActivateService {
     return this.tagAccount(moved, to);
   }
 
+  // Book a meeting (the Engage→Activate handoff). Creates a real Google Calendar event
+  // — with the client invited + a Google Meet link — on the chosen mailbox's calendar,
+  // records a linked meetings row, and returns the account-tagged meeting. The event
+  // shows up in the Booker on the next calendar read (it's a live event). Throws a
+  // user-facing 400 if the mailbox lacks Calendar access or the API rejects.
+  async bookMeeting(
+    orgId: string,
+    body: {
+      company: string;
+      contactName?: string;
+      clientEmail: string;
+      startsAt: string;
+      durationMinutes?: number;
+      title?: string;
+      notes?: string;
+      accountId?: string;
+    },
+  ): Promise<ActivateMeeting> {
+    const access = await this.google.resolveMailboxForAccount(
+      orgId,
+      body.accountId ?? null,
+      'calendar',
+    );
+    if (!access.ok) throw new BadRequestException(access.reason);
+
+    const start = new Date(body.startsAt);
+    if (Number.isNaN(start.getTime())) {
+      throw new BadRequestException('Invalid meeting start time.');
+    }
+    const duration = body.durationMinutes ?? 30;
+    const end = new Date(start.getTime() + duration * 60_000);
+    const title = body.title?.trim() || `EVERTRUST × ${body.company} — Intro Call`;
+    const description = [body.notes?.trim(), 'Booked via EVERTRUST Engage.']
+      .filter(Boolean)
+      .join('\n\n');
+
+    const created = await this.calendar.createEvent(orgId, access.account.id, {
+      summary: title,
+      description,
+      start: start.toISOString(),
+      end: end.toISOString(),
+      attendees: [body.clientEmail],
+      requestId: `engage-${randomUUID()}`,
+      withMeet: true,
+    });
+    if (!created) {
+      throw new BadRequestException(
+        `Could not create the calendar event on ${access.account.email}. Confirm the mailbox has granted Calendar access.`,
+      );
+    }
+
+    await this.repo.createBookedMeeting(orgId, {
+      eventId: created.id,
+      title,
+      clientCompany: body.company,
+      clientContact: body.contactName?.trim() || null,
+      clientEmail: body.clientEmail,
+      ownerEmail: access.account.email,
+      meetingDateIso: start.toISOString(),
+      joinUrl: created.joinUrl,
+    });
+
+    const connected = await this.google.listForOrg(orgId);
+    const account = connected.find((a) => a.id === access.account.id);
+    return account ? this.tagAccount(created, account) : created;
+  }
+
   // Stamp an event with its owning account's id/email/color (for per-account coloring).
   private tagAccount(
     m: ActivateMeeting,
@@ -206,13 +274,21 @@ export class ActivateService {
   // mailboxes' "Read Meeting Report" emails and upsert them (transcript pending). Idempotent.
   async harvestReadAi(
     orgId: string,
-  ): Promise<{ scanned: number; imported: number }> {
-    const { items, scanned } = await this.readAiEmail.harvest(orgId);
+  ): Promise<{ scanned: number; imported: number; reason: string | null }> {
+    const { items, scanned, errors } = await this.readAiEmail.harvest(orgId);
     const { count } = await this.repo.importReadAiMeetings(orgId, items);
     if (count > 0) {
       this.logger.log(`Read AI harvest: ${count} meetings upserted from ${scanned} report emails.`);
     }
-    return { scanned, imported: count };
+    // Surface a reason when nothing was imported so the UI can explain the failure
+    // (e.g. a metadata-only Gmail grant blocking search) rather than a silent "Synced 0".
+    const reason =
+      count === 0 && errors.length > 0
+        ? errors.join(' · ')
+        : count === 0
+          ? 'No Read AI report emails found in the connected mailboxes.'
+          : null;
+    return { scanned, imported: count, reason };
   }
 
   // Score one meeting's transcript through the chosen persona via activate.sales_agent, then

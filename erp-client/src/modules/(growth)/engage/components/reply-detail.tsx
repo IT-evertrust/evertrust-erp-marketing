@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
+import { CalendarPlus } from 'lucide-react';
+
 import { LiveDot } from '@/modules/(growth)/shared';
 
 import {
@@ -13,17 +15,21 @@ import {
 } from '../services/engage.service';
 import type { AiAgentMode, CampaignReply, ReplyThreadMessage } from '../types';
 import { AiAgentBox } from './ai-agent-box';
+import { BookMeetingDialog } from './book-meeting-dialog';
 
 type ReplyDetailProps = {
   reply?: CampaignReply;
   aiMode: AiAgentMode;
   onChangeAiMode: (mode: AiAgentMode) => void;
+  // The campaign's mailbox google_accounts id — books meetings on that calendar.
+  mailboxAccountId?: string | null;
 };
 
 export function ReplyDetail({
   reply,
   aiMode,
   onChangeAiMode,
+  mailboxAccountId = null,
 }: ReplyDetailProps) {
   // Draft is editable + controlled, so switching replies always shows the right text
   // and Send/Save read the latest edits.
@@ -32,6 +38,7 @@ export function ReplyDetail({
   const [saving, setSaving] = useState(false);
   const [sending, setSending] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [bookOpen, setBookOpen] = useState(false);
   // Messages sent this session, appended to the thread so the rep immediately SEES
   // their reply land in the conversation (the server has it; this avoids a slow refetch).
   const [sentMessages, setSentMessages] = useState<ReplyThreadMessage[]>([]);
@@ -134,6 +141,15 @@ export function ReplyDetail({
 
   const threadMessages = [...(reply?.thread ?? []), ...sentMessages];
 
+  // The client's words to scan for a proposed meeting time — the latest inbound thread
+  // message, falling back to the classified reply's inbound body.
+  function bookingHintText(r: CampaignReply): string {
+    const lastInbound = [...(r.thread ?? [])]
+      .reverse()
+      .find((mssg) => mssg.direction === 'inbound');
+    return lastInbound?.body || r.inboundBody || '';
+  }
+
   return (
     <section className="flex min-h-[560px] flex-col gap-4 p-5">
       <div className="flex items-start justify-between gap-3">
@@ -144,9 +160,23 @@ export function ReplyDetail({
           <div className="mt-1 text-[11px] text-[#959ca7]">{reply.contact}</div>
         </div>
 
-        <span className="rounded-full border border-[#c2c7ce] px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#5b626d]">
-          {reply.category}
-        </span>
+        <div className="flex items-center gap-2">
+          {/* Engage→Activate: book a meeting straight from an interested reply. */}
+          {reply.category === 'INTERESTED' && (
+            <button
+              type="button"
+              onClick={() => setBookOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-[7px] border border-[#15171c] bg-[#15171c] px-[10px] py-[6px] text-[10px] font-bold uppercase tracking-[0.08em] text-white transition-colors hover:bg-[#2a2d33]"
+              title="Create a calendar invite + Meet link, added to Activate"
+            >
+              <CalendarPlus className="size-3.5" />
+              Book meeting
+            </button>
+          )}
+          <span className="rounded-full border border-[#c2c7ce] px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#5b626d]">
+            {reply.category}
+          </span>
+        </div>
       </div>
 
       <div className="max-h-[300px] overflow-auto rounded-[10px] border border-[#c2c7ce] p-3">
@@ -227,6 +257,15 @@ export function ReplyDetail({
           applying={applying}
         />
       </div>
+
+      <BookMeetingDialog
+        open={bookOpen}
+        onClose={() => setBookOpen(false)}
+        company={reply.company}
+        clientEmail={reply.contact}
+        suggestedText={bookingHintText(reply)}
+        mailboxAccountId={mailboxAccountId}
+      />
     </section>
   );
 }

@@ -179,6 +179,40 @@ export async function getEngagePersonas(): Promise<EngagePersona[]> {
   return getJson<EngagePersona[]>('/engage/personas');
 }
 
+// Create a new drafting persona (name + voice rules). Returns the picker shape.
+export async function createEngagePersona(
+  name: string,
+  rules: string,
+): Promise<EngagePersona> {
+  return mutate<EngagePersona>('POST', '/engage/personas', { name, rules });
+}
+
+// One persona's detail incl. its current voice rules — for the edit dialog.
+export interface EngagePersonaDetail {
+  id: string;
+  name: string;
+  rules: string;
+}
+export async function getEngagePersona(id: string): Promise<EngagePersonaDetail> {
+  return getJson<EngagePersonaDetail>(`/engage/personas/${id}`);
+}
+
+// Edit an existing persona's name and/or rules. Returns the picker shape.
+export async function updateEngagePersona(
+  id: string,
+  updates: { name?: string; rules?: string },
+): Promise<EngagePersona> {
+  return mutate<EngagePersona>('PATCH', `/engage/personas/${id}`, updates);
+}
+
+// Re-draft every unhandled reply in a campaign in its current persona voice. Run
+// after switching the persona so the queue reflects the new voice. SLOW (LLM/reply).
+export async function redraftCampaign(
+  aimId: string,
+): Promise<{ redrafted: number; failed: number; total: number }> {
+  return mutate('POST', `/engage/campaigns/${aimId}/redraft-all`);
+}
+
 // Set (or clear, personaId=null) the campaign's drafting persona.
 export async function setCampaignPersona(
   aimId: string,
@@ -219,6 +253,26 @@ export async function redraftReply(
   );
 }
 
+// Book a meeting from an INTERESTED reply (the Engage→Activate handoff). Creates a
+// Google Calendar event (+ Meet link) on the campaign's mailbox and records it; the
+// event then shows up in Activate's Meeting Booker.
+export interface BookMeetingInput {
+  company: string;
+  contactName?: string;
+  clientEmail: string;
+  startsAt: string; // ISO
+  durationMinutes?: number;
+  title?: string;
+  notes?: string;
+  accountId?: string; // the campaign's mailbox google_accounts id
+}
+
+export async function bookMeeting(
+  input: BookMeetingInput,
+): Promise<{ id: string; title: string; joinUrl: string | null; startsAt: string | null }> {
+  return mutate('POST', '/growth/activate/meetings', input);
+}
+
 // ---- mappers: backend shape -> the UI's local view types (UI is untouched) ----
 function mapCampaign(c: BackendCampaign): EngageCampaign {
   return {
@@ -231,6 +285,7 @@ function mapCampaign(c: BackendCampaign): EngageCampaign {
     sender: c.sender,
     senderEmail: c.mailboxEmail ?? c.sender,
     personaId: c.personaId ?? null,
+    mailboxAccountId: c.mailboxAccountId ?? null,
   };
 }
 

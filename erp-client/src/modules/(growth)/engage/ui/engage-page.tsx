@@ -1,16 +1,24 @@
 'use client';
 
-import { Loader2, RefreshCw } from 'lucide-react';
+import { useState } from 'react';
+import { Pencil, Plus, RefreshCw } from 'lucide-react';
 
-import { GrowthCard } from '@/modules/(growth)/shared';
+import { GrowthCard, Spinner } from '@/modules/(growth)/shared';
 
 import { EngageCampaignTable } from '../components/engage-campaign-table';
+import { PersonaDialog } from '../components/persona-create-dialog';
 import { ReplyDetail } from '../components/reply-detail';
 import { ReplyList } from '../components/reply-list';
 import { useEngage } from '../hooks/use-engage';
 
 export function EngagePage() {
   const engage = useEngage();
+  // The persona dialog is shared for create + edit; null = closed.
+  const [personaDialog, setPersonaDialog] = useState<
+    { mode: 'create' } | { mode: 'edit'; id: string; name: string } | null
+  >(null);
+  const activePersonaId = engage.selectedCampaign?.personaId ?? null;
+  const activePersona = engage.personas.find((p) => p.id === activePersonaId);
 
   return (
     <main className="px-6 py-5 duration-300 animate-in fade-in">
@@ -45,8 +53,10 @@ export function EngagePage() {
             </div>
           )}
 
-          {/* F4: the salesperson persona reply drafts are written in. */}
-          {engage.selectedCampaign && engage.personas.length > 0 && (
+          {/* F4: the salesperson persona reply drafts are written in. Switching the
+              persona re-drafts the campaign's replies in that voice; the "+" creates a
+              new persona (name + rules) and applies it. */}
+          {engage.selectedCampaign && (
             <div className="flex items-center gap-2">
               <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
                 Draft persona
@@ -54,9 +64,10 @@ export function EngagePage() {
               <select
                 value={engage.selectedCampaign.personaId ?? ''}
                 onChange={(event) =>
-                  engage.changePersona(event.target.value || null)
+                  void engage.changePersona(event.target.value || null)
                 }
-                className="rounded-[8px] border border-[#e4e7eb] bg-white px-3 py-1.5 text-[12.5px] text-[#15171c]"
+                disabled={engage.redrafting}
+                className="rounded-[8px] border border-[#e4e7eb] bg-white px-3 py-1.5 text-[12.5px] text-[#15171c] disabled:opacity-50"
               >
                 <option value="">Default voice</option>
                 {engage.personas.map((persona) => (
@@ -65,6 +76,38 @@ export function EngagePage() {
                   </option>
                 ))}
               </select>
+              <button
+                type="button"
+                onClick={() => setPersonaDialog({ mode: 'create' })}
+                disabled={engage.redrafting}
+                title="Create a new draft persona"
+                className="inline-flex size-[30px] items-center justify-center rounded-[8px] border border-[#d6dade] bg-white text-[#15171c] transition-colors hover:border-[#15171c] disabled:opacity-50"
+              >
+                <Plus className="size-3.5" />
+              </button>
+              {activePersona && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPersonaDialog({
+                      mode: 'edit',
+                      id: activePersona.id,
+                      name: activePersona.name,
+                    })
+                  }
+                  disabled={engage.redrafting}
+                  title={`Edit the ${activePersona.name} persona`}
+                  className="inline-flex size-[30px] items-center justify-center rounded-[8px] border border-[#d6dade] bg-white text-[#15171c] transition-colors hover:border-[#15171c] disabled:opacity-50"
+                >
+                  <Pencil className="size-3.5" />
+                </button>
+              )}
+              {engage.redrafting && (
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-[#959ca7]">
+                  <Spinner inline size={14} />
+                  Re-drafting…
+                </span>
+              )}
             </div>
           )}
 
@@ -81,7 +124,7 @@ export function EngagePage() {
             title="Scan this campaign's inbox for new replies"
           >
             {engage.scanning ? (
-              <Loader2 className="size-3.5 animate-spin" />
+              <Spinner inline size={14} />
             ) : (
               <RefreshCw className="size-3.5" />
             )}
@@ -112,10 +155,24 @@ export function EngagePage() {
               reply={engage.selectedReply}
               aiMode={engage.aiMode}
               onChangeAiMode={engage.setAiMode}
+              mailboxAccountId={engage.selectedCampaign?.mailboxAccountId ?? null}
             />
           </div>
         </GrowthCard>
       </div>
+
+      <PersonaDialog
+        open={personaDialog !== null}
+        onClose={() => setPersonaDialog(null)}
+        mode={personaDialog?.mode ?? 'create'}
+        personaId={personaDialog?.mode === 'edit' ? personaDialog.id : null}
+        initialName={personaDialog?.mode === 'edit' ? personaDialog.name : ''}
+        onSubmit={(name, rules) =>
+          personaDialog?.mode === 'edit'
+            ? engage.updatePersona(personaDialog.id, name, rules)
+            : engage.createPersona(name, rules)
+        }
+      />
     </main>
   );
 }

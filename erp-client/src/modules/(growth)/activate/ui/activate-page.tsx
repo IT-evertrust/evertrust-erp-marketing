@@ -53,8 +53,6 @@ export function ActivatePage() {
           onAnalyze={activate.runAnalysis}
           query={activate.analysisQuery}
           onQuery={activate.setAnalysisQuery}
-          date={activate.analysisDate}
-          onDate={activate.setAnalysisDate}
           onSyncReadAi={activate.syncReadAi}
           syncingReadAi={activate.syncingReadAi}
         />

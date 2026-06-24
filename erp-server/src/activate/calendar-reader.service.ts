@@ -81,6 +81,68 @@ export class CalendarReaderService {
     }
   }
 
+  // CREATE an event on an account's calendar (the Engage→Activate "Book meeting"
+  // handoff). Invites the client, requests a Google Meet link, and emails everyone
+  // (sendUpdates=all). Returns the new meeting, or null if the grant is unusable /
+  // the API rejects. `requestId` makes the Meet creation idempotent per booking.
+  async createEvent(
+    orgId: string,
+    accountId: string,
+    input: {
+      summary: string;
+      description?: string | null;
+      location?: string | null;
+      start: string; // ISO
+      end: string; // ISO
+      attendees?: string[]; // client emails to invite
+      requestId: string; // unique per booking (for conferenceData.createRequest)
+      withMeet?: boolean;
+    },
+  ): Promise<ActivateMeeting | null> {
+    const token = await this.google.getAccessTokenForAccount(orgId, accountId);
+    if (!token) return null;
+    const body: Record<string, unknown> = {
+      summary: input.summary,
+      start: { dateTime: input.start, timeZone: DEFAULT_TZ },
+      end: { dateTime: input.end, timeZone: DEFAULT_TZ },
+    };
+    if (input.description != null) body.description = input.description;
+    if (input.location != null) body.location = input.location;
+    const attendees = (input.attendees ?? []).filter(Boolean);
+    if (attendees.length > 0) body.attendees = attendees.map((email) => ({ email }));
+    if (input.withMeet !== false) {
+      body.conferenceData = {
+        createRequest: {
+          requestId: input.requestId,
+          conferenceSolutionKey: { type: 'hangoutsMeet' },
+        },
+      };
+    }
+    try {
+      const res = await fetch(
+        `${CALENDAR_API}/calendars/primary/events?sendUpdates=all&conferenceDataVersion=1`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        },
+      );
+      if (!res.ok) {
+        const t = await res.text().catch(() => '');
+        this.logger.warn(
+          `Calendar create failed (${accountId}): ${res.status} ${t.slice(0, 200)}`,
+        );
+        return null;
+      }
+      return mapEvent((await res.json()) as GCalEvent);
+    } catch (err) {
+      this.logger.warn(
+        `Calendar create error: ${err instanceof Error ? err.message : 'error'}`,
+      );
+      return null;
+    }
+  }
+
   // One event's detail. null if the grant is unusable or the event is gone.
   async getEvent(
     orgId: string,

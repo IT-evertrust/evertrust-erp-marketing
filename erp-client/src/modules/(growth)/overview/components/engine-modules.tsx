@@ -107,7 +107,7 @@ export function EngineModules({ onActiveChange }: EngineModulesProps) {
   return (
     <GrowthCard
       title="Engine Modules"
-      className="flex h-full flex-col"
+      className="flex h-full flex-col overflow-hidden"
       bodyClassName="flex min-h-0 flex-1 flex-col"
     >
       <style>{WHEEL_CSS}</style>

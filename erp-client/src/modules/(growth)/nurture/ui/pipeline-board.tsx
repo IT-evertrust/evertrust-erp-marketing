@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { GripVertical, Loader2, Plus, X } from 'lucide-react';
+import { GripVertical, Plus, X } from 'lucide-react';
 import { toast } from 'sonner';
 import type { PipelineStage, ReachBoardLeadDto } from '@evertrust/shared';
 import {
@@ -11,6 +11,7 @@ import {
   useUpdateReachLeadStage,
   useUpdateReachLeadDeal,
 } from '@/hooks/use-reach-board';
+import { Spinner } from '@/modules/(growth)/shared';
 import { cn } from '@/lib/utils';
 
 // Big page so the kanban shows a meaningful slice of the pipeline at once.
@@ -93,9 +94,8 @@ export function PipelineBoard({
 
   if (query.isLoading) {
     return (
-      <div className="flex min-h-[420px] items-center justify-center rounded-[10px] border border-[#e4e7eb] bg-white text-[12.5px] font-bold text-[#959ca7]">
-        <Loader2 className="mr-2 size-4 animate-spin" />
-        Loading pipeline…
+      <div className="flex min-h-[420px] items-center justify-center rounded-[10px] border border-[#e4e7eb] bg-white">
+        <Spinner label="Loading pipeline…" />
       </div>
     );
   }

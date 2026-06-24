@@ -22,9 +22,11 @@ import { GmailWatchService } from './gmail-watch.service';
 import {
   CampaignPersonaBodyDto,
   CampaignReplyBodyDto,
+  CreatePersonaBodyDto,
   EngageSendBodyDto,
   RedraftBodyDto,
   TrainingNoteBodyDto,
+  UpdatePersonaBodyDto,
 } from './engage.dto';
 
 // Engage · ERP-DIRECT Gmail reply pipeline. JWT-auth + tenant-scoped (@OrgId),
@@ -145,6 +147,34 @@ export class EngageController {
     return this.campaignReplies.listPersonas(orgId);
   }
 
+  // Create a new drafting persona (name + voice rules) — the "+" beside the picker.
+  @RequirePermissions('campaigns:write')
+  @Post('personas')
+  createPersona(@OrgId() orgId: string, @Body() body: CreatePersonaBodyDto) {
+    return this.campaignReplies.createPersona(orgId, body.name, body.rules);
+  }
+
+  // One persona's detail incl. its voice rules — feeds the edit dialog.
+  @RequirePermissions('campaigns:read')
+  @Get('personas/:id')
+  getPersona(@OrgId() orgId: string, @Param('id', ParseUUIDPipe) id: string) {
+    return this.campaignReplies.getPersona(orgId, id);
+  }
+
+  // Edit an existing persona's name and/or voice rules.
+  @RequirePermissions('campaigns:write')
+  @Patch('personas/:id')
+  updatePersona(
+    @OrgId() orgId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdatePersonaBodyDto,
+  ) {
+    return this.campaignReplies.updatePersona(orgId, id, {
+      name: body.name,
+      rules: body.rules,
+    });
+  }
+
   // Set (or clear, personaId=null) the drafting persona for a campaign.
   @RequirePermissions('campaigns:write')
   @Patch('campaigns/:aimId/persona')
@@ -154,6 +184,17 @@ export class EngageController {
     @Body() body: CampaignPersonaBodyDto,
   ) {
     return this.campaignReplies.setCampaignPersona(orgId, aimId, body.personaId);
+  }
+
+  // Re-draft every unhandled reply in a campaign in its CURRENT persona voice — run
+  // after switching the Draft persona so the queue reflects the new voice. SLOW.
+  @RequirePermissions('campaigns:write')
+  @Post('campaigns/:aimId/redraft-all')
+  redraftCampaign(
+    @OrgId() orgId: string,
+    @Param('aimId', ParseUUIDPipe) aimId: string,
+  ) {
+    return this.campaignReplies.redraftCampaign(orgId, aimId);
   }
 
   // --- TRAINING (F3): "teach the AI" notes the drafter always applies ---

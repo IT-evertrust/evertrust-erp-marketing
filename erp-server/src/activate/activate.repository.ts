@@ -120,6 +120,57 @@ export class ActivateRepository {
     return mapBookerMeeting(row);
   }
 
+  // Record a meeting booked from Engage (the "Book meeting" handoff). Keyed on the
+  // Google Calendar event id (sessionId) so a re-book of the same event updates rather
+  // than duplicates. `aeName` = the owning mailbox (the Booker's account axis). The row
+  // is for attribution + after-sales; the event itself shows in the Booker from the live
+  // calendar. campaignId/leadId stay null (Engage campaigns are reach_aims, not the
+  // legacy campaigns this FK points at) — attribution rides on clientEmail + matchMethod.
+  async createBookedMeeting(
+    orgId: string,
+    values: {
+      eventId: string;
+      title: string;
+      clientCompany: string;
+      clientContact: string | null;
+      clientEmail: string;
+      ownerEmail: string;
+      meetingDateIso: string;
+      joinUrl: string | null;
+    },
+  ): Promise<void> {
+    await this.db
+      .insert(schema.meetings)
+      .values({
+        organizationId: orgId,
+        sessionId: values.eventId,
+        title: values.title,
+        clientCompany: values.clientCompany,
+        aeName: values.ownerEmail,
+        clientContact: values.clientContact,
+        clientEmail: values.clientEmail,
+        meetingDate: values.meetingDateIso,
+        transcript: null, // null = upcoming (Booker), not an after-sales call
+        docUrl: values.joinUrl,
+        campaignId: null,
+        leadId: null,
+        matchMethod: 'engage_booking',
+      })
+      .onConflictDoUpdate({
+        target: [schema.meetings.organizationId, schema.meetings.sessionId],
+        set: {
+          title: values.title,
+          clientCompany: values.clientCompany,
+          aeName: values.ownerEmail,
+          clientContact: values.clientContact,
+          clientEmail: values.clientEmail,
+          meetingDate: values.meetingDateIso,
+          docUrl: values.joinUrl,
+          updatedAt: new Date(),
+        },
+      });
+  }
+
   // ---- after-sales meetings ----
   // Meetings that can appear in After-Sales: those with a stored transcript (analyzable).
   // Newest first, shaped for the UI.

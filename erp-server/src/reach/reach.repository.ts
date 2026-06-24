@@ -287,6 +287,15 @@ export class ReachRepository {
       opts.q
         ? sql`lower(${schema.reachLeads.company}) like ${'%' + opts.q.toLowerCase() + '%'}`
         : undefined,
+      // GATE: a lead only enters the Nurture pipeline once it's "interested" — either
+      // a manually-added deal (source='manual') OR it has an Engage reply classified
+      // INTERESTED. Scraped/unscanned/uninterested leads stay off the board, so a
+      // selected campaign shows exactly the clients who are currently interested.
+      sql`(${schema.reachLeads.source} = 'manual' OR EXISTS (
+        SELECT 1 FROM reach_lead_replies rlr
+        WHERE rlr.lead_id = ${schema.reachLeads.id}
+          AND rlr.category = 'INTERESTED'
+      ))`,
     );
 
     const rows = await this.db

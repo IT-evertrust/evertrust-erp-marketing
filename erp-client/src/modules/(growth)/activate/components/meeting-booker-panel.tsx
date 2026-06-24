@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-import { GrowthCard, LiveDot } from '@/modules/(growth)/shared';
+import { GrowthCard, LiveDot, Spinner } from '@/modules/(growth)/shared';
 
 import {
   moveMeeting,
@@ -143,6 +143,28 @@ export function MeetingBookerPanel({
   // INSTEAD of an empty grid — otherwise the calendar box renders blank mid-load.
   const isLoading = loadingAccounts || (loadingMeetings && meetings.length === 0);
 
+  // Google-Calendar-style keyboard nav: N = next week, P = previous week. Ignored
+  // while typing in a field or with the meeting popup open / a modifier held.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.metaKey || e.ctrlKey || e.altKey || openMeeting) return;
+      const t = e.target as HTMLElement | null;
+      const tag = t?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t?.isContentEditable) {
+        return;
+      }
+      if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault();
+        setViewDate((d) => clampToYear(addDays(d, 7)));
+      } else if (e.key === 'p' || e.key === 'P') {
+        e.preventDefault();
+        setViewDate((d) => clampToYear(addDays(d, -7)));
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [openMeeting]);
+
   return (
     <GrowthCard
       title={`Calendar · Week ${isoWeek(viewDate)}`}
@@ -240,6 +262,7 @@ export function MeetingBookerPanel({
               onClick={() => go(addDays(viewDate, -7))}
               className="px-2.5 py-1.5 text-[12px] font-bold text-[#15171c] hover:bg-[#f6f7f9]"
               aria-label="Previous week"
+              title="Previous week (P)"
             >
               ‹
             </button>
@@ -251,6 +274,7 @@ export function MeetingBookerPanel({
               onClick={() => go(addDays(viewDate, 7))}
               className="px-2.5 py-1.5 text-[12px] font-bold text-[#15171c] hover:bg-[#f6f7f9]"
               aria-label="Next week"
+              title="Next week (N)"
             >
               ›
             </button>
@@ -260,10 +284,7 @@ export function MeetingBookerPanel({
 
       {isLoading ? (
         <div className="flex min-h-[300px] items-center justify-center rounded-[10px] border border-[#e4e7eb] bg-white">
-          <div className="flex items-center gap-2.5 text-[12px] font-bold text-[#959ca7]">
-            <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-[#c2c7ce]" />
-            {loadingAccounts ? 'Loading accounts…' : 'Loading meetings…'}
-          </div>
+          <Spinner label={loadingAccounts ? 'Loading accounts…' : 'Loading meetings…'} />
         </div>
       ) : accounts.length === 0 ? (
         <div className="rounded-[10px] border border-dashed border-[#d6dade] bg-[#f6f7f9] px-6 py-10 text-center text-[12.5px] font-bold text-[#959ca7]">
@@ -340,8 +361,8 @@ export function MeetingBookerPanel({
       )}
 
       {loadingMeetings && meetings.length > 0 ? (
-        <div className="mt-2 text-center text-[11px] font-bold text-[#959ca7]">
-          Refreshing…
+        <div className="mt-2 flex justify-center text-[11px] font-bold text-[#959ca7]">
+          <Spinner inline size={14} label="Refreshing…" />
         </div>
       ) : null}
 

@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
+import { Spinner } from '@/modules/(growth)/shared';
 import { PipelineBoard } from './pipeline-board';
 import { ContractAssist } from './contract-assist';
 
@@ -53,7 +54,9 @@ export function NurtureUI() {
   return (
     <main className="px-6 py-5 duration-300 animate-in fade-in">
       {isLoading ? (
-        <div className="h-64 w-full animate-pulse rounded-[10px] border border-[#e4e7eb] bg-[#f6f7f9]" />
+        <div className="flex h-64 w-full items-center justify-center rounded-[10px] border border-[#e4e7eb] bg-[#f6f7f9]">
+          <Spinner label="Loading…" />
+        </div>
       ) : allowed ? (
         <NurtureView />
       ) : (
@@ -207,7 +210,9 @@ function NurtureView() {
       ) : null}
 
       {campaignsQ.isLoading ? (
-        <div className="h-72 w-full animate-pulse rounded-[10px] border border-[#e4e7eb] bg-[#f6f7f9]" />
+        <div className="flex h-72 w-full items-center justify-center rounded-[10px] border border-[#e4e7eb] bg-[#f6f7f9]">
+          <Spinner label="Loading campaigns…" />
+        </div>
       ) : campaignsQ.isError ? (
         <p className="text-[13px] font-bold text-[#b91c1c]">
           Couldn’t load campaigns. {campaignsQ.error.message}

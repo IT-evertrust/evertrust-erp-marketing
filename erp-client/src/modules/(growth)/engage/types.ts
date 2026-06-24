@@ -16,6 +16,9 @@ export type EngageCampaign = {
   senderEmail: string;
   // The drafting persona reply_glock writes in (F4). null = default voice.
   personaId: string | null;
+  // The google_accounts id of the campaign's mailbox — used to book meetings on the
+  // right calendar (Engage→Activate). null when no mailbox is connected.
+  mailboxAccountId: string | null;
 };
 
 export type ReplyThreadMessage = {

@@ -47,9 +47,8 @@ export function useActivate() {
   const [loadingAnalyses, setLoadingAnalyses] = useState(true);
   const [selectedCallAnalysisId, setSelectedCallAnalysisId] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
-  // After-sales search (server-side: name + calendar day).
+  // After-sales search (server-side: by company / contact name).
   const [analysisQuery, setAnalysisQuery] = useState('');
-  const [analysisDate, setAnalysisDate] = useState('');
 
   // Bumped to re-pull the calendar after an edit/move so the grid reflects the change.
   const [refreshTick, setRefreshTick] = useState(0);
@@ -176,12 +175,12 @@ export function useActivate() {
     };
   }, []);
 
-  // Load analyzable calls; re-fetch on search (name / date), debounced for the text query.
+  // Load analyzable calls; re-fetch on search (by name), debounced for the text query.
   useEffect(() => {
     let active = true;
     setLoadingAnalyses(true);
     const timer = setTimeout(() => {
-      getCallAnalyses(analysisQuery || undefined, analysisDate || undefined)
+      getCallAnalyses(analysisQuery || undefined)
         .then((data) => {
           if (!active) return;
           setCallAnalyses(data);
@@ -196,7 +195,7 @@ export function useActivate() {
       active = false;
       clearTimeout(timer);
     };
-  }, [analysisQuery, analysisDate]);
+  }, [analysisQuery]);
 
   const selectedDossier = dossiers.find((d) => d.id === selectedDossierId);
   const selectedCallAnalysis = callAnalyses.find((c) => c.id === selectedCallAnalysisId);
@@ -206,16 +205,21 @@ export function useActivate() {
   const syncReadAi = useCallback(async () => {
     setSyncingReadAi(true);
     try {
-      const { imported } = await harvestReadAiMeetings();
-      const data = await getCallAnalyses(analysisQuery || undefined, analysisDate || undefined);
+      const { imported, reason } = await harvestReadAiMeetings();
+      const data = await getCallAnalyses(analysisQuery || undefined);
       setCallAnalyses(data);
-      toast.success(`Synced ${imported} Read AI meeting${imported === 1 ? '' : 's'}.`);
+      if (imported > 0) {
+        toast.success(`Synced ${imported} Read AI meeting${imported === 1 ? '' : 's'}.`);
+      } else {
+        // Surface WHY nothing came in (e.g. a metadata-only Gmail grant blocking search).
+        toast.error(reason ?? 'No Read AI meetings found to sync.');
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Read AI sync failed.');
     } finally {
       setSyncingReadAi(false);
     }
-  }, [analysisQuery, analysisDate]);
+  }, [analysisQuery]);
 
   // Re-run the sales coach on the selected call with the chosen persona.
   const runAnalysis = useCallback(async () => {
@@ -266,8 +270,6 @@ export function useActivate() {
     runAnalysis,
     analysisQuery,
     setAnalysisQuery,
-    analysisDate,
-    setAnalysisDate,
     syncingReadAi,
     syncReadAi,
   };

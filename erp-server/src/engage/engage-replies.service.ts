@@ -33,6 +33,15 @@ const GMAIL_API = 'https://gmail.googleapis.com/gmail/v1/users/me';
 const GMAIL_SEND_URL = `${GMAIL_API}/messages/send`;
 const THREAD_BODY_MAX = 4000;
 
+// Fixed instruction used when re-drafting a campaign after the persona is switched.
+// It tells reply_glock to keep the meaning + classification and only re-voice the
+// draft, so the existing redraft path (which skips re-classification when an
+// instruction + prior_status are present) applies the newly-set persona cleanly.
+const PERSONA_REFRESH_INSTRUCTION =
+  "Re-draft this reply in the campaign's currently selected persona voice. Keep the " +
+  'same meaning, intent and classification — only adjust the wording, rhythm and ' +
+  'phrasing so it reads in that persona’s style.';
+
 // reply_glock status -> the UI's display category. TEMPORARY surfaces as its own
 // "Temp" bucket; UNINTERESTED maps onto the UI's "NOT INTERESTED" chip.
 const UI_CATEGORY: Record<string, string> = {
@@ -234,6 +243,11 @@ export class EngageRepliesService {
         )
         .limit(1);
       persona = rows[0]?.systemPrompt ?? null;
+    }
+    // DEFAULT VOICE = Hanna. When a campaign has no persona explicitly set, drafts
+    // are still written in Hanna's voice/pattern (our standing response identity).
+    if (!persona) {
+      persona = (await this.hannaPersona(orgId))?.systemPrompt ?? null;
     }
     const notes = await this.db
       .select({ note: schema.engageTraining.note })
@@ -452,6 +466,114 @@ export class EngageRepliesService {
       .orderBy(asc(schema.personas.name));
   }
 
+  // The org's "Hanna Nguyen" persona (the default response voice), if it exists.
+  private async hannaPersona(
+    orgId: string,
+  ): Promise<{ id: string; systemPrompt: string } | null> {
+    const rows = await this.db
+      .select({ id: schema.personas.id, systemPrompt: schema.personas.systemPrompt })
+      .from(schema.personas)
+      .where(
+        and(
+          eq(schema.personas.organizationId, orgId),
+          eq(schema.personas.name, 'Hanna Nguyen'),
+        ),
+      )
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
+  // Create a new drafting persona (the "+" beside the Draft-persona toggle). `rules`
+  // is the voice/style instruction the drafter writes in (stored as system_prompt).
+  // Returns the picker shape so the UI can select it immediately. Rejects duplicate
+  // names within the org so the picker stays unambiguous.
+  async createPersona(orgId: string, name: string, rules: string) {
+    const cleanName = name.trim();
+    const cleanRules = rules.trim();
+    if (!cleanName) throw new BadRequestException('Persona name is required.');
+    if (!cleanRules) throw new BadRequestException('Persona rules are required.');
+    const existing = await this.db
+      .select({ id: schema.personas.id })
+      .from(schema.personas)
+      .where(
+        and(
+          eq(schema.personas.organizationId, orgId),
+          eq(schema.personas.name, cleanName),
+        ),
+      )
+      .limit(1);
+    if (existing[0]) {
+      throw new BadRequestException(`A persona named "${cleanName}" already exists.`);
+    }
+    const rows = await this.db
+      .insert(schema.personas)
+      .values({ organizationId: orgId, name: cleanName, systemPrompt: cleanRules })
+      .returning({ id: schema.personas.id, name: schema.personas.name });
+    return rows[0]!;
+  }
+
+  // One persona's full detail incl. its voice rules (system_prompt) — for the edit
+  // dialog, which needs the current rules to extend them.
+  async getPersona(orgId: string, id: string) {
+    const rows = await this.db
+      .select({
+        id: schema.personas.id,
+        name: schema.personas.name,
+        rules: schema.personas.systemPrompt,
+      })
+      .from(schema.personas)
+      .where(
+        and(eq(schema.personas.id, id), eq(schema.personas.organizationId, orgId)),
+      )
+      .limit(1);
+    if (!rows[0]) throw new NotFoundException('Unknown persona');
+    return rows[0];
+  }
+
+  // Edit an existing persona's name and/or voice rules. Org-scoped; rejects a name
+  // collision with a DIFFERENT persona. Returns the picker shape.
+  async updatePersona(
+    orgId: string,
+    id: string,
+    updates: { name?: string; rules?: string },
+  ) {
+    const existing = await this.getPersona(orgId, id); // 404s if not in the org
+    const set: { name?: string; systemPrompt?: string } = {};
+    if (updates.name !== undefined) {
+      const cleanName = updates.name.trim();
+      if (!cleanName) throw new BadRequestException('Persona name is required.');
+      if (cleanName.toLowerCase() !== existing.name.toLowerCase()) {
+        const dup = await this.db
+          .select({ id: schema.personas.id })
+          .from(schema.personas)
+          .where(
+            and(
+              eq(schema.personas.organizationId, orgId),
+              eq(schema.personas.name, cleanName),
+            ),
+          )
+          .limit(1);
+        if (dup[0]) {
+          throw new BadRequestException(`A persona named "${cleanName}" already exists.`);
+        }
+      }
+      set.name = cleanName;
+    }
+    if (updates.rules !== undefined) {
+      const cleanRules = updates.rules.trim();
+      if (!cleanRules) throw new BadRequestException('Persona rules are required.');
+      set.systemPrompt = cleanRules;
+    }
+    const rows = await this.db
+      .update(schema.personas)
+      .set(set)
+      .where(
+        and(eq(schema.personas.id, id), eq(schema.personas.organizationId, orgId)),
+      )
+      .returning({ id: schema.personas.id, name: schema.personas.name });
+    return rows[0]!;
+  }
+
   // Set (or clear) the drafting persona for a campaign. personaId null = default voice.
   async setCampaignPersona(orgId: string, aimId: string, personaId: string | null) {
     const resolved = await this.resolveCampaign(orgId, aimId);
@@ -500,7 +622,11 @@ export class EngageRepliesService {
       .orderBy(desc(schema.engageTraining.createdAt));
   }
 
-  // Persist a piece of operator feedback the draft agent should always apply.
+  // Persist a piece of operator feedback the draft agent should always apply, AND fold
+  // it into the campaign's drafting persona's rules so the persona itself evolves with
+  // the feedback (the "make the LLM remember" → update the rule). The note is appended
+  // under a managed "LEARNED PREFERENCES" block in the persona's system_prompt; the
+  // target persona is the campaign's (aim.personaId) or, when unset, the default Hanna.
   async addTraining(orgId: string, aimId: string, note: string) {
     const resolved = await this.resolveCampaign(orgId, aimId);
     if (!resolved) throw new NotFoundException('Unknown campaign');
@@ -510,7 +636,49 @@ export class EngageRepliesService {
       .insert(schema.engageTraining)
       .values({ organizationId: orgId, aimId, note: trimmed, source: 'feedback' })
       .returning({ id: schema.engageTraining.id });
+
+    // Also update the persona rule so the learned preference persists in the voice.
+    await this.appendPersonaRule(orgId, resolved.aim.personaId, trimmed);
+
     return { ok: true, id: rows[0]?.id ?? null };
+  }
+
+  // Append a learned preference to a persona's system_prompt under a managed block, so
+  // operator feedback ("make the LLM remember …") becomes part of the persona's rules.
+  // Targets the given persona, falling back to the default Hanna persona. No-op if
+  // neither exists, or if the exact line is already present (idempotent).
+  private async appendPersonaRule(
+    orgId: string,
+    personaId: string | null,
+    note: string,
+  ): Promise<void> {
+    let target: { id: string; systemPrompt: string } | null = null;
+    if (personaId) {
+      const rows = await this.db
+        .select({ id: schema.personas.id, systemPrompt: schema.personas.systemPrompt })
+        .from(schema.personas)
+        .where(
+          and(
+            eq(schema.personas.id, personaId),
+            eq(schema.personas.organizationId, orgId),
+          ),
+        )
+        .limit(1);
+      target = rows[0] ?? null;
+    }
+    if (!target) target = await this.hannaPersona(orgId);
+    if (!target) return;
+
+    const marker = '\n\nLEARNED PREFERENCES (from operator feedback):';
+    const line = `- ${note}`;
+    if (target.systemPrompt.includes(line)) return; // already captured
+    const next = target.systemPrompt.includes(marker)
+      ? `${target.systemPrompt}\n${line}`
+      : `${target.systemPrompt}${marker}\n${line}`;
+    await this.db
+      .update(schema.personas)
+      .set({ systemPrompt: next })
+      .where(eq(schema.personas.id, target.id));
   }
 
   // Deactivate a training note (kept for audit, no longer applied).
@@ -614,6 +782,43 @@ export class EngageRepliesService {
       .set({ draftSubject, draftBody, draftSource: 'reply_glock:redraft', updatedAt: new Date() })
       .where(eq(schema.reachLeadReplies.id, row.id));
     return { ok: true, draftSubject, draftBody };
+  }
+
+  // --- REDRAFT ALL (F4 persona switch) --------------------------------------
+  // Re-draft every UNHANDLED reply in a campaign in the campaign's CURRENT persona
+  // voice. Used when the operator switches the Draft persona — the drafts on screen
+  // should immediately reflect the new voice. Reuses redraftReply with a fixed
+  // "refresh" instruction so reply_glock keeps the prior classification (no re-sort)
+  // and only re-words the draft. Already-sent replies (handled) are left untouched.
+  // SLOW: one LLM pass per reply (~35s on local Hermes); the caller shows a spinner.
+  async redraftCampaign(orgId: string, aimId: string) {
+    const resolved = await this.resolveCampaign(orgId, aimId);
+    if (!resolved) throw new BadRequestException('Unknown campaign');
+
+    const rows = await this.db
+      .select({ id: schema.reachLeadReplies.id })
+      .from(schema.reachLeadReplies)
+      .where(
+        and(
+          tenantScope(orgId, schema.reachLeadReplies),
+          eq(schema.reachLeadReplies.aimId, aimId),
+          eq(schema.reachLeadReplies.handled, false),
+        ),
+      );
+
+    let redrafted = 0;
+    let failed = 0;
+    for (const { id } of rows) {
+      try {
+        await this.redraftReply(orgId, id, PERSONA_REFRESH_INSTRUCTION);
+        redrafted++;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'unknown error';
+        this.logger.warn(`Engage redraftCampaign reply ${id} failed: ${msg}`);
+        failed++;
+      }
+    }
+    return { redrafted, failed, total: rows.length };
   }
 
   // --- DEV/TEST: seed synthetic outreach→reply threads (F2) ------------------

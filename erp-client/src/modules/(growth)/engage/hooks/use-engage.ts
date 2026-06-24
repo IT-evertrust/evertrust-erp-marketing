@@ -6,13 +6,16 @@ import { toast } from 'sonner';
 
 import {
   type EngagePersona,
+  createEngagePersona,
   getCampaignReplies,
   getEngageCampaigns,
   getEngagePersonas,
+  redraftCampaign,
   scanCampaign,
   scanInbox,
   setCampaignPersona,
   syncEngageInbox,
+  updateEngagePersona,
 } from '../services/engage.service';
 import type {
   AiAgentMode,
@@ -42,6 +45,8 @@ export function useEngage() {
   const [loadingReplies, setLoadingReplies] = useState(false);
   // Manual "Scan now" in flight for the selected campaign.
   const [scanning, setScanning] = useState(false);
+  // Re-drafting the whole campaign in a newly-selected persona voice (F4 switch).
+  const [redrafting, setRedrafting] = useState(false);
 
   // Load campaigns once; default the selection to the first with replies. Best-effort
   // inbox sync first so real inbound Gmail (matched to known prospects) is in the queue.
@@ -79,27 +84,118 @@ export function useEngage() {
     };
   }, []);
 
-  // F4: set the selected campaign's drafting persona (optimistic local update).
-  function changePersona(personaId: string | null) {
+  // F4: switch the selected campaign's drafting persona. Persists the choice, then
+  // RE-DRAFTS every unhandled reply in the new voice and refreshes the queue so the
+  // drafts on screen immediately reflect the persona. Slow (LLM/reply) — `redrafting`
+  // drives the spinner. Optimistic local update keeps the picker snappy.
+  async function changePersona(personaId: string | null) {
     const aimId = selectedCampaignId;
-    if (!aimId) return;
+    if (!aimId || redrafting) return;
     setCampaigns((prev) =>
       prev.map((c) => (c.id === aimId ? { ...c, personaId } : c)),
     );
-    setCampaignPersona(aimId, personaId)
-      .then(() => {
-        const name = personas.find((p) => p.id === personaId)?.name;
-        toast.success(
-          personaId
-            ? `Drafts will use the ${name ?? 'selected'} persona.`
-            : 'Drafts will use the default voice.',
-        );
-      })
-      .catch((err: unknown) => {
-        toast.error(
-          err instanceof Error ? err.message : 'Could not set the persona.',
-        );
-      });
+    const name = personas.find((p) => p.id === personaId)?.name;
+    try {
+      await setCampaignPersona(aimId, personaId);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not set the persona.');
+      return;
+    }
+    // No replies yet → nothing to redraft; the next scan will use the new voice.
+    if (replies.filter((r) => !r.handled).length === 0) {
+      toast.success(
+        personaId
+          ? `Drafts will use the ${name ?? 'selected'} persona.`
+          : 'Drafts will use the default voice.',
+      );
+      return;
+    }
+    setRedrafting(true);
+    toast.info(
+      personaId
+        ? `Re-drafting replies in the ${name ?? 'selected'} voice…`
+        : 'Re-drafting replies in the default voice…',
+    );
+    try {
+      const r = await redraftCampaign(aimId);
+      const data = await getCampaignReplies(aimId);
+      setReplies(data);
+      toast.success(
+        `Re-drafted ${r.redrafted} repl${r.redrafted === 1 ? 'y' : 'ies'}${
+          r.failed ? ` · ${r.failed} failed` : ''
+        }.`,
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : 'Could not re-draft the replies.',
+      );
+    } finally {
+      setRedrafting(false);
+    }
+  }
+
+  // F4: create a new persona (name + voice rules), then select it for the campaign
+  // (which redrafts the queue in the new voice). Returns true on success.
+  async function createPersona(name: string, rules: string): Promise<boolean> {
+    try {
+      const persona = await createEngagePersona(name, rules);
+      setPersonas((prev) =>
+        [...prev, persona].sort((a, b) => a.name.localeCompare(b.name)),
+      );
+      toast.success(`Persona "${persona.name}" created.`);
+      await changePersona(persona.id);
+      return true;
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : 'Could not create the persona.',
+      );
+      return false;
+    }
+  }
+
+  // F4: edit an existing persona's name/rules. If the EDITED persona is the one the
+  // current campaign drafts with, re-draft the queue so the updated voice takes effect
+  // immediately (same behaviour as switching to it). Returns true on success.
+  async function updatePersona(
+    id: string,
+    name: string,
+    rules: string,
+  ): Promise<boolean> {
+    try {
+      const updated = await updateEngagePersona(id, { name, rules });
+      setPersonas((prev) =>
+        prev
+          .map((p) => (p.id === id ? { ...p, name: updated.name } : p))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      );
+      toast.success(`Persona "${updated.name}" updated.`);
+      const aimId = selectedCampaignId;
+      const isActive =
+        !!aimId &&
+        campaigns.find((c) => c.id === aimId)?.personaId === id;
+      if (isActive && replies.filter((r) => !r.handled).length > 0 && !redrafting) {
+        setRedrafting(true);
+        toast.info(`Re-drafting replies in the updated ${updated.name} voice…`);
+        try {
+          const r = await redraftCampaign(aimId);
+          const data = await getCampaignReplies(aimId);
+          setReplies(data);
+          toast.success(
+            `Re-drafted ${r.redrafted} repl${r.redrafted === 1 ? 'y' : 'ies'}${
+              r.failed ? ` · ${r.failed} failed` : ''
+            }.`,
+          );
+        } finally {
+          setRedrafting(false);
+        }
+      }
+      return true;
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : 'Could not update the persona.',
+      );
+      return false;
+    }
   }
 
   // Load replies whenever the selected campaign changes.
@@ -250,6 +346,9 @@ export function useEngage() {
     setAiMode,
     personas,
     changePersona,
+    createPersona,
+    updatePersona,
+    redrafting,
     scanning,
     scanNow,
   };

@@ -20,7 +20,7 @@ export function GrowthCard({
   return (
     <section
       className={[
-        'min-w-0 rounded-[10px] border border-[#e4e7eb] bg-white',
+        'min-h-0 min-w-0 rounded-[10px] border border-[#e4e7eb] bg-white',
         className,
       ].join(' ')}
     >

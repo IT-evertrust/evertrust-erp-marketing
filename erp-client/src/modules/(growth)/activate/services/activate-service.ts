@@ -189,14 +189,10 @@ export function getPersonas(): Promise<Persona[]> {
   return getJson<Persona[]>('/growth/activate/personas');
 }
 
-// Analyzable calls, optionally searched by name (q) + calendar day (date = YYYY-MM-DD).
-export function getCallAnalyses(
-  q?: string,
-  date?: string,
-): Promise<CallAnalysis[]> {
+// Analyzable calls, optionally searched by name (q = company / contact).
+export function getCallAnalyses(q?: string): Promise<CallAnalysis[]> {
   const params = new URLSearchParams();
   if (q) params.set('q', q);
-  if (date) params.set('date', date);
   const qs = params.toString();
   return getJson<CallAnalysis[]>(
     `/growth/activate/analyses${qs ? `?${qs}` : ''}`,
@@ -214,6 +210,7 @@ export function importReadAiMeetings(
 export function harvestReadAiMeetings(): Promise<{
   scanned: number;
   imported: number;
+  reason: string | null;
 }> {
   return postJson('/growth/activate/read-ai/harvest');
 }

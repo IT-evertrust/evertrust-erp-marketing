@@ -8,6 +8,7 @@ import {
   ImportReadAiBodyDto,
 } from './dto/import-read-ai.dto';
 import { UpdateMeetingBodyDto } from './dto/update-meeting.dto';
+import { BookMeetingBodyDto } from './dto/book-meeting.dto';
 import { GenerateResearchBodyDto } from './dto/generate-research.dto';
 import { ActivateResearchService } from './activate-research.service';
 
@@ -55,6 +56,15 @@ export class ActivateController {
   @Get('meetings')
   getMeetings(@OrgId() orgId: string, @Query('accountId') accountId: string) {
     return this.activate.listMeetings(orgId, accountId ?? '');
+  }
+
+  // Book a meeting (the Engage→Activate handoff): create a Google Calendar event with
+  // a Meet link on the chosen mailbox + record a linked meetings row. The event then
+  // appears in the Booker from the live calendar.
+  @RequirePermissions('campaigns:write')
+  @Post('meetings')
+  bookMeeting(@OrgId() orgId: string, @Body() body: BookMeetingBodyDto) {
+    return this.activate.bookMeeting(orgId, body);
   }
 
   // One event's detail (the popup).

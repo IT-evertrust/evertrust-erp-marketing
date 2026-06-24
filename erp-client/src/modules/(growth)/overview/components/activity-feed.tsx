@@ -56,7 +56,7 @@ export function EngineActivityFeed({
   return (
     <GrowthCard
       title="Engine Activity"
-      className="flex h-full flex-col"
+      className="flex h-full flex-col overflow-hidden"
       bodyClassName="flex min-h-0 flex-1 flex-col"
       hint={
         <span className="inline-flex items-center gap-2">
@@ -67,7 +67,7 @@ export function EngineActivityFeed({
     >
       {/* The feed fills the card and scrolls INSIDE it — never overflowing into the
           funnel row below (the previous fixed max-h + content above caused the bleed). */}
-      <div className="min-h-0 flex-1 overflow-y-auto pr-2">
+      <div className="max-h-[460px] min-h-0 flex-1 overflow-y-auto pr-2">
         {shown.length === 0 ? (
           <div className="py-6 text-center text-[12px] font-bold text-[#959ca7]">
             {activeModule ? 'No recent runs for this module.' : 'No engine activity yet.'}

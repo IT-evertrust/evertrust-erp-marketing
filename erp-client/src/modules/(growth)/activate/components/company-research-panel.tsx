@@ -1,4 +1,4 @@
-import { GrowthCard, LiveDot } from '@/modules/(growth)/shared';
+import { GrowthCard, LiveDot, Spinner } from '@/modules/(growth)/shared';
 
 import type { ResearchDossier } from '../types';
 
@@ -30,9 +30,7 @@ export function CompanyResearchPanel({
           </div>
 
           {loading && dossiers.length === 0 ? (
-            <div className="p-6 text-center text-[12.5px] font-bold text-[#959ca7]">
-              Loading meetings…
-            </div>
+            <Spinner label="Loading meetings…" />
           ) : dossiers.length === 0 ? (
             <div className="p-6 text-center text-[12.5px] font-bold text-[#959ca7]">
               No upcoming meetings on this calendar.
@@ -77,10 +75,14 @@ export function CompanyResearchPanel({
               Select a meeting to view the dossier.
             </div>
           ) : selectedDossier.status === 'Being generated' ? (
-            <div className="flex min-h-[300px] items-center justify-center rounded-lg border border-dashed border-[#d6dade] bg-[#f6f7f9] px-6 py-8 text-center text-[12.5px] font-bold text-[#959ca7]">
-              {generating
-                ? 'Researching the company — building the dossier…'
-                : 'Dossier will be generated when you open this meeting.'}
+            <div className="flex min-h-[300px] items-center justify-center rounded-lg border border-dashed border-[#d6dade] bg-[#f6f7f9] px-6 py-8 text-center">
+              {generating ? (
+                <Spinner label="Researching the company — building the dossier…" />
+              ) : (
+                <span className="text-[12.5px] font-bold text-[#959ca7]">
+                  Dossier will be generated when you open this meeting.
+                </span>
+              )}
             </div>
           ) : (
             <DossierDetail dossier={selectedDossier} />

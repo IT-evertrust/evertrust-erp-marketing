@@ -27,20 +27,33 @@ export class ReadAiEmailService {
   constructor(private readonly google: GoogleAccountsService) {}
 
   // Parse Read AI report emails across all connected mailboxes into import items
-  // (summary-only; no transcript). Best-effort per mailbox.
+  // (summary-only; no transcript). Best-effort per mailbox, but failures are no longer
+  // swallowed: each mailbox that can't be searched contributes a human-readable reason
+  // so the UI can explain why a sync found nothing (the usual culprit is a
+  // gmail.metadata-only grant, which 403s the `q` search).
   async harvest(
     orgId: string,
     sinceDays = 120,
     maxPerMailbox = 60,
-  ): Promise<{ items: ReadAiImportItem[]; scanned: number }> {
+  ): Promise<{ items: ReadAiImportItem[]; scanned: number; errors: string[] }> {
     const accounts = await this.google.listForOrg(orgId);
     const items: ReadAiImportItem[] = [];
+    const errors: string[] = [];
     let scanned = 0;
     for (const account of accounts) {
-      const token = await this.google.getAccessTokenForAccount(orgId, account.id);
-      if (!token) continue;
-      const auth = { Authorization: `Bearer ${token}` };
-      const ids = await this.listReportIds(auth, sinceDays, maxPerMailbox);
+      // Scope-checked token — a mailbox with no Gmail read grant is reported, not skipped silently.
+      const access = await this.google.resolveMailboxForAccount(
+        orgId,
+        account.id,
+        'gmail-read',
+      );
+      if (!access.ok) {
+        errors.push(`${account.email}: ${access.reason}`);
+        continue;
+      }
+      const auth = { Authorization: `Bearer ${access.accessToken}` };
+      const { ids, error } = await this.listReportIds(auth, sinceDays, maxPerMailbox);
+      if (error) errors.push(`${account.email}: ${error}`);
       scanned += ids.length;
       for (const id of ids) {
         const item = await this.parseReport(auth, id, account.email);
@@ -48,27 +61,40 @@ export class ReadAiEmailService {
       }
     }
     if (items.length === 0) {
-      this.logger.log('Read AI harvest: no report emails found in connected mailboxes.');
+      this.logger.log(
+        `Read AI harvest: no report emails imported${errors.length ? ` (${errors.join('; ')})` : ''}.`,
+      );
     }
-    return { items, scanned };
+    return { items, scanned, errors };
   }
 
   private async listReportIds(
     auth: Record<string, string>,
     sinceDays: number,
     max: number,
-  ): Promise<string[]> {
+  ): Promise<{ ids: string[]; error: string | null }> {
     const params = new URLSearchParams({
       q: `from:read.ai subject:"Read Meeting Report" newer_than:${sinceDays}d`,
       maxResults: String(Math.min(max, 100)),
     });
     try {
       const res = await fetch(`${GMAIL_API}/messages?${params}`, { headers: auth });
-      if (!res.ok) return [];
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        // 403 on a `q` search almost always means the grant is gmail.metadata-only,
+        // which forbids search queries — the fix is to reconnect with read access.
+        const hint =
+          res.status === 403
+            ? 'Gmail search is blocked for this mailbox (403) — its grant is likely metadata-only. Reconnect Google with read access (revoke, then re-consent) and try again.'
+            : `Gmail search failed (HTTP ${res.status}). ${body.slice(0, 160)}`;
+        this.logger.warn(`Read AI listReportIds failed: ${hint}`);
+        return { ids: [], error: hint };
+      }
       const json = (await res.json()) as { messages?: Array<{ id: string }> };
-      return (json.messages ?? []).map((m) => m.id);
-    } catch {
-      return [];
+      return { ids: (json.messages ?? []).map((m) => m.id), error: null };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'network error';
+      return { ids: [], error: `Gmail search error: ${msg}` };
     }
   }
 

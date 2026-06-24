@@ -1,9 +1,8 @@
 'use client';
 
-import { Loader2 } from 'lucide-react';
 import type { ContractDto, ContractStatus } from '@evertrust/shared';
 import { useContracts } from '@/hooks/use-contracts';
-import { LiveDot } from '@/modules/(growth)/shared';
+import { LiveDot, Spinner } from '@/modules/(growth)/shared';
 import { formatDateTime } from '@/lib/tender-format';
 
 // The four contract templates from the attached design. Static — there is no
@@ -82,15 +81,14 @@ export function ContractAssist({ campaignId }: { campaignId: string }) {
         title="Quotes & Contracts"
         action={
           q.isFetching ? (
-            <Loader2 className="size-4 animate-spin text-[#959ca7]" />
+            <span className="text-[#959ca7]">
+              <Spinner inline size={16} />
+            </span>
           ) : null
         }
       >
         {q.isLoading ? (
-          <div className="flex items-center justify-center py-10 text-[12.5px] font-bold text-[#959ca7]">
-            <Loader2 className="mr-2 size-4 animate-spin" />
-            Loading contracts…
-          </div>
+          <Spinner label="Loading contracts…" />
         ) : q.isError ? (
           <p className="py-8 text-center text-[12.5px] font-bold text-[#b91c1c]">
             Couldn’t load contracts. {q.error.message}
