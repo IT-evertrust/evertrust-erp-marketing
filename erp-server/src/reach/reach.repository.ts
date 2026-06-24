@@ -320,7 +320,18 @@ export class ReachRepository {
       .from(schema.reachAims)
       .where(tenantScope(orgId, schema.reachAims))
       .orderBy(desc(schema.reachAims.createdAt));
-    return rows.map(rowToAim);
+    // Reconcile the denormalized `companies` with the LIVE reach_leads count: an older
+    // scraper version could record a count without persisting the lead rows, leaving a
+    // phantom number (companies=98 but 0 leads). Deriving it on read makes the displayed
+    // count always the truth — even for legacy rows or if a re-scrape later fails. The
+    // stored column stays a cache (kept in sync by replaceLeads + the 0045 backfill).
+    const counts = await this.db
+      .select({ aimId: schema.reachLeads.aimId, n: count() })
+      .from(schema.reachLeads)
+      .where(tenantScope(orgId, schema.reachLeads))
+      .groupBy(schema.reachLeads.aimId);
+    const byAim = new Map(counts.map((c) => [c.aimId, Number(c.n)]));
+    return rows.map((r) => ({ ...rowToAim(r), companies: byAim.get(r.id) ?? 0 }));
   }
 
   async findAimById(orgId: string, aimId: string): Promise<ReachAim | undefined> {
