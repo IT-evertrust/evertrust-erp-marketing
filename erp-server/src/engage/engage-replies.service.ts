@@ -776,6 +776,11 @@ export class EngageRepliesService {
       .where(and(tenantScope(orgId, schema.reachLeadReplies), eq(schema.reachLeadReplies.aimId, aimId)))
       .orderBy(asc(schema.reachLeads.company));
 
+    // The org's display zones (same the calendar/email use) so the UI renders meeting
+    // times dual-zone with a timezone label instead of the viewer's browser-local time.
+    const { primary: timeZone, secondary: secondaryTimeZone } =
+      await this.calendar.getOrgTimeZones(orgId);
+
     return rows.map(({ r, company, email }) => ({
       id: r.id,
       campaignId: aimId,
@@ -799,6 +804,8 @@ export class EngageRepliesService {
       proposedSlots: r.proposedSlots ?? [],
       acceptedSlot: r.acceptedSlot ?? null,
       bookedMeetingId: r.bookedMeetingId ?? null,
+      timeZone,
+      secondaryTimeZone,
       thread: r.thread ?? [],
       time: r.classifiedAt.toISOString(),
     }));

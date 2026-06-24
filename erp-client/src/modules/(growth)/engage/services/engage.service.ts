@@ -49,6 +49,8 @@ interface BackendReply {
   proposedSlots?: { start: string; end: string }[];
   acceptedSlot?: { start: string; end: string } | null;
   bookedMeetingId?: string | null;
+  timeZone?: string;
+  secondaryTimeZone?: string | null;
 }
 
 async function getJson<T>(path: string): Promise<T> {
@@ -399,6 +401,8 @@ function mapReply(r: BackendReply): CampaignReply {
     acceptedSlot: r.acceptedSlot ?? undefined,
     proposedSlots: r.proposedSlots ?? [],
     bookedMeetingId: r.bookedMeetingId ?? undefined,
+    timeZone: r.timeZone,
+    secondaryTimeZone: r.secondaryTimeZone ?? null,
   };
 }
 

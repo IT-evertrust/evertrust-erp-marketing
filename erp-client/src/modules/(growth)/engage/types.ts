@@ -61,4 +61,8 @@ export type CampaignReply = {
   acceptedSlot?: { start: string; end: string };
   proposedSlots?: { start: string; end: string }[];
   bookedMeetingId?: string;
+  // Org display zones (primary + optional GMT+7 cross-reference) so meeting times render
+  // with a timezone label in the org's zone, matching the email — not the viewer's local.
+  timeZone?: string;
+  secondaryTimeZone?: string | null;
 };

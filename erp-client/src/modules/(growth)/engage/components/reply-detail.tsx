@@ -20,10 +20,15 @@ import type { AiAgentMode, CampaignReply, ReplyThreadMessage } from '../types';
 import { AiAgentBox } from './ai-agent-box';
 import { BookMeetingDialog } from './book-meeting-dialog';
 
-// Compact slot label in the calendar's own time zone, e.g. "Tue 24 Jun · 15:00–15:30".
-// `timeZone` is optional — the accepted-slot banner renders before any free-slots
-// fetch, so it falls back to the viewer's local zone.
-function formatSlot(slot: CalendarSlot, timeZone?: string): string {
+// Compact slot label in the org's time zone with an offset label, e.g.
+// "Tue 24 Jun · 15:00–15:30 (GMT+2) · 20:00–20:30 (GMT+7)". When `secondaryTimeZone` is
+// set the org's cross-reference zone is appended (matching the email). `timeZone` is
+// optional — without it we fall back to the viewer's local zone (no offset label).
+function formatSlot(
+  slot: CalendarSlot,
+  timeZone?: string,
+  secondaryTimeZone?: string | null,
+): string {
   const start = new Date(slot.start);
   const end = new Date(slot.end);
   const tz = timeZone || undefined;
@@ -33,14 +38,20 @@ function formatSlot(slot: CalendarSlot, timeZone?: string): string {
     month: 'short',
     timeZone: tz,
   }).format(start);
-  const time = (date: Date) =>
+  const time = (date: Date, zone?: string) =>
     new Intl.DateTimeFormat('en-GB', {
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
-      timeZone: tz,
+      timeZone: zone,
     }).format(date);
-  return `${day} · ${time(start)}–${time(end)}`;
+  const offset = (zone?: string) =>
+    new Intl.DateTimeFormat('en-GB', { timeZoneName: 'shortOffset', timeZone: zone })
+      .formatToParts(start)
+      .find((p) => p.type === 'timeZoneName')?.value ?? '';
+  const primary = `${day} · ${time(start, tz)}–${time(end, tz)}${tz ? ` (${offset(tz)})` : ''}`;
+  if (!secondaryTimeZone) return primary;
+  return `${primary} · ${time(start, secondaryTimeZone)}–${time(end, secondaryTimeZone)} (${offset(secondaryTimeZone)})`;
 }
 
 // The draft line the rep drops in when they hold a slot, e.g.
@@ -336,7 +347,7 @@ export function ReplyDetail({
       {showAcceptedBanner && reply.acceptedSlot && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-[10px] border border-[#9bd3b0] bg-[#eaf7ef] px-4 py-3">
           <div className="text-[12.5px] font-bold text-[#15171c]">
-            Client accepted {formatSlot(reply.acceptedSlot)} — Book it?
+            Client accepted {formatSlot(reply.acceptedSlot, reply.timeZone, reply.secondaryTimeZone)} — Book it?
           </div>
           <button
             type="button"
