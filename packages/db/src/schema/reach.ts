@@ -13,6 +13,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { organizations } from './org';
 import { campaigns } from './campaigns';
+import { personas } from './personas';
 
 // Reach (Growth Engine) owns its own lean tables, separate from the heavier
 // campaigns/prospects pipeline. An "aim" is a Reach campaign: the AIM input
@@ -99,6 +100,11 @@ export const reachAims = pgTable(
     stats: jsonb('stats').$type<ReachStats>(),
     // 'llm' when a model produced the content, 'offline' for the fallback.
     generatedBy: text('generated_by'),
+    // Engage drafting persona: reply_glock writes replies in this salesperson's
+    // voice/pattern (the same `personas` Activate uses for call coaching). Null =
+    // the default EVERTRUST voice. Additive — the Reach/Nurture read path on this
+    // branch stays on prospects and does NOT depend on it.
+    personaId: uuid('persona_id').references(() => personas.id),
     // Reach Bazooka on/off toggle: when true, the auto-sender advances this
     // campaign's sequence on each run.
     autoSend: boolean('auto_send').notNull().default(false),
