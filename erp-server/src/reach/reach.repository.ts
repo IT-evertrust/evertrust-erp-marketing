@@ -646,4 +646,45 @@ export class ReachRepository {
       return true;
     });
   }
+
+  // Mark a lead as REPLIED on its most-recent send (Engage classified an inbound
+  // reply) and recompute the aim's stats cache — the same machinery as trackEvent,
+  // but keyed by aim+lead rather than a specific (round, tracking-pixel) hit. Stamps
+  // repliedAt on the latest send row (max sentAt) when it is still null, so a re-scan
+  // is idempotent and never double-counts. Org-scoped. Returns whether a send was
+  // stamped (false when the lead has no send, or it was already marked replied).
+  async markLeadReplied(orgId: string, aimId: string, leadId: string): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
+      const [send] = await tx
+        .select()
+        .from(schema.reachSends)
+        .where(
+          and(
+            eq(schema.reachSends.aimId, aimId),
+            eq(schema.reachSends.leadId, leadId),
+            tenantScope(orgId, schema.reachSends),
+          ),
+        )
+        .orderBy(desc(schema.reachSends.sentAt))
+        .limit(1);
+      if (!send || send.repliedAt != null) return false;
+
+      await tx
+        .update(schema.reachSends)
+        .set({ repliedAt: new Date() })
+        .where(eq(schema.reachSends.id, send.id));
+
+      const stats = await this.computeStats(tx, orgId, aimId);
+      await tx
+        .update(schema.reachAims)
+        .set({ stats, updatedAt: new Date() })
+        .where(
+          and(
+            eq(schema.reachAims.id, aimId),
+            tenantScope(orgId, schema.reachAims),
+          ),
+        );
+      return true;
+    });
+  }
 }

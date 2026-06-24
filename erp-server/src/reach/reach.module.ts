@@ -14,5 +14,8 @@ import { GmailSenderService } from './gmail-sender.service';
   imports: [GoogleModule, NichesModule],
   controllers: [ReachController],
   providers: [ReachService, ReachRepository, ReachAgentClient, GmailSenderService],
+  // ReachRepository is exported so EngageModule can propagate a classified reply back
+  // into the Reach stats cache + lead status (markLeadReplied).
+  exports: [ReachRepository],
 })
 export class ReachModule {}

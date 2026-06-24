@@ -387,6 +387,53 @@ export class GoogleAccountsService {
     }
   }
 
+  // Resolve a LIVE access token for a SPECIFIC org-owned account when one is named,
+  // else fall back to the org default mailbox for `kind`. The Engage scan uses this to
+  // act on a chosen mailbox (a central operator triaging a colleague's inbox); passing
+  // a null accountId reproduces resolveMailbox exactly. Org-scoped: only ever resolves
+  // the calling org's own rows. Returns the same MailboxAccess contract as resolveMailbox.
+  async resolveMailboxForAccount(
+    orgId: string,
+    accountId: string | null | undefined,
+    kind: GoogleMailboxKind,
+  ): Promise<MailboxAccess> {
+    if (!accountId) return this.resolveMailbox(orgId, kind);
+
+    try {
+      const row = await this.ownedRow(orgId, accountId);
+      if (!row) {
+        return {
+          ok: false,
+          reason: 'That Google account is not connected for this organization.',
+        };
+      }
+      if (row.status !== 'CONNECTED') {
+        return {
+          ok: false,
+          reason: `The account ${row.email} is not connected. Reconnect it to use this mailbox.`,
+        };
+      }
+      if (!this.canServeKind(row, kind)) {
+        return { ok: false, reason: this.missingScopeReason(kind, row.email) };
+      }
+
+      const refreshToken = this.crypto.decrypt(row.refreshTokenEnc);
+      const { accessToken, expiryDate } = await this.oauth.refreshAccessToken(refreshToken);
+
+      this.cacheAccessToken(row.id, accessToken, expiryDate).catch(() => undefined);
+
+      return { ok: true, accessToken, account: { id: row.id, email: row.email } };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown error';
+      const reason =
+        'The connected Google token could not be refreshed. Reconnect the account (the server encryption key may have changed).';
+      this.logger.warn(
+        `resolveMailboxForAccount(${orgId}, ${accountId}, ${kind}) token error: ${msg} — ${reason}`,
+      );
+      return { ok: false, reason };
+    }
+  }
+
   private canServeKind(row: GoogleAccountRow, kind: GoogleMailboxKind): boolean {
     if (kind === 'calendar') return this.hasCalendarScope(row);
     if (kind === 'gmail-read') return this.hasGmailReadScope(row);
