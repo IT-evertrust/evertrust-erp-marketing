@@ -374,6 +374,55 @@ export class ActivateRepository {
     await this.db.insert(schema.meetings).values(values);
     return true;
   }
+
+  // Record (or update) the meetings row for a meeting booked via the Engage handoff,
+  // keyed on the Google event id (organization_id + session_id is UNIQUE, so a re-book of
+  // the same event updates in place). transcript:null marks it as an upcoming Booker
+  // meeting, not an after-sales call. matchMethod 'engage_booking' tags its origin.
+  async createBookedMeeting(
+    orgId: string,
+    values: {
+      eventId: string;
+      title: string;
+      clientCompany: string;
+      clientContact: string | null;
+      clientEmail: string;
+      ownerEmail: string;
+      meetingDateIso: string;
+      joinUrl: string | null;
+    },
+  ): Promise<void> {
+    await this.db
+      .insert(schema.meetings)
+      .values({
+        organizationId: orgId,
+        sessionId: values.eventId,
+        title: values.title,
+        clientCompany: values.clientCompany,
+        aeName: values.ownerEmail,
+        clientContact: values.clientContact,
+        clientEmail: values.clientEmail,
+        meetingDate: values.meetingDateIso,
+        transcript: null,
+        docUrl: values.joinUrl,
+        campaignId: null,
+        leadId: null,
+        matchMethod: 'engage_booking',
+      })
+      .onConflictDoUpdate({
+        target: [schema.meetings.organizationId, schema.meetings.sessionId],
+        set: {
+          title: values.title,
+          clientCompany: values.clientCompany,
+          aeName: values.ownerEmail,
+          clientContact: values.clientContact,
+          clientEmail: values.clientEmail,
+          meetingDate: values.meetingDateIso,
+          docUrl: values.joinUrl,
+          updatedAt: new Date(),
+        },
+      });
+  }
 }
 
 // Deterministic session key shared by both Read AI ingest paths (Gmail-harvest summary +

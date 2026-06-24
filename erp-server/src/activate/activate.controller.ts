@@ -7,6 +7,7 @@ import {
   AnalyzeMeetingBodyDto,
   ImportReadAiBodyDto,
 } from './dto/import-read-ai.dto';
+import { BookMeetingBodyDto } from './dto/book-meeting.dto';
 
 // The Activate plane (Growth Engine, stage 03) for the web UI. JWT-auth + tenant-scoped
 // (@OrgId), gated by the campaigns RBAC (read for queries, write for mutations) like
@@ -30,6 +31,15 @@ export class ActivateController {
   @Get('meetings')
   getMeetings(@OrgId() orgId: string, @Query('accountId') accountId: string) {
     return this.activate.listMeetings(orgId, accountId ?? '');
+  }
+
+  // Book a meeting — the Engage→Activate handoff. Creates a Google Calendar event with a
+  // Meet link on the org's default calendar + records a linked meetings row; the booked
+  // call then appears in the Booker from the live calendar.
+  @RequirePermissions('campaigns:write')
+  @Post('meetings')
+  bookMeeting(@OrgId() orgId: string, @Body() body: BookMeetingBodyDto) {
+    return this.activate.bookMeeting(orgId, body);
   }
 
   // One event's detail (the popup).

@@ -10,6 +10,7 @@ import { ActivateRepository } from './activate.repository';
 import { CalendarReaderService } from './calendar-reader.service';
 import { ReadAiEmailService } from './read-ai-email.service';
 import { GoogleAccountsService } from '../google/google-accounts.service';
+import { GoogleCalendarReadService } from '../google/google-calendar-read.service';
 import type { ReadAiImportItem } from './dto/import-read-ai.dto';
 import type {
   ActivateCallAnalysis,
@@ -33,6 +34,9 @@ export class ActivateService {
     private readonly calendar: CalendarReaderService,
     private readonly google: GoogleAccountsService,
     private readonly readAiEmail: ReadAiEmailService,
+    // The Google-module calendar writer (org default calendar) — used by the Engage
+    // booking handoff to create the real Meet event.
+    private readonly googleCalendar: GoogleCalendarReadService,
   ) {}
 
   // ---- Meeting Booker (live Google Calendar) ----
@@ -71,6 +75,80 @@ export class ActivateService {
     }
     // No live calendar (or event not found there) — try the DB-seeded meeting.
     return this.repo.getUpcomingMeeting(orgId, eventId);
+  }
+
+  // Book a meeting — the Engage→Activate handoff. Creates a real Google Calendar event
+  // (with a Meet link) on the org's DEFAULT calendar mailbox + records a linked meetings
+  // row, so the booked call appears in the Booker from the live calendar. Books on the
+  // org default calendar (main's createEvent path); per-account targeting is a later
+  // refinement (body.accountId is accepted but currently unused). Never silently
+  // succeeds — a calendar failure surfaces as a 400 so the operator can fix the grant.
+  async bookMeeting(
+    orgId: string,
+    body: {
+      company: string;
+      contactName?: string;
+      clientEmail: string;
+      startsAt: string;
+      durationMinutes?: number;
+      title?: string;
+      notes?: string;
+      accountId?: string;
+    },
+  ): Promise<{
+    eventId: string;
+    joinUrl: string | null;
+    title: string;
+    meetingDate: string;
+  }> {
+    const start = new Date(body.startsAt);
+    if (Number.isNaN(start.getTime())) {
+      throw new BadRequestException('Invalid meeting start time.');
+    }
+    const duration = body.durationMinutes ?? 30;
+    const end = new Date(start.getTime() + duration * 60_000);
+    const title = body.title?.trim() || `EVERTRUST × ${body.company} — Intro Call`;
+    const description = [body.notes?.trim(), 'Booked via EVERTRUST Engage.']
+      .filter(Boolean)
+      .join('\n\n');
+
+    const created = await this.googleCalendar.createEvent(orgId, {
+      title,
+      description,
+      start: start.toISOString(),
+      end: end.toISOString(),
+      timeZone: 'Europe/Berlin',
+      attendees: [{ email: body.clientEmail }],
+      addGoogleMeet: true,
+    });
+    if (!created.ok || !created.eventId) {
+      throw new BadRequestException(
+        created.reason ??
+          'Could not create the calendar event. Confirm a mailbox has granted Calendar access.',
+      );
+    }
+
+    // The org's default calendar mailbox owns the event (createEvent books there).
+    const connected = await this.google.listForOrg(orgId);
+    const owner = connected.find((a) => a.isDefault) ?? connected[0];
+
+    await this.repo.createBookedMeeting(orgId, {
+      eventId: created.eventId,
+      title,
+      clientCompany: body.company,
+      clientContact: body.contactName?.trim() || null,
+      clientEmail: body.clientEmail,
+      ownerEmail: owner?.email ?? '',
+      meetingDateIso: start.toISOString(),
+      joinUrl: created.meetingUrl,
+    });
+
+    return {
+      eventId: created.eventId,
+      joinUrl: created.meetingUrl,
+      title,
+      meetingDate: start.toISOString(),
+    };
   }
 
   // "Request to join": hand back the meeting's conferencing link so the UI can open it.
