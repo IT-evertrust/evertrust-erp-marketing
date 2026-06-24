@@ -51,6 +51,9 @@ export const queryKeys = {
         campaignId?: string | null;
         status?: string | null;
         q?: string | null;
+        nicheTargetId?: string | null;
+        createdFrom?: string | null;
+        createdTo?: string | null;
         limit?: number | null;
         offset?: number | null;
       } = {},
@@ -61,6 +64,9 @@ export const queryKeys = {
         f.campaignId ?? 'all',
         f.status ?? 'all',
         f.q ?? '',
+        f.nicheTargetId ?? 'all',
+        f.createdFrom ?? '',
+        f.createdTo ?? '',
         f.limit ?? 50,
         f.offset ?? 0,
       ] as const,

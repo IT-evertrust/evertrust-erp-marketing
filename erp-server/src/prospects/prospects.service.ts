@@ -1,17 +1,17 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, gte, lte } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 import type {
   GraduateProspectDto,
   GraduateProspectResultDto,
   LeadDto,
+  PipelineStage,
   ProspectStatus,
   UpdateProspectDto,
 } from '@evertrust/shared';
 import { DB, type DbClient } from '../db/db.tokens';
 import { writeMachineAudit } from '../common/machine-audit';
 import { LeadsService } from '../leads/leads.service';
-import { WorkflowConfigService } from '../arsenal/workflow-config.service';
 
 type ProspectRow = typeof schema.prospects.$inferSelect;
 type CampaignRow = typeof schema.campaigns.$inferSelect;
@@ -36,7 +36,6 @@ export interface ProspectListFilters {
   status?: ProspectStatus;
   email?: string;
   snoozeDue?: boolean;
-  sendList?: boolean;
   limit?: number;
 }
 
@@ -46,26 +45,26 @@ export interface ProspectListFilters {
 // set (ignoring status/q/page) so the board columns show full tallies.
 export interface ProspectBoardFilters {
   campaignId?: string;
+  // SCOPE filters (narrow both the page AND the column tallies), alongside campaignId.
+  nicheTargetId?: string;
+  createdFrom?: Date;
+  createdTo?: Date;
+  // WITHIN-SCOPE narrowing (page only; tallies show the full scope).
   status?: ProspectStatus;
   q?: string;
   limit?: number;
   offset?: number;
 }
 
-// One org-scoped board page: the page rows, the post-filter pre-page total, and
-// the per-status tally for the campaign columns.
+// One org-scoped board page: the page rows, the post-filter pre-page total, and the
+// per-status + per-stage tallies for the board columns (the Nurture kanban groups by
+// stage; the Engage board groups by status).
 export interface ProspectBoardResult {
   items: ProspectRow[];
   total: number;
   statusCounts: Record<string, number>;
+  stageCounts: Record<string, number>;
 }
-
-const SEND_LIST_STATUSES: ProspectStatus[] = ['NEW', 'EMAILED'];
-const FOLLOWUP_CAP = 3;
-// Default follow-up cooldown (days) when automation.leads.dedupDays is unset (null).
-// Preserves the pre-config 3-day window; the send-list predicate multiplies it by
-// 86_400_000 to get the cooldown in ms.
-const FOLLOWUP_COOLDOWN_DEFAULT_DAYS = 3;
 
 // Map a leads row to its HTTP DTO (timestamps → ISO strings). Local to the
 // graduation response so prospects need not depend on the leads controller.
@@ -105,7 +104,6 @@ export class ProspectsService {
   constructor(
     @Inject(DB) private readonly db: DbClient,
     private readonly leads: LeadsService,
-    private readonly workflowConfig: WorkflowConfigService,
   ) {}
 
   // Upsert prospects on (campaignId, email). On conflict the SCRAPED fields update
@@ -177,15 +175,9 @@ export class ProspectsService {
     return { created, updated };
   }
 
-  // The machine prospect list. campaignId/status/email are SQL-filtered; snoozeDue
-  // and sendList are the derived gates (computed in-process so the rules stay one
-  // readable predicate). sendList enforces: campaign ACTIVE, status NEW|EMAILED,
-  // followupCount<3, last contact null or older than the cooldown, and NOT
-  // suppressed (org,email). The cooldown + suppression gate are config-driven via
-  // automation.leads (WorkflowConfigService): dedupDays sets the cooldown window
-  // (falling back to FOLLOWUP_COOLDOWN_DEFAULT_DAYS when null), and
-  // respectSuppressions toggles the do-not-contact gate. Both default to today's
-  // behaviour (3-day cooldown, suppressions honoured) until an admin overrides them.
+  // The machine prospect list. campaignId/status/email are SQL-filtered; snoozeDue is
+  // a derived gate computed in-process. (The n8n `sendList` send-queue gate was retired
+  // with the rest of the n8n marketing flow — Reach owns sending now.)
   async list(filters: ProspectListFilters): Promise<ProspectRow[]> {
     const conds = [];
     if (filters.campaignId) {
@@ -214,54 +206,6 @@ export class ProspectsService {
       );
     }
 
-    if (filters.sendList) {
-      // Admin-tunable lead governance is now PER-ORG (org_config). The send list is a
-      // machine pull that can span orgs, so resolve each prospect's org governance
-      // (dedupDays → cooldown, respectSuppressions → do-not-contact gate), memoized
-      // per org for the duration of this call. dedupDays null → the built-in default
-      // cooldown; respectSuppressions defaults true.
-      const govByOrg = new Map<
-        string,
-        { cooldownMs: number; respectSuppressions: boolean }
-      >();
-      const govFor = async (orgId: string) => {
-        const cached = govByOrg.get(orgId);
-        if (cached) return cached;
-        const { leads } = await this.workflowConfig.getAutomation(orgId);
-        const gov = {
-          cooldownMs:
-            (leads.dedupDays ?? FOLLOWUP_COOLDOWN_DEFAULT_DAYS) * 86_400_000,
-          respectSuppressions: leads.respectSuppressions,
-        };
-        govByOrg.set(orgId, gov);
-        return gov;
-      };
-      // Active campaigns only.
-      const activeCampaignIds = await this.activeCampaignIdSet();
-      // Suppressed (org,email) pairs — the do-not-contact gate. Built once and only
-      // consulted for prospects whose org has respectSuppressions on.
-      const suppressed = await this.suppressedKeySet();
-      const filtered: ProspectRow[] = [];
-      for (const r of rows) {
-        if (!activeCampaignIds.has(r.campaignId)) continue;
-        if (!SEND_LIST_STATUSES.includes(r.status)) continue;
-        if (r.followupCount >= FOLLOWUP_CAP) continue;
-        const gov = await govFor(r.organizationId);
-        const lastMs = r.lastContactedAt
-          ? new Date(r.lastContactedAt).getTime()
-          : null;
-        if (lastMs !== null && now - lastMs < gov.cooldownMs) continue;
-        if (
-          gov.respectSuppressions &&
-          suppressed.has(`${r.organizationId}::${r.email}`)
-        ) {
-          continue;
-        }
-        filtered.push(r);
-      }
-      rows = filtered;
-    }
-
     const limit = filters.limit && filters.limit > 0 ? filters.limit : undefined;
     return limit ? rows.slice(0, limit) : rows;
   }
@@ -281,16 +225,29 @@ export class ProspectsService {
     if (filters.campaignId) {
       conds.push(eq(schema.prospects.campaignId, filters.campaignId));
     }
+    if (filters.nicheTargetId) {
+      conds.push(eq(schema.prospects.nicheTargetId, filters.nicheTargetId));
+    }
+    if (filters.createdFrom) {
+      conds.push(gte(schema.prospects.createdAt, filters.createdFrom));
+    }
+    if (filters.createdTo) {
+      conds.push(lte(schema.prospects.createdAt, filters.createdTo));
+    }
     const scoped = await this.db
       .select()
       .from(schema.prospects)
       .where(and(...conds))
       .orderBy(desc(schema.prospects.createdAt));
 
-    // statusCounts: the full tally over org(+campaign), independent of status/q/page.
+    // status/stageCounts: the full tally over the SCOPE set (org + campaign + niche +
+    // date), independent of the status/q/page narrowing — so the columns show real
+    // totals. statusCounts backs the Engage board; stageCounts the Nurture kanban.
     const statusCounts: Record<string, number> = {};
+    const stageCounts: Record<string, number> = {};
     for (const r of scoped) {
       statusCounts[r.status] = (statusCounts[r.status] ?? 0) + 1;
+      stageCounts[r.pipelineStage] = (stageCounts[r.pipelineStage] ?? 0) + 1;
     }
 
     // Apply the page narrowing (status, then q) to get the filtered set.
@@ -312,7 +269,7 @@ export class ProspectsService {
     const limit = filters.limit && filters.limit > 0 ? filters.limit : 50;
     const items = filtered.slice(offset, offset + limit);
 
-    return { items, total, statusCounts };
+    return { items, total, statusCounts, stageCounts };
   }
 
   // One prospect IN THE CALLER'S ORG (the UI drawer). 404 if missing or cross-org.
@@ -376,6 +333,28 @@ export class ProspectsService {
     const updated = await this.db
       .update(schema.prospects)
       .set(set)
+      .where(
+        and(
+          eq(schema.prospects.organizationId, orgId),
+          eq(schema.prospects.id, id),
+        ),
+      )
+      .returning();
+    return updated[0] ?? before;
+  }
+
+  // Manual pipeline-stage move from the Nurture board (drag-and-drop). ORG-SCOPED:
+  // 404 if the prospect is not in `orgId`. Sets ONLY pipeline_stage — never touches
+  // the agent-driven `status`. The JWT audit row is set by the controller.
+  async updateStageForOrg(
+    orgId: string,
+    id: string,
+    pipelineStage: PipelineStage,
+  ): Promise<ProspectRow> {
+    const before = await this.getForOrg(orgId, id); // 404 cross-org / unknown
+    const updated = await this.db
+      .update(schema.prospects)
+      .set({ pipelineStage, updatedAt: new Date() })
       .where(
         and(
           eq(schema.prospects.organizationId, orgId),
@@ -539,21 +518,4 @@ export class ProspectsService {
     return campaign;
   }
 
-  private async activeCampaignIdSet(): Promise<Set<string>> {
-    const rows = await this.db
-      .select({ id: schema.campaigns.id })
-      .from(schema.campaigns)
-      .where(eq(schema.campaigns.lifecycle, 'ACTIVE'));
-    return new Set(rows.map((r) => r.id));
-  }
-
-  private async suppressedKeySet(): Promise<Set<string>> {
-    const rows = await this.db
-      .select({
-        organizationId: schema.suppressions.organizationId,
-        email: schema.suppressions.email,
-      })
-      .from(schema.suppressions);
-    return new Set(rows.map((r) => `${r.organizationId}::${r.email.toLowerCase()}`));
-  }
 }

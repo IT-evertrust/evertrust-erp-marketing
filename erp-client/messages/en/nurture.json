@@ -21,7 +21,23 @@
     "followups": "{count} follow-up sent",
     "moveBack": "Move to previous stage",
     "moveForward": "Move to next stage",
-    "movedToast": "{name} moved to {stage}"
+    "movedToast": "{name} moved to {stage}",
+    "moveError": "Could not move the deal",
+    "stages": {
+      "INTEREST": "Interest",
+      "INTENT": "Intent",
+      "CONSIDERATION": "Consideration",
+      "DECISION": "Decision",
+      "WON": "Won",
+      "LOST": "Lost"
+    },
+    "filters": {
+      "search": "Search company or email…",
+      "allNiches": "All niches",
+      "from": "From",
+      "to": "To",
+      "clear": "Clear"
+    }
   },
   "contracts": {
     "listTitle": "Contracts",

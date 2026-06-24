@@ -3,6 +3,7 @@ import {
   GraduateProspectDto as GraduateProspectSchema,
   ProspectBulkDto as ProspectBulkSchema,
   UpdateProspectDto as UpdateProspectSchema,
+  UpdateProspectStageDto as UpdateProspectStageSchema,
   UpdateProspectStatusDto as UpdateProspectStatusSchema,
 } from '@evertrust/shared';
 
@@ -16,4 +17,8 @@ export class GraduateProspectBodyDto extends createZodDto(
 // JWT manual status override (PATCH /prospects/:id/status).
 export class UpdateProspectStatusBodyDto extends createZodDto(
   UpdateProspectStatusSchema,
+) {}
+// JWT manual pipeline-stage move from the Nurture board (PATCH /prospects/:id/stage).
+export class UpdateProspectStageBodyDto extends createZodDto(
+  UpdateProspectStageSchema,
 ) {}

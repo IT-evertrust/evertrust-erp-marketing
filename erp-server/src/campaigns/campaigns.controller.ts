@@ -19,7 +19,6 @@ import {
   type CampaignConfigDto,
   type CampaignDto,
   type CampaignFilesDto,
-  type CampaignMachineListItemDto,
   type CampaignTemplatesDto,
 } from '@evertrust/shared';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
@@ -62,21 +61,8 @@ export class CampaignsController {
   list(@OrgId() orgId: string): Promise<CampaignDto[]> {
     return this.campaigns.list(orgId) as unknown as Promise<CampaignDto[]>;
   }
-
-  // Machine campaign list filtered by lifecycle (the daily scheduler). Declared
-  // BEFORE :id so "machine" isn't captured as a campaign id. @Public() + token.
-  @Public()
-  @UseGuards(ArsenalTokenGuard)
-  @Get('machine/list')
-  machineList(
-    @Query('lifecycle') lifecycleParam?: string,
-  ): Promise<CampaignMachineListItemDto[]> {
-    const parsed = CampaignLifecycle.safeParse(lifecycleParam ?? 'ACTIVE');
-    if (!parsed.success) {
-      throw new BadRequestException(`Unknown lifecycle: ${lifecycleParam}`);
-    }
-    return this.campaigns.machineList(parsed.data);
-  }
+  // (Retired: GET /campaigns/machine/list — the n8n daily scheduler that pulled active
+  // campaigns is gone; Reach owns processing.)
 
   @RequirePermissions('campaigns:read')
   @Get(':id')

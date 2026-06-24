@@ -4,7 +4,7 @@ import { ProspectsService } from '../src/prospects/prospects.service';
 import { LeadsService } from '../src/leads/leads.service';
 import { NichesService } from '../src/niches/niches.service';
 import type { AppConfigService } from '../src/config/app-config.service';
-import { getDb, makeWorkflowConfig, seed } from './real-db';
+import { getDb, seed } from './real-db';
 
 const ORG_A = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const CAMP = 'cccccccc-cccc-cccc-cccc-cccccccccccc';
@@ -40,11 +40,7 @@ async function makeService(
   if (leadRows.length) await seed(schema.leads, leadRows);
   const db = getDb();
   const leadsService = new LeadsService(db, config, new NichesService(db));
-  const service = new ProspectsService(
-    db,
-    leadsService,
-    makeWorkflowConfig(db, config),
-  );
+  const service = new ProspectsService(db, leadsService);
   return { service };
 }
 

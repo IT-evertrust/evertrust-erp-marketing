@@ -54,38 +54,22 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-describe('CampaignsService — launch (create + AIM deploy)', () => {
-  // WHY: ERP-first. The campaign persists regardless of the webhook outcome; a 2xx
-  // turns the saved target into a live (ACTIVE) campaign with activatedBy/At stamped.
-  it('persists DRAFT, fires AIM, and flips to ACTIVE on a 2xx', async () => {
+describe('CampaignsService — create (DRAFT, no AIM webhook)', () => {
+  // WHY: the n8n AIM-deploy on create has been RETIRED — Reach (the Python agents)
+  // owns processing now. create ALWAYS persists a DRAFT campaign, NEVER calls out, and
+  // returns deployError: null. No campaign is auto-activated on create anymore.
+  it('persists a DRAFT campaign and never fires a webhook', async () => {
     const { service } = setup(WEBHOOK);
-    const fetchMock = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ success: true }),
-    });
+    const fetchMock = jest.fn();
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     const { campaign, deployError } = await service.create(ORG_A, DTO, USER);
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, opts] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe(WEBHOOK);
-    expect(opts.method).toBe('POST');
-    const sent = JSON.parse(opts.body as string);
-    // The resolved niche NAME (not id) + region zone are sent; source tags it ERP.
-    expect(sent).toMatchObject({
-      niche: 'LED',
-      region: 'North',
-      country: 'Germany',
-      sender: 'info',
-      source: 'erp',
-    });
-
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(campaign.lifecycle).toBe('DRAFT');
+    expect(campaign.activatedBy).toBeNull();
     expect(deployError).toBeNull();
-    expect(campaign.lifecycle).toBe('ACTIVE');
-    expect(campaign.activatedBy).toBe(USER);
-    expect(campaign.activatedAt).toBeInstanceOf(Date);
-    // The niche was find-or-created and linked.
+    // The niche is still find-or-created and linked.
     const nicheRows = await rowsOf(schema.niches);
     expect(nicheRows).toHaveLength(1);
     expect(campaign.nicheId).toBe(nicheRows[0]!.id);
@@ -95,60 +79,11 @@ describe('CampaignsService — launch (create + AIM deploy)', () => {
   // is the dedup), not create a duplicate.
   it('reuses an existing niche across campaigns (find-or-create by slug)', async () => {
     const { service } = setup(WEBHOOK);
-    globalThis.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({}),
-    }) as unknown as typeof fetch;
-
     const a = await service.create(ORG_A, DTO, USER);
     const b = await service.create(ORG_A, { ...DTO, nicheName: ' led ' }, USER);
 
     expect(await rowsOf(schema.niches)).toHaveLength(1);
     expect(a.campaign.nicheId).toBe(b.campaign.nicheId);
-  });
-
-  // WHY: no FAILED state exists — a failed deploy leaves the campaign DRAFT with the
-  // error surfaced so the operator can activate/retry, and the launch never throws.
-  // (Regression guard: the real-Postgres migration surfaced a bug where create() ran an
-  // empty `db.update(...).set({})` on the failed-deploy path — which real Postgres
-  // rejects with "No values to set". Fixed by skipping the write when the patch is
-  // empty; these two specs pin the intended DRAFT-with-error behavior.)
-  it('stays DRAFT + surfaces deployError on a non-2xx webhook response', async () => {
-    const { service } = setup(WEBHOOK);
-    globalThis.fetch = jest.fn().mockResolvedValue({
-      ok: false,
-      status: 500,
-      json: async () => ({}),
-    }) as unknown as typeof fetch;
-
-    const { campaign, deployError } = await service.create(ORG_A, DTO, USER);
-    expect(campaign.lifecycle).toBe('DRAFT');
-    expect(campaign.activatedBy).toBeNull();
-    expect(deployError).toContain('HTTP 500');
-  });
-
-  it('stays DRAFT + surfaces deployError when the webhook throws', async () => {
-    const { service } = setup(WEBHOOK);
-    globalThis.fetch = jest
-      .fn()
-      .mockRejectedValue(new Error('ECONNREFUSED')) as unknown as typeof fetch;
-
-    const { campaign, deployError } = await service.create(ORG_A, DTO, USER);
-    expect(campaign.lifecycle).toBe('DRAFT');
-    expect(deployError).toContain('ECONNREFUSED');
-  });
-
-  // WHY: safe to run before AIM is wired — no webhook configured means the campaign
-  // simply saves as DRAFT (with an explanatory deployError), no fetch attempted.
-  it('saves DRAFT without calling out when no AIM webhook is configured', async () => {
-    const { service } = setup(''); // no webhook
-    const fetchMock = jest.fn();
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-    const { campaign, deployError } = await service.create(ORG_A, DTO, USER);
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(campaign.lifecycle).toBe('DRAFT');
-    expect(deployError).toContain('not configured');
   });
 
   // WHY: the campaign sender must be one of the org's RESOLVED sender keys. With no
@@ -297,23 +232,7 @@ describe('CampaignsService — machine config + list', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('machineList filters by lifecycle (ACTIVE only)', async () => {
-    const { service } = setup(WEBHOOK);
-    globalThis.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({}),
-    }) as unknown as typeof fetch;
-    const active = await service.create(ORG_A, DTO, USER); // → ACTIVE
-
-    // A second, DRAFT campaign, created via a no-webhook service so it saves DRAFT
-    // through the early-return path (no AIM call).
-    const { service: draftService } = setup(''); // no AIM webhook → DRAFT
-    await draftService.create(ORG_A, { ...DTO, project: 'P2' }, USER); // → DRAFT
-
-    const list = await service.machineList('ACTIVE');
-    expect(list.map((c) => c.id)).toEqual([active.campaign.id]);
-    expect(list[0]!.nicheId).toBe(active.campaign.nicheId);
-  });
+  // (Retired: machineList test — the n8n machine campaign list route is gone.)
 
   // REGRESSION (Drive→Postgres migration): CampaignDto gained `nicheName`, but the
   // Postgres service returned raw campaign rows with no niche join — so every

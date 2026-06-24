@@ -85,6 +85,7 @@ import {
   ProspectListDto,
   ProspectStatus,
   UpdateProspectStatusDto,
+  UpdateProspectStageDto,
   ReplyDraftDto,
   OutreachMessageDto,
   ContractDto,
@@ -502,6 +503,9 @@ export const api = {
         campaignId?: string;
         status?: z.infer<typeof ProspectStatus>;
         q?: string;
+        nicheTargetId?: string;
+        createdFrom?: string;
+        createdTo?: string;
         limit?: number;
         offset?: number;
       } = {},
@@ -512,6 +516,9 @@ export const api = {
       if (filters.campaignId) q.set('campaignId', filters.campaignId);
       if (filters.status) q.set('status', filters.status);
       if (filters.q) q.set('q', filters.q);
+      if (filters.nicheTargetId) q.set('nicheTargetId', filters.nicheTargetId);
+      if (filters.createdFrom) q.set('createdFrom', filters.createdFrom);
+      if (filters.createdTo) q.set('createdTo', filters.createdTo);
       if (filters.limit != null) q.set('limit', String(filters.limit));
       if (filters.offset != null) q.set('offset', String(filters.offset));
 
@@ -533,6 +540,14 @@ export const api = {
       request<ProspectDto>(`/prospects/${encodeURIComponent(id)}/status`, {
         method: 'PATCH',
         body: UpdateProspectStatusDto.parse(input),
+        schema: ProspectDto,
+      }),
+
+    // Move a card on the Nurture kanban (the human sales stage).
+    setStage: (id: string, input: z.infer<typeof UpdateProspectStageDto>) =>
+      request<ProspectDto>(`/prospects/${encodeURIComponent(id)}/stage`, {
+        method: 'PATCH',
+        body: UpdateProspectStageDto.parse(input),
         schema: ProspectDto,
       }),
   },

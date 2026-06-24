@@ -12,7 +12,7 @@ import { organizations } from './org';
 import { campaigns } from './campaigns';
 import { nicheTargets } from './niches';
 import { leads } from './leads';
-import { prospectStatusEnum } from './enums';
+import { pipelineStageEnum, prospectStatusEnum } from './enums';
 
 // Cold-outreach target, written by Lead Satellite via POST /prospects/bulk
 // (upsert on the (campaignId, email) key) — the per-campaign leads-sheet
@@ -43,6 +43,12 @@ export const prospects = pgTable(
     sourceUrl: text('source_url'),
     emailVerified: boolean('email_verified').notNull().default(false),
     status: prospectStatusEnum('status').notNull().default('NEW'),
+    // Human sales-pipeline stage (Nurture board, drag-and-drop). A SEPARATE axis
+    // from `status`: the team moves a card Interest→…→Won/Lost by hand, while the
+    // agents keep driving `status`. New prospects start at INTEREST.
+    pipelineStage: pipelineStageEnum('pipeline_stage')
+      .notNull()
+      .default('INTEREST'),
     // Re-engage no earlier than this (set by a SNOOZE verdict).
     snoozeUntil: timestamp('snooze_until', { withTimezone: true }),
     followupCount: integer('followup_count').notNull().default(0),
@@ -61,6 +67,7 @@ export const prospects = pgTable(
     uniqueIndex('prospects_campaign_id_email_uq').on(t.campaignId, t.email),
     index('prospects_organization_id_idx').on(t.organizationId),
     index('prospects_status_idx').on(t.status),
+    index('prospects_pipeline_stage_idx').on(t.pipelineStage),
     index('prospects_snooze_until_idx').on(t.snoozeUntil),
   ],
 );

@@ -30,10 +30,18 @@ import {
   GraduateProspectBodyDto,
   ProspectBulkBodyDto,
   UpdateProspectBodyDto,
+  UpdateProspectStageBodyDto,
   UpdateProspectStatusBodyDto,
 } from './prospects.dto';
 
 type ProspectRow = typeof schema.prospects.$inferSelect;
+
+// An optional ISO date query param → Date, or undefined if absent/invalid.
+function parseDate(s?: string): Date | undefined {
+  if (!s) return undefined;
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? undefined : d;
+}
 
 // Map a prospect row to its HTTP DTO (timestamps → ISO strings).
 function toDto(r: ProspectRow): ProspectDto {
@@ -50,6 +58,7 @@ function toDto(r: ProspectRow): ProspectDto {
     sourceUrl: r.sourceUrl,
     emailVerified: r.emailVerified,
     status: r.status,
+    pipelineStage: r.pipelineStage,
     snoozeUntil: r.snoozeUntil ? r.snoozeUntil.toISOString() : null,
     followupCount: r.followupCount,
     lastContactedAt: r.lastContactedAt ? r.lastContactedAt.toISOString() : null,
@@ -84,15 +93,22 @@ export class ProspectsController {
     @Query('campaignId') campaignIdParam?: string,
     @Query('status') statusParam?: string,
     @Query('q') q?: string,
+    @Query('nicheTargetId') nicheTargetIdParam?: string,
+    @Query('createdFrom') createdFromParam?: string,
+    @Query('createdTo') createdToParam?: string,
     @Query('limit') limitParam?: string,
     @Query('offset') offsetParam?: string,
   ): Promise<ProspectListDto> {
     const status = ProspectStatus.safeParse(statusParam);
     const campaignId = z.string().uuid().safeParse(campaignIdParam);
+    const nicheTargetId = z.string().uuid().safeParse(nicheTargetIdParam);
     const limit = Number.parseInt(limitParam ?? '', 10);
     const offset = Number.parseInt(offsetParam ?? '', 10);
     const result = await this.prospects.boardList(orgId, {
       campaignId: campaignId.success ? campaignId.data : undefined,
+      nicheTargetId: nicheTargetId.success ? nicheTargetId.data : undefined,
+      createdFrom: parseDate(createdFromParam),
+      createdTo: parseDate(createdToParam),
       status: status.success ? status.data : undefined,
       q: q || undefined,
       limit: Number.isFinite(limit) ? limit : undefined,
@@ -102,6 +118,7 @@ export class ProspectsController {
       items: result.items.map(toDto),
       total: result.total,
       statusCounts: result.statusCounts as ProspectListDto['statusCounts'],
+      stageCounts: result.stageCounts as ProspectListDto['stageCounts'],
     };
   }
 
@@ -141,6 +158,31 @@ export class ProspectsController {
     return toDto(row);
   }
 
+  // Manual pipeline-stage move from the Nurture kanban (drag-and-drop). org-scoped +
+  // audited (campaigns:write). Sets ONLY the human sales stage — never the agent-
+  // driven outreach status. Distinct sub-path so it never hits the machine PATCH /:id.
+  @RequirePermissions('campaigns:write')
+  @Patch(':id/stage')
+  async updateStage(
+    @OrgId() orgId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateProspectStageBodyDto,
+    @Req() req: Request,
+  ): Promise<ProspectDto> {
+    const row = await this.prospects.updateStageForOrg(
+      orgId,
+      id,
+      body.pipelineStage,
+    );
+    setAuditContext(req, {
+      entity: 'prospects',
+      entityId: row.id,
+      action: 'STAGE_MOVE',
+      after: { pipelineStage: row.pipelineStage },
+    });
+    return toDto(row);
+  }
+
   // ---- MACHINE routes (the arsenal) — @Public() + ArsenalTokenGuard ----------
 
   // Upsert a Lead Satellite scrape batch on (campaignId, email). Conflict updates
@@ -153,7 +195,7 @@ export class ProspectsController {
   }
 
   // The prospect list with the arsenal filters (campaignId, status, email,
-  // snoozeDue, sendList, limit). sendList = Reach Bazooka's eligible queue.
+  // snoozeDue, limit). (The n8n sendList send-queue gate was retired.)
   @Public()
   @UseGuards(ArsenalTokenGuard)
   @Get()
@@ -162,7 +204,6 @@ export class ProspectsController {
     @Query('status') statusParam?: string,
     @Query('email') email?: string,
     @Query('snoozeDue') snoozeDue?: string,
-    @Query('sendList') sendList?: string,
     @Query('limit') limitParam?: string,
   ): Promise<ProspectDto[]> {
     const status = ProspectStatus.safeParse(statusParam);
@@ -172,7 +213,6 @@ export class ProspectsController {
       status: status.success ? status.data : undefined,
       email: email || undefined,
       snoozeDue: snoozeDue === 'true',
-      sendList: sendList === 'true',
       limit: Number.isFinite(limit) ? limit : undefined,
     });
     return rows.map(toDto);

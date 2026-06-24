@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ProspectsBoard } from '@/components/growth/prospects-board';
+import { NurturePipelineBoard } from '@/components/growth/nurture-pipeline-board';
 import { ContractsCard } from '@/components/growth/contracts-card';
 
 type Tab = 'pipeline' | 'contracts';
@@ -73,16 +73,11 @@ function NurtureView() {
 
   return (
     <main className="flex flex-col gap-5 px-6 py-5 duration-300 animate-in fade-in">
-      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-sidebar-border pb-5">
-        <div className="min-w-0">
-          <h1 className="text-[22px] font-bold leading-none tracking-[-0.01em] text-foreground">
-            {tn('title')}
-          </h1>
-          <div className="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-            {tn('subtitle')}
-          </div>
-        </div>
-        {campaigns.length > 0 ? (
+      {/* No body title here — the GrowthTopbar masthead is the single page header
+          (Overview/Engage do the same), so "Nurture" isn't rendered twice. This row
+          carries only the campaign scope selector. */}
+      {campaigns.length > 0 ? (
+        <div className="flex flex-wrap items-center justify-end gap-3 border-b border-sidebar-border pb-5">
           <Select value={campaignId ?? undefined} onValueChange={setCampaignId}>
             <SelectTrigger className="w-[260px]">
               <SelectValue placeholder={tn('campaignPlaceholder')} />
@@ -95,8 +90,8 @@ function NurtureView() {
               ))}
             </SelectContent>
           </Select>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       <SegmentedTabs
         tabs={tabs}
@@ -123,7 +118,12 @@ function NurtureView() {
           description={tn('pickCampaign.body')}
         />
       ) : tab === 'pipeline' ? (
-        <ProspectsBoard campaignId={campaignId} />
+        <NurturePipelineBoard
+          campaignId={campaignId}
+          nicheId={
+            campaigns.find((c) => c.id === campaignId)?.nicheId ?? null
+          }
+        />
       ) : (
         <ContractsCard
           filters={{ campaignId }}

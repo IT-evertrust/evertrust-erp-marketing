@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { and, count, desc, eq, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 
 import { DB, type DbClient } from '../db/db.tokens';
@@ -73,6 +73,7 @@ function rowToAim(row: AimRow): ReachAim {
     salesCalendarId: row.salesCalendarId ?? undefined,
     segment: row.segment ?? undefined,
     source: row.source ?? undefined,
+    campaignId: row.campaignId ?? null,
     status: row.status,
     companies: row.companies,
     scrapeStartedAt: row.scrapeStartedAt ? row.scrapeStartedAt.toISOString() : null,
@@ -145,6 +146,91 @@ export class ReachRepository {
       })
       .returning();
     return rowToAim(row!);
+  }
+
+  // Create the campaign an aim links to (1:1). A bare insert — NO AIM webhook, no n8n:
+  // Reach (Python) owns the processing. The campaign is ACTIVE because the aim IS a
+  // live campaign (it shows as active, is the default on the Nurture board, and counts
+  // in active metrics). Safe to be ACTIVE: the n8n send paths that gated on ACTIVE are
+  // retired. Returns the campaign id.
+  async createLinkedCampaign(
+    orgId: string,
+    nicheId: string,
+    aim: ReachAim,
+  ): Promise<string> {
+    const [row] = await this.db
+      .insert(schema.campaigns)
+      .values({
+        organizationId: orgId,
+        name: aim.name,
+        nicheId,
+        country: aim.country ?? 'Germany',
+        region: aim.region,
+        project: aim.project ?? aim.name,
+        gmailLabel: aim.gmailLabel ?? '',
+        whatsappNumber: aim.whatsappNumber ?? '',
+        salesCalendarId: aim.salesCalendarId ?? null,
+        sender: aim.sender,
+        lifecycle: 'ACTIVE',
+      })
+      .returning({ id: schema.campaigns.id });
+    return row!.id;
+  }
+
+  // Link an aim to its campaign (org-scoped).
+  async setAimCampaign(
+    orgId: string,
+    aimId: string,
+    campaignId: string,
+  ): Promise<void> {
+    await this.db
+      .update(schema.reachAims)
+      .set({ campaignId, updatedAt: new Date() })
+      .where(
+        and(eq(schema.reachAims.id, aimId), tenantScope(orgId, schema.reachAims)),
+      );
+  }
+
+  // Mirror the aim's scraped leads INTO the campaign's prospects so they appear in
+  // the shared Nurture/Engage pipeline. Only leads WITH an email mirror (prospects.email
+  // is NOT NULL). Upsert on (campaignId, email): on conflict the scraped fields refresh
+  // but the conversation state (status/snooze/followup) NEVER regresses. Returns the
+  // count mirrored. Best-effort — callers swallow errors (the scrape already succeeded).
+  async mirrorLeadsToProspects(
+    orgId: string,
+    campaignId: string,
+    leads: LeadInsert[],
+    country: string | null,
+  ): Promise<number> {
+    const rows = leads
+      .filter((l) => (l.email ?? '').trim())
+      .map((l) => ({
+        organizationId: orgId,
+        campaignId,
+        email: l.email!.trim(),
+        companyName: l.company,
+        website: l.website ?? null,
+        city: l.location ?? null,
+        country: country ?? null,
+        sourceUrl: l.source ?? null,
+        emailVerified: false,
+      }));
+    if (rows.length === 0) return 0;
+    await this.db
+      .insert(schema.prospects)
+      .values(rows)
+      .onConflictDoUpdate({
+        target: [schema.prospects.campaignId, schema.prospects.email],
+        set: {
+          companyName: sql`excluded.company_name`,
+          website: sql`excluded.website`,
+          city: sql`excluded.city`,
+          country: sql`excluded.country`,
+          sourceUrl: sql`excluded.source_url`,
+          updatedAt: new Date(),
+        },
+      });
+    return rows.length;
   }
 
   async setGenerated(
