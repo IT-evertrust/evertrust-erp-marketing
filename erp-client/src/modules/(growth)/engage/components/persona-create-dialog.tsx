@@ -8,8 +8,8 @@ import { getEngagePersona } from '../services/engage.service';
 // A small modal for creating OR editing a drafting persona (the "+" / pencil beside the
 // Draft-persona toggle). Captures a name + the voice/style rules the drafter writes in.
 // In edit mode it loads the persona's current rules so they can be extended. On save it
-// calls onSubmit (which persists, and re-drafts in that voice when relevant). White-themed
-// to match the cockpit design.
+// calls onSubmit (which persists, and re-drafts in that voice when relevant). Themed with
+// the app's semantic tokens so it reads correctly on the dark cockpit shell.
 type PersonaDialogProps = {
   open: boolean;
   onClose: () => void;
@@ -84,19 +84,19 @@ export function PersonaDialog({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-[520px] rounded-[14px] border border-[#e4e7eb] bg-white p-5 shadow-xl"
+        className="w-full max-w-[520px] rounded-[14px] border border-border bg-card p-5 shadow-xl"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="text-[15px] font-bold text-[#15171c]">
+        <div className="text-[15px] font-bold text-foreground">
           {isEdit ? 'Edit draft persona' : 'New draft persona'}
         </div>
-        <div className="mt-1 text-[12px] text-[#959ca7]">
+        <div className="mt-1 text-[12px] text-muted-foreground">
           {isEdit
             ? 'Adjust the name or extend the rules its replies follow. Replies in campaigns using this persona will be re-drafted in the updated voice.'
             : 'Give the persona a name and the rules its replies should follow. New and existing replies in this campaign will be re-drafted in this voice.'}
         </div>
 
-        <label className="mt-4 block text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+        <label className="mt-4 block text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
           Persona name
         </label>
         <input
@@ -105,10 +105,10 @@ export function PersonaDialog({
           placeholder="Hanna Nguyen"
           maxLength={120}
           disabled={loading}
-          className="mt-1 w-full rounded-[8px] border border-[#d6dade] bg-white px-3 py-2 text-[13px] text-[#15171c] outline-none focus:border-[#15171c] disabled:opacity-50"
+          className="mt-1 w-full rounded-[8px] border border-border bg-card px-3 py-2 text-[13px] text-foreground outline-none focus:border-foreground disabled:opacity-50"
         />
 
-        <label className="mt-3 block text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+        <label className="mt-3 block text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
           Voice & rules
         </label>
         <textarea
@@ -118,7 +118,7 @@ export function PersonaDialog({
           rows={10}
           maxLength={8000}
           disabled={loading}
-          className="mt-1 w-full resize-y rounded-[8px] border border-[#d6dade] bg-white px-3 py-2 text-[12.5px] leading-relaxed text-[#15171c] outline-none focus:border-[#15171c] disabled:opacity-50"
+          className="mt-1 w-full resize-y rounded-[8px] border border-border bg-card px-3 py-2 text-[12.5px] leading-relaxed text-foreground outline-none focus:border-foreground disabled:opacity-50"
         />
 
         <div className="mt-4 flex justify-end gap-2">
@@ -126,7 +126,7 @@ export function PersonaDialog({
             type="button"
             onClick={onClose}
             disabled={saving}
-            className="rounded-md border border-[#c2c7ce] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#15171c] disabled:opacity-50"
+            className="rounded-md border border-border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-foreground disabled:opacity-50"
           >
             Cancel
           </button>
@@ -134,7 +134,7 @@ export function PersonaDialog({
             type="button"
             onClick={handleSave}
             disabled={saving || loading || !name.trim() || !rules.trim()}
-            className="rounded-md border border-[#15171c] bg-[#15171c] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-white disabled:opacity-50"
+            className="rounded-md border border-foreground bg-foreground px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-background disabled:opacity-50"
           >
             {saving ? 'Saving…' : isEdit ? 'Save changes' : 'Create persona'}
           </button>
