@@ -140,7 +140,19 @@ export class ReachService {
   // Forge to generate the three templates + the news brief and store them. If the
   // agent is unreachable the aim is still created (DRAFT) so it can be regenerated.
   async createAim(orgId: string, dto: CreateAimDto): Promise<ReachAim> {
-    const aim = await this.repo.createAim(orgId, dto);
+    let aim = await this.repo.createAim(orgId, dto);
+    // Aiming IS creating the campaign: give every aim its CRM campaign (1:1) up
+    // front so it appears on the Nurture board from the moment it's aimed — no need
+    // to wait for the first lead promotion. Best-effort: a campaign-link failure
+    // must not block the aim (it'll be created lazily on the first promote instead).
+    try {
+      const niche = await this.niches.findOrCreate(orgId, aim.niche);
+      const campaignId = await this.repo.ensureCampaign(orgId, aim, niche.id);
+      aim = { ...aim, campaignId };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'campaign link failed';
+      this.logger.warn(`Campaign link failed for aim ${aim.id}: ${msg}`);
+    }
     try {
       const config = await this.buildAgentConfig(orgId, aim);
       const result = await this.agent.run('reach.ammo_forge', {

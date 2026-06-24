@@ -292,6 +292,54 @@ export class ReachRepository {
 
   // ---- Reach → Nurture bridge ----
 
+  // Insert the aim's CRM campaign and link it back onto the aim (1:1), within the
+  // given tx. Seeds the NOT NULL campaign columns the Reach aim doesn't carry from
+  // the aim's own fields (sender → gmailLabel, blank whatsapp). Caller guarantees
+  // the aim has no campaign yet and that nicheId is resolved.
+  private async createAndLinkCampaign(
+    tx: Tx,
+    orgId: string,
+    aim: ReachAim,
+    nicheId: string,
+  ): Promise<string> {
+    const [campaign] = await tx
+      .insert(schema.campaigns)
+      .values({
+        organizationId: orgId,
+        name: aim.name,
+        nicheId,
+        country: aim.country ?? 'Germany',
+        region: aim.region,
+        project: aim.name,
+        gmailLabel: aim.sender,
+        whatsappNumber: '',
+        sender: aim.sender,
+      })
+      .returning({ id: schema.campaigns.id });
+    const campaignId = campaign!.id;
+    await tx
+      .update(schema.reachAims)
+      .set({ campaignId, updatedAt: new Date() })
+      .where(
+        and(eq(schema.reachAims.id, aim.id), tenantScope(orgId, schema.reachAims)),
+      );
+    return campaignId;
+  }
+
+  // Give an aim its CRM campaign if it doesn't have one yet (the eager path, called
+  // at aim creation so the aim shows in Nurture from the moment it's aimed). Returns
+  // the existing or freshly-created campaign id. Idempotent.
+  async ensureCampaign(
+    orgId: string,
+    aim: ReachAim,
+    nicheId: string,
+  ): Promise<string> {
+    if (aim.campaignId) return aim.campaignId;
+    return this.db.transaction((tx) =>
+      this.createAndLinkCampaign(tx, orgId, aim, nicheId),
+    );
+  }
+
   // Promote a reach_lead into the Nurture pipeline as a `prospects` row, in ONE
   // transaction so the aim↔campaign link, the prospect upsert, and the lead-status
   // advance never half-apply. Find-or-creates the aim's CRM campaign (1:1, lazily —
@@ -307,36 +355,12 @@ export class ReachRepository {
     email: string,
   ): Promise<PromoteLeadResult> {
     return this.db.transaction(async (tx) => {
-      // 1. Ensure the aim has a CRM campaign (find-or-create, 1:1).
+      // 1. Ensure the aim has a CRM campaign (fallback for aims created before the
+      // eager link, or if that link failed). New aims already carry campaignId.
       let campaignId = aim.campaignId;
       if (!campaignId) {
         if (!nicheId) throw new Error('nicheId is required to create a campaign');
-        const [campaign] = await tx
-          .insert(schema.campaigns)
-          .values({
-            organizationId: orgId,
-            name: aim.name,
-            nicheId,
-            country: aim.country ?? 'Germany',
-            region: aim.region,
-            project: aim.name,
-            // Required NOT NULL CRM fields the Reach aim doesn't carry — seeded
-            // from the aim's sender / left blank (editable later in the CRM).
-            gmailLabel: aim.sender,
-            whatsappNumber: '',
-            sender: aim.sender,
-          })
-          .returning({ id: schema.campaigns.id });
-        campaignId = campaign!.id;
-        await tx
-          .update(schema.reachAims)
-          .set({ campaignId, updatedAt: new Date() })
-          .where(
-            and(
-              eq(schema.reachAims.id, aim.id),
-              tenantScope(orgId, schema.reachAims),
-            ),
-          );
+        campaignId = await this.createAndLinkCampaign(tx, orgId, aim, nicheId);
       }
 
       // 2. Upsert the prospect on (campaignId, email). org-scoped too: campaignId
