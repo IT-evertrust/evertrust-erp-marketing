@@ -1280,6 +1280,18 @@ export class EngageRepliesService {
       return { ok: true, meetingStatus: 'BOOKED', bookedMeetingId: row.bookedMeetingId };
     }
 
+    // Never trust a client-supplied meeting id — verify it belongs to this org before
+    // linking it (the FK only proves the meeting exists in SOME tenant). Multi-tenant
+    // invariant: every write resolves organizationId.
+    const meetingRows = await this.db
+      .select({ id: schema.meetings.id })
+      .from(schema.meetings)
+      .where(
+        and(tenantScope(orgId, schema.meetings), eq(schema.meetings.id, meetingId)),
+      )
+      .limit(1);
+    if (!meetingRows[0]) throw new BadRequestException('Meeting not found');
+
     await this.db
       .update(schema.reachLeadReplies)
       .set({ meetingStatus: 'BOOKED', bookedMeetingId: meetingId, updatedAt: new Date() })
