@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 from concurrent.futures import ThreadPoolExecutor
 
+from .domain import firmographics
 from .domain import icp as I
 from .domain import tender
 from .domain.scrape import registrable_domain
@@ -142,6 +143,18 @@ def qualify(prospects: list[dict], fetcher, icp: I.ICP, *, country: str = "", ni
                     cities=[], market_tld=market_tld)
                 tier, reason = tender.rank_label(score, 40), f"score={score}"
                 p["score"] = score
+                # C-TIER firmographic gate (interim): for the weakest tier only, read age + headcount
+                # off the crawled page — too young (<AGE_MIN) or too small (<EMP_MIN) is REJECTED, a
+                # C that shows it's old/sizeable enough is PROMOTED to B. Missing data -> stays C
+                # (we never punish a page that simply doesn't state it). Full tier rework comes later.
+                if tier == "C":
+                    fg = firmographics.extract_firmographics(text)
+                    p["foundedYear"], p["employees"] = fg["foundedYear"], fg["employees"]
+                    verdict = firmographics.firmographic_verdict(fg)
+                    if verdict == "reject":
+                        tier, reason = I.EXCLUDE, f"firmo-reject(age={fg['age']},emp={fg['employees']})"
+                    elif verdict == "promote":
+                        tier, reason = I.B, f"firmo-promote(age={fg['age']},emp={fg['employees']})"
         est = I.email_status(email, source="website" if email else "")
         p.update(entity=entity, tier=tier, tierReason=reason, nicheHits=core,
                  nicheFit=fit, evidenceChars=len(text), emailStatus=est)

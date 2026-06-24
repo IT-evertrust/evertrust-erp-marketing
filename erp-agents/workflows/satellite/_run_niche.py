@@ -134,7 +134,8 @@ def main() -> int:
     # The deliverable = ONE simple lead file: the QUALIFIED companies (real company + on-niche),
     # best-first. refine_prospects already ranked them; we just write the columns.
 
-    cols = ["ranking", "tier", "score", "companyName", "email", "emailStatus", "city", "country", "website"]
+    cols = ["ranking", "tier", "score", "companyName", "foundedYear", "employees",
+            "email", "emailStatus", "city", "country", "website"]
     main = os.path.join(out_dir, stem + ".csv")
     with open(main, "w", newline="", encoding="utf-8-sig") as f:    # utf-8-sig for Excel umlauts
         w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
