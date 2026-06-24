@@ -38,11 +38,41 @@ const MTG_BLOCK = new RegExp(`\\n*${MTG_OPEN}[\\s\\S]*?${MTG_CLOSE}`, 'g');
 const PROPOSE_SLOT_COUNT = 2;
 const PROPOSE_HORIZON_DAYS = 28;
 
+// A closing salutation that begins the signature block (EN + DE). Matched per-line, so
+// the meeting-time prose is inserted as the LAST body paragraph — just ABOVE the sign-off
+// (`Best regards, / Hanna Nguyen / EVERTRUST GmbH`), never dangling beneath the signature.
+const SIGNOFF_RE =
+  /^[ \t>]*(best regards|kind(?:est)? regards|warm(?:est)? regards|best wishes|regards|sincerely(?: yours)?|yours (?:sincerely|truly|faithfully)|best|cheers|many thanks|thanks(?: again)?|thank you|talk soon|speak soon|looking forward\b[^\n]*|mit freundlichen gr[üu](?:ß|ss)en|freundliche gr[üu](?:ß|ss)e|viele gr[üu](?:ß|ss)e|beste gr[üu](?:ß|ss)e|liebe gr[üu](?:ß|ss)e|herzliche gr[üu](?:ß|ss)e)[ \t]*[,!.]?[ \t]*$/i;
+
+// Place `block` as the final body paragraph, immediately before the closing salutation if
+// one is found near the end (a signature is short — only the last few non-empty lines are
+// considered, so an earlier "Looking forward…" sentence mid-body is never mistaken for it).
+// No recognizable sign-off → append at the end (the old behaviour, the safe fallback).
+function placeBeforeSignoff(body: string, block: string): string {
+  const lines = body.split('\n');
+  let examined = 0;
+  let idx = -1;
+  for (let i = lines.length - 1; i >= 0 && examined < 6; i--) {
+    const line = lines[i] ?? '';
+    if (line.trim() === '') continue;
+    examined++;
+    if (SIGNOFF_RE.test(line)) {
+      idx = i;
+      break;
+    }
+  }
+  if (idx === -1) return `${body.trimEnd()}\n\n${block}`;
+  const head = lines.slice(0, idx).join('\n').trimEnd();
+  const tail = lines.slice(idx).join('\n').trimStart();
+  return `${head}\n\n${block}\n\n${tail}`;
+}
+
 // Stamp the authoritative dual-zone meeting time onto an email body as a NATURAL sentence
 // (rendered from the structured slot(s) — the SAME ones the calendar books — so the email
 // can never disagree with the invite; the LLM never writes the time). `kind` shapes the
 // phrasing (propose / accept / counter). Idempotent: any prior block is stripped before
-// re-appending, so re-stamping (e.g. ACCEPTED after PROPOSED) never duplicates it.
+// re-inserting, so re-stamping (e.g. ACCEPTED after PROPOSED) never duplicates it. The
+// block lands as the last body paragraph, just above the sign-off — not beneath it.
 export function withMeetingTime(
   body: string,
   slots: Slot[],
@@ -53,7 +83,7 @@ export function withMeetingTime(
   const stripped = body.replace(MTG_BLOCK, '').trimEnd();
   if (slots.length === 0) return stripped;
   const prose = renderMeetingProse(slots, primaryTz, secondaryTz, kind);
-  return `${stripped}\n\n${MTG_OPEN}${prose}${MTG_CLOSE}`;
+  return placeBeforeSignoff(stripped, `${MTG_OPEN}${prose}${MTG_CLOSE}`);
 }
 
 // ===========================================================================
