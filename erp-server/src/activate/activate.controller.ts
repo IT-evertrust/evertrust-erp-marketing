@@ -8,6 +8,8 @@ import {
   ImportReadAiBodyDto,
 } from './dto/import-read-ai.dto';
 import { BookMeetingBodyDto } from './dto/book-meeting.dto';
+import { GenerateResearchBodyDto } from './dto/generate-research.dto';
+import { ActivateResearchService } from './activate-research.service';
 
 // The Activate plane (Growth Engine, stage 03) for the web UI. JWT-auth + tenant-scoped
 // (@OrgId), gated by the campaigns RBAC (read for queries, write for mutations) like
@@ -16,7 +18,29 @@ import { BookMeetingBodyDto } from './dto/book-meeting.dto';
 // Company Research + After-Sales call the erp-agents brains.
 @Controller('growth/activate')
 export class ActivateController {
-  constructor(private readonly activate: ActivateService) {}
+  constructor(
+    private readonly activate: ActivateService,
+    private readonly research: ActivateResearchService,
+  ) {}
+
+  // ---- Client Research (internal-data dossier + MBTI) ----
+  @RequirePermissions('campaigns:read')
+  @Get('research')
+  listResearch(@OrgId() orgId: string) {
+    return this.research.listResearch(orgId);
+  }
+
+  @RequirePermissions('campaigns:write')
+  @Post('research/generate')
+  generateResearch(@OrgId() orgId: string, @Body() body: GenerateResearchBodyDto) {
+    return this.research.generate(orgId, body.company, body.clientEmail);
+  }
+
+  @RequirePermissions('campaigns:read')
+  @Get('research/:company')
+  getResearch(@OrgId() orgId: string, @Param('company') company: string) {
+    return this.research.getResearch(orgId, company);
+  }
 
   // ---- Meeting Booker ----
   // Connected Google accounts = the email-account toggle (like Engage's inbox switch).

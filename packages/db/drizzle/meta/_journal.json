@@ -330,6 +330,13 @@
       "when": 1780594000000,
       "tag": "0046_engage_replies",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1780595000000,
+      "tag": "0047_client_research",
+      "breakpoints": true
     }
   ]
 }

@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { GoogleModule } from '../google/google.module';
 import { ActivateController } from './activate.controller';
 import { ActivateService } from './activate.service';
+import { ActivateResearchService } from './activate-research.service';
 import { ActivateRepository } from './activate.repository';
 import { ActivateAgentClient } from './activate.agent';
 import { GmailReaderService } from './gmail-reader.service';
@@ -16,6 +17,7 @@ import { ReadAiEmailService } from './read-ai-email.service';
   controllers: [ActivateController],
   providers: [
     ActivateService,
+    ActivateResearchService,
     ActivateRepository,
     ActivateAgentClient,
     GmailReaderService,
