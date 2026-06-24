@@ -6,6 +6,7 @@ from erp_agents.workflows.activate.company_research import CompanyResearchWorkfl
 from erp_agents.workflows.activate.sales_agent import SalesAgentWorkflow
 from erp_agents.workflows.engage.rag_agent import RagAgentWorkflow
 from erp_agents.workflows.engage.reply_glock import ReplyGlockWorkflow
+from erp_agents.workflows.nurture.sleeper_grenade import SleeperGrenadeWorkflow
 from erp_agents.workflows.reach.ammo_forge import AmmoForgeWorkflow
 from erp_agents.workflows.reach.lead_satellite import LeadSatelliteWorkflow
 from erp_agents.workflows.reach.reach_bazooka import ReachBazookaWorkflow
@@ -20,6 +21,7 @@ WORKFLOW_REGISTRY: dict[str, type[Workflow]] = {
     "activate.sales_agent": SalesAgentWorkflow,
     "activate.company_research": CompanyResearchWorkflow,
     "activate.client_research": ClientResearchWorkflow,
+    "nurture.sleeper_grenade": SleeperGrenadeWorkflow,
 }
 
 
