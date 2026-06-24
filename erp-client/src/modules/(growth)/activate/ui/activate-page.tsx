@@ -30,6 +30,10 @@ export function ActivatePage() {
           selectedDossier={activate.selectedDossier}
           loading={activate.loadingDossiers}
           generating={activate.generating}
+          clientResearch={activate.clientResearch}
+          loadingClientResearch={activate.loadingClientResearch}
+          generatingClientResearch={activate.generatingClientResearch}
+          onGenerateClientResearch={activate.generateClientResearch}
         />
       ) : null}
 

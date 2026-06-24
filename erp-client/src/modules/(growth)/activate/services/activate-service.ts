@@ -3,6 +3,7 @@ import { API_URL } from '@/lib/env';
 import type {
   CalendarMeeting,
   CallAnalysis,
+  ClientResearch,
   MeetingAccount,
   Persona,
   ResearchDossier,
@@ -75,6 +76,29 @@ export function generateDossier(
   return postJson<ResearchDossier>(
     `/growth/activate/dossiers/${encodeURIComponent(eventId)}/generate?accountId=${encodeURIComponent(accountId)}`,
   );
+}
+
+// ---- Client Research (persisted deep dossier: MBTI + personality + deal economics) ----
+export function listClientResearch(): Promise<ClientResearch[]> {
+  return getJson<ClientResearch[]>('/growth/activate/research');
+}
+
+// Returns the persisted research row for a company, or null if none exists yet.
+export function getClientResearch(company: string): Promise<ClientResearch | null> {
+  if (!company) return Promise.resolve(null);
+  return getJson<ClientResearch | null>(
+    `/growth/activate/research/${encodeURIComponent(company)}`,
+  );
+}
+
+export function generateClientResearch(
+  company: string,
+  clientEmail?: string,
+): Promise<ClientResearch> {
+  return postJson<ClientResearch>('/growth/activate/research/generate', {
+    company,
+    clientEmail,
+  });
 }
 
 // ---- After-Sales Analysis ----
