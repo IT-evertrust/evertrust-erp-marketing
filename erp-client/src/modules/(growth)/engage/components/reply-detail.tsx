@@ -1,65 +1,292 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
+
+import { CalendarPlus } from 'lucide-react';
+
 import { LiveDot } from '@/modules/(growth)/shared';
 
-import type { AiAgentMode, CampaignReply } from '../types';
+import {
+  addCampaignTraining,
+  type CalendarSlot,
+  getCampaignFreeSlots,
+  redraftReply,
+  saveReplyDraft,
+  sendReply,
+} from '../services/engage.service';
+import type { AiAgentMode, CampaignReply, ReplyThreadMessage } from '../types';
 import { AiAgentBox } from './ai-agent-box';
+import { BookMeetingDialog } from './book-meeting-dialog';
+
+// Compact slot label in the calendar's own time zone, e.g. "Tue 24 Jun · 15:00–15:30".
+function formatSlot(slot: CalendarSlot, timeZone: string): string {
+  const start = new Date(slot.start);
+  const end = new Date(slot.end);
+  const day = new Intl.DateTimeFormat('en-GB', {
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+    timeZone,
+  }).format(start);
+  const time = (date: Date) =>
+    new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone,
+    }).format(date);
+  return `${day} · ${time(start)}–${time(end)}`;
+}
+
+// The draft line the rep drops in when they hold a slot, e.g.
+// "How about Tuesday 24 Jun at 15:00 (Europe/Berlin)? …".
+function proposalLine(slot: CalendarSlot, timeZone: string): string {
+  const start = new Date(slot.start);
+  const day = new Intl.DateTimeFormat('en-GB', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'short',
+    timeZone,
+  }).format(start);
+  const time = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone,
+  }).format(start);
+  return `How about ${day} at ${time} (${timeZone})? I've held the slot and sent a calendar invite.`;
+}
 
 type ReplyDetailProps = {
   reply?: CampaignReply;
   aiMode: AiAgentMode;
   onChangeAiMode: (mode: AiAgentMode) => void;
+  // The campaign's mailbox google_accounts id — books meetings on that calendar.
+  mailboxAccountId?: string | null;
 };
 
 export function ReplyDetail({
   reply,
   aiMode,
   onChangeAiMode,
+  mailboxAccountId = null,
 }: ReplyDetailProps) {
+  // Draft is editable + controlled, so switching replies always shows the right text
+  // and Send/Save read the latest edits.
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [bookOpen, setBookOpen] = useState(false);
+  // Messages sent this session, appended to the thread so the rep immediately SEES
+  // their reply land in the conversation (the server has it; this avoids a slow refetch).
+  const [sentMessages, setSentMessages] = useState<ReplyThreadMessage[]>([]);
+  const [justSent, setJustSent] = useState(false);
+  // "Propose times": the fetched bookable windows + the rep's chosen one (passed to Send).
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [slots, setSlots] = useState<CalendarSlot[]>([]);
+  const [slotsTimeZone, setSlotsTimeZone] = useState('');
+  const [selectedSlot, setSelectedSlot] = useState<CalendarSlot | null>(null);
+
+  const replyId = reply?.id;
+  useEffect(() => {
+    setSubject(reply?.draftSubject ?? '');
+    setBody(reply?.draftBody ?? '');
+    setSentMessages([]);
+    setJustSent(false);
+    setLoadingSlots(false);
+    setSlots([]);
+    setSlotsTimeZone('');
+    setSelectedSlot(null);
+  }, [replyId, reply?.draftSubject, reply?.draftBody]);
+
   if (!reply) {
     return (
       <section className="flex min-h-[560px] items-center justify-center p-6">
-        <div className="rounded-lg border border-dashed border-border bg-muted px-6 py-8 text-center text-[12.5px] font-bold text-muted-foreground">
+        <div className="rounded-lg border border-dashed border-[#d6dade] bg-[#f6f7f9] px-6 py-8 text-center text-[12.5px] font-bold text-[#959ca7]">
           Pick a campaign with replies to draft responses.
         </div>
       </section>
     );
   }
 
+  async function handleSave() {
+    if (!reply) return;
+    if (!subject.trim() || !body.trim()) {
+      toast.error('Subject and body are required.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await saveReplyDraft(reply.id, subject, body);
+      toast.success('Draft saved.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not save draft.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSend() {
+    if (!reply) return;
+    if (!subject.trim() || !body.trim()) {
+      toast.error('Subject and body are required.');
+      return;
+    }
+    setSending(true);
+    try {
+      const result = selectedSlot
+        ? await sendReply(reply.id, subject, body, selectedSlot)
+        : await sendReply(reply.id, subject, body);
+      // Show the just-sent reply in the thread immediately (it's now in Gmail too).
+      setSentMessages((prev) => [
+        ...prev,
+        {
+          id: `sent-${prev.length}`,
+          direction: 'outbound',
+          header: `EVERTRUST → ${reply.company.toUpperCase()} · just now`,
+          subject: subject.trim().toLowerCase().startsWith('re:')
+            ? subject
+            : `Re: ${subject}`,
+          body,
+        },
+      ]);
+      setJustSent(true);
+      setSelectedSlot(null);
+      if (result.meeting?.ok) {
+        toast.success('Reply sent + calendar invite created.');
+      } else {
+        toast.success(`Reply sent to ${reply.contact} from your campaign mailbox.`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not send reply.');
+    } finally {
+      setSending(false);
+    }
+  }
+
+  // "Propose times": read the campaign calendar's bookable windows. If the calendar
+  // isn't readable (configured:false) surface the reason and offer nothing.
+  async function handleProposeTimes() {
+    if (!reply || loadingSlots) return;
+    setLoadingSlots(true);
+    try {
+      const data = await getCampaignFreeSlots(reply.campaignId);
+      if (!data.configured) {
+        setSlots([]);
+        setSlotsTimeZone('');
+        toast.error(data.reason ?? 'Calendar is not available for this campaign.');
+        return;
+      }
+      setSlotsTimeZone(data.timeZone);
+      setSlots(data.slots);
+      if (data.slots.length === 0) {
+        toast.message('No open slots in the calendar right now.');
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not load free slots.');
+    } finally {
+      setLoadingSlots(false);
+    }
+  }
+
+  // Pick a slot: hold it for Send and append a human-readable line to the editable draft.
+  function handleSelectSlot(slot: CalendarSlot) {
+    setSelectedSlot(slot);
+    const line = proposalLine(slot, slotsTimeZone);
+    setBody((prev) => (prev.trim() ? `${prev.trimEnd()}\n\n${line}` : line));
+  }
+
+  // Write & Fix: ask the agent to revise the current draft, then load the result
+  // into the editor. Slow (LLM) — guard with `applying`.
+  async function handleApply(instruction: string) {
+    if (!reply) return;
+    setApplying(true);
+    try {
+      const next = await redraftReply(reply.id, instruction);
+      setSubject(next.draftSubject);
+      setBody(next.draftBody);
+      toast.success('Draft updated.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not revise the draft.');
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  // Train · Feedback: persist a note the drafter applies to all future drafts for
+  // this campaign.
+  async function handleSaveTraining(note: string) {
+    if (!reply) return;
+    try {
+      await addCampaignTraining(reply.campaignId, note);
+      toast.success('Got it — future drafts will apply this.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not save feedback.');
+    }
+  }
+
+  const threadMessages = [...(reply?.thread ?? []), ...sentMessages];
+
+  // The client's words to scan for a proposed meeting time — the latest inbound thread
+  // message, falling back to the classified reply's inbound body.
+  function bookingHintText(r: CampaignReply): string {
+    const lastInbound = [...(r.thread ?? [])]
+      .reverse()
+      .find((mssg) => mssg.direction === 'inbound');
+    return lastInbound?.body || r.inboundBody || '';
+  }
+
   return (
     <section className="flex min-h-[560px] flex-col gap-4 p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-[15px] font-bold text-foreground">
+          <div className="text-[15px] font-bold text-[#15171c]">
             {reply.company}
           </div>
-          <div className="mt-1 text-[11px] text-muted-foreground">
-            {reply.contact}
-          </div>
+          <div className="mt-1 text-[11px] text-[#959ca7]">{reply.contact}</div>
         </div>
 
-        <span className="rounded-full border border-border px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
-          {reply.category}
-        </span>
+        <div className="flex items-center gap-2">
+          {/* Engage→Activate: book a meeting straight from an interested reply. */}
+          {reply.category === 'INTERESTED' && (
+            <button
+              type="button"
+              onClick={() => setBookOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-[7px] border border-[#15171c] bg-[#15171c] px-[10px] py-[6px] text-[10px] font-bold uppercase tracking-[0.08em] text-white transition-colors hover:bg-[#2a2d33]"
+              title="Create a calendar invite + Meet link, added to Activate"
+            >
+              <CalendarPlus className="size-3.5" />
+              Book meeting
+            </button>
+          )}
+          <span className="rounded-full border border-[#c2c7ce] px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.06em] text-[#5b626d]">
+            {reply.category}
+          </span>
+        </div>
       </div>
 
-      <div className="max-h-[260px] overflow-auto rounded-[10px] border border-border p-3">
+      <div className="max-h-[300px] overflow-auto rounded-[10px] border border-[#c2c7ce] p-3">
         <div className="flex flex-col gap-2.5">
-          {reply.thread.map((message) => (
+          {threadMessages.map((message) => (
             <div
               key={message.id}
               className={[
-                'max-w-[90%] rounded-[10px] border border-border bg-muted px-4 py-3',
+                'max-w-[90%] rounded-[10px] border border-[#d6dade] bg-[#f6f7f9] px-4 py-3',
                 message.direction === 'outbound'
                   ? 'self-end'
-                  : 'self-start bg-card',
+                  : 'self-start bg-white',
               ].join(' ')}
             >
-              <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+              <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-[#959ca7]">
                 {message.header}
               </div>
-              <div className="mb-2 text-[12.5px] font-bold text-foreground">
+              <div className="mb-2 text-[12.5px] font-bold text-[#15171c]">
                 {message.subject}
               </div>
-              <div className="whitespace-pre-line text-[12.5px] leading-relaxed text-muted-foreground">
+              <div className="whitespace-pre-wrap break-words text-[12.5px] leading-relaxed text-[#5b626d]">
                 {message.body}
               </div>
             </div>
@@ -67,38 +294,112 @@ export function ReplyDetail({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-[10px] border border-border bg-card">
+      <div className="overflow-hidden rounded-[10px] border border-[#c2c7ce] bg-white">
         <div className="p-4">
-          <div className="mb-2 flex items-center gap-2 text-[9.5px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+          <div className="mb-2 flex items-center gap-2 text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#959ca7]">
             <LiveDot />
             Sorter: {reply.category} · AI Reply Draft
           </div>
 
-          <div className="overflow-hidden rounded-lg border border-border bg-muted">
+          <div className="overflow-hidden rounded-lg border border-[#e4e7eb] bg-[#f6f7f9]">
             <input
-              defaultValue={reply.draftSubject}
-              className="w-full border-b border-border bg-transparent px-3 py-2.5 text-[12.5px] font-bold text-foreground outline-none focus:bg-card"
+              value={subject}
+              onChange={(event) => setSubject(event.target.value)}
+              placeholder="Subject"
+              className="w-full border-b border-[#e4e7eb] bg-transparent px-3 py-2.5 text-[12.5px] font-bold text-[#15171c] outline-none focus:bg-white"
             />
 
             <textarea
-              defaultValue={reply.draftBody}
-              rows={7}
-              className="w-full resize-none bg-transparent px-3 py-3 text-[12.5px] leading-relaxed text-foreground outline-none focus:bg-card"
+              value={body}
+              onChange={(event) => setBody(event.target.value)}
+              rows={9}
+              placeholder="Draft reply…"
+              className="w-full resize-y bg-transparent px-3 py-3 text-[12.5px] leading-relaxed text-[#15171c] outline-none focus:bg-white"
             />
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2">
-            <button className="rounded-md border border-foreground bg-foreground px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-background">
-              Send
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={sending || saving}
+              className="rounded-md border border-[#15171c] bg-[#15171c] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-white disabled:opacity-50"
+            >
+              {sending ? 'Sending…' : justSent ? 'Sent ✓' : 'Send'}
             </button>
-            <button className="rounded-md border border-border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-foreground">
-              Save draft
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || sending}
+              className="rounded-md border border-[#c2c7ce] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#15171c] disabled:opacity-50"
+            >
+              {saving ? 'Saving…' : 'Save draft'}
+            </button>
+            <button
+              type="button"
+              onClick={handleProposeTimes}
+              disabled={loadingSlots || sending}
+              className="rounded-md border border-[#c2c7ce] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#15171c] disabled:opacity-50"
+            >
+              {loadingSlots ? 'Loading…' : 'Propose times'}
             </button>
           </div>
+
+          {slots.length > 0 && (
+            <div className="mt-3 rounded-lg border border-[#e4e7eb] bg-[#f6f7f9] p-3">
+              <div className="mb-2 text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#959ca7]">
+                Pick a slot to propose
+                {slotsTimeZone ? ` · ${slotsTimeZone}` : ''}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {slots.slice(0, 6).map((slot) => {
+                  const active =
+                    selectedSlot?.start === slot.start &&
+                    selectedSlot?.end === slot.end;
+                  return (
+                    <button
+                      key={`${slot.start}-${slot.end}`}
+                      type="button"
+                      onClick={() => handleSelectSlot(slot)}
+                      className={[
+                        'rounded-full border px-3 py-1.5 text-[11px] font-bold tracking-[0.02em]',
+                        active
+                          ? 'border-[#15171c] bg-[#15171c] text-white'
+                          : 'border-[#c2c7ce] bg-white text-[#15171c] hover:border-[#15171c]',
+                      ].join(' ')}
+                    >
+                      {formatSlot(slot, slotsTimeZone)}
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedSlot && (
+                <div className="mt-2 text-[10px] leading-relaxed text-[#959ca7]">
+                  Slot added to the draft — Send will hold it and invite{' '}
+                  {reply.contact}.
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        <AiAgentBox mode={aiMode} onChangeMode={onChangeAiMode} />
+        <AiAgentBox
+          mode={aiMode}
+          onChangeMode={onChangeAiMode}
+          onApply={handleApply}
+          onSaveTraining={handleSaveTraining}
+          applying={applying}
+        />
       </div>
+
+      <BookMeetingDialog
+        open={bookOpen}
+        onClose={() => setBookOpen(false)}
+        company={reply.company}
+        clientEmail={reply.contact}
+        suggestedText={bookingHintText(reply)}
+        mailboxAccountId={mailboxAccountId}
+      />
     </section>
   );
 }
