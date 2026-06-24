@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -30,6 +31,7 @@ import {
   GraduateProspectBodyDto,
   ProspectBulkBodyDto,
   UpdateProspectBodyDto,
+  UpdateProspectDealBodyDto,
   UpdateProspectStageBodyDto,
   UpdateProspectStatusBodyDto,
 } from './prospects.dto';
@@ -59,6 +61,7 @@ function toDto(r: ProspectRow): ProspectDto {
     emailVerified: r.emailVerified,
     status: r.status,
     pipelineStage: r.pipelineStage,
+    dealValue: r.dealValue,
     snoozeUntil: r.snoozeUntil ? r.snoozeUntil.toISOString() : null,
     followupCount: r.followupCount,
     lastContactedAt: r.lastContactedAt ? r.lastContactedAt.toISOString() : null,
@@ -181,6 +184,46 @@ export class ProspectsController {
       after: { pipelineStage: row.pipelineStage },
     });
     return toDto(row);
+  }
+
+  // JWT: set a card's € deal value from the Nurture board. Org-scoped + audited
+  // (campaigns:write). Sets ONLY deal_value. Distinct sub-path so it never hits the
+  // machine PATCH /:id.
+  @RequirePermissions('campaigns:write')
+  @Patch(':id/deal')
+  async updateDeal(
+    @OrgId() orgId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateProspectDealBodyDto,
+    @Req() req: Request,
+  ): Promise<ProspectDto> {
+    const row = await this.prospects.updateDealForOrg(orgId, id, body.dealValue);
+    setAuditContext(req, {
+      entity: 'prospects',
+      entityId: row.id,
+      action: 'DEAL_SET',
+      after: { dealValue: row.dealValue },
+    });
+    return toDto(row);
+  }
+
+  // JWT: delete a card from the Nurture board. Org-scoped + audited (campaigns:write).
+  // Distinct sub-path (':id/card') so it never collides with the machine PATCH /:id.
+  @RequirePermissions('campaigns:write')
+  @Delete(':id/card')
+  async removeCard(
+    @OrgId() orgId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: Request,
+  ): Promise<{ id: string }> {
+    const row = await this.prospects.removeForOrg(orgId, id);
+    setAuditContext(req, {
+      entity: 'prospects',
+      entityId: row.id,
+      action: 'DELETE',
+      before: { email: row.email, pipelineStage: row.pipelineStage },
+    });
+    return { id: row.id };
   }
 
   // ---- MACHINE routes (the arsenal) — @Public() + ArsenalTokenGuard ----------

@@ -829,78 +829,6 @@ function SalesCalendarCard() {
 // should be swept into i18n when these wire to the backend.
 // ============================================================================
 
-// Mockup A — Reach send mode. Reflects the global REACH_SEND_MODE today; per-org
-// wiring (a test/live toggle, a test recipient, a daily cap) is pending. All
-// controls disabled.
-function ReachSendModeCard() {
-  return (
-    <SettingsCard
-      title="Reach send mode"
-      description="Controls whether the Reach sender delivers real email or routes everything to a test inbox. Today this reflects the global REACH_SEND_MODE; per-org wiring is pending."
-      action={<MockupBadge>Mockup — wires to backend next</MockupBadge>}
-         >
-      <div className="flex flex-col gap-1.5">
-        <Eyebrow>Send mode</Eyebrow>
-        {/* Segmented test/live toggle, defaulting to Test. Disabled mockup. */}
-        <div
-          role="group"
-          aria-label="Send mode"
-          className="inline-flex w-fit rounded-[10px] border border-sidebar-border bg-muted/40 p-0.5 opacity-70"
-        >
-          <span className="rounded-[8px] bg-card px-3 py-1.5 text-xs font-semibold text-foreground shadow-sm">
-            Test
-          </span>
-          <span className="px-3 py-1.5 text-xs font-semibold text-muted-foreground">
-            Live
-          </span>
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Default is Test — outbound is captured, never delivered to prospects.
-        </p>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="reach-test-recipient">
-            <Eyebrow>Test recipient</Eyebrow>
-          </Label>
-          <Input
-            id="reach-test-recipient"
-            type="email"
-            disabled
-            autoComplete="off"
-            placeholder="qa@your-org.com"
-          />
-          <p className="text-xs text-muted-foreground">
-            Where test-mode sends are routed.
-          </p>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="reach-daily-cap">
-            <Eyebrow>Daily send cap</Eyebrow>
-          </Label>
-          <Input
-            id="reach-daily-cap"
-            type="number"
-            min={0}
-            inputMode="numeric"
-            disabled
-            autoComplete="off"
-            placeholder="200"
-          />
-          <p className="text-xs text-muted-foreground">
-            Max outbound emails per day across the org.
-          </p>
-        </div>
-      </div>
-
-      <Button type="button" className="self-start" disabled>
-        Save send settings
-      </Button>
-    </SettingsCard>
-  );
-}
-
 // Mockup B — Branding & sender identity. Org logo drop area, sender display name,
 // email signature, and an accent-color swatch. All disabled.
 function BrandingCard() {
@@ -1139,7 +1067,6 @@ export function ConfigurationSettings() {
         <LeadScraperCard />
         <SalesCalendarCard />
         {/* Mockup sections — not wired to any backend yet. */}
-        <ReachSendModeCard />
         <BrandingCard />
         <NotificationsCard />
       </div>

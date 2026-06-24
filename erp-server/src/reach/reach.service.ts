@@ -15,6 +15,7 @@ import { NichesService } from '../niches/niches.service';
 import { WorkflowConfigService } from '../arsenal/workflow-config.service';
 import type {
   BazookaRunSummary,
+  DailySendPoint,
   EmailBlock,
   ReachAim,
   ReachNewsBrief,
@@ -413,17 +414,111 @@ export class ReachService {
         : t.final_push;
   }
 
-  // The effective Reach send policy for an org. Currently env-only (the product
-  // default); the `orgId` is taken so a PER-ORG override (org_config ?? env — the
-  // house multi-tenant rule, exactly like EngageService.resolveAiModel/resolveTone)
-  // can be layered in here without touching any caller, once the org_config columns
-  // land (see FLAG in the integration report). Async to match that future DB read.
-  private async resolveSendConfig(_orgId: string): Promise<ReachSendConfig> {
-    return Promise.resolve({
-      mode: this.config.get('REACH_SEND_MODE'),
-      testRecipient: this.config.get('REACH_TEST_RECIPIENT'),
-      cap: this.config.get('REACH_TEST_SEND_CAP'),
-    });
+  // The effective Reach send policy for an org: PER-ORG override (org_config) ?? env
+  // default — the house multi-tenant rule. Now editable at runtime from the Settings
+  // page (no redeploy). Any unset column falls back to the product env default.
+  private async resolveSendConfig(orgId: string): Promise<ReachSendConfig> {
+    const ov = await this.repo.getReachSettings(orgId);
+    const mode: 'test' | 'live' =
+      ov.mode === 'test' || ov.mode === 'live'
+        ? ov.mode
+        : this.config.get('REACH_SEND_MODE');
+    return {
+      mode,
+      testRecipient: ov.testRecipient ?? this.config.get('REACH_TEST_RECIPIENT'),
+      cap: ov.cap ?? this.config.get('REACH_TEST_SEND_CAP'),
+    };
+  }
+
+  // ---- Reach send-policy settings (Settings page) ----
+
+  // The org's effective send policy + the env defaults (so the UI shows what a reset
+  // falls back to) + the connected-mailbox status.
+  async getReachSendSettings(orgId: string): Promise<{
+    mode: 'test' | 'live';
+    testRecipient: string;
+    cap: number;
+    envDefaults: { mode: 'test' | 'live'; testRecipient: string; cap: number };
+    mailbox: { connected: boolean; email: string | null; reason: string | null };
+  }> {
+    const [effective, mailbox] = await Promise.all([
+      this.resolveSendConfig(orgId),
+      this.gmail.senderStatus(orgId),
+    ]);
+    return {
+      ...effective,
+      envDefaults: {
+        mode: this.config.get('REACH_SEND_MODE'),
+        testRecipient: this.config.get('REACH_TEST_RECIPIENT'),
+        cap: this.config.get('REACH_TEST_SEND_CAP'),
+      },
+      mailbox,
+    };
+  }
+
+  // Persist a partial Reach send-policy override, then return the refreshed effective
+  // settings (so the UI reflects exactly what will be used).
+  async updateReachSendSettings(
+    orgId: string,
+    patch: { mode?: 'test' | 'live'; testRecipient?: string | null; cap?: number | null },
+  ): ReturnType<ReachService['getReachSendSettings']> {
+    await this.repo.setReachSettings(orgId, patch);
+    return this.getReachSendSettings(orgId);
+  }
+
+  // Send a one-off sample email to `to` via the org's connected mailbox — a manual
+  // "does sending work?" probe for the Settings page. Sends DIRECTLY to the given
+  // inbox (no test-mode redirection). Never throws: a send failure is returned as
+  // { ok:false, reason } so the form can show why.
+  async sendTestEmail(
+    orgId: string,
+    to: string,
+  ): Promise<{ ok: boolean; to: string; from: string | null; messageId: string | null; reason: string | null }> {
+    const status = await this.gmail.senderStatus(orgId);
+    try {
+      const messageId = await this.gmail.sendAs(orgId, 'info', {
+        to,
+        subject: 'EVERTRUST Reach — test email',
+        body:
+          'This is a test email sent from the EVERTRUST Growth Engine settings page ' +
+          'to verify that outbound sending is working.\n\nIf you received this, the ' +
+          'connected mailbox can send mail.\n\n— EVERTRUST GmbH',
+        fromName: 'EVERTRUST GmbH',
+      });
+      return { ok: true, to, from: status.email, messageId, reason: null };
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : 'Send failed.';
+      this.logger.warn(`Reach test-send to ${to} failed: ${reason}`);
+      return { ok: false, to, from: status.email, messageId: null, reason };
+    }
+  }
+
+  // The org's Reach send timeline: real per-day counts over the last 10 days
+  // (oldest first), zero-filled, with "Today" labelled — drives the Reach dashboard
+  // chart.
+  async dailySends(orgId: string): Promise<DailySendPoint[]> {
+    const rows = await this.repo.dailySends(orgId);
+
+    // Bucket counts by local "YYYY-M-D" key so DB ::date rows line up with our days.
+    const dayKey = (d: Date) =>
+      `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+    const counts = new Map<string, number>();
+    for (const r of rows) counts.set(dayKey(r.day), r.count);
+
+    const today = new Date();
+    const points: DailySendPoint[] = [];
+    // 9 days ago -> today (10 days total), chronological (oldest first).
+    for (let i = 9; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const isToday = i === 0;
+      points.push({
+        date: isToday ? 'Today' : `${d.getDate()}/${d.getMonth() + 1}`,
+        value: counts.get(dayKey(d)) ?? 0,
+        type: isToday ? 'today' : 'past',
+      });
+    }
+    return points;
   }
 
   // ---- Reach Bazooka (auto-sender) ----

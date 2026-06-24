@@ -5,9 +5,11 @@ import { toast } from 'sonner';
 
 import {
   analyzeMeeting,
+  generateClientResearch,
   generateDossier,
   getCallAnalyses,
   getCalendarMeetings,
+  getClientResearch,
   getMeetingAccounts,
   getPersonas,
   getResearchDossiers,
@@ -17,6 +19,7 @@ import type {
   ActivateTab,
   CalendarMeeting,
   CallAnalysis,
+  ClientResearch,
   MeetingAccount,
   Persona,
   ResearchDossier,
@@ -38,6 +41,11 @@ export function useActivate() {
   const [loadingDossiers, setLoadingDossiers] = useState(false);
   const [selectedDossierId, setSelectedDossierId] = useState('');
   const [generating, setGenerating] = useState(false);
+
+  // ---- client research (persisted deep dossier for the selected company) ----
+  const [clientResearch, setClientResearch] = useState<ClientResearch | null>(null);
+  const [loadingClientResearch, setLoadingClientResearch] = useState(false);
+  const [generatingClientResearch, setGeneratingClientResearch] = useState(false);
 
   // ---- after-sales ----
   const [personas, setPersonas] = useState<Persona[]>([]);
@@ -166,6 +174,43 @@ export function useActivate() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId, selectedDossierId]);
 
+  // Fetch the persisted client research for the selected company (on demand).
+  const selectedResearchCompany = selectedDossier?.company ?? '';
+  useEffect(() => {
+    if (!selectedResearchCompany) {
+      setClientResearch(null);
+      return;
+    }
+    let active = true;
+    setLoadingClientResearch(true);
+    setClientResearch(null);
+    getClientResearch(selectedResearchCompany)
+      .then((data) => active && setClientResearch(data))
+      .catch(() => active && setClientResearch(null))
+      .finally(() => active && setLoadingClientResearch(false));
+    return () => {
+      active = false;
+    };
+  }, [selectedResearchCompany]);
+
+  // Generate / refresh the client research for the selected company, then store it.
+  const generateClientResearchForSelected = useCallback(async () => {
+    if (!selectedResearchCompany) return;
+    setGeneratingClientResearch(true);
+    try {
+      const research = await generateClientResearch(
+        selectedResearchCompany,
+        selectedDossier?.contact?.split(' · ')[1] || undefined,
+      );
+      setClientResearch(research);
+      toast.success(`Research ready for ${selectedResearchCompany}.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not build client research.');
+    } finally {
+      setGeneratingClientResearch(false);
+    }
+  }, [selectedResearchCompany, selectedDossier]);
+
   // Harvest Read AI report emails (Gmail) into the after-sales list, then reload.
   const [syncingReadAi, setSyncingReadAi] = useState(false);
   const syncReadAi = useCallback(async () => {
@@ -216,6 +261,12 @@ export function useActivate() {
     selectedDossier,
     loadingDossiers,
     generating,
+
+    // client research (persisted deep dossier)
+    clientResearch,
+    loadingClientResearch,
+    generatingClientResearch,
+    generateClientResearch: generateClientResearchForSelected,
 
     // after-sales
     personas,

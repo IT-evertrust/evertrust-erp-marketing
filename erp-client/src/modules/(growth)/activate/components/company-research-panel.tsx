@@ -1,6 +1,6 @@
-import { GrowthCard, LiveDot } from '@/modules/(growth)/shared';
+import { GrowthCard, LiveDot, Spinner } from '@/modules/(growth)/shared';
 
-import type { ResearchDossier } from '../types';
+import type { ClientResearch, ResearchDossier } from '../types';
 
 type CompanyResearchPanelProps = {
   dossiers: ResearchDossier[];
@@ -9,6 +9,11 @@ type CompanyResearchPanelProps = {
   selectedDossier?: ResearchDossier;
   loading?: boolean;
   generating?: boolean;
+  // ---- Client Research (additive: persisted deep dossier for the company) ----
+  clientResearch?: ClientResearch | null;
+  loadingClientResearch?: boolean;
+  generatingClientResearch?: boolean;
+  onGenerateClientResearch?: () => void;
 };
 
 export function CompanyResearchPanel({
@@ -18,6 +23,10 @@ export function CompanyResearchPanel({
   selectedDossier,
   loading = false,
   generating = false,
+  clientResearch = null,
+  loadingClientResearch = false,
+  generatingClientResearch = false,
+  onGenerateClientResearch,
 }: CompanyResearchPanelProps) {
   return (
     <GrowthCard title="Company Research">
@@ -83,7 +92,13 @@ export function CompanyResearchPanel({
                 : 'Dossier will be generated when you open this meeting.'}
             </div>
           ) : (
-            <DossierDetail dossier={selectedDossier} />
+            <DossierDetail
+              dossier={selectedDossier}
+              clientResearch={clientResearch}
+              loadingClientResearch={loadingClientResearch}
+              generatingClientResearch={generatingClientResearch}
+              onGenerateClientResearch={onGenerateClientResearch}
+            />
           )}
         </section>
       </div>
@@ -91,7 +106,19 @@ export function CompanyResearchPanel({
   );
 }
 
-function DossierDetail({ dossier }: { dossier: ResearchDossier }) {
+function DossierDetail({
+  dossier,
+  clientResearch,
+  loadingClientResearch,
+  generatingClientResearch,
+  onGenerateClientResearch,
+}: {
+  dossier: ResearchDossier;
+  clientResearch?: ClientResearch | null;
+  loadingClientResearch?: boolean;
+  generatingClientResearch?: boolean;
+  onGenerateClientResearch?: () => void;
+}) {
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-start justify-between gap-3">
@@ -143,6 +170,13 @@ function DossierDetail({ dossier }: { dossier: ResearchDossier }) {
         </section>
       ) : null}
 
+      <ClientResearchSection
+        research={clientResearch}
+        loading={loadingClientResearch}
+        generating={generatingClientResearch}
+        onGenerate={onGenerateClientResearch}
+      />
+
       <div className="flex flex-wrap gap-2">
         <button className="rounded-md border border-border px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-foreground">
           As PDF
@@ -170,4 +204,203 @@ function Bullet({ children }: { children: React.ReactNode }) {
       <span>{children}</span>
     </div>
   );
+}
+
+// ---- Client Research (additive section: MBTI + personality + deal economics) ----
+function ClientResearchSection({
+  research,
+  loading = false,
+  generating = false,
+  onGenerate,
+}: {
+  research?: ClientResearch | null;
+  loading?: boolean;
+  generating?: boolean;
+  onGenerate?: () => void;
+}) {
+  const hasResearch = Boolean(research);
+
+  return (
+    <section className="rounded-lg border border-border bg-card p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+          Client Research
+        </h3>
+
+        <div className="flex items-center gap-2">
+          {hasResearch && research ? <StageBadge stage={research.stage} /> : null}
+          {onGenerate ? (
+            <button
+              type="button"
+              onClick={onGenerate}
+              disabled={generating}
+              className="inline-flex items-center gap-2 rounded-md border border-foreground bg-foreground px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-background disabled:opacity-60"
+            >
+              {generating ? (
+                <Spinner inline size={12} />
+              ) : null}
+              {generating
+                ? 'Generating…'
+                : hasResearch
+                  ? 'Refresh'
+                  : 'Generate research'}
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {generating ? (
+        <Spinner label="Researching the client — building the profile…" />
+      ) : loading ? (
+        <Spinner label="Loading client research…" />
+      ) : !research ? (
+        <div className="rounded-lg border border-dashed border-border bg-muted px-5 py-6 text-center text-[12px] font-bold text-muted-foreground">
+          No client research yet. Generate it to surface MBTI, personality, and deal economics.
+        </div>
+      ) : (
+        <div className="flex flex-col gap-5">
+          {research.mbti ? (
+            <div>
+              <SectionTitle>Personality Type (MBTI)</SectionTitle>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center rounded-full border border-foreground bg-foreground px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.06em] text-background">
+                  {research.mbti}
+                </span>
+                {research.mbtiConfidence != null ? (
+                  <span className="text-[11px] text-muted-foreground">
+                    {Math.round(research.mbtiConfidence * 100)}% confidence
+                  </span>
+                ) : null}
+              </div>
+              {research.mbtiReasoning ? (
+                <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
+                  {research.mbtiReasoning}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {research.personality ? (
+            <div>
+              <SectionTitle>Personality</SectionTitle>
+              <div className="grid grid-cols-2 gap-x-4">
+                <TraitRow label="Tone" value={research.personality.tone} />
+                <TraitRow label="Decisiveness" value={research.personality.decisiveness} />
+                <TraitRow label="Formality" value={research.personality.formality} />
+                <TraitRow label="Detail" value={research.personality.detail} />
+              </div>
+            </div>
+          ) : null}
+
+          {research.interactionContext ? (
+            <div>
+              <SectionTitle>Interaction Context</SectionTitle>
+              <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+                {research.interactionContext}
+              </p>
+            </div>
+          ) : null}
+
+          {research.history && research.history.length > 0 ? (
+            <div>
+              <SectionTitle>Interaction History</SectionTitle>
+              <div className="flex flex-col gap-2.5 border-l border-border pl-4">
+                {research.history.map((entry, index) => (
+                  <div key={index} className="relative">
+                    <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full border border-border bg-foreground" />
+                    <div className="flex flex-wrap items-center gap-2">
+                      {entry.date ? (
+                        <span className="text-[11px] font-bold text-foreground">
+                          {entry.date}
+                        </span>
+                      ) : null}
+                      {entry.kind ? (
+                        <span className="inline-flex items-center rounded-full border border-border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
+                          {entry.kind}
+                        </span>
+                      ) : null}
+                    </div>
+                    {entry.summary ? (
+                      <p className="mt-0.5 text-[12px] text-muted-foreground">
+                        {entry.summary}
+                      </p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {research.talkingPoints && research.talkingPoints.length > 0 ? (
+            <div>
+              <SectionTitle>Talking Points</SectionTitle>
+              {research.talkingPoints.map((point) => (
+                <Bullet key={point}>{point}</Bullet>
+              ))}
+            </div>
+          ) : null}
+
+          {research.signals && research.signals.length > 0 ? (
+            <div>
+              <SectionTitle>Signals</SectionTitle>
+              {research.signals.map((signal) => (
+                <Bullet key={signal}>{signal}</Bullet>
+              ))}
+            </div>
+          ) : null}
+
+          {research.dealValue != null ? (
+            <div>
+              <SectionTitle>Deal Economics</SectionTitle>
+              <div className="flex flex-wrap items-baseline gap-2">
+                <span className="text-[18px] font-bold text-foreground">
+                  {formatDealValue(research.dealValue, research.dealCurrency)}
+                </span>
+                {research.dealBasis ? (
+                  <span className="text-[11px] text-muted-foreground">
+                    {research.dealBasis}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function StageBadge({ stage }: { stage: ClientResearch['stage'] }) {
+  const label = stage === 'POST_MEETING' ? 'Post-meeting' : 'Pre-meeting';
+  return (
+    <span className="inline-flex items-center gap-2 rounded-full border border-border px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+      <LiveDot />
+      {label}
+    </span>
+  );
+}
+
+function TraitRow({ label, value }: { label: string; value?: string }) {
+  if (!value) return null;
+  return (
+    <div className="flex justify-between border-b border-dashed border-border py-2 text-[12.5px]">
+      <span className="text-muted-foreground">{label}</span>
+      <b className="text-foreground">{value}</b>
+    </div>
+  );
+}
+
+function formatDealValue(value: number, currency?: string | null): string {
+  if (currency) {
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency,
+        maximumFractionDigits: 0,
+      }).format(value);
+    } catch {
+      // Unknown currency code — fall through to plain formatting.
+    }
+  }
+  return `${new Intl.NumberFormat().format(value)}${currency ? ` ${currency}` : ''}`;
 }

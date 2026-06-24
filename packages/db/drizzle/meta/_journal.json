@@ -323,6 +323,34 @@
       "when": 1780593000000,
       "tag": "0045_reach_companies_backfill",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1780594000000,
+      "tag": "0046_engage_replies",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1780595000000,
+      "tag": "0047_client_research",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1780596000000,
+      "tag": "0048_reach_send_settings",
+      "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1780597000000,
+      "tag": "0049_prospect_deal_value",
+      "breakpoints": true
     }
   ]
 }

@@ -92,6 +92,15 @@ export const orgConfig = pgTable(
     scrapeLeadTarget: integer('scrape_lead_target'),
     scrapeMaxQueries: integer('scrape_max_queries'),
     scrapeMinScore: integer('scrape_min_score'),
+    // --- Reach send policy (per-org override of the env default) ---
+    // 'test' redirects every Reach email to reachTestRecipient (capped by
+    // reachTestSendCap) so real leads are never hit; 'live' sends to the real lead
+    // email. Null = fall back to env REACH_SEND_MODE. Editable from the Settings page.
+    reachSendMode: text('reach_send_mode'),
+    // Inbox that test-mode Reach emails are redirected to. Null = env default.
+    reachTestRecipient: text('reach_test_recipient'),
+    // Max test-mode sends per delivery run. Null = env default.
+    reachTestSendCap: integer('reach_test_send_cap'),
     // --- Lead governance (per-org) ---
     maxLeadsPerRun: integer('max_leads_per_run'),
     maxPerNiche: integer('max_per_niche'),

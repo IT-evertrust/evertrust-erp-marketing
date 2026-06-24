@@ -43,6 +43,13 @@ class Settings(BaseSettings):
         default="hermes",
         validation_alias=AliasChoices("LLM_MODEL", "OPENAI_MODEL"),
     )
+    # Model used specifically for WRITING reply drafts (Engage reply_glock). Defaults
+    # to llm_model; set DRAFT_MODEL to point drafting at a stronger model (e.g. a
+    # locally hosted Qwen-32B) without changing the fast Hermes classifier.
+    draft_model: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("DRAFT_MODEL"),
+    )
 
     # ---- Google (Gmail / Calendar / Docs) ----
     google_client_id: str | None = None

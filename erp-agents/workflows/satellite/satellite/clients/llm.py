@@ -38,6 +38,45 @@ def _client(settings):
                   timeout=45.0, max_retries=0)
 
 
+def classify_company(settings, name: str, url: str, text: str, niche: str, country: str = "",
+                     *, model: str | None = None, timeout: float = 45.0) -> dict:
+    """LANGUAGE-AGNOSTIC entity + niche-fit judgement on a crawled page. The LLM reads the page in
+    whatever language it's in (Polish, German, …), so there are NO hardcoded per-language word lists.
+
+    Returns {'entityType','nicheFit','reason'} or {} on any failure (the caller then falls back to
+    the universal structural rules). entityType ∈ company|event|association|government|education|
+    news|jobboard|directory|training; nicheFit ∈ core|peripheral|none."""
+    if not settings.llm_base_url:
+        return {}
+    system = (
+        "You classify ONE business website from its visible text, in ANY language. Output STRICT "
+        "JSON only, no prose. Decide two things:\n"
+        "entityType — one of: company, event, association, government, education, news, jobboard, "
+        "directory, training. 'company' = a real commercial business that sells products/services "
+        "(a possible B2B sales prospect). The others are NOT prospects (an event page, an industry "
+        "association/initiative, a public authority, a university/school, a news/blog article, a job "
+        "board, a business directory/marketplace, or a training/course provider).\n"
+        "nicheFit — how central the given NICHE is to this entity: 'core' (it is their main "
+        "business), 'peripheral' (a related sub-area among others), or 'none' (unrelated)."
+    )
+    user = (f'NICHE: "{niche}"\nCOUNTRY: {country}\nCOMPANY NAME: {name}\nURL: {url}\n'
+            f'VISIBLE PAGE TEXT:\n{(text or "")[:4000]}\n\n'
+            'Return JSON exactly: {"entityType":"...","nicheFit":"core|peripheral|none","reason":"<=8 words"}')
+    try:
+        from openai import OpenAI
+        # Own client with a caller-set timeout: a big local model (qwen2.5:32b) can need a one-time
+        # cold VRAM load (~30s) before its first classify, so 45s is too tight -> silent {} fallback.
+        client = OpenAI(base_url=settings.llm_base_url, api_key=settings.llm_api_key,
+                        timeout=timeout, max_retries=0)
+        r = client.chat.completions.create(
+            model=model or settings.lead_model, temperature=0,
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}])
+        d = _extract_json(r.choices[0].message.content)
+    except Exception:
+        return {}
+    return d if isinstance(d, dict) else {}
+
+
 def _lead_from(d: dict, seg: Segment) -> Lead:
     em, status = email_status(d.get("email"))
     return Lead(

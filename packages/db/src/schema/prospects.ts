@@ -49,6 +49,10 @@ export const prospects = pgTable(
     pipelineStage: pipelineStageEnum('pipeline_stage')
       .notNull()
       .default('INTEREST'),
+    // Deal value in whole euros, shown + inline-edited on the Nurture card; the
+    // board rolls these up into per-column totals. Manual (the team sets it);
+    // default 0 until entered.
+    dealValue: integer('deal_value').notNull().default(0),
     // Re-engage no earlier than this (set by a SNOOZE verdict).
     snoozeUntil: timestamp('snooze_until', { withTimezone: true }),
     followupCount: integer('followup_count').notNull().default(0),

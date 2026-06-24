@@ -134,8 +134,11 @@ describe('buildRawReply', () => {
     const decoded = decodeBase64Url(raw);
     expect(decoded).toContain('To: buyer@target.de');
     expect(decoded).toContain('From: rep@us.com');
-    // A subject without a Re:/AW: prefix gets one added.
-    expect(decoded).toContain('Subject: Re: Your proposal');
+    // A subject without a Re:/AW: prefix gets one added. The Subject is RFC2047
+    // encoded-word (=?UTF-8?B?..?=) so non-ASCII survives transport — decode it back.
+    const m = decoded.match(/Subject: =\?UTF-8\?B\?(.+?)\?=/);
+    const subject = Buffer.from(m?.[1] ?? '', 'base64').toString('utf8');
+    expect(subject).toBe('Re: Your proposal');
     expect(decoded).toContain('In-Reply-To: <abc@mail.target.de>');
     expect(decoded).toContain('References: <orig@us.com> <abc@mail.target.de>');
     expect(decoded).toContain('Happy to set up a call.');
@@ -151,8 +154,10 @@ describe('buildRawReply', () => {
       references: null,
     });
     const decoded = decodeBase64Url(raw);
-    expect(decoded).toContain('Subject: Re: hi');
-    expect(decoded).not.toContain('Re: Re: hi');
+    // Already-Re: subject is kept (not double-prefixed); decode the encoded-word.
+    const m = decoded.match(/Subject: =\?UTF-8\?B\?(.+?)\?=/);
+    const subject = Buffer.from(m?.[1] ?? '', 'base64').toString('utf8');
+    expect(subject).toBe('Re: hi');
     // No threading headers when there is nothing to thread.
     expect(decoded).not.toContain('In-Reply-To:');
     expect(decoded).not.toContain('References:');

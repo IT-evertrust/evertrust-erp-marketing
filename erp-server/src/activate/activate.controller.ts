@@ -7,6 +7,9 @@ import {
   AnalyzeMeetingBodyDto,
   ImportReadAiBodyDto,
 } from './dto/import-read-ai.dto';
+import { BookMeetingBodyDto } from './dto/book-meeting.dto';
+import { GenerateResearchBodyDto } from './dto/generate-research.dto';
+import { ActivateResearchService } from './activate-research.service';
 
 // The Activate plane (Growth Engine, stage 03) for the web UI. JWT-auth + tenant-scoped
 // (@OrgId), gated by the campaigns RBAC (read for queries, write for mutations) like
@@ -15,7 +18,29 @@ import {
 // Company Research + After-Sales call the erp-agents brains.
 @Controller('growth/activate')
 export class ActivateController {
-  constructor(private readonly activate: ActivateService) {}
+  constructor(
+    private readonly activate: ActivateService,
+    private readonly research: ActivateResearchService,
+  ) {}
+
+  // ---- Client Research (internal-data dossier + MBTI) ----
+  @RequirePermissions('campaigns:read')
+  @Get('research')
+  listResearch(@OrgId() orgId: string) {
+    return this.research.listResearch(orgId);
+  }
+
+  @RequirePermissions('campaigns:write')
+  @Post('research/generate')
+  generateResearch(@OrgId() orgId: string, @Body() body: GenerateResearchBodyDto) {
+    return this.research.generate(orgId, body.company, body.clientEmail);
+  }
+
+  @RequirePermissions('campaigns:read')
+  @Get('research/:company')
+  getResearch(@OrgId() orgId: string, @Param('company') company: string) {
+    return this.research.getResearch(orgId, company);
+  }
 
   // ---- Meeting Booker ----
   // Connected Google accounts = the email-account toggle (like Engage's inbox switch).
@@ -30,6 +55,15 @@ export class ActivateController {
   @Get('meetings')
   getMeetings(@OrgId() orgId: string, @Query('accountId') accountId: string) {
     return this.activate.listMeetings(orgId, accountId ?? '');
+  }
+
+  // Book a meeting — the Engage→Activate handoff. Creates a Google Calendar event with a
+  // Meet link on the org's default calendar + records a linked meetings row; the booked
+  // call then appears in the Booker from the live calendar.
+  @RequirePermissions('campaigns:write')
+  @Post('meetings')
+  bookMeeting(@OrgId() orgId: string, @Body() body: BookMeetingBodyDto) {
+    return this.activate.bookMeeting(orgId, body);
   }
 
   // One event's detail (the popup).

@@ -14,7 +14,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
-import { Search } from 'lucide-react';
+import { Search, Trash2 } from 'lucide-react';
 import {
   PIPELINE_STAGE_ORDER,
   type CampaignDto,
@@ -24,6 +24,8 @@ import {
 import {
   useProspectsBoard,
   useUpdateProspectStage,
+  useUpdateProspectDeal,
+  useDeleteProspect,
 } from '@/hooks/use-prospects';
 import { useNicheTargets } from '@/hooks/use-niche-targets';
 import {
@@ -32,6 +34,7 @@ import {
   PROSPECT_STATUS_LABEL,
 } from '@/lib/growth-format';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
@@ -48,6 +51,17 @@ const ALL = 'all';
 
 function campaignLabel(c: CampaignDto): string {
   return c.name || c.project || c.nicheName || c.region;
+}
+
+// Compact euro label for a whole-euro amount: €0, €950, €2.5K, €12.5K, €3.4M.
+// Drops a trailing ".0" so €2K reads cleanly. Negatives are clamped to 0.
+function formatEuros(value: number): string {
+  const v = Math.max(0, Math.round(value));
+  if (v < 1_000) return `€${v}`;
+  const compact = (n: number, suffix: string) =>
+    `€${n.toFixed(1).replace(/\.0$/, '')}${suffix}`;
+  if (v < 1_000_000) return compact(v / 1_000, 'K');
+  return compact(v / 1_000_000, 'M');
 }
 
 // The Nurture "Sales Pipeline" board: a 6-stage kanban (Interest → Lost) the team
@@ -76,6 +90,8 @@ export function NurturePipelineBoard({
 
   const targetsQ = useNicheTargets(nicheId, !!nicheId);
   const setStage = useUpdateProspectStage();
+  const updateDeal = useUpdateProspectDeal();
+  const deleteProspect = useDeleteProspect();
 
   const q = useProspectsBoard({
     campaignId,
@@ -99,6 +115,16 @@ export function NurturePipelineBoard({
     for (const p of items) map[p.pipelineStage].push(p);
     return map;
   }, [items]);
+
+  // Per-column € total: sum each stage's cards' dealValue, computed client-side from
+  // the grouped cards already in the board.
+  const stageTotals = useMemo(() => {
+    const map = {} as Record<PipelineStage, number>;
+    for (const stage of PIPELINE_STAGE_ORDER) {
+      map[stage] = byStage[stage].reduce((sum, p) => sum + (p.dealValue ?? 0), 0);
+    }
+    return map;
+  }, [byStage]);
 
   const counts = q.data?.stageCounts ?? {};
   const activeCard = useMemo(
@@ -129,6 +155,33 @@ export function NurturePipelineBoard({
             }),
           ),
         onError: (err) => toast.error(err.message ?? t('pipeline.moveError')),
+      },
+    );
+  }
+
+  // Inline deal-value save (blur/Enter from a card). No-op when unchanged.
+  function onSaveDeal(card: ProspectDto, dealValue: number) {
+    if (dealValue === card.dealValue) return;
+    updateDeal.mutate(
+      { id: card.id, dealValue },
+      {
+        onError: (err) => toast.error(err.message ?? t('pipeline.dealError')),
+      },
+    );
+  }
+
+  // Delete a card with a lightweight confirm so a misclick doesn't remove it.
+  function onDeleteCard(card: ProspectDto) {
+    const name = card.companyName ?? card.email;
+    if (!window.confirm(t('pipeline.deleteConfirm', { name }))) return;
+    deleteProspect.mutate(
+      { id: card.id },
+      {
+        onSuccess: () => {
+          if (openId === card.id) setOpenId(null);
+          toast.success(t('pipeline.deletedToast', { name }));
+        },
+        onError: (err) => toast.error(err.message ?? t('pipeline.deleteError')),
       },
     );
   }
@@ -228,10 +281,19 @@ export function NurturePipelineBoard({
                 stage={stage}
                 label={t(`pipeline.stages.${stage}`)}
                 count={counts[stage] ?? byStage[stage].length}
+                total={formatEuros(stageTotals[stage])}
                 emptyLabel={t('pipeline.columnEmpty')}
               >
                 {byStage[stage].map((p) => (
-                  <ProspectCard key={p.id} p={p} onOpen={() => setOpenId(p.id)} />
+                  <ProspectCard
+                    key={p.id}
+                    p={p}
+                    onOpen={() => setOpenId(p.id)}
+                    onSaveDeal={(v) => onSaveDeal(p, v)}
+                    onDelete={() => onDeleteCard(p)}
+                    deleteLabel={t('pipeline.deleteCard')}
+                    dealLabel={t('pipeline.dealLabel')}
+                  />
                 ))}
               </StageColumn>
             ))}
@@ -255,12 +317,14 @@ function StageColumn({
   stage,
   label,
   count,
+  total,
   emptyLabel,
   children,
 }: {
   stage: PipelineStage;
   label: string;
   count: number;
+  total: string;
   emptyLabel: string;
   children: React.ReactNode;
 }) {
@@ -274,7 +338,7 @@ function StageColumn({
         isOver && 'border-primary/60 bg-primary/5',
       )}
     >
-      <div className="flex items-center justify-between px-1 pb-1">
+      <div className="flex items-center justify-between gap-2 px-1 pb-1">
         <span
           className={cn(
             'rounded-md border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide',
@@ -283,8 +347,11 @@ function StageColumn({
         >
           {label}
         </span>
-        <span className="text-xs font-semibold tabular-nums text-muted-foreground">
-          {count}
+        <span className="flex items-baseline gap-1.5 tabular-nums">
+          <span className="text-xs font-semibold text-foreground">{total}</span>
+          <span className="text-xs font-semibold text-muted-foreground">
+            {count}
+          </span>
         </span>
       </div>
       <div className="flex flex-col gap-2">
@@ -300,42 +367,169 @@ function StageColumn({
   );
 }
 
+// Stop a pointer/mouse event from reaching the draggable wrapper (no drag start) AND
+// from bubbling to the card's onClick (no drawer open). Used on the deal input and
+// delete control so they behave as plain form controls, not drag handles.
+function stop(e: React.SyntheticEvent) {
+  e.stopPropagation();
+}
+
+// Inline-editable € deal value: shows the formatted amount; click to edit a number
+// input; blur/Enter saves (Escape cancels). Not draggable — swallows pointer/click so
+// it neither starts a drag nor opens the drawer. Read-only when onSave is omitted (the
+// drag overlay), where it renders as static text.
+function DealValue({
+  value,
+  label,
+  onSave,
+}: {
+  value: number;
+  label: string;
+  onSave?: (next: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value));
+
+  if (!onSave) {
+    return (
+      <span className="text-xs font-semibold tabular-nums text-foreground">
+        {formatEuros(value)}
+      </span>
+    );
+  }
+
+  function commit() {
+    setEditing(false);
+    const parsed = Math.max(0, Math.round(Number(draft)));
+    if (Number.isFinite(parsed) && parsed !== value) onSave?.(parsed);
+  }
+
+  if (editing) {
+    return (
+      <Input
+        autoFocus
+        type="number"
+        min={0}
+        inputMode="numeric"
+        value={draft}
+        aria-label={label}
+        onPointerDown={stop}
+        onClick={stop}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            commit();
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            setDraft(String(value));
+            setEditing(false);
+          }
+        }}
+        className="h-6 w-20 px-1.5 py-0 text-xs tabular-nums"
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onPointerDown={stop}
+      onClick={(e) => {
+        stop(e);
+        setDraft(String(value));
+        setEditing(true);
+      }}
+      className="rounded px-1 text-xs font-semibold tabular-nums text-foreground hover:bg-muted"
+    >
+      {formatEuros(value)}
+    </button>
+  );
+}
+
 // Presentational card — memoized; reused for both the in-column card and the drag
-// overlay so the floating copy looks identical.
+// overlay so the floating copy looks identical. When onSaveDeal/onDelete are passed
+// (the in-column card) the deal value is inline-editable and a hover delete control
+// appears; the drag overlay passes neither, so it stays purely presentational.
 const CardView = memo(function CardView({
   p,
   dragging,
+  onSaveDeal,
+  onDelete,
+  deleteLabel,
+  dealLabel,
 }: {
   p: ProspectDto;
   dragging?: boolean;
+  onSaveDeal?: (dealValue: number) => void;
+  onDelete?: () => void;
+  deleteLabel?: string;
+  dealLabel?: string;
 }) {
   const location = [p.city, p.country].filter(Boolean).join(', ');
   return (
     <div
       className={cn(
-        'rounded-md border border-sidebar-border bg-card p-2.5 text-left shadow-sm',
+        'group/card relative rounded-md border border-sidebar-border bg-card p-2.5 text-left shadow-sm',
         dragging && 'cursor-grabbing shadow-lg ring-1 ring-primary/40',
       )}
     >
-      <p className="truncate text-sm font-semibold text-foreground">
+      {onDelete ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          aria-label={deleteLabel}
+          title={deleteLabel}
+          onPointerDown={stop}
+          onClick={(e) => {
+            stop(e);
+            onDelete();
+          }}
+          className="absolute right-1 top-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover/card:opacity-100"
+        >
+          <Trash2 />
+        </Button>
+      ) : null}
+      <p className="truncate pr-6 text-sm font-semibold text-foreground">
         {p.companyName ?? p.email}
       </p>
       {location ? (
         <p className="mt-0.5 truncate text-xs text-muted-foreground">{location}</p>
       ) : null}
-      <Badge
-        variant="outline"
-        className={cn('mt-2 text-[10px]', PROSPECT_STATUS_CLASS[p.status])}
-      >
-        {PROSPECT_STATUS_LABEL[p.status]}
-      </Badge>
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <Badge
+          variant="outline"
+          className={cn('text-[10px]', PROSPECT_STATUS_CLASS[p.status])}
+        >
+          {PROSPECT_STATUS_LABEL[p.status]}
+        </Badge>
+        <DealValue value={p.dealValue} label={dealLabel ?? ''} onSave={onSaveDeal} />
+      </div>
     </div>
   );
 });
 
 // The draggable in-column card: only dims while dragging (the DragOverlay shows the
 // moving copy), so the grid never reflows mid-drag.
-function ProspectCard({ p, onOpen }: { p: ProspectDto; onOpen: () => void }) {
+function ProspectCard({
+  p,
+  onOpen,
+  onSaveDeal,
+  onDelete,
+  deleteLabel,
+  dealLabel,
+}: {
+  p: ProspectDto;
+  onOpen: () => void;
+  onSaveDeal: (dealValue: number) => void;
+  onDelete: () => void;
+  deleteLabel: string;
+  dealLabel: string;
+}) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: p.id,
   });
@@ -350,7 +544,13 @@ function ProspectCard({ p, onOpen }: { p: ProspectDto; onOpen: () => void }) {
         isDragging && 'opacity-40',
       )}
     >
-      <CardView p={p} />
+      <CardView
+        p={p}
+        onSaveDeal={onSaveDeal}
+        onDelete={onDelete}
+        deleteLabel={deleteLabel}
+        dealLabel={dealLabel}
+      />
     </div>
   );
 }

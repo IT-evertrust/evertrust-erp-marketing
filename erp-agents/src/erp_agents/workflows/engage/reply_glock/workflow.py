@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Any
 
 from erp_agents.clients.llm_client import LlmClient
@@ -7,6 +8,7 @@ from erp_agents.core.result import AgentResult, AgentTraceStep
 from erp_agents.core.workflow import Workflow
 from erp_agents.workflows.engage.reply_glock.models import (
     CampaignContext,
+    ExtractedSignals,
     NormalizedReply,
     ReplyClassification,
     ReplyDraft,
@@ -26,6 +28,30 @@ from erp_agents.workflows.engage.reply_glock.tools import (
     recommended_action_for_status,
     ui_bucket_for_status,
 )
+
+# Deterministic language pick for the draft: German ONLY when the prospect's reply is
+# clearly German, otherwise English. The LLM is unreliable at self-detecting language
+# (Hermes sometimes drafts German for an English reply), so we decide in code and pin
+# it with a hard directive. Bias to English unless there is a strong German signal.
+_GERMAN_CHARS = set("äöüßÄÖÜ")
+_GERMAN_WORDS = {
+    "der", "die", "das", "und", "wir", "sie", "ich", "nicht", "ein", "eine", "ist",
+    "danke", "mit", "für", "sind", "haben", "kein", "keine", "gerade", "aktuell",
+    "budget", "uns", "unser", "unsere", "vielen", "gruß", "grüße", "hallo", "bitte",
+    "derzeit", "momentan", "zurück", "melden", "kontaktieren", "interesse", "leider",
+    "jetzt", "nächste", "nächsten", "quartal", "jahr", "wäre", "können", "möchten",
+}
+
+
+def detect_language(text: str) -> str:
+    """'de' when the text is clearly German, else 'en' (the default)."""
+    t = (text or "").lower()
+    if any(c in _GERMAN_CHARS for c in t):
+        return "de"
+    words = re.findall(r"[a-zäöüß]+", t)
+    hits = sum(1 for w in words if w in _GERMAN_WORDS)
+    return "de" if hits >= 2 else "en"
+
 
 # Maps each status to the draft's purpose when the LLM omits/garbles it.
 _DEFAULT_PURPOSE: dict[str, str] = {
@@ -60,10 +86,26 @@ class ReplyGlockWorkflow(Workflow):
                 self.trace_step("normalize_reply", {"body": workflow_input.body}, normalized.model_dump())
             )
 
-            classification, classify_trace = self.classify_reply(
-                workflow_input=workflow_input, normalized=normalized
-            )
-            trace.extend(classify_trace)
+            # Interactive re-draft ("Write & Fix"): the bucket is already known, so
+            # skip the classifier LLM call entirely — one fewer call to fail, and the
+            # revision can't accidentally re-bucket the reply.
+            if workflow_input.instruction and workflow_input.prior_status:
+                classification = ReplyClassification(
+                    status=workflow_input.prior_status,
+                    confidence=1.0,
+                    reasoning="interactive re-draft",
+                    extracted_signals=ExtractedSignals(),
+                )
+                trace.append(
+                    self.trace_step(
+                        "redraft_skip_classify", None, {"status": classification.status}
+                    )
+                )
+            else:
+                classification, classify_trace = self.classify_reply(
+                    workflow_input=workflow_input, normalized=normalized
+                )
+                trace.extend(classify_trace)
 
             draft, draft_trace = self.draft_reply(
                 workflow_input=workflow_input, normalized=normalized, classification=classification
@@ -153,18 +195,117 @@ class ReplyGlockWorkflow(Workflow):
             subject=workflow_input.subject,
             clean_body=normalized.clean_body,
         )
+        # Pin the output language deterministically (German iff the prospect's reply is
+        # clearly German, else English) — overrides the model's flaky self-detection.
+        lang = detect_language(normalized.clean_body)
+        lang_name = "German" if lang == "de" else "English"
+        user_prompt += (
+            f"\n\nOUTPUT LANGUAGE — STRICT: the prospect wrote in {lang_name}. "
+            f"Write the ENTIRE reply — subject AND body — in {lang_name} only. "
+            f"Do not use any other language."
+        )
+        # Persona (F4): imitate a salesperson's voice/pattern. Training notes (F3):
+        # accumulated operator preferences the draft must always honour. Instruction:
+        # a one-off interactive revision of the current draft ("Write & Fix").
+        if workflow_input.persona:
+            user_prompt += (
+                "\n\nPERSONA — write in this salesperson's voice, rhythm, and "
+                "persuasion pattern (embody the style; do NOT name or mention them):\n"
+                f"{workflow_input.persona}"
+            )
+        if workflow_input.guidance:
+            notes = "\n".join(f"- {g}" for g in workflow_input.guidance if g)
+            if notes:
+                user_prompt += (
+                    "\n\nLEARNED PREFERENCES — operator instructions you must ALWAYS "
+                    f"apply to this campaign's replies:\n{notes}"
+                )
+        if workflow_input.instruction:
+            cur = workflow_input.current_draft or {}
+            if cur.get("body"):
+                user_prompt += (
+                    "\n\nCURRENT DRAFT (revise THIS — keep what works, change only "
+                    f"what the instruction asks):\nSubject: {cur.get('subject', '')}\n"
+                    f"{cur.get('body', '')}"
+                )
+            user_prompt += (
+                "\n\nOPERATOR INSTRUCTION — apply this change to the draft:\n"
+                f"{workflow_input.instruction}"
+            )
         trace.append(self.trace_step("draft_prompt", {"system": DRAFT_SYSTEM_PROMPT}, {"user": user_prompt}))
 
-        raw = self.llm.complete_json(
-            system_prompt=DRAFT_SYSTEM_PROMPT, user_prompt=user_prompt, temperature=0.3
-        )
-        trace.append(self.trace_step("draft_llm", {"model_call": "draft"}, raw))
+        # Ask for the body as PLAIN TEXT (not JSON). A small local model reliably
+        # writes prose but routinely mangles a requested JSON shape — which used to
+        # fail ReplyDraft validation and silently drop the draft.
+        # Prefer the configured draft model (e.g. a locally hosted Qwen-32B). If the
+        # gateway doesn't serve it yet (model-not-found / error), fall back to the
+        # default model so drafting never breaks while a model is brought online.
+        try:
+            text = self.llm.complete_text(
+                system_prompt=DRAFT_SYSTEM_PROMPT,
+                user_prompt=user_prompt,
+                temperature=0.3,
+                model=self.llm.draft_model,
+            )
+        except Exception:
+            if self.llm.draft_model == self.llm.model:
+                raise
+            text = self.llm.complete_text(
+                system_prompt=DRAFT_SYSTEM_PROMPT,
+                user_prompt=user_prompt,
+                temperature=0.3,
+                model=self.llm.model,
+            )
+        body = self._clean_draft_text(text)
+        trace.append(self.trace_step("draft_llm", {"model_call": "draft"}, {"body": body}))
+        if not body:
+            raise ValueError("model returned an empty draft body")
 
-        raw.setdefault("purpose", _DEFAULT_PURPOSE[classification.status])
-        if not raw.get("subject"):
-            raw["subject"] = f"Re: {workflow_input.subject}"
-        draft = ReplyDraft.model_validate(raw)
+        subject = (workflow_input.subject or "").strip()
+        if not re.match(r"^(re:|aw:)", subject, flags=re.IGNORECASE):
+            subject = f"Re: {subject}" if subject else "Re: your message"
+        draft = ReplyDraft(
+            subject=subject,
+            body=body,
+            purpose=_DEFAULT_PURPOSE[classification.status],
+        )
         return draft, trace
+
+    # Coerce whatever the model returns into a clean email body: strip code fences,
+    # a leading "Subject:" line, wrapping quotes, and — if it STILL handed back JSON
+    # — pull the body/response/content field out of it.
+    @staticmethod
+    def _clean_draft_text(text: str) -> str:
+        t = (text or "").strip()
+        if t.startswith("```"):
+            t = re.sub(r"^```[a-zA-Z]*\n?", "", t)
+            t = re.sub(r"\n?```$", "", t).strip()
+        if t.startswith("{"):
+            try:
+                obj = json.loads(t)
+                for key in ("body", "response", "content", "text", "message", "email", "reply"):
+                    val = obj.get(key) if isinstance(obj, dict) else None
+                    if isinstance(val, str) and val.strip():
+                        t = val.strip()
+                        break
+            except json.JSONDecodeError:
+                pass
+        t = re.sub(r"^\s*subject:.*\n+", "", t, flags=re.IGNORECASE)
+        # Cut trailing meta-commentary OR an echoed prompt-injection header that the
+        # model sometimes appends after the email body ("OUTPUT LANGUAGE — ...",
+        # "PERSONA — ...", "LEARNED PREFERENCES ...", "OPERATOR INSTRUCTION ...",
+        # "CURRENT DRAFT ...", "Operator instructions followed: ...", "Note: ...").
+        t = re.split(
+            r"\n+\s*(?:operator instruction|instructions?\s+(?:followed|applied|met|incorporated)"
+            r"|output language|learned preferences|current draft|persona\s*[\s—:-]"
+            r"|note\s*:|notes?\s*:|\(note)",
+            t,
+            maxsplit=1,
+            flags=re.IGNORECASE,
+        )[0].strip()
+        if len(t) >= 2 and t[0] in "\"'" and t[-1] == t[0]:
+            t = t[1:-1].strip()
+        return t.strip()
 
     def compose_output(
         self,

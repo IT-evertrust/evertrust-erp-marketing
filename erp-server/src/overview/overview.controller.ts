@@ -13,8 +13,8 @@ export class OverviewController {
 
   @RequirePermissions('campaigns:read')
   @Get()
-  getOverview() {
-    return this.overviewService.getOverview();
+  getOverview(@OrgId() orgId: string) {
+    return this.overviewService.getOverview(orgId);
   }
 
   // The real Engine Activity feed + alerts for the dashboard.

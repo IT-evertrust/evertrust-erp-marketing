@@ -86,6 +86,7 @@ import {
   ProspectStatus,
   UpdateProspectStatusDto,
   UpdateProspectStageDto,
+  UpdateProspectDealDto,
   ReplyDraftDto,
   OutreachMessageDto,
   ContractDto,
@@ -176,6 +177,11 @@ export type UpsertOrgSenderBody = z.infer<typeof UpsertOrgSenderBodyDto>;
 
 const ConnectedGoogleAccountListDto = z.array(ConnectedGoogleAccountDto);
 
+// Result of DELETE /prospects/:id/card — the removed prospect's id.
+const RemoveCardResultDto = z.object({
+  id: z.string(),
+});
+
 const GoogleConnectStartDto = z.object({
   url: z.string().url(),
 });
@@ -203,6 +209,18 @@ function calendarQuery(params?: CalendarRangeParams): string {
 }
 
 
+// A 401 means the session is gone or expired. Bounce the browser to /login so it
+// re-authenticates instead of rendering empty data. Skipped while already on a
+// /login* route (the login bootstrap probes /auth/me and expects 401s there) and on
+// the server (no window). The edge middleware also gates pages, but a session can
+// expire mid-session between navigations — this catches that on the next API call.
+function redirectToLoginOnUnauthorized(status: number): void {
+  if (status !== 401) return;
+  if (typeof window === 'undefined') return;
+  if (window.location.pathname.startsWith('/login')) return;
+  window.location.href = '/login?expired=1';
+}
+
 async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const { method = 'GET', schema, body, signal } = opts;
 
@@ -221,6 +239,7 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   }
 
   if (!res.ok) {
+    redirectToLoginOnUnauthorized(res.status);
     throw new ApiError(res.status, await readErrorMessage(res));
   }
 
@@ -252,6 +271,7 @@ async function uploadRequest<T>(path: string, form: FormData, schema: z.ZodTypeA
   }
 
   if (!res.ok) {
+    redirectToLoginOnUnauthorized(res.status);
     throw new ApiError(res.status, await readErrorMessage(res));
   }
 
@@ -550,6 +570,24 @@ export const api = {
         body: UpdateProspectStageDto.parse(input),
         schema: ProspectDto,
       }),
+
+    // Set a card's € deal value on the Nurture board (whole euros, >= 0).
+    updateDeal: (id: string, dealValue: number) =>
+      request<ProspectDto>(`/prospects/${encodeURIComponent(id)}/deal`, {
+        method: 'PATCH',
+        body: UpdateProspectDealDto.parse({ dealValue }),
+        schema: ProspectDto,
+      }),
+
+    // Remove a card from the Nurture board (DELETE /prospects/:id/card).
+    removeCard: (id: string) =>
+      request<z.infer<typeof RemoveCardResultDto>>(
+        `/prospects/${encodeURIComponent(id)}/card`,
+        {
+          method: 'DELETE',
+          schema: RemoveCardResultDto,
+        },
+      ),
   },
 
   replyDrafts: {

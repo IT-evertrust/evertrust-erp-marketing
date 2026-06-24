@@ -47,6 +47,37 @@ export type ResearchDossier = {
   talkingPoints: string[];
 };
 
+// The persisted "Client Research" dossier — the backend's deeper client profile
+// (MBTI + personality + interaction history + deal economics) for a company.
+// Every field may be null until research has been generated.
+export type ClientResearch = {
+  id: string;
+  company: string;
+  clientEmail: string | null;
+  leadId: string | null;
+  campaignId: string | null;
+  profile: Array<{ label: string; value: string }> | null;
+  signals: string[] | null;
+  talkingPoints: string[] | null;
+  interactionContext: string | null;
+  history: Array<{ date?: string; kind?: string; summary?: string }> | null;
+  mbti: string | null;
+  mbtiConfidence: number | null;
+  mbtiReasoning: string | null;
+  personality: {
+    tone?: string;
+    decisiveness?: string;
+    formality?: string;
+    detail?: string;
+  } | null;
+  stage: 'PRE_MEETING' | 'POST_MEETING';
+  dealValue: number | null;
+  dealCurrency: string | null;
+  dealBasis: string | null;
+  status: string;
+  generatedAt: string;
+};
+
 // A coaching persona (the After-Sales analysis lens).
 export type Persona = {
   id: string;

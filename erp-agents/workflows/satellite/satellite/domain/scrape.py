@@ -29,6 +29,10 @@ _JUNK_HOST_FRAGMENTS = (
     # spam/parking/scraper-aggregator hosts seen in the wild
     "qanator.", "namepros.", "sedo.", "dan.com", "afternic.", "hugedomains.",
     "thegioididong.", "lazada.", "shopee.", "made-in-china.", "globalsources.", "thomasnet.",
+    # real-estate / classifieds portals — listing marketplaces, not companies to cold-email
+    "immobilienscout24.", "immowelt.", "immonet.", "immosuchmaschine.", "kalaydo.",
+    "kleinanzeigen.", "ebay-kleinanzeigen.", "wohnungsboerse.", "immobilien.de", "meinestadt.",
+    "jacasa.", "wlw.de", "wlw.at", "wlw.ch",   # review/B2B directories (not a company to cold-email)
 )
 
 _TAGS = re.compile(r"<[^>]+>")

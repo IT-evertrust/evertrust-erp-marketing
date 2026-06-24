@@ -28,3 +28,28 @@ export type OverviewActivity = {
   activity: EngineActivityItem[];
   alerts: EngineAlert[];
 };
+
+// A headline metric card. `value`/`delta` are pre-formatted strings; `spark` is an
+// SVG polyline points string (viewBox 0 0 100 22) of the last 7 days' daily counts.
+export type OverviewKpi = {
+  label: string;
+  value: string;
+  delta: string;
+  spark: string;
+};
+
+// One R-E-A-N funnel stage with its real count. `width` is 0-100 (scaled to the
+// largest stage); `conversion` is the stage as a % of Reach.
+export type FunnelStage = {
+  name: string;
+  value: string;
+  width: number;
+  conversion: string;
+};
+
+// The dashboard summary: real KPI cards + R-E-A-N funnel for the org. Activity is a
+// separate endpoint (getActivity).
+export type OverviewSummary = {
+  kpis: OverviewKpi[];
+  funnel: FunnelStage[];
+};

@@ -13,6 +13,9 @@ dependencies = [
 [project.optional-dependencies]
 # Only needed for real lead research / email recovery — --no-llm offline path works without these.
 llm = ["openai>=1.30"]
+# Headless-browser rendering for JS-rendered directory/association hub pages (hub mining). Optional:
+# the renderer degrades to a no-op if absent. After install run: `python -m playwright install chromium`.
+render = ["playwright>=1.40"]
 dev = ["pytest>=8.0"]
 
 [tool.setuptools.packages.find]

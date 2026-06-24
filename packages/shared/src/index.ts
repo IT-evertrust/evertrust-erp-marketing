@@ -844,11 +844,15 @@ export const GOOGLE_CONNECT_SCOPES: readonly string[] = [
   'openid',
   'email',
   'profile',
+  // FULL Gmail access: send + metadata + readonly + insert. gmail.readonly grants the
+  // message body + free-text `q` search (it supersedes gmail.metadata; metadata is kept
+  // for clarity/compat). NOTE: gmail.readonly is a RESTRICTED scope — it requires
+  // Google's OAuth-app verification + the annual CASA security assessment before
+  // external orgs can use it (the cost of full-inbox read, accepted deliberately).
   'https://www.googleapis.com/auth/gmail.send',
-  // gmail.metadata (headers + Gmail snippet, NO message body) is a SENSITIVE scope —
-  // it sidesteps the RESTRICTED-scope verification + CASA audit that gmail.readonly
-  // would force. Engage triages on subject + snippet only.
   'https://www.googleapis.com/auth/gmail.metadata',
+  'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.insert',
   'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/calendar.readonly',
 ];
@@ -1967,6 +1971,8 @@ export const ProspectDto = z.object({
   emailVerified: z.boolean(),
   status: ProspectStatus,
   pipelineStage: PipelineStage,
+  // Deal value in whole euros (Nurture card inline edit + per-column totals).
+  dealValue: z.number().int().nonnegative(),
   snoozeUntil: z.string().nullable(),
   followupCount: z.number().int().nonnegative(),
   lastContactedAt: z.string().nullable(),
@@ -2050,6 +2056,13 @@ export const UpdateProspectStageDto = z.object({
   pipelineStage: PipelineStage,
 });
 export type UpdateProspectStageDto = z.infer<typeof UpdateProspectStageDto>;
+
+// Body for PATCH /prospects/:id/deal — the human setting a card's € deal value on the
+// Nurture board (whole euros, >= 0). Independent of stage + the agent-driven status.
+export const UpdateProspectDealDto = z.object({
+  dealValue: z.number().int().nonnegative().max(1_000_000_000),
+});
+export type UpdateProspectDealDto = z.infer<typeof UpdateProspectDealDto>;
 
 // ---- Reply classifications ----
 // Body for POST /reply-classifications — Reply Glock / RAG verdict. Inserted as

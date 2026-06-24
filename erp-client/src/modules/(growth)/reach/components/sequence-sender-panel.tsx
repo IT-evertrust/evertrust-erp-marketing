@@ -4,13 +4,7 @@ import { useTranslations } from 'next-intl';
 
 import { GrowthCard, StatusPill } from '../../shared';
 
-import type { SenderSchedule } from '../types';
-
-type DailySend = {
-  date: string;
-  value: number;
-  type: string;
-};
+import type { DailySend, SenderSchedule } from '../types';
 
 type SequenceSenderPanelProps = {
   schedule: SenderSchedule[];

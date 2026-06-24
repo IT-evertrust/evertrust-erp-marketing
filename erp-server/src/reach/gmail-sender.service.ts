@@ -23,6 +23,17 @@ export class GmailSenderService {
     return (await this.googleAccounts.resolveMailbox(orgId, 'gmail')).ok;
   }
 
+  // The org's send mailbox status (for the Settings page): connected + which email,
+  // or the reason it can't send. Never throws.
+  async senderStatus(
+    orgId: string,
+  ): Promise<{ connected: boolean; email: string | null; reason: string | null }> {
+    const r = await this.googleAccounts.resolveMailbox(orgId, 'gmail');
+    return r.ok
+      ? { connected: true, email: r.account.email, reason: null }
+      : { connected: false, email: null, reason: r.reason };
+  }
+
   // Send an email via the org's resolved Gmail mailbox. Returns the Gmail message
   // id. Throws 503 if no mailbox is connected / the token is unusable / the API
   // rejects. The sender handle is ignored — the resolved default account sends.
