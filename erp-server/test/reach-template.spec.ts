@@ -1,4 +1,34 @@
-import { renderTemplate } from '../src/reach/reach-template';
+import { normalizeTemplateInput, renderTemplate } from '../src/reach/reach-template';
+
+describe('normalizeTemplateInput', () => {
+  it('maps the pasted COLD/FOLLOWUP/FINALPUSH shape to the stored keys', () => {
+    const out = normalizeTemplateInput({
+      COLD: { subject: 'c', body: 'cb' },
+      FOLLOWUP: { subject: 'f', body: 'fb' },
+      FINALPUSH: { subject: 'p', body: 'pb' },
+    });
+    expect(out).toEqual({
+      cold_outreach: { subject: 'c', body: 'cb' },
+      follow_up: { subject: 'f', body: 'fb' },
+      final_push: { subject: 'p', body: 'pb' },
+    });
+  });
+
+  it('also accepts the stored-key spelling', () => {
+    const out = normalizeTemplateInput({
+      cold_outreach: { subject: 'c', body: 'cb' },
+      follow_up: { subject: 'f', body: 'fb' },
+      final_push: { subject: 'p', body: 'pb' },
+    });
+    expect(out.cold_outreach.subject).toBe('c');
+  });
+
+  it('throws when a round or its subject/body is missing', () => {
+    expect(() => normalizeTemplateInput({ COLD: { subject: 'c', body: 'cb' } })).toThrow();
+    expect(() => normalizeTemplateInput({ COLD: { subject: 'c' }, FOLLOWUP: {}, FINALPUSH: {} })).toThrow();
+    expect(() => normalizeTemplateInput('nope')).toThrow();
+  });
+});
 
 const VARS = {
   company: 'Granozita GmbH',

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   Logger,
   NotFoundException,
@@ -23,7 +24,7 @@ import type {
   ReachTemplates,
   TrackKind,
 } from './reach.model';
-import { renderTemplate } from './reach-template';
+import { normalizeTemplateInput, renderTemplate } from './reach-template';
 
 type SentLead = { company: string; email: string | null };
 
@@ -167,6 +168,23 @@ export class ReachService {
 
   getAims(orgId: string): Promise<ReachAim[]> {
     return this.repo.findAims(orgId);
+  }
+
+  // The org-wide default outreach template (or null when none is set).
+  getDefaultTemplate(orgId: string): Promise<ReachTemplates | null> {
+    return this.repo.getDefaultTemplate(orgId);
+  }
+
+  // Save the org-wide default template from a pasted/uploaded payload (any round
+  // spelling). Normalizes + validates; a bad shape becomes a 400.
+  async setDefaultTemplate(orgId: string, raw: unknown): Promise<void> {
+    let normalized;
+    try {
+      normalized = normalizeTemplateInput(raw);
+    } catch (e) {
+      throw new BadRequestException(e instanceof Error ? e.message : 'Invalid template');
+    }
+    await this.repo.setDefaultTemplate(orgId, normalized);
   }
 
   async getAim(orgId: string, aimId: string): Promise<ReachAim> {

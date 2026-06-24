@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Post,
   Patch,
+  Put,
   Query,
   Redirect,
   Req,
@@ -53,6 +54,22 @@ export class ReachController {
   @Get('aims')
   getAims(@OrgId() orgId: string) {
     return this.reachService.getAims(orgId);
+  }
+
+  // ---- Org default outreach template (paste/upload + set default) ----
+  @RequirePermissions('campaigns:write')
+  @Get('default-template')
+  getDefaultTemplate(@OrgId() orgId: string) {
+    return this.reachService.getDefaultTemplate(orgId);
+  }
+
+  // Accepts a pasted template in any round spelling (COLD/FOLLOWUP/FINALPUSH or the
+  // stored keys); the service normalizes + validates and 400s on a bad shape.
+  @RequirePermissions('campaigns:write')
+  @Put('default-template')
+  async setDefaultTemplate(@OrgId() orgId: string, @Body() body: unknown) {
+    await this.reachService.setDefaultTemplate(orgId, body);
+    return { ok: true };
   }
 
   // Real daily email-send counts (last 10 days ending today) for the reach chart.
