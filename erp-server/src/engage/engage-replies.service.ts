@@ -15,6 +15,12 @@ import { ReachRepository } from '../reach/reach.repository';
 import { tenantScope } from '../common/tenant';
 import { EngageAgentClient } from './engage.agent';
 import { buildRawReply, extractPlainBody, parseFromAddress } from './engage.service';
+import {
+  resolveScheduling,
+  type MeetingResolution,
+  type SchedulingVerdict,
+  type Slot,
+} from './meeting-loop';
 
 // ===========================================================================
 // Engage · CAMPAIGN-CENTRIC reply pipeline (reach_aims / reach_leads model).
@@ -221,7 +227,19 @@ export class EngageRepliesService {
           continue; // no reply from this lead yet
         }
 
-        const out = await this.classifyAndDraft(aim, lead, inbound, thread, drafting);
+        // Load this lead's existing reply row (if any) for the meeting loop: the slots
+        // we previously offered + whether it is already BOOKED (idempotency guard).
+        const existingRow = await this.loadExistingReply(orgId, aimId, lead.id);
+        const offeredSlots = existingRow?.proposedSlots ?? [];
+
+        const out = await this.classifyAndDraft(
+          aim,
+          lead,
+          inbound,
+          thread,
+          drafting,
+          offeredSlots,
+        );
         if (!out) {
           skipped++;
           continue;
@@ -229,6 +247,19 @@ export class EngageRepliesService {
         byCategory[out.status] = (byCategory[out.status] ?? 0) + 1;
         classified++;
         await this.upsertReply(orgId, aimId, lead.id, inbound, thread, lead.company, out);
+        // Resolve the scheduling verdict (accept / counter) and persist meeting fields.
+        // Skip when already BOOKED (don't touch a confirmed meeting). Best-effort: a
+        // scheduling failure must NOT fail the scan (the classify already counted).
+        if (existingRow?.meetingStatus !== 'BOOKED') {
+          await this.applyScheduling(
+            orgId,
+            lead.id,
+            aim,
+            lead,
+            out.scheduling,
+            offeredSlots,
+          );
+        }
         // Propagate the classification into the Reach plane (stats cache + lead status)
         // so the Email Generator / Sequence Sender / Lead Scraper reflect the reply.
         // Best-effort: a failure here must not fail the scan (the classify still counts).
@@ -282,6 +313,111 @@ export class EngageRepliesService {
     }
   }
 
+  // Load this lead's existing reply row (org-scoped, by aim+lead) so the scan can read
+  // the meeting-loop state it carries (the slots previously offered + meetingStatus).
+  // Returns null when no row exists yet (first scan of the thread).
+  private async loadExistingReply(
+    orgId: string,
+    aimId: string,
+    leadId: string,
+  ): Promise<typeof schema.reachLeadReplies.$inferSelect | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.reachLeadReplies)
+      .where(
+        and(
+          tenantScope(orgId, schema.reachLeadReplies),
+          eq(schema.reachLeadReplies.aimId, aimId),
+          eq(schema.reachLeadReplies.leadId, leadId),
+        ),
+      )
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
+  // Resolve a reply_glock scheduling verdict against the org's calendar — pure-ish,
+  // delegates to the free `resolveScheduling` (testable with a fake calendar). The
+  // calendar is `this.calendar` (GoogleCalendarReadService), which already implements
+  // isWindowFree / alternativesNear.
+  async resolveScheduling(
+    orgId: string,
+    verdict: SchedulingVerdict,
+    proposedSlots: Slot[],
+  ): Promise<MeetingResolution> {
+    return resolveScheduling(this.calendar, orgId, verdict, proposedSlots);
+  }
+
+  // Apply the scheduling resolution for one lead during a scan (org-scoped):
+  //   ACCEPTED → meetingStatus='ACCEPTED' + acceptedSlot.
+  //   COUNTER  → meetingStatus='COUNTER', overwrite proposedSlots with the alternatives,
+  //              and regenerate the draft to propose those alternative times.
+  //   NONE     → leave meeting fields untouched.
+  // Wrapped in try/catch: a scheduling failure must NOT fail the scan.
+  private async applyScheduling(
+    orgId: string,
+    leadId: string,
+    aim: typeof schema.reachAims.$inferSelect,
+    lead: { company: string; email: string | null; contactName: string | null },
+    verdict: SchedulingVerdict,
+    proposedSlots: Slot[],
+  ): Promise<void> {
+    try {
+      const resolution = await this.resolveScheduling(orgId, verdict, proposedSlots);
+      if (resolution.status === 'NONE') return;
+
+      if (resolution.status === 'ACCEPTED') {
+        await this.db
+          .update(schema.reachLeadReplies)
+          .set({
+            meetingStatus: 'ACCEPTED',
+            acceptedSlot: resolution.acceptedSlot,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              tenantScope(orgId, schema.reachLeadReplies),
+              eq(schema.reachLeadReplies.aimId, aim.id),
+              eq(schema.reachLeadReplies.leadId, leadId),
+            ),
+          );
+        return;
+      }
+
+      // COUNTER: the lead's requested time is busy — offer the nearest alternatives.
+      // Overwrite proposedSlots with them and regenerate the draft to propose them.
+      await this.db
+        .update(schema.reachLeadReplies)
+        .set({
+          meetingStatus: 'COUNTER',
+          proposedSlots: resolution.alternatives,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            tenantScope(orgId, schema.reachLeadReplies),
+            eq(schema.reachLeadReplies.aimId, aim.id),
+            eq(schema.reachLeadReplies.leadId, leadId),
+          ),
+        );
+
+      if (resolution.alternatives.length > 0) {
+        const formatted = resolution.alternatives
+          .map((s) => `${s.start} – ${s.end}`)
+          .join(', ');
+        const instruction =
+          'Their requested time is unavailable. Propose these alternative times instead: ' +
+          `${formatted}.`;
+        const existing = await this.loadExistingReply(orgId, aim.id, leadId);
+        if (existing) {
+          await this.redraftReply(orgId, existing.id, instruction);
+        }
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown error';
+      this.logger.warn(`Engage applyScheduling lead ${leadId} failed: ${msg}`);
+    }
+  }
+
   // Resolve the campaign's drafting persona + active "teach the AI" notes. Notes
   // scoped to this campaign OR org-wide (aimId null). Loaded once per scan.
   private async loadDrafting(
@@ -325,6 +461,9 @@ export class EngageRepliesService {
   }
 
   // Call reply_glock for one inbound reply; returns its parsed output (or null).
+  // `proposedSlots` is the set of times already offered to this lead (from the reply
+  // row): the agent reads them back to decide whether the lead ACCEPTED one or
+  // COUNTER-proposed, and returns its verdict in `scheduling`.
   private async classifyAndDraft(
     aim: typeof schema.reachAims.$inferSelect,
     lead: { company: string; email: string | null; contactName: string | null },
@@ -334,6 +473,7 @@ export class EngageRepliesService {
       persona: null,
       guidance: [],
     },
+    proposedSlots: Slot[] = [],
   ): Promise<{
     status: string;
     confidence: number;
@@ -342,6 +482,7 @@ export class EngageRepliesService {
     draftSubject: string;
     draftBody: string;
     followUpWindow: string | null;
+    scheduling: SchedulingVerdict;
   } | null> {
     const input = {
       reply_id: `${aim.id}:${inbound.id}`,
@@ -352,6 +493,7 @@ export class EngageRepliesService {
       subject: inbound.subject ?? '(no subject)',
       body: inbound.body.slice(0, THREAD_BODY_MAX),
       received_at: new Date(inbound.internalMs).toISOString(),
+      proposed_slots: proposedSlots,
       previous_thread: thread
         .filter((m) => m.id !== inbound.id)
         .map((m) => ({
@@ -380,6 +522,7 @@ export class EngageRepliesService {
     const o = result.output as Record<string, unknown>;
     const draft = (o.draft ?? {}) as Record<string, unknown>;
     const status = String(o.status ?? 'UNSURE').toUpperCase();
+    const sched = (o.scheduling ?? {}) as Record<string, unknown>;
     return {
       status: status in UI_CATEGORY ? status : 'UNSURE',
       confidence: typeof o.confidence === 'number' ? o.confidence : 0,
@@ -389,6 +532,12 @@ export class EngageRepliesService {
       draftBody: String(draft.body ?? ''),
       followUpWindow:
         typeof o.follow_up_date_or_window === 'string' ? o.follow_up_date_or_window : null,
+      scheduling: {
+        accepted_index:
+          typeof sched.accepted_index === 'number' ? sched.accepted_index : null,
+        counter_time:
+          typeof sched.counter_time === 'string' ? sched.counter_time : null,
+      },
     };
   }
 
@@ -499,6 +648,11 @@ export class EngageRepliesService {
       citations: (r.citations as string[] | null) ?? [],
       followUpWindow: r.followUpWindow ?? null,
       handled: r.handled,
+      // --- meeting loop (propose → accept/counter → book) ---
+      meetingStatus: r.meetingStatus,
+      proposedSlots: r.proposedSlots ?? [],
+      acceptedSlot: r.acceptedSlot ?? null,
+      bookedMeetingId: r.bookedMeetingId ?? null,
       thread: r.thread ?? [],
       time: r.classifiedAt.toISOString(),
     }));
@@ -1021,6 +1175,7 @@ export class EngageRepliesService {
     subject: string,
     body: string,
     proposedSlot?: { start: string; end: string },
+    proposedSlots?: { start: string; end: string }[],
   ) {
     const row = await this.ownedReply(orgId, replyId);
     const lead = (
@@ -1069,6 +1224,21 @@ export class EngageRepliesService {
       .set({ handled: true, sentAt: new Date(), draftBody: body, draftSubject: subject, updatedAt: new Date() })
       .where(eq(schema.reachLeadReplies.id, row.id));
 
+    // Record the slots offered to the lead in this round so a later scan can resolve
+    // their accept/counter reply against them. PROPOSED drives the reply-card banner.
+    // Org-scoped; the row is already asserted in-org by ownedReply above.
+    if (proposedSlots?.length) {
+      await this.db
+        .update(schema.reachLeadReplies)
+        .set({ proposedSlots, meetingStatus: 'PROPOSED', updatedAt: new Date() })
+        .where(
+          and(
+            tenantScope(orgId, schema.reachLeadReplies),
+            eq(schema.reachLeadReplies.id, row.id),
+          ),
+        );
+    }
+
     // Optional: book a tentative intro call on the org's calendar for the proposed
     // slot, with the lead as attendee. BEST-EFFORT — a calendar failure must NOT fail
     // the send (the reply already went out). createEvent itself never throws (it
@@ -1096,6 +1266,53 @@ export class EngageRepliesService {
     }
 
     return { ok: true, meeting };
+  }
+
+  // --- MARK BOOKED ----------------------------------------------------------
+  // The operator confirmed the meeting in Activate and hands its id back. Mark the
+  // reply BOOKED and link the meeting. Org-scoped; idempotent (a re-mark is a no-op).
+  // When the reply's campaign (aim.campaignId) is set, also stamp the meeting's
+  // campaign_id so the call threads into the CRM under that campaign. Leaves the
+  // meeting unattributed when the campaign has no linked CRM campaign.
+  async markBooked(orgId: string, replyId: string, meetingId: string) {
+    const row = await this.ownedReply(orgId, replyId); // 404/400s if not in the org
+    if (row.meetingStatus === 'BOOKED') {
+      return { ok: true, meetingStatus: 'BOOKED', bookedMeetingId: row.bookedMeetingId };
+    }
+
+    await this.db
+      .update(schema.reachLeadReplies)
+      .set({ meetingStatus: 'BOOKED', bookedMeetingId: meetingId, updatedAt: new Date() })
+      .where(
+        and(
+          tenantScope(orgId, schema.reachLeadReplies),
+          eq(schema.reachLeadReplies.id, row.id),
+        ),
+      );
+
+    // Link the meeting to the reply's campaign so the call shows under the campaign in
+    // the CRM. Resolve the aim (org-scoped) → its campaignId; skip when unattributed.
+    const aimRows = await this.db
+      .select({ campaignId: schema.reachAims.campaignId })
+      .from(schema.reachAims)
+      .where(
+        and(tenantScope(orgId, schema.reachAims), eq(schema.reachAims.id, row.aimId)),
+      )
+      .limit(1);
+    const campaignId = aimRows[0]?.campaignId ?? null;
+    if (campaignId) {
+      await this.db
+        .update(schema.meetings)
+        .set({ campaignId })
+        .where(
+          and(
+            tenantScope(orgId, schema.meetings),
+            eq(schema.meetings.id, meetingId),
+          ),
+        );
+    }
+
+    return { ok: true, meetingStatus: 'BOOKED', bookedMeetingId: meetingId };
   }
 
   // The org's proposed free meeting slots for a campaign — resolves the aim (org-scoped)
