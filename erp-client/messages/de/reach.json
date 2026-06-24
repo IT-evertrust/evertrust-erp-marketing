@@ -2,7 +2,8 @@
   "tabs": {
     "scraper": "Lead-Scraper",
     "generator": "E-Mail-Generator",
-    "sender": "Sequenz-Sender"
+    "sender": "Sequenz-Sender",
+    "templates": "Vorlagen"
   },
   "campaignTable": {
     "title": "Kampagnen",
@@ -79,7 +80,8 @@
       "1": "Runde 1",
       "2": "Runde 2",
       "3": "Runde 3"
-    }
+    },
+    "orgDefault": "Es wird die organisationsweite Standardvorlage angezeigt. Bearbeiten Sie sie im Tab „Vorlagen“ — kampagnenspezifische Änderungen hier werden nicht verwendet."
   },
   "sender": {
     "campaignsTitle": "Kampagnen",
@@ -134,7 +136,14 @@
       "whatsappPlaceholder": "z. B. +49 151 23456789",
       "sender": "Gmail",
       "calendar": "Kalender",
-      "calendarNotConnected": "Google nicht verbunden — der Standardkalender der Organisation wird verwendet."
+      "calendarNotConnected": "Google nicht verbunden — der Standardkalender der Organisation wird verwendet.",
+      "targetType": "Typ",
+      "targetTypePlaceholder": "z. B. Anbieter, Lieferant",
+      "industryFocus": "Branchenfokus",
+      "industryFocusPlaceholder": "z. B. IT, Energie, Transport",
+      "tenderFocus": "Ausschreibungsfokus",
+      "tenderFocusPlaceholder": "z. B. Cloud-Infrastruktur, KI-Plattform",
+      "focusHint": "Wird von der Standard-E-Mail-Vorlage verwendet ({{Type}} / {{IndustryFocus}} / {{TenderFocus}})."
     }
   },
   "toast": {
@@ -147,5 +156,61 @@
     "sendFailed": "Senden fehlgeschlagen",
     "scrapeDone": "Scrape abgeschlossen — {count} Firmen gefunden.",
     "scrapeFailed": "Lead-Scrape fehlgeschlagen."
+  },
+  "templates": {
+    "orgWide": "Organisationsweit",
+    "optional": "Optional",
+    "saving": "Wird gespeichert…",
+    "saveDefault": "Als Standard speichern",
+    "default": {
+      "title": "Standard-E-Mail-Vorlage",
+      "intro": "Der organisationsweite Standard, den die Reach Bazooka sendet, wenn eine Kampagne keine eigene Vorlage hat. Verwenden Sie die Platzhalter",
+      "and": "und",
+      "outro": ", um jeden Versand zu personalisieren."
+    },
+    "round": {
+      "cold": {
+        "label": "Kaltakquise",
+        "hint": "Runde 1"
+      },
+      "followUp": {
+        "label": "Nachfassen",
+        "hint": "Runde 2"
+      },
+      "final": {
+        "label": "Letzter Anstoß",
+        "hint": "Runde 3"
+      }
+    },
+    "field": {
+      "subject": "Betreff",
+      "subjectPlaceholder": "Betreffzeile",
+      "body": "Text",
+      "bodyPlaceholder": "E-Mail-Text…"
+    },
+    "import": {
+      "title": "Aus JSON importieren",
+      "intro": "Fügen Sie ein",
+      "outro": "-Objekt ein oder laden Sie es hoch (gespeicherte Schlüssel funktionieren ebenfalls), um die drei Runden oben zu füllen.",
+      "hidePaste": "Einfügen ausblenden",
+      "pasteJson": "JSON einfügen",
+      "upload": ".json hochladen",
+      "loadFromJson": "Aus JSON laden"
+    },
+    "signature": {
+      "title": "Signaturbild",
+      "urlLabel": "URL des Signaturbilds",
+      "previewAlt": "Signaturvorschau"
+    },
+    "toast": {
+      "loadFailed": "Die Standardvorlage konnte nicht geladen werden.",
+      "invalidJson": "Ungültiges JSON — die Vorlage konnte nicht gelesen werden.",
+      "expectedObject": "Es wurde ein JSON-Objekt mit den drei Runden erwartet.",
+      "noRounds": "Keine COLD / FOLLOWUP / FINALPUSH-Runden im JSON gefunden.",
+      "loaded": "Vorlage aus JSON geladen.",
+      "readFailed": "Die hochgeladene Datei konnte nicht gelesen werden.",
+      "saved": "Gespeichert",
+      "saveFailed": "Speichern fehlgeschlagen."
+    }
   }
 }

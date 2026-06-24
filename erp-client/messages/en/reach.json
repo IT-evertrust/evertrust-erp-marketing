@@ -2,7 +2,8 @@
   "tabs": {
     "scraper": "Lead Scraper",
     "generator": "Email Generator",
-    "sender": "Sequence Sender"
+    "sender": "Sequence Sender",
+    "templates": "Templates"
   },
   "campaignTable": {
     "title": "Campaigns",
@@ -79,7 +80,8 @@
       "1": "Round 1",
       "2": "Round 2",
       "3": "Round 3"
-    }
+    },
+    "orgDefault": "Showing the org-wide default template. Edit it in the Templates tab — per-campaign edits here are not used."
   },
   "sender": {
     "campaignsTitle": "Campaigns",
@@ -134,7 +136,14 @@
       "whatsappPlaceholder": "e.g. +49 151 23456789",
       "sender": "Gmail",
       "calendar": "Calendar",
-      "calendarNotConnected": "Google not connected — the org default calendar is used."
+      "calendarNotConnected": "Google not connected — the org default calendar is used.",
+      "targetType": "Type",
+      "targetTypePlaceholder": "e.g. provider, supplier",
+      "industryFocus": "Industry focus",
+      "industryFocusPlaceholder": "e.g. IT, Power, Transportation",
+      "tenderFocus": "Tender focus",
+      "tenderFocusPlaceholder": "e.g. Cloud Infrastructure, AI Platform",
+      "focusHint": "Used by the default email template ({{Type}} / {{IndustryFocus}} / {{TenderFocus}})."
     }
   },
   "toast": {
@@ -147,5 +156,61 @@
     "sendFailed": "Send failed",
     "scrapeDone": "Scrape complete — {count} companies found.",
     "scrapeFailed": "Lead scrape failed."
+  },
+  "templates": {
+    "orgWide": "Org-wide",
+    "optional": "Optional",
+    "saving": "Saving…",
+    "saveDefault": "Save as default",
+    "default": {
+      "title": "Default email template",
+      "intro": "The org-wide default the Reach Bazooka sends when a campaign has no template of its own. Use the placeholders",
+      "and": "and",
+      "outro": "to personalise each send."
+    },
+    "round": {
+      "cold": {
+        "label": "Cold outreach",
+        "hint": "Round 1"
+      },
+      "followUp": {
+        "label": "Follow-up",
+        "hint": "Round 2"
+      },
+      "final": {
+        "label": "Final push",
+        "hint": "Round 3"
+      }
+    },
+    "field": {
+      "subject": "Subject",
+      "subjectPlaceholder": "Subject line",
+      "body": "Body",
+      "bodyPlaceholder": "Email body…"
+    },
+    "import": {
+      "title": "Import from JSON",
+      "intro": "Paste or upload a",
+      "outro": "object (stored keys also work) to fill the three rounds above.",
+      "hidePaste": "Hide paste",
+      "pasteJson": "Paste JSON",
+      "upload": "Upload .json",
+      "loadFromJson": "Load from JSON"
+    },
+    "signature": {
+      "title": "Signature image",
+      "urlLabel": "Signature image URL",
+      "previewAlt": "Signature preview"
+    },
+    "toast": {
+      "loadFailed": "Could not load the default template.",
+      "invalidJson": "Invalid JSON — could not parse the template.",
+      "expectedObject": "Expected a JSON object with the three rounds.",
+      "noRounds": "No COLD / FOLLOWUP / FINALPUSH rounds found in the JSON.",
+      "loaded": "Loaded template from JSON.",
+      "readFailed": "Could not read the uploaded file.",
+      "saved": "Saved",
+      "saveFailed": "Could not save."
+    }
   }
 }
