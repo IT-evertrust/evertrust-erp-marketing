@@ -4,6 +4,7 @@ import { AppConfigService } from '../config/app-config.service';
 import { TokenCrypto } from './token-crypto';
 import { GoogleOAuthService } from './google-oauth.service';
 import { GoogleAccountsService } from './google-accounts.service';
+import { GoogleGmailService } from './google-gmail.service';
 import { GoogleConnectController } from './google-connect.controller';
 import { GoogleCalendarReadService } from './google-calendar-read.service';
 import { GoogleCalendarReadController } from './google-calendar-read.controller';
@@ -44,8 +45,9 @@ import { GoogleCalendarReadController } from './google-calendar-read.controller'
     TokenCrypto,
     GoogleOAuthService,
     GoogleAccountsService,
+    GoogleGmailService,
     GoogleCalendarReadService,
   ],
-  exports: [GoogleAccountsService],
+  exports: [GoogleAccountsService, GoogleGmailService, GoogleCalendarReadService],
 })
 export class GoogleModule {}
