@@ -17,7 +17,6 @@ import type {
   BazookaRunSummary,
   DailySendPoint,
   EmailBlock,
-  PromoteLeadResult,
   ReachAim,
   ReachNewsBrief,
   ReachRound,
@@ -141,19 +140,9 @@ export class ReachService {
   // Forge to generate the three templates + the news brief and store them. If the
   // agent is unreachable the aim is still created (DRAFT) so it can be regenerated.
   async createAim(orgId: string, dto: CreateAimDto): Promise<ReachAim> {
-    let aim = await this.repo.createAim(orgId, dto);
-    // Aiming IS creating the campaign: give every aim its CRM campaign (1:1) up
-    // front so it appears on the Nurture board from the moment it's aimed — no need
-    // to wait for the first lead promotion. Best-effort: a campaign-link failure
-    // must not block the aim (it'll be created lazily on the first promote instead).
-    try {
-      const niche = await this.niches.findOrCreate(orgId, aim.niche);
-      const campaignId = await this.repo.ensureCampaign(orgId, aim, niche.id);
-      aim = { ...aim, campaignId };
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'campaign link failed';
-      this.logger.warn(`Campaign link failed for aim ${aim.id}: ${msg}`);
-    }
+    const aim = await this.repo.createAim(orgId, dto);
+    // reach_aims is the single source — no CRM campaigns row is created. The aim's
+    // leads (reach_leads) ARE its Nurture pipeline once scraped.
     try {
       const config = await this.buildAgentConfig(orgId, aim);
       const result = await this.agent.run('reach.ammo_forge', {
@@ -240,33 +229,6 @@ export class ReachService {
   async getAimLeads(orgId: string, aimId: string) {
     await this.getAim(orgId, aimId);
     return this.repo.findLeadsByAimId(orgId, aimId);
-  }
-
-  // Reach → Nurture bridge: promote one of an aim's leads into the Nurture pipeline
-  // as a `prospects` row. Find-or-creates the aim's CRM campaign (1:1, lazily) so the
-  // prospect has a home, then upserts it on (campaign, email) at the INTEREST stage.
-  // 404 if the aim/lead is missing or cross-org; 422 if the lead has no email (a
-  // prospect can't exist without one). Idempotent — re-promoting refreshes the row.
-  async promoteLead(
-    orgId: string,
-    aimId: string,
-    leadId: string,
-  ): Promise<PromoteLeadResult> {
-    const aim = await this.getAim(orgId, aimId); // 404 if missing / cross-org
-    const lead = await this.repo.findLeadById(orgId, aimId, leadId);
-    if (!lead) throw new NotFoundException('Lead not found');
-    const email = lead.email?.trim().toLowerCase();
-    if (!email) {
-      throw new UnprocessableEntityException(
-        "This lead has no email address — it can't be added to the pipeline.",
-      );
-    }
-    // The campaign needs a niche (NOT NULL). Resolve it only when the aim has no
-    // campaign yet (the find-or-create case) — reusing the AIM-launch niche SSOT.
-    const nicheId = aim.campaignId
-      ? null
-      : (await this.niches.findOrCreate(orgId, aim.niche)).id;
-    return this.repo.promote(orgId, aim, nicheId, lead, email);
   }
 
   // Real daily email-send counts for the org's reach chart: the last 10 calendar

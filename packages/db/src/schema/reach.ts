@@ -12,7 +12,6 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { organizations } from './org';
-import { campaigns } from './campaigns';
 import { personas } from './personas';
 import { pipelineStageEnum } from './enums';
 
@@ -71,11 +70,9 @@ export const reachAims = pgTable(
     organizationId: uuid('organization_id')
       .notNull()
       .references(() => organizations.id),
-    // The CRM campaign this aim feeds (the Reach→Nurture bridge). NULLABLE: an aim
-    // gets a campaign lazily, the first time one of its leads is promoted into the
-    // Nurture pipeline (find-or-created 1:1 from the aim). Until then it's a
-    // self-contained Reach campaign with no CRM home.
-    campaignId: uuid('campaign_id').references(() => campaigns.id),
+    // NOTE: reach_aims is the SINGLE source for Reach/Engage/Nurture — there is no
+    // CRM `campaigns` bridge. Leads live on reach_leads and ARE the Nurture pipeline
+    // (pipeline_stage + deal_value on the lead). The old campaignId link was removed.
     // ---- config.json (the AIM input fields) ----
     name: text('name').notNull(),
     niche: text('niche').notNull(),
@@ -112,10 +109,7 @@ export const reachAims = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (t) => [
-    index('reach_aims_organization_id_idx').on(t.organizationId),
-    index('reach_aims_campaign_id_idx').on(t.campaignId),
-  ],
+  (t) => [index('reach_aims_organization_id_idx').on(t.organizationId)],
 );
 
 export const reachLeads = pgTable(

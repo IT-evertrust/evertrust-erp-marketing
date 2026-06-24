@@ -150,27 +150,6 @@ export class ReachController {
     return lead;
   }
 
-  // Reach → Nurture bridge: promote a lead into the Nurture pipeline (creates/links
-  // the aim's CRM campaign and upserts the prospect at the INTEREST stage). org-scoped
-  // + audited (campaigns:write). Returns { campaignId, prospectId, created }.
-  @RequirePermissions('campaigns:write')
-  @Post('aims/:aimId/leads/:leadId/promote')
-  async promoteLead(
-    @OrgId() orgId: string,
-    @Param('aimId', ParseUUIDPipe) aimId: string,
-    @Param('leadId', ParseUUIDPipe) leadId: string,
-    @Req() req: Request,
-  ) {
-    const result = await this.reachService.promoteLead(orgId, aimId, leadId);
-    setAuditContext(req, {
-      entity: 'prospects',
-      entityId: result.prospectId,
-      action: 'PROMOTE_FROM_REACH',
-      after: { campaignId: result.campaignId, created: result.created },
-    });
-    return result;
-  }
-
   // Manual send for one round (cold | followup | final). Records the send +
   // advances stats; actual Gmail delivery is deferred until the OAuth key lands.
   @RequirePermissions('campaigns:write')

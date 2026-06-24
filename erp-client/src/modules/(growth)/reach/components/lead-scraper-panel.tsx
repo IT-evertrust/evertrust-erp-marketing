@@ -14,8 +14,6 @@ type LeadScraperPanelProps = {
   loadingCampaigns?: boolean;
   loadingLeads?: boolean;
   scraping?: boolean;
-  onPromoteLead?: (leadId: string) => void;
-  promotingLeadId?: string | null;
 };
 
 export function LeadScraperPanel({
@@ -28,8 +26,6 @@ export function LeadScraperPanel({
   loadingCampaigns = false,
   loadingLeads = false,
   scraping = false,
-  onPromoteLead,
-  promotingLeadId = null,
 }: LeadScraperPanelProps) {
   return (
     <div className="flex flex-col gap-4">
@@ -74,17 +70,12 @@ export function LeadScraperPanel({
                 <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
                   Status
                 </th>
-                <th className="px-3 pb-3 text-right text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
-                  Pipeline
-                </th>
               </tr>
             </thead>
 
             <tbody>
               {leads.map((lead) => {
-                const promoting = promotingLeadId === lead.id;
                 const inPipeline = lead.status === 'Interested';
-                const noEmail = !lead.email;
                 return (
                   <tr
                     key={lead.id}
@@ -104,29 +95,6 @@ export function LeadScraperPanel({
                     </td>
                     <td className="px-3 py-3">
                       <StatusPill live={inPipeline}>{lead.status}</StatusPill>
-                    </td>
-                    <td className="px-3 py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => onPromoteLead?.(lead.id)}
-                        disabled={
-                          promoting || inPipeline || noEmail || !onPromoteLead
-                        }
-                        title={
-                          noEmail
-                            ? 'No email found for this lead'
-                            : inPipeline
-                              ? 'Already in the Nurture pipeline'
-                              : 'Move this lead into the Nurture pipeline'
-                        }
-                        className="rounded-[6px] border border-[#d6dade] bg-white px-2.5 py-1 text-[11.5px] font-bold text-[#15171c] transition-colors hover:border-[#15171c] hover:bg-[#f6f7f9] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-[#d6dade] disabled:hover:bg-white"
-                      >
-                        {promoting
-                          ? 'Moving…'
-                          : inPipeline
-                            ? 'In pipeline'
-                            : 'Move to pipeline'}
-                      </button>
                     </td>
                   </tr>
                 );

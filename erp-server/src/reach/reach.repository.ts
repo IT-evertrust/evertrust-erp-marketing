@@ -20,7 +20,6 @@ import {
   EMPTY_ROUND_STATS,
   EMPTY_STATS,
   type AimStatus,
-  type PromoteLeadResult,
   type ReachAim,
   type ReachBoardResult,
   type ReachLead,
@@ -71,7 +70,6 @@ function rowToAim(row: AimRow): ReachAim {
     region: row.region,
     segment: row.segment ?? undefined,
     source: row.source ?? undefined,
-    campaignId: row.campaignId ?? null,
     status: row.status,
     companies: row.companies,
     sender: row.sender,
@@ -379,154 +377,6 @@ export class ReachRepository {
       )
       .limit(1);
     return row ? rowToLead(row) : undefined;
-  }
-
-  // ---- Reach → Nurture bridge ----
-
-  // Insert the aim's CRM campaign and link it back onto the aim (1:1), within the
-  // given tx. Seeds the NOT NULL campaign columns the Reach aim doesn't carry from
-  // the aim's own fields (sender → gmailLabel, blank whatsapp). Caller guarantees
-  // the aim has no campaign yet and that nicheId is resolved.
-  private async createAndLinkCampaign(
-    tx: Tx,
-    orgId: string,
-    aim: ReachAim,
-    nicheId: string,
-  ): Promise<string> {
-    const [campaign] = await tx
-      .insert(schema.campaigns)
-      .values({
-        organizationId: orgId,
-        name: aim.name,
-        nicheId,
-        country: aim.country ?? 'Germany',
-        region: aim.region,
-        project: aim.name,
-        gmailLabel: aim.sender,
-        whatsappNumber: '',
-        sender: aim.sender,
-      })
-      .returning({ id: schema.campaigns.id });
-    const campaignId = campaign!.id;
-    await tx
-      .update(schema.reachAims)
-      .set({ campaignId, updatedAt: new Date() })
-      .where(
-        and(eq(schema.reachAims.id, aim.id), tenantScope(orgId, schema.reachAims)),
-      );
-    return campaignId;
-  }
-
-  // Give an aim its CRM campaign if it doesn't have one yet (the eager path, called
-  // at aim creation so the aim shows in Nurture from the moment it's aimed). Returns
-  // the existing or freshly-created campaign id. Idempotent.
-  async ensureCampaign(
-    orgId: string,
-    aim: ReachAim,
-    nicheId: string,
-  ): Promise<string> {
-    if (aim.campaignId) return aim.campaignId;
-    return this.db.transaction((tx) =>
-      this.createAndLinkCampaign(tx, orgId, aim, nicheId),
-    );
-  }
-
-  // Promote a reach_lead into the Nurture pipeline as a `prospects` row, in ONE
-  // transaction so the aim↔campaign link, the prospect upsert, and the lead-status
-  // advance never half-apply. Find-or-creates the aim's CRM campaign (1:1, lazily —
-  // `nicheId` is required only when the aim has no campaign yet). The prospect is
-  // upserted on (campaignId, email): a re-promote refreshes the scraped fields but
-  // NEVER regresses the conversation/pipeline state (status, pipeline_stage, deal).
-  // The lead is advanced to INTERESTED so the scraper view shows it's been moved.
-  async promote(
-    orgId: string,
-    aim: ReachAim,
-    nicheId: string | null,
-    lead: ReachLead,
-    email: string,
-  ): Promise<PromoteLeadResult> {
-    return this.db.transaction(async (tx) => {
-      // 1. Ensure the aim has a CRM campaign (fallback for aims created before the
-      // eager link, or if that link failed). New aims already carry campaignId.
-      let campaignId = aim.campaignId;
-      if (!campaignId) {
-        if (!nicheId) throw new Error('nicheId is required to create a campaign');
-        campaignId = await this.createAndLinkCampaign(tx, orgId, aim, nicheId);
-      }
-
-      // 2. Upsert the prospect on (campaignId, email). org-scoped too: campaignId
-      // is already org-confined (freshly inserted with orgId, or read from the
-      // org-scoped aim), but the tenantScope keeps the multi-tenant invariant local.
-      const [existing] = await tx
-        .select({ id: schema.prospects.id })
-        .from(schema.prospects)
-        .where(
-          and(
-            tenantScope(orgId, schema.prospects),
-            eq(schema.prospects.campaignId, campaignId),
-            eq(schema.prospects.email, email),
-          ),
-        )
-        .limit(1);
-
-      let prospectId: string;
-      let created: boolean;
-      if (existing) {
-        // Refresh scraped fields only — pipeline_stage / status / deal_value stay put.
-        await tx
-          .update(schema.prospects)
-          .set({
-            companyName: lead.company,
-            website: lead.website ?? null,
-            city: lead.location ?? null,
-            country: aim.country ?? null,
-            contactName: lead.contactName ?? null,
-            contactPhone: lead.phone ?? null,
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(schema.prospects.id, existing.id),
-              tenantScope(orgId, schema.prospects),
-            ),
-          );
-        prospectId = existing.id;
-        created = false;
-      } else {
-        const [inserted] = await tx
-          .insert(schema.prospects)
-          .values({
-            organizationId: orgId,
-            campaignId,
-            email,
-            companyName: lead.company,
-            website: lead.website ?? null,
-            city: lead.location ?? null,
-            country: aim.country ?? null,
-            sourceUrl: lead.source ?? null,
-            contactName: lead.contactName ?? null,
-            contactPhone: lead.phone ?? null,
-            // pipeline_stage defaults to INTEREST (the kanban entry column),
-            // status to NEW, deal_value to 0 — the Nurture funnel starts here.
-          })
-          .returning({ id: schema.prospects.id });
-        prospectId = inserted!.id;
-        created = true;
-      }
-
-      // 3. Mark the source lead INTERESTED (the scraper view reflects the move).
-      await tx
-        .update(schema.reachLeads)
-        .set({ status: 'INTERESTED', updatedAt: new Date() })
-        .where(
-          and(
-            eq(schema.reachLeads.id, lead.id),
-            tenantScope(orgId, schema.reachLeads),
-          ),
-        );
-
-      return { campaignId, prospectId, created };
-    });
   }
 
   // ---- send + stats (reach_sends is the source of truth) ----

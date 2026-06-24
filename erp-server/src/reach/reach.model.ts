@@ -53,8 +53,6 @@ export type ReachAim = {
   region: string;
   segment?: string;
   source?: string;
-  // The CRM campaign this aim feeds (null until a lead is promoted to Nurture).
-  campaignId: string | null;
   // Optional config fields consumed by the agent CampaignConfig. The reach_aims
   // table does not yet expose these columns in this build, so they are undefined
   // until surfaced from the DB; buildAgentConfig falls back to name / 'Germany'.
@@ -99,15 +97,6 @@ export type ReachLeadStatus =
   | 'INTERESTED'
   | 'UNSURE'
   | 'NOT_INTERESTED';
-
-// Result of promoting a reach_lead into the Nurture pipeline: the CRM campaign it
-// landed in (find-or-created from the aim), the resulting prospect id, and whether
-// a brand-new prospect was created (vs. an existing one re-linked/updated).
-export type PromoteLeadResult = {
-  campaignId: string;
-  prospectId: string;
-  created: boolean;
-};
 
 export type ReachLead = {
   id: string;

@@ -25,8 +25,6 @@ export function ReachPage() {
           loadingCampaigns={reach.loadingCampaigns}
           loadingLeads={reach.loadingLeads}
           scraping={reach.scrapingLeads}
-          onPromoteLead={reach.promoteLead}
-          promotingLeadId={reach.promotingLeadId}
         />
       ) : null}
 
