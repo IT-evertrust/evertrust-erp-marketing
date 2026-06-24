@@ -121,8 +121,14 @@ describe('normalizeVerdict', () => {
   });
 });
 
+// The Subject is RFC2047-encoded (=?UTF-8?B?…?=) so non-ASCII survives transport; decode it back.
+function decodedSubject(decoded: string): string {
+  const m = decoded.match(/Subject: =\?UTF-8\?B\?(.*?)\?=/);
+  return m?.[1] ? Buffer.from(m[1], 'base64').toString('utf8') : '';
+}
+
 describe('buildRawReply', () => {
-  it('builds a base64url RFC822 reply that threads via In-Reply-To/References', () => {
+  it('builds a multipart/alternative reply that threads via In-Reply-To/References', () => {
     const raw = buildRawReply({
       to: 'buyer@target.de',
       from: 'rep@us.com',
@@ -134,8 +140,9 @@ describe('buildRawReply', () => {
     const decoded = decodeBase64Url(raw);
     expect(decoded).toContain('To: buyer@target.de');
     expect(decoded).toContain('From: rep@us.com');
-    // A subject without a Re:/AW: prefix gets one added.
-    expect(decoded).toContain('Subject: Re: Your proposal');
+    expect(decoded).toContain('Content-Type: multipart/alternative');
+    // A subject without a Re:/AW: prefix gets one added (then RFC2047-encoded).
+    expect(decodedSubject(decoded)).toBe('Re: Your proposal');
     expect(decoded).toContain('In-Reply-To: <abc@mail.target.de>');
     expect(decoded).toContain('References: <orig@us.com> <abc@mail.target.de>');
     expect(decoded).toContain('Happy to set up a call.');
@@ -151,8 +158,7 @@ describe('buildRawReply', () => {
       references: null,
     });
     const decoded = decodeBase64Url(raw);
-    expect(decoded).toContain('Subject: Re: hi');
-    expect(decoded).not.toContain('Re: Re: hi');
+    expect(decodedSubject(decoded)).toBe('Re: hi');
     // No threading headers when there is nothing to thread.
     expect(decoded).not.toContain('In-Reply-To:');
     expect(decoded).not.toContain('References:');

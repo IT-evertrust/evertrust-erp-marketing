@@ -1358,6 +1358,7 @@ export class EngageRepliesService {
     const offeredSlots: Slot[] = proposedSlots ?? (proposedSlot ? [proposedSlot] : []);
     const finalBody = await this.stampMeetingTime(orgId, body, offeredSlots);
 
+    const signatureImageUrl = await this.reach.getSignatureImageUrl(orgId);
     const raw = buildRawReply({
       to: lead.email,
       from: access.account.email,
@@ -1365,6 +1366,7 @@ export class EngageRepliesService {
       body: finalBody,
       inReplyTo,
       references: inReplyTo,
+      signatureImageUrl,
     });
 
     const res = await fetch(GMAIL_SEND_URL, {

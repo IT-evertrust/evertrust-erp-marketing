@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 
 import { GoogleAccountsService } from '../google/google-accounts.service';
+import { buildMimeEmail } from '../common/mime-email';
 
 // Shared Gmail transport for the Growth plane (Reach + Engage). Routes every send
 // through the org's connected Google mailbox via GoogleAccountsService.resolveMailbox
@@ -40,7 +41,13 @@ export class GmailSenderService {
   async sendAs(
     orgId: string,
     _sender: string,
-    msg: { to: string; subject: string; body: string; fromName?: string },
+    msg: {
+      to: string;
+      subject: string;
+      body: string;
+      fromName?: string;
+      signatureImageUrl?: string | null;
+    },
   ): Promise<string> {
     const access = await this.googleAccounts.resolveMailbox(orgId, 'gmail');
     if (!access.ok) throw new ServiceUnavailableException(access.reason);
@@ -51,6 +58,7 @@ export class GmailSenderService {
       to: msg.to,
       subject: msg.subject,
       body: msg.body,
+      signatureImageUrl: msg.signatureImageUrl,
     });
     const res = await fetch(
       'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
@@ -73,27 +81,23 @@ export class GmailSenderService {
     return json.id;
   }
 
-  // RFC822 message, base64url-encoded for the Gmail API. Subject is RFC2047-encoded
-  // so non-ASCII (em dashes, umlauts) survive.
+  // multipart/alternative (text + html) message, base64url for the Gmail API — so the
+  // org signature image embeds. Subject RFC2047-encoded (handled by the shared helper).
   private buildRaw(m: {
     from: string;
     fromName?: string;
     to: string;
     subject: string;
     body: string;
+    signatureImageUrl?: string | null;
   }): string {
-    const fromHeader = m.fromName ? `${m.fromName} <${m.from}>` : m.from;
-    const encSubject = `=?UTF-8?B?${Buffer.from(m.subject, 'utf8').toString('base64')}?=`;
-    const lines = [
-      `From: ${fromHeader}`,
-      `To: ${m.to}`,
-      `Subject: ${encSubject}`,
-      'MIME-Version: 1.0',
-      'Content-Type: text/plain; charset=UTF-8',
-      'Content-Transfer-Encoding: 8bit',
-      '',
-      m.body,
-    ];
-    return Buffer.from(lines.join('\r\n'), 'utf8').toString('base64url');
+    return buildMimeEmail({
+      from: m.from,
+      fromName: m.fromName,
+      to: m.to,
+      subject: m.subject,
+      body: m.body,
+      signatureImageUrl: m.signatureImageUrl,
+    });
   }
 }

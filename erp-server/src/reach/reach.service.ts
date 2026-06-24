@@ -359,6 +359,7 @@ export class ReachService {
     const orgDefault = await this.repo.getDefaultTemplate(orgId);
     const tmpl = this.templateFor(aim, round, orgDefault);
     if (!tmpl || leads.length === 0) return 0;
+    const signatureImageUrl = await this.repo.getSignatureImageUrl(orgId);
 
     const { mode, testRecipient, cap } = await this.resolveSendConfig(orgId);
     const targets = mode === 'live' ? leads : leads.slice(0, cap);
@@ -386,6 +387,7 @@ export class ReachService {
           subject,
           body,
           fromName: 'EVERTRUST GmbH',
+          signatureImageUrl,
         });
         delivered++;
       } catch (err) {
