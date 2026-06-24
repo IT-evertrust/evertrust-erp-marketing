@@ -38,6 +38,45 @@ def _client(settings):
                   timeout=45.0, max_retries=0)
 
 
+def classify_company(settings, name: str, url: str, text: str, niche: str, country: str = "",
+                     *, model: str | None = None, timeout: float = 45.0) -> dict:
+    """LANGUAGE-AGNOSTIC entity + niche-fit judgement on a crawled page. The LLM reads the page in
+    whatever language it's in (Polish, German, …), so there are NO hardcoded per-language word lists.
+
+    Returns {'entityType','nicheFit','reason'} or {} on any failure (the caller then falls back to
+    the universal structural rules). entityType ∈ company|event|association|government|education|
+    news|jobboard|directory|training; nicheFit ∈ core|peripheral|none."""
+    if not settings.llm_base_url:
+        return {}
+    system = (
+        "You classify ONE business website from its visible text, in ANY language. Output STRICT "
+        "JSON only, no prose. Decide two things:\n"
+        "entityType — one of: company, event, association, government, education, news, jobboard, "
+        "directory, training. 'company' = a real commercial business that sells products/services "
+        "(a possible B2B sales prospect). The others are NOT prospects (an event page, an industry "
+        "association/initiative, a public authority, a university/school, a news/blog article, a job "
+        "board, a business directory/marketplace, or a training/course provider).\n"
+        "nicheFit — how central the given NICHE is to this entity: 'core' (it is their main "
+        "business), 'peripheral' (a related sub-area among others), or 'none' (unrelated)."
+    )
+    user = (f'NICHE: "{niche}"\nCOUNTRY: {country}\nCOMPANY NAME: {name}\nURL: {url}\n'
+            f'VISIBLE PAGE TEXT:\n{(text or "")[:4000]}\n\n'
+            'Return JSON exactly: {"entityType":"...","nicheFit":"core|peripheral|none","reason":"<=8 words"}')
+    try:
+        from openai import OpenAI
+        # Own client with a caller-set timeout: a big local model (qwen2.5:32b) can need a one-time
+        # cold VRAM load (~30s) before its first classify, so 45s is too tight -> silent {} fallback.
+        client = OpenAI(base_url=settings.llm_base_url, api_key=settings.llm_api_key,
+                        timeout=timeout, max_retries=0)
+        r = client.chat.completions.create(
+            model=model or settings.lead_model, temperature=0,
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}])
+        d = _extract_json(r.choices[0].message.content)
+    except Exception:
+        return {}
+    return d if isinstance(d, dict) else {}
+
+
 def _lead_from(d: dict, seg: Segment) -> Lead:
     em, status = email_status(d.get("email"))
     return Lead(
@@ -115,18 +154,15 @@ def _chat_json(settings, system: str, user: str, timeout: float = 90.0) -> dict:
         return {}
 
 
-def _simple_cities(settings, country: str, want: int = 40, region_focus: str = "") -> dict:
+def _simple_cities(settings, country: str, want: int = 40) -> dict:
     """8B-friendly fallback: a FLAT city list + iso2/langCode. Small models choke on the big nested
-    region->cities->keywords JSON but handle this simple shape, so the satellite still gets cities.
-    region_focus narrows the list to a part of the country (a zone like 'North'), if given."""
-    zone = (region_focus or "").strip()
-    scope = f"the {zone} of {country}" if zone else country
+    region->cities->keywords JSON but handle this simple shape, so the satellite still gets cities."""
     d = _chat_json(
         settings,
         "Respond with ONE valid JSON object and nothing else. Use only well-known facts.",
-        f'List the largest cities of {scope}. Return JSON exactly: '
+        f'List the largest cities of {country}. Return JSON exactly: '
         f'{{"iso2":"2-letter code","langCode":"ISO 639-1 code","cities":["city1","city2"]}} — the '
-        f'{want} largest cities and business towns of {scope}, LOCAL spelling, largest first. Only '
+        f'{want} largest cities and business towns of {country}, LOCAL spelling, largest first. Only '
         f'cities of {country}. JSON only.')
     cities = [str(x).strip() for x in (d.get("cities") or []) if str(x).strip()]
     return {"iso2": str(d.get("iso2") or "").upper()[:2],
@@ -148,127 +184,92 @@ def _simple_keywords(settings, country: str, niche: str, industry: str = "") -> 
             "keywordsEnglish": [str(x).strip() for x in (d.get("english") or []) if str(x).strip()]}
 
 
-def profile_country(settings, country: str, niche: str, industry: str = "", want_cities: int = 80,
-                    region_focus: str = "") -> dict:
+def profile_country(settings, country: str, niche: str, industry: str = "", want_cities: int = 80) -> dict:
     """Country profiler (port of the n8n 'Country Profiler' node). For ANY country + niche, ask the
     model for that country's real ADMINISTRATIVE REGIONS each with its cities (local spelling) +
     BILINGUAL niche keywords (local script + English). The regions drive the nationwide per-region
     sweep, so the satellite is fully country-agnostic with NO hardcoded geography. Returns {} on any
-    failure so callers fall back to the offline PL/DE fixtures + deterministic keywords.
-
-    region_focus is an optional ZONE word ("North"/"South"/"East"/"West"/"Border-DE"…) — a relative
-    PART of the country, not a real place. When given, the profiler is asked to return only the
-    administrative regions + cities that lie in that zone of the country (geography stays in the LLM;
-    no hardcoded zone->region tables). Empty => the whole country (unchanged)."""
+    failure so callers fall back to the offline PL/DE fixtures + deterministic keywords."""
     if not settings.llm_base_url:
         return {}
-    zone = (region_focus or "").strip()
-    zone_line = (
-        f"Geographic focus: the {zone} of {country}. Return ONLY the administrative regions and "
-        f"cities that lie in the {zone} part of {country} (still in {country}, local spelling); "
-        f"omit regions in other parts of the country.\n"
-        if zone else ""
-    )
-    system = ("You are a geography and B2B market research assistant. Respond with ONE valid JSON "
-              "object and NOTHING ELSE. No markdown fences, no prose. Use only well-known facts.")
-    user = (
-        f"Country: {country}\nParent industry: {industry or '(infer from the niche)'}\nNiche: {niche}\n"
-        f"{zone_line}"
-        'Return JSON exactly in this shape: {"countryName":"English country name",'
-        '"iso2":"two-letter country code","language":"main business language (English name)",'
-        '"langCode":"ISO 639-1 code",'
-        '"regions":[{"name":"administrative region name (local spelling)","cities":["city1","city2"]}],'
-        '"nicheKeywordsLocal":"10-14 comma-separated keywords",'
-        '"nicheKeywordsEnglish":"10-14 comma-separated keywords"}\nRules:\n'
-        "- regions = the FIRST-LEVEL administrative divisions of THIS specific country (states / "
-        "provinces / voivodeships / Bundesländer / counties / regions / prefectures / oblasts — "
-        "whatever THIS country actually uses). " + (
-            f"List ONLY the divisions that lie in the {zone} part of {country} (do NOT list the "
-            "rest of the country), in LOCAL spelling. Never include divisions of another country, "
-            "and never invent a region that does not exist.\n"
-            if zone else
-            "List the COMPLETE set (most countries have 5-30; do NOT stop after a few), in LOCAL "
-            "spelling. This MUST work for ANY country on earth: never restrict to a fixed set, "
-            "never include divisions of another country, and never invent a region that does not "
-            "exist.\n"
-        ) +
-        "- For EACH region: cities = 3 to 10 of its largest cities / business towns (local spelling, "
-        "largest first). " + (
-            f"Together the regions should cover the {zone} of {country}.\n" if zone
-            else "Together the regions should cover the whole country.\n"
-        ) +
-        "- BOTH keyword lists EXPAND the niche WIDE but stay ON-NICHE and COMMERCIAL. Within the "
-        "parent industry, include sub-niches, adjacent product/service categories, the core "
-        "technologies, and the exact words a COMPANY/VENDOR uses to describe what it BUILDS or SELLS "
-        "(e.g. for 'AI Platform' under IT: MLOps, model serving, machine-learning platform, AI "
-        "infrastructure, data platform, vector database, computer vision, NLP, AI software/SaaS "
-        "vendor). The SAME broad-but-on-niche expansion applies to EVERY niche and industry — "
-        "lighting, construction, logistics, manufacturing, energy, anything — not only tech. Go BROAD "
-        "across the whole niche, but EVERY term must identify a COMPANY/VENDOR that makes or sells in "
-        "it, NOT a generic topic word, and NEVER words that pull in news, blogs, courses or training, "
-        "universities or government (those are not leads).\n"
-        "- nicheKeywordsEnglish: in English.\n"
-        f"- nicheKeywordsLocal: in the LOCAL language of {country}, native script if the language "
-        "uses one (e.g. Cyrillic for Bulgarian), exactly how local companies describe themselves on "
-        "their own websites. If the local business language is English, repeat the English list."
-    )
-
+    # Profiling is split into small focused ROUNDS below (one giant call timed out / left geo blank
+    # on slow models). Each round asks for ONE thing so the model fills it reliably and fast.
     def _split(v):
         if isinstance(v, list):
             return [str(x).strip() for x in v if str(x).strip()]
         return [s.strip() for s in str(v or "").split(",") if s.strip()]
 
-    try:
-        from openai import OpenAI
-
-        # One upfront call that produces a long list (cities + keywords) — give it a generous
-        # timeout (vs _client's fail-fast 45s used for the many per-segment calls).
-        client = OpenAI(base_url=settings.llm_base_url, api_key=settings.llm_api_key,
-                        timeout=120.0, max_retries=0)
-        resp = client.chat.completions.create(
-            model=settings.profile_model, temperature=0.3,
-            response_format={"type": "json_object"},
-            messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
-        )
-        data = _extract_json(resp.choices[0].message.content or "")
-        if not isinstance(data, dict):
+    def _ask(user_prompt, timeout,
+             system_p="Return ONE valid JSON object and NOTHING ELSE. No prose, no markdown."):
+        try:
+            from openai import OpenAI
+            client = OpenAI(base_url=settings.llm_base_url, api_key=settings.llm_api_key,
+                            timeout=timeout, max_retries=0)
+            r = client.chat.completions.create(
+                model=settings.profile_model, temperature=0.2,
+                response_format={"type": "json_object"},
+                messages=[{"role": "system", "content": system_p},
+                          {"role": "user", "content": user_prompt}])
+            d = _extract_json(r.choices[0].message.content or "")
+            return d if isinstance(d, dict) else {}
+        except Exception:
             return {}
-        regions, flat_cities = [], []
-        for r in (data.get("regions") if isinstance(data.get("regions"), list) else []):
-            if not isinstance(r, dict):
-                continue
-            rc = _split(r.get("cities"))
-            if rc:
-                regions.append({"name": str(r.get("name") or ""), "cities": rc})
-                flat_cities.extend(rc)
-        out = {
-            "countryName": str(data.get("countryName") or country),
-            "iso2": str(data.get("iso2") or "").upper()[:2],
-            "language": str(data.get("language") or ""),
-            "langCode": str(data.get("langCode") or "").lower()[:5],
-            "regions": regions,
-            "cities": (flat_cities or _split(data.get("cities")))[:want_cities],
-            "keywordsLocal": _split(data.get("nicheKeywordsLocal")),
-            "keywordsEnglish": _split(data.get("nicheKeywordsEnglish")),
-        }
-    except Exception:
-        out = {"countryName": country, "iso2": "", "language": "", "langCode": "",
-               "regions": [], "cities": [], "keywordsLocal": [], "keywordsEnglish": []}
 
-    # SMALL-MODEL FALLBACK (hermes-mini 8B chokes on the big nested JSON above). If the rich call
-    # produced no geography / no keywords, recover them with SIMPLE flat calls the 8B can answer.
-    if not out["regions"] and not out["cities"]:
-        sc = _simple_cities(settings, country, want_cities, region_focus=zone)
-        if sc.get("cities"):
-            out["cities"] = sc["cities"]
-            out["iso2"] = out["iso2"] or sc.get("iso2", "")
-            out["langCode"] = out["langCode"] or sc.get("langCode", "")
-    if not out["keywordsLocal"] and not out["keywordsEnglish"]:
-        kw = _simple_keywords(settings, country, niche, industry)
-        out["keywordsLocal"] = kw["keywordsLocal"]
-        out["keywordsEnglish"] = kw["keywordsEnglish"]
-    # Nothing usable at all -> behave like the old failure (caller falls back to offline tables).
-    return out if (out["cities"] or out["regions"] or out["keywordsLocal"] or out["keywordsEnglish"]) else {}
+    # Round 1 - country code + business language: tiny, near-instant, reliable for ANY country.
+    g = _ask(f'For the country "{country}" return JSON: '
+             '{"iso2":"ISO 3166-1 alpha-2 code","language":"main business language (English name)",'
+             '"langCode":"ISO 639-1 two-letter code"}', 45)
+    iso2 = str(g.get("iso2") or "").upper()[:2]
+    lang_code = str(g.get("langCode") or "").lower()[:5]
+
+    # Round 2 - bilingual niche keywords (on-niche, commercial; NO geography in this call).
+    kw = _ask(
+        f'Niche: "{niche}"\nParent industry: {industry or "(infer from the niche)"}\nCountry: {country}\n'
+        'Return JSON: {"keywordsLocal":[...],"keywordsEnglish":[...]}. Each list = 10-14 SEARCH '
+        'keywords a COMPANY/VENDOR in this niche uses to describe what it BUILDS or SELLS (sub-niches, '
+        'product/service categories, core technologies). Commercial only - NEVER words that pull in '
+        'news, blogs, courses, training, universities or government. keywordsEnglish in English; '
+        f'keywordsLocal in the local language of {country} (native script), exactly how local '
+        'companies describe themselves; if the local business language is English, repeat the list.',
+        70)
+    kw_local = _split(kw.get("keywordsLocal") or kw.get("nicheKeywordsLocal"))
+    kw_en = _split(kw.get("keywordsEnglish") or kw.get("nicheKeywordsEnglish"))
+
+    # Round 3 - the country's first-level administrative regions (NAMES only -> short output).
+    rg = _ask(f'List the COMPLETE set of FIRST-LEVEL administrative regions of "{country}" (states / '
+              'provinces / voivodeships / Bundeslaender / regions / oblasts - whatever THIS country '
+              'actually uses), local spelling, every one (most countries have 5-30). Return JSON: '
+              '{"regions":["name1","name2",...]}. Never invent one or use another country\'s.', 60)
+    region_names = _split(rg.get("regions"))[:30]
+
+    # Round 4 - cities per region, in small concurrent BATCHES (short output each, can't time out).
+    regions, flat_cities = [], []
+    if region_names:
+        from concurrent.futures import ThreadPoolExecutor
+        batches = [region_names[i:i + 6] for i in range(0, len(region_names), 6)]
+
+        def _cities(batch):
+            d = _ask(f'Country: {country}. For EACH region below list 3-8 of its largest cities / '
+                     'business towns (local spelling, largest first). Regions: ' + "; ".join(batch) +
+                     '\nReturn JSON mapping each region name to its city list: '
+                     '{"<region>":["city1","city2",...]}.', 60)
+            return [(name, _split(d.get(name))) for name in batch]
+
+        with ThreadPoolExecutor(max_workers=3) as ex:
+            for pairs in ex.map(_cities, batches):
+                for name, cities in pairs:
+                    if cities:
+                        regions.append({"name": name, "cities": cities})
+                        flat_cities.extend(cities)
+
+    out = {
+        "countryName": str(g.get("countryName") or country), "iso2": iso2,
+        "language": str(g.get("language") or ""), "langCode": lang_code,
+        "regions": regions, "cities": flat_cities[:want_cities],
+        "keywordsLocal": kw_local, "keywordsEnglish": kw_en,
+    }
+    # Usable if ANY round produced something — geo language + market TLD survive even with no regions.
+    return out if (iso2 or kw_local or kw_en or flat_cities) else {}
 
 
 def research_leads(settings, seg: Segment, search) -> list[Lead]:
