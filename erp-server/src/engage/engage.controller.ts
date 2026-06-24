@@ -129,6 +129,8 @@ export class EngageController {
   }
 
   // Send the (edited) draft to the lead, threaded onto the existing conversation.
+  // An optional `proposedSlot` books a tentative intro-call on the campaign mailbox's
+  // calendar AFTER the reply sends (best-effort — a calendar failure never fails the send).
   @RequirePermissions('campaigns:write')
   @Post('campaign-replies/:id/send')
   sendCampaignReply(
@@ -136,7 +138,19 @@ export class EngageController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: CampaignReplyBodyDto,
   ) {
-    return this.campaignReplies.sendReply(orgId, id, body.subject, body.body);
+    return this.campaignReplies.sendReply(orgId, id, body.subject, body.body, body.proposedSlot);
+  }
+
+  // Proposed free meeting slots for a campaign (org's default calendar, next 7 days,
+  // business hours). Feeds the "propose a slot" picker on a campaign reply. Never 500s —
+  // returns a `configured: false` shell when the org has no calendar connected.
+  @RequirePermissions('campaigns:read')
+  @Get('campaigns/:aimId/free-slots')
+  campaignFreeSlots(
+    @OrgId() orgId: string,
+    @Param('aimId', ParseUUIDPipe) aimId: string,
+  ) {
+    return this.campaignReplies.campaignFreeSlots(orgId, aimId);
   }
 
   // --- PERSONA (F4): draft in a salesperson's voice ---

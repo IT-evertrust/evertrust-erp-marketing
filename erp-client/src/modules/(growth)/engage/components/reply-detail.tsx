@@ -9,6 +9,8 @@ import { LiveDot } from '@/modules/(growth)/shared';
 
 import {
   addCampaignTraining,
+  type CalendarSlot,
+  getCampaignFreeSlots,
   redraftReply,
   saveReplyDraft,
   sendReply,
@@ -16,6 +18,45 @@ import {
 import type { AiAgentMode, CampaignReply, ReplyThreadMessage } from '../types';
 import { AiAgentBox } from './ai-agent-box';
 import { BookMeetingDialog } from './book-meeting-dialog';
+
+// Compact slot label in the calendar's own time zone, e.g. "Tue 24 Jun · 15:00–15:30".
+function formatSlot(slot: CalendarSlot, timeZone: string): string {
+  const start = new Date(slot.start);
+  const end = new Date(slot.end);
+  const day = new Intl.DateTimeFormat('en-GB', {
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+    timeZone,
+  }).format(start);
+  const time = (date: Date) =>
+    new Intl.DateTimeFormat('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone,
+    }).format(date);
+  return `${day} · ${time(start)}–${time(end)}`;
+}
+
+// The draft line the rep drops in when they hold a slot, e.g.
+// "How about Tuesday 24 Jun at 15:00 (Europe/Berlin)? …".
+function proposalLine(slot: CalendarSlot, timeZone: string): string {
+  const start = new Date(slot.start);
+  const day = new Intl.DateTimeFormat('en-GB', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'short',
+    timeZone,
+  }).format(start);
+  const time = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone,
+  }).format(start);
+  return `How about ${day} at ${time} (${timeZone})? I've held the slot and sent a calendar invite.`;
+}
 
 type ReplyDetailProps = {
   reply?: CampaignReply;
@@ -43,6 +84,11 @@ export function ReplyDetail({
   // their reply land in the conversation (the server has it; this avoids a slow refetch).
   const [sentMessages, setSentMessages] = useState<ReplyThreadMessage[]>([]);
   const [justSent, setJustSent] = useState(false);
+  // "Propose times": the fetched bookable windows + the rep's chosen one (passed to Send).
+  const [loadingSlots, setLoadingSlots] = useState(false);
+  const [slots, setSlots] = useState<CalendarSlot[]>([]);
+  const [slotsTimeZone, setSlotsTimeZone] = useState('');
+  const [selectedSlot, setSelectedSlot] = useState<CalendarSlot | null>(null);
 
   const replyId = reply?.id;
   useEffect(() => {
@@ -50,6 +96,10 @@ export function ReplyDetail({
     setBody(reply?.draftBody ?? '');
     setSentMessages([]);
     setJustSent(false);
+    setLoadingSlots(false);
+    setSlots([]);
+    setSlotsTimeZone('');
+    setSelectedSlot(null);
   }, [replyId, reply?.draftSubject, reply?.draftBody]);
 
   if (!reply) {
@@ -87,7 +137,9 @@ export function ReplyDetail({
     }
     setSending(true);
     try {
-      await sendReply(reply.id, subject, body);
+      const result = selectedSlot
+        ? await sendReply(reply.id, subject, body, selectedSlot)
+        : await sendReply(reply.id, subject, body);
       // Show the just-sent reply in the thread immediately (it's now in Gmail too).
       setSentMessages((prev) => [
         ...prev,
@@ -102,12 +154,49 @@ export function ReplyDetail({
         },
       ]);
       setJustSent(true);
-      toast.success(`Reply sent to ${reply.contact} from your campaign mailbox.`);
+      setSelectedSlot(null);
+      if (result.meeting?.ok) {
+        toast.success('Reply sent + calendar invite created.');
+      } else {
+        toast.success(`Reply sent to ${reply.contact} from your campaign mailbox.`);
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not send reply.');
     } finally {
       setSending(false);
     }
+  }
+
+  // "Propose times": read the campaign calendar's bookable windows. If the calendar
+  // isn't readable (configured:false) surface the reason and offer nothing.
+  async function handleProposeTimes() {
+    if (!reply || loadingSlots) return;
+    setLoadingSlots(true);
+    try {
+      const data = await getCampaignFreeSlots(reply.campaignId);
+      if (!data.configured) {
+        setSlots([]);
+        setSlotsTimeZone('');
+        toast.error(data.reason ?? 'Calendar is not available for this campaign.');
+        return;
+      }
+      setSlotsTimeZone(data.timeZone);
+      setSlots(data.slots);
+      if (data.slots.length === 0) {
+        toast.message('No open slots in the calendar right now.');
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not load free slots.');
+    } finally {
+      setLoadingSlots(false);
+    }
+  }
+
+  // Pick a slot: hold it for Send and append a human-readable line to the editable draft.
+  function handleSelectSlot(slot: CalendarSlot) {
+    setSelectedSlot(slot);
+    const line = proposalLine(slot, slotsTimeZone);
+    setBody((prev) => (prev.trim() ? `${prev.trimEnd()}\n\n${line}` : line));
   }
 
   // Write & Fix: ask the agent to revise the current draft, then load the result
@@ -246,7 +335,52 @@ export function ReplyDetail({
             >
               {saving ? 'Saving…' : 'Save draft'}
             </button>
+            <button
+              type="button"
+              onClick={handleProposeTimes}
+              disabled={loadingSlots || sending}
+              className="rounded-md border border-[#c2c7ce] px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#15171c] disabled:opacity-50"
+            >
+              {loadingSlots ? 'Loading…' : 'Propose times'}
+            </button>
           </div>
+
+          {slots.length > 0 && (
+            <div className="mt-3 rounded-lg border border-[#e4e7eb] bg-[#f6f7f9] p-3">
+              <div className="mb-2 text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#959ca7]">
+                Pick a slot to propose
+                {slotsTimeZone ? ` · ${slotsTimeZone}` : ''}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {slots.slice(0, 6).map((slot) => {
+                  const active =
+                    selectedSlot?.start === slot.start &&
+                    selectedSlot?.end === slot.end;
+                  return (
+                    <button
+                      key={`${slot.start}-${slot.end}`}
+                      type="button"
+                      onClick={() => handleSelectSlot(slot)}
+                      className={[
+                        'rounded-full border px-3 py-1.5 text-[11px] font-bold tracking-[0.02em]',
+                        active
+                          ? 'border-[#15171c] bg-[#15171c] text-white'
+                          : 'border-[#c2c7ce] bg-white text-[#15171c] hover:border-[#15171c]',
+                      ].join(' ')}
+                    >
+                      {formatSlot(slot, slotsTimeZone)}
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedSlot && (
+                <div className="mt-2 text-[10px] leading-relaxed text-[#959ca7]">
+                  Slot added to the draft — Send will hold it and invite{' '}
+                  {reply.contact}.
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <AiAgentBox

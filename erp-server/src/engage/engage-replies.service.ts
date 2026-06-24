@@ -7,8 +7,11 @@ import {
 } from '@nestjs/common';
 import { and, asc, desc, eq, isNull, or } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
+import type { CalendarFreeSlotsDto } from '@evertrust/shared';
 import { DB, type DbClient } from '../db/db.tokens';
 import { GoogleAccountsService } from '../google/google-accounts.service';
+import { GoogleCalendarReadService } from '../google/google-calendar-read.service';
+import { ReachRepository } from '../reach/reach.repository';
 import { tenantScope } from '../common/tenant';
 import { EngageAgentClient } from './engage.agent';
 import { buildRawReply, extractPlainBody, parseFromAddress } from './engage.service';
@@ -49,6 +52,16 @@ const UI_CATEGORY: Record<string, string> = {
   UNSURE: 'UNSURE',
   TEMPORARY: 'TEMP',
   UNINTERESTED: 'NOT INTERESTED',
+};
+
+// reply_glock status -> the reach_leads.status (reach_lead_status enum) the Lead
+// Scraper / Nurture board read. TEMPORARY folds into UNSURE; UNINTERESTED maps to
+// NOT_INTERESTED. A status outside this map leaves the lead status untouched.
+const REACH_LEAD_STATUS: Record<string, 'INTERESTED' | 'UNSURE' | 'NOT_INTERESTED'> = {
+  INTERESTED: 'INTERESTED',
+  UNSURE: 'UNSURE',
+  TEMPORARY: 'UNSURE',
+  UNINTERESTED: 'NOT_INTERESTED',
 };
 
 // F2 seed content. Cold-outreach body + a cycle of inbound replies engineered to
@@ -123,6 +136,8 @@ export class EngageRepliesService {
     @Inject(DB) private readonly db: DbClient,
     private readonly googleAccounts: GoogleAccountsService,
     private readonly agent: EngageAgentClient,
+    private readonly reach: ReachRepository,
+    private readonly calendar: GoogleCalendarReadService,
   ) {}
 
   // Resolve the campaign + the mailbox account it sends from (sender local-part ==
@@ -214,6 +229,10 @@ export class EngageRepliesService {
         byCategory[out.status] = (byCategory[out.status] ?? 0) + 1;
         classified++;
         await this.upsertReply(orgId, aimId, lead.id, inbound, thread, lead.company, out);
+        // Propagate the classification into the Reach plane (stats cache + lead status)
+        // so the Email Generator / Sequence Sender / Lead Scraper reflect the reply.
+        // Best-effort: a failure here must not fail the scan (the classify still counts).
+        await this.propagateClassification(orgId, aimId, lead.id, out.status);
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'unknown error';
         this.logger.warn(`Engage scanCampaign lead ${lead.id} failed: ${msg}`);
@@ -222,6 +241,45 @@ export class EngageRepliesService {
     }
 
     return { configured: true, scanned, classified, byCategory, skipped, reason: null };
+  }
+
+  // Propagate a successful classification into the Reach plane so the cached aim.stats
+  // (Email Generator + Sequence Sender) and reach_leads.status (Lead Scraper) reflect
+  // the reply. Two independent best-effort steps, each wrapped so a propagation failure
+  // never fails the scan (the classify already counted):
+  //   (a) markLeadReplied — stamp repliedAt on the lead's latest send + recompute stats
+  //       (idempotent; only stamps when repliedAt is null, so a re-scan can't double count).
+  //   (b) set reach_leads.status from the reply_glock category (org-scoped).
+  private async propagateClassification(
+    orgId: string,
+    aimId: string,
+    leadId: string,
+    status: string,
+  ): Promise<void> {
+    try {
+      await this.reach.markLeadReplied(orgId, aimId, leadId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown error';
+      this.logger.warn(`Engage propagate stats lead ${leadId} failed: ${msg}`);
+    }
+
+    const leadStatus = REACH_LEAD_STATUS[status];
+    if (leadStatus) {
+      try {
+        await this.db
+          .update(schema.reachLeads)
+          .set({ status: leadStatus, updatedAt: new Date() })
+          .where(
+            and(
+              tenantScope(orgId, schema.reachLeads),
+              eq(schema.reachLeads.id, leadId),
+            ),
+          );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'unknown error';
+        this.logger.warn(`Engage propagate status lead ${leadId} failed: ${msg}`);
+      }
+    }
   }
 
   // Resolve the campaign's drafting persona + active "teach the AI" notes. Notes
@@ -957,11 +1015,17 @@ export class EngageRepliesService {
   // --- SEND -----------------------------------------------------------------
   // Send the (edited) draft to the lead via the campaign mailbox, threaded onto the
   // existing Gmail thread (In-Reply-To the last inbound message). Marks handled.
-  async sendReply(orgId: string, replyId: string, subject: string, body: string) {
+  async sendReply(
+    orgId: string,
+    replyId: string,
+    subject: string,
+    body: string,
+    proposedSlot?: { start: string; end: string },
+  ) {
     const row = await this.ownedReply(orgId, replyId);
     const lead = (
       await this.db
-        .select({ email: schema.reachLeads.email })
+        .select({ email: schema.reachLeads.email, company: schema.reachLeads.company })
         .from(schema.reachLeads)
         .where(eq(schema.reachLeads.id, row.leadId))
         .limit(1)
@@ -1005,7 +1069,43 @@ export class EngageRepliesService {
       .set({ handled: true, sentAt: new Date(), draftBody: body, draftSubject: subject, updatedAt: new Date() })
       .where(eq(schema.reachLeadReplies.id, row.id));
 
-    return { ok: true };
+    // Optional: book a tentative intro call on the org's calendar for the proposed
+    // slot, with the lead as attendee. BEST-EFFORT — a calendar failure must NOT fail
+    // the send (the reply already went out). createEvent itself never throws (it
+    // degrades to { ok:false }); the try/catch guards anything unexpected.
+    let meeting: { ok: boolean; eventId: string | null; htmlLink: string | null } | null = null;
+    if (proposedSlot) {
+      try {
+        const res = await this.calendar.createEvent(orgId, {
+          title: `EVERTRUST × ${lead.company} — intro call`,
+          start: proposedSlot.start,
+          end: proposedSlot.end,
+          timeZone: 'Europe/Berlin',
+          attendees: [{ email: lead.email }],
+          addGoogleMeet: true,
+        });
+        if (!res.ok) {
+          this.logger.warn(`Engage sendReply meeting-create degraded for reply ${row.id}: ${res.reason}`);
+        }
+        meeting = { ok: res.ok, eventId: res.eventId, htmlLink: res.htmlLink };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'unknown error';
+        this.logger.warn(`Engage sendReply meeting-create failed for reply ${row.id}: ${msg}`);
+        meeting = { ok: false, eventId: null, htmlLink: null };
+      }
+    }
+
+    return { ok: true, meeting };
+  }
+
+  // The org's proposed free meeting slots for a campaign — resolves the aim (org-scoped)
+  // then returns GoogleCalendarReadService.freeSlots for the org's default calendar.
+  // freeSlots reads the org DEFAULT calendar mailbox (no per-account targeting), which
+  // is the desired behaviour here. Never throws — degrades to a configured:false shell.
+  async campaignFreeSlots(orgId: string, aimId: string): Promise<CalendarFreeSlotsDto> {
+    const resolved = await this.resolveCampaign(orgId, aimId);
+    if (!resolved) throw new BadRequestException('Unknown campaign');
+    return this.calendar.freeSlots(orgId);
   }
 
   // Load a reply row, asserting it belongs to the calling org.

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AiModule } from '../ai/ai.module';
 import { GoogleModule } from '../google/google.module';
+import { ReachModule } from '../reach/reach.module';
 import { EngageController } from './engage.controller';
 import { EngageService } from './engage.service';
 import { EngageRepliesService } from './engage-replies.service';
@@ -17,8 +18,12 @@ import { GmailPushController } from './gmail-push.controller';
 // EngageScheduler (hourly auto-scan + historyId poll fallback + watch renewal),
 // GmailWatchService (gmail.watch register/renew + Pub/Sub push handling), and the
 // @Public GmailPushController that receives Pub/Sub notifications. Wired into AppModule.
+// ReachModule is imported for ReachRepository — Engage propagates a classified reply
+// back into the Reach stats cache + lead status (the Email Generator / Sequence Sender /
+// Lead Scraper read those). GoogleModule also exports GoogleCalendarReadService for the
+// campaign free-slots + tentative meeting-create on send.
 @Module({
-  imports: [GoogleModule, AiModule],
+  imports: [GoogleModule, AiModule, ReachModule],
   controllers: [EngageController, GmailPushController],
   providers: [
     EngageService,
