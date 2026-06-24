@@ -32,23 +32,32 @@ const LEVEL_DOT: Record<ActivityLevel, string> = {
   warning: '#b7791f',
   error: '#c0392b',
 };
-const ALERT_ACCENT: Record<EngineAlert['level'], { border: string; bg: string; text: string }> = {
-  error: { border: '#e3b4ad', bg: '#fbeeec', text: '#9b2c1f' },
-  warning: { border: '#e7d4a8', bg: '#fbf5e6', text: '#8a6212' },
-  info: { border: '#d6dade', bg: '#f6f7f9', text: '#5b626d' },
-};
+// Alerts ARE recent activity — fold them into the one live-log feed (as priority
+// rows, on top) so the card reads exactly like the mock's single scrolling Engine
+// Activity log rather than a separate banner block.
+function alertToItem(a: EngineAlert): EngineActivityItem {
+  return {
+    time: a.time,
+    source: a.source,
+    message: a.detail ? `${a.title} — ${a.detail}` : a.title,
+    level: a.level,
+  };
+}
 
 export function EngineActivityFeed({
   activity,
   alerts = [],
   activeModule = null,
 }: EngineActivityFeedProps) {
+  const merged = [...alerts.map(alertToItem), ...activity];
   const shown = activeModule
-    ? activity.filter((item) => matchesModule(item, activeModule))
-    : activity;
+    ? merged.filter((item) => matchesModule(item, activeModule))
+    : merged;
   return (
     <GrowthCard
       title="Engine Activity"
+      className="flex h-full flex-col"
+      bodyClassName="flex min-h-0 flex-1 flex-col"
       hint={
         <span className="inline-flex items-center gap-2">
           <LiveDot />
@@ -56,20 +65,9 @@ export function EngineActivityFeed({
         </span>
       }
     >
-      {alerts.length > 0 ? (
-        <div className="mb-3">
-          <div className="mb-2 flex items-center gap-2 text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#959ca7]">
-            Alerts · {alerts.length}
-          </div>
-          <div className="flex flex-col gap-1.5">
-            {alerts.map((alert) => (
-              <AlertRow key={alert.id} alert={alert} />
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      <div className="max-h-[420px] overflow-y-auto pr-2">
+      {/* The feed fills the card and scrolls INSIDE it — never overflowing into the
+          funnel row below (the previous fixed max-h + content above caused the bleed). */}
+      <div className="min-h-0 flex-1 overflow-y-auto pr-2">
         {shown.length === 0 ? (
           <div className="py-6 text-center text-[12px] font-bold text-[#959ca7]">
             {activeModule ? 'No recent runs for this module.' : 'No engine activity yet.'}
@@ -81,29 +79,6 @@ export function EngineActivityFeed({
         )}
       </div>
     </GrowthCard>
-  );
-}
-
-function AlertRow({ alert }: { alert: EngineAlert }) {
-  const accent = ALERT_ACCENT[alert.level];
-  return (
-    <div
-      className="rounded-[8px] border px-3 py-2 duration-300 animate-in fade-in zoom-in-95"
-      style={{ borderColor: accent.border, backgroundColor: accent.bg }}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="text-[12px] font-bold" style={{ color: accent.text }}>
-          {alert.title}
-        </div>
-        <span className="shrink-0 text-[10px] font-bold text-[#959ca7]">{alert.time}</span>
-      </div>
-      {alert.detail ? (
-        <div className="mt-0.5 text-[11.5px] leading-snug text-[#5b626d]">{alert.detail}</div>
-      ) : null}
-      <div className="mt-1 text-[9px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
-        {alert.source}
-      </div>
-    </div>
   );
 }
 

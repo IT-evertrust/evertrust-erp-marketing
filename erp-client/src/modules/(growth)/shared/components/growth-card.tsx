@@ -5,6 +5,9 @@ type GrowthCardProps = {
   hint?: ReactNode;
   children: ReactNode;
   className?: string;
+  // Extra classes for the body wrapper — e.g. `flex min-h-0 flex-1 flex-col` so a
+  // scrolling child fills a fixed-height card instead of overflowing it.
+  bodyClassName?: string;
 };
 
 export function GrowthCard({
@@ -12,6 +15,7 @@ export function GrowthCard({
   hint,
   children,
   className = '',
+  bodyClassName = '',
 }: GrowthCardProps) {
   return (
     <section
@@ -32,7 +36,9 @@ export function GrowthCard({
         ) : null}
       </div>
 
-      <div className="p-4">{children}</div>
+      <div className={['p-4', bodyClassName].filter(Boolean).join(' ')}>
+        {children}
+      </div>
     </section>
   );
 }

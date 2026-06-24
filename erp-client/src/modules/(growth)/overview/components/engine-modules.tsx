@@ -105,7 +105,11 @@ export function EngineModules({ onActiveChange }: EngineModulesProps) {
   }, [active, onActiveChange]);
 
   return (
-    <GrowthCard title="Engine Modules" className="flex h-full flex-col">
+    <GrowthCard
+      title="Engine Modules"
+      className="flex h-full flex-col"
+      bodyClassName="flex min-h-0 flex-1 flex-col"
+    >
       <style>{WHEEL_CSS}</style>
       <div className="flex min-h-[420px] flex-1 items-center justify-center overflow-hidden">
         <div
