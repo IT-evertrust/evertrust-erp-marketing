@@ -198,6 +198,18 @@ function calendarQuery(params?: CalendarRangeParams): string {
 }
 
 
+// A 401 means the session is gone or expired (the edge middleware lets a present
+// cookie through; the API is what actually rejects a dead token). Bounce the
+// browser to /login so it re-authenticates instead of rendering empty data. We
+// skip the redirect while already on a /login* route (the login bootstrap itself
+// probes /auth/me and expects 401s there) and on the server (no window).
+function redirectToLoginOnUnauthorized(status: number): void {
+  if (status !== 401) return;
+  if (typeof window === 'undefined') return;
+  if (window.location.pathname.startsWith('/login')) return;
+  window.location.href = '/login?expired=1';
+}
+
 async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const { method = 'GET', schema, body, signal } = opts;
 
@@ -216,6 +228,7 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   }
 
   if (!res.ok) {
+    redirectToLoginOnUnauthorized(res.status);
     throw new ApiError(res.status, await readErrorMessage(res));
   }
 
@@ -247,6 +260,7 @@ async function uploadRequest<T>(path: string, form: FormData, schema: z.ZodTypeA
   }
 
   if (!res.ok) {
+    redirectToLoginOnUnauthorized(res.status);
     throw new ApiError(res.status, await readErrorMessage(res));
   }
 
