@@ -688,6 +688,31 @@ export class ReachRepository {
     });
   }
 
+  // The lead ids this campaign has actually emailed (has a reach_sends row for). The
+  // Engage scan uses it to skip leads with zero sends — a lead never contacted by THIS
+  // campaign whose Gmail thread is pre-existing / cross-campaign history we must not
+  // ingest. Org-scoped.
+  async leadIdsWithSends(orgId: string, aimId: string): Promise<Set<string>> {
+    const rows = await this.db
+      .selectDistinct({ leadId: schema.reachSends.leadId })
+      .from(schema.reachSends)
+      .where(
+        and(
+          tenantScope(orgId, schema.reachSends),
+          eq(schema.reachSends.aimId, aimId),
+        ),
+      );
+    return new Set(rows.map((r) => r.leadId));
+  }
+
+  // The org's outbound signature image URL, embedded as an <img> on every sent email.
+  // Phase 11 stub: the per-org signature store ships with the Reach Templates feature
+  // (Phase 12). Until then there is no signature image, so sends go out plain — return
+  // null so `buildMimeEmail` simply omits the <img> block.
+  async getSignatureImageUrl(_orgId: string): Promise<string | null> {
+    return null;
+  }
+
   // ---- Reach send-policy settings (per-org override columns on org_config) ----
 
   // The org's stored Reach send-policy OVERRIDES (null = "use the env default",

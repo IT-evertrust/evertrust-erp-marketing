@@ -45,6 +45,13 @@ interface BackendReply {
   handled: boolean;
   thread: BackendThreadMessage[];
   time: string;
+  // Meeting-loop state (propose → accept/counter → book).
+  meetingStatus?: string;
+  proposedSlots?: { start: string; end: string }[];
+  acceptedSlot?: { start: string; end: string } | null;
+  bookedMeetingId?: string | null;
+  timeZone?: string;
+  secondaryTimeZone?: string | null;
 }
 
 async function getJson<T>(path: string): Promise<T> {
@@ -186,12 +193,34 @@ export async function sendReply(
   subject: string,
   body: string,
   proposedSlot?: CalendarSlot,
+  // The full set of windows offered this round — persisted so a later scan can match
+  // the client's accept/counter against the exact times we put on the table.
+  proposedSlots?: CalendarSlot[],
 ): Promise<SendReplyResult> {
+  const payload: {
+    subject: string;
+    body: string;
+    proposedSlot?: CalendarSlot;
+    proposedSlots?: CalendarSlot[];
+  } = { subject, body };
+  if (proposedSlot) payload.proposedSlot = proposedSlot;
+  if (proposedSlots && proposedSlots.length > 0) payload.proposedSlots = proposedSlots;
   return mutate<SendReplyResult>(
     'POST',
     `/engage/campaign-replies/${replyId}/send`,
-    proposedSlot ? { subject, body, proposedSlot } : { subject, body },
+    payload,
   );
+}
+
+// Mark a reply BOOKED and link the created Activate meeting to the campaign reply,
+// closing the meeting loop. Called after a successful book from the accepted-slot banner.
+export async function markReplyBooked(
+  replyId: string,
+  meetingId: string,
+): Promise<void> {
+  await mutate('PATCH', `/engage/campaign-replies/${replyId}/booked`, {
+    meetingId,
+  });
 }
 
 // ---- F4 persona + F3 training/redraft ----
@@ -369,7 +398,28 @@ function mapReply(r: BackendReply): CampaignReply {
     handled: r.handled,
     draftSource: r.draftSource,
     citations: r.citations,
+    meetingStatus: mapMeetingStatus(r.meetingStatus),
+    acceptedSlot: r.acceptedSlot ?? undefined,
+    proposedSlots: r.proposedSlots ?? [],
+    bookedMeetingId: r.bookedMeetingId ?? undefined,
+    timeZone: r.timeZone,
+    secondaryTimeZone: r.secondaryTimeZone ?? null,
   };
+}
+
+const MEETING_STATUSES: CampaignReply['meetingStatus'][] = [
+  'NONE',
+  'PROPOSED',
+  'ACCEPTED',
+  'COUNTER',
+  'BOOKED',
+];
+
+function mapMeetingStatus(status?: string): CampaignReply['meetingStatus'] {
+  const s = (status ?? '').toUpperCase();
+  return (MEETING_STATUSES as string[]).includes(s)
+    ? (s as CampaignReply['meetingStatus'])
+    : 'NONE';
 }
 
 // ISO -> compact relative label ("2h", "1d") matching the existing UI copy.

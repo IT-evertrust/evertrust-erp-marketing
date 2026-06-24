@@ -48,6 +48,29 @@ const MAX_UPCOMING_EVENTS = 10;
 // existing Berlin-pinned unit tests stay green without passing a zone explicitly.
 const DEFAULT_TIME_ZONE = 'Europe/Berlin';
 
+// True when `at` falls inside the org's business-hours window (Mon–Fri,
+// BUSINESS_START_HOUR ≤ hour < BUSINESS_END_HOUR) in `timeZone` — the SAME window
+// computeFreeSlots offers from, so a counter-proposed time is validated against the hours
+// we'd actually book. Invalid dates / bad zones return false (never throws). Used by the
+// meeting-loop gate so a free-but-2am instant is not auto-booked.
+export function isWithinBusinessHours(at: Date, timeZone: string): boolean {
+  if (Number.isNaN(at.getTime())) return false;
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      weekday: 'short',
+      hour: 'numeric',
+      hour12: false,
+    }).formatToParts(at);
+    const weekday = parts.find((p) => p.type === 'weekday')?.value ?? '';
+    const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 'NaN') % 24;
+    if (weekday === 'Sat' || weekday === 'Sun') return false;
+    return hour >= BUSINESS_START_HOUR && hour < BUSINESS_END_HOUR;
+  } catch {
+    return false;
+  }
+}
+
 type CalendarRangeInput = {
   timeMin?: string;
   timeMax?: string;
@@ -297,6 +320,39 @@ export function computeFreeSlots(
   }
 
   return out;
+}
+
+// PURE: whether the window [start,end] (ISO instants) overlaps none of the busy
+// intervals. Exported for unit testing. Used by isWindowFree to validate a client's
+// counter-proposed meeting time.
+export function computeWindowFree(
+  busy: { start: string; end: string }[],
+  start: string,
+  end: string,
+): boolean {
+  const s = new Date(start).getTime();
+  const e = new Date(end).getTime();
+  return !busy.some((b) => {
+    const bs = new Date(b.start).getTime();
+    const be = new Date(b.end).getTime();
+    return s < be && bs < e; // overlap
+  });
+}
+
+// PURE nearest-slot picker (exported for unit testing). Returns the `n` slots whose
+// START is closest (absolute distance) to the `around` instant, nearest first.
+export function pickNearest(
+  slots: { start: string; end: string }[],
+  around: string,
+  n: number,
+): { start: string; end: string }[] {
+  const a = new Date(around).getTime();
+  return [...slots]
+    .sort(
+      (x, y) =>
+        Math.abs(new Date(x.start).getTime() - a) - Math.abs(new Date(y.start).getTime() - a),
+    )
+    .slice(0, n);
 }
 
 function resolveCalendarRange(
@@ -672,6 +728,64 @@ export class GoogleCalendarReadService {
       };
     }
   }
+
+  // Public accessor for callers outside the calendar (e.g. Engage meeting emails) that
+  // need the org's resolved primary + secondary sales zones — the SAME zones the
+  // calendar renders, so an email's time and the invite never disagree.
+  getOrgTimeZones(
+    orgId: string,
+  ): Promise<{ primary: string; secondary: string | null }> {
+    return this.resolveOrgTimeZones(orgId);
+  }
+
+  // Whether a specific proposed window [start,end] (ISO instants) is free on the CALLING
+  // org's primary calendar — used by the Engage meeting loop to validate a client's
+  // counter-proposed time. Reuses the SAME classified-event approach as freeSlots: only
+  // events classified as a CLIENT meeting block a window (team/personal/OOO do not).
+  // Never throws — a non-ok fetch degrades to { configured:false, free:false, reason }.
+  async isWindowFree(
+    orgId: string,
+    start: string,
+    end: string,
+  ): Promise<{ configured: boolean; free: boolean; reason: string | null }> {
+    const { primary: timeZone } = await this.resolveOrgTimeZones(orgId);
+    const access = await this.googleAccounts.resolveMailbox(orgId, 'calendar');
+    if (!access.ok) return { configured: false, free: false, reason: access.reason };
+    const selfEmail = access.account.email.toLowerCase();
+    const selfDomain = selfEmail.split('@')[1] ?? '';
+    try {
+      const fetched = await this.fetchClassifiedEvents(
+        orgId,
+        access.accessToken,
+        selfEmail,
+        selfDomain,
+        { timeMin: start, timeMax: end, timeZone },
+      );
+      if (!fetched.ok) return { configured: false, free: false, reason: fetched.reason };
+      const busy = fetched.events
+        .filter((e) => e.category === 'client')
+        .map((e) => ({ start: e.start, end: e.end }));
+      return { configured: true, free: computeWindowFree(busy, start, end), reason: null };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown error';
+      this.logger.warn(`Calendar isWindowFree failed for org ${orgId}: ${msg}`);
+      return { configured: false, free: false, reason: 'Could not reach Google Calendar.' };
+    }
+  }
+
+  // Up to 3 free slots nearest the requested `around` instant on the CALLING org's
+  // primary calendar — used by the Engage meeting loop to offer alternatives when a
+  // client's counter-proposed time is busy. Reuses freeSlots (already org-scoped).
+  // Never throws — returns [] when the org has no calendar / fetch fails.
+  async alternativesNear(
+    orgId: string,
+    around: string,
+  ): Promise<{ start: string; end: string }[]> {
+    const result = await this.freeSlots(orgId);
+    if (!result.configured) return [];
+    return pickNearest(result.slots, around, 3);
+  }
+
   async createEvent(
     orgId: string,
     dto: CreateCalendarEventDto,

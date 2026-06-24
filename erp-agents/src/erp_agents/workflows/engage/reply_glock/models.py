@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -69,6 +70,15 @@ class ReplyGlockInput(BaseModel):
     # On an interactive re-draft we already know the bucket — skip re-classifying.
     prior_status: ReplyGlockStatus | None = None
 
+    # The slots we already offered this lead, so the agent can match an acceptance.
+    proposed_slots: list[dict] = Field(default_factory=list)  # [{"start","end"}]
+
+    # Grounding for resolving relative / zoned meeting times in the reply ("Friday at
+    # 10am", "next Tuesday 3pm CET"): the CURRENT instant (ISO-8601) and the org's IANA
+    # timezone. A time the lead states without a zone is interpreted in `timezone`.
+    now: str | None = None
+    timezone: str | None = None
+
 
 class NormalizedReply(BaseModel):
     clean_body: str
@@ -88,6 +98,38 @@ class ExtractedSignals(BaseModel):
     follow_up_date_or_window: str | None = None
     requested_quantity: str | None = None
     requested_documents: list[str] = Field(default_factory=list)
+
+
+class SchedulingVerdict(BaseModel):
+    # The client accepted one of the slots we offered (0-based into proposed_slots), or None.
+    accepted_index: int | None = None
+    # A specific time the client asked for that we did NOT offer (ISO-8601), or None.
+    counter_time: str | None = None
+
+
+def _is_iso_instant(value: str) -> bool:
+    """True when `value` parses as an ISO-8601 datetime (accepts a trailing 'Z')."""
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return True
+    except ValueError:
+        return False
+
+
+def parse_scheduling(raw: dict, proposed_slots: list[dict]) -> SchedulingVerdict:
+    """Map the model's raw scheduling JSON onto a validated verdict.
+
+    Pure + total: an out-of-range or non-int accepted_index clamps to None (no
+    acceptance), and counter_time is kept only when it's a non-empty, ISO-8601 string —
+    free text like "sometime Friday" is dropped so the resolver never materialises a junk
+    meeting from an unparseable value.
+    """
+    idx = raw.get("accepted_index")
+    if isinstance(idx, int) and 0 <= idx < len(proposed_slots):
+        return SchedulingVerdict(accepted_index=idx, counter_time=None)
+    ct = raw.get("counter_time")
+    counter_time = ct if isinstance(ct, str) and ct and _is_iso_instant(ct) else None
+    return SchedulingVerdict(accepted_index=None, counter_time=counter_time)
 
 
 class ReplyClassification(BaseModel):
@@ -126,5 +168,7 @@ class ReplyGlockOutput(BaseModel):
 
     follow_up_needed: bool = False
     follow_up_date_or_window: str | None = None
+
+    scheduling: SchedulingVerdict = Field(default_factory=SchedulingVerdict)
 
     ui: dict

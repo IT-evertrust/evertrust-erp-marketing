@@ -8,6 +8,15 @@ SNOOZE_DAYS = 60
 
 _QUOTE_PATTERNS = [
     r"\nOn .+ wrote:",
+    # Gmail's localised quote intro in other languages (the footer carries OUR original
+    # send timestamp; left in, the scheduler parses that instead of the lead's request):
+    #   vi "Vào … đã viết:", de "Am … schrieb:", fr "Le … a écrit :", es "El … escribió:"
+    r"\nVào .+ đã viết:",
+    r"\nAm .+ schrieb.*:",
+    r"\nLe .+ a écrit\s*:",
+    r"\nEl .+ escribió:",
+    # Generic fallback: a line with an <email> immediately followed by a wrote-verb.
+    r"\n[^\n]*<[^@\s>]+@[^@\s>]+>\s*(wrote|đã viết|schrieb|a écrit|escribió|ha scritto)\s*:",
     r"\nFrom: .+\nSent: .+",
     r"\n-{2,}\s*Original Message\s*-{2,}",
     r"\n_{5,}",

@@ -23,6 +23,22 @@ Rules:
   wording / the resolved date in follow_up_date_or_window.
 - Extract concrete signals; leave a signal false/null when not present.
 
+SCHEDULING — match the reply against the meeting slots we already offered (listed under
+OFFERED SLOTS in the user message, numbered from 0). Return a "scheduling" object:
+- accepted_index: the 0-based number of the offered slot they accepted, when the reply
+  references one of the numbered options ("the first works", "Wednesday's fine", "option 2",
+  "let's do the 10am one"). Otherwise null.
+- counter_time: an ISO-8601 UTC timestamp ONLY when they propose a concrete DIFFERENT time we
+  did NOT offer ("can we do Friday at 3pm instead?"). Resolve relative dates/times against the
+  CURRENT DATE/TIME and org timezone shown in the user message: e.g. "Friday this week at
+  10:00 CET" -> that Friday's date at 10:00 in that zone, converted to UTC (trailing "Z"). A
+  time stated with NO zone is in the org timezone. IGNORE quoted earlier-message footers and
+  their timestamps ("On ... wrote:", "Vao ... da viet:") — only the lead's NEW request counts.
+  If you cannot pin BOTH a concrete date AND time, set counter_time null. Otherwise null.
+- Set BOTH to null when there is no scheduling signal, when no slots were offered, or when the
+  reply is too vague to pin to a slot or a concrete time. Never set both at once — prefer
+  accepted_index when the reply clearly picks an offered slot.
+
 Respond with exactly this JSON shape:
 {
   "status": "INTERESTED|UNINTERESTED|UNSURE|TEMPORARY",
@@ -39,11 +55,20 @@ Respond with exactly this JSON shape:
     "follow_up_date_or_window": null,
     "requested_quantity": null,
     "requested_documents": []
+  },
+  "scheduling": {
+    "accepted_index": null,
+    "counter_time": null
   }
 }"""
 
-CLASSIFY_USER_PROMPT_TEMPLATE = """CAMPAIGN CONTEXT:
+CLASSIFY_USER_PROMPT_TEMPLATE = """CURRENT DATE/TIME: {now} (org timezone: {timezone})
+
+CAMPAIGN CONTEXT:
 {campaign_context}
+
+OFFERED SLOTS (meeting times we already proposed to this lead, numbered from 0):
+{proposed_slots}
 
 PREVIOUS THREAD (oldest first):
 {thread}
@@ -66,6 +91,10 @@ CORE VOICE — decisive, warm, never apologetic:
 - Match the prospect's language: if their reply is in German, write the whole reply in German.
 - Do NOT fabricate prices, certifications, references, quantities, or availability — only use facts
   present in the thread/campaign context.
+- MEETING TIMES: NEVER state a specific date, day, or clock time. When a meeting time is relevant,
+  refer to it generically ("the time below", "the proposed time(s)"). The exact time — in the
+  recipient's timezone — is appended beneath your message by the system; if you write your own time
+  it WILL contradict the calendar invite. Do not state or output any time yourself.
 - Sign off as the sender from the campaign context.
 
 Strategy by status:
