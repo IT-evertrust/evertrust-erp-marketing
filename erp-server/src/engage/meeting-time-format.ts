@@ -64,6 +64,18 @@ export function renderSlotBullets(
   return slots.map((s) => `• ${formatSlot(s, primaryTz, secondaryTz)}`).join('\n');
 }
 
+// The booking confirmation for an agreed slot — the grounded time only, no "looking
+// forward to it!" tail (the drafter writes its own closing). e.g. "You're all set for
+// Thursday, 25 June at 09:00 (GMT+2) · 14:00 (GMT+7) — I'll send a calendar invite to lock
+// it in." Injected right after the drafter's "I've added our call to my calendar." sentence.
+export function renderAcceptConfirmation(
+  slot: Slot,
+  primaryTz: string,
+  secondaryTz: string | null,
+): string {
+  return `You're all set for ${formatSlot(slot, primaryTz, secondaryTz)} — I'll send a calendar invite to lock it in.`;
+}
+
 // Render the meeting time(s) as a natural sentence in Hanna's voice. `kind`:
 //   propose → offer the slot(s) and invite a pick or a counter-suggestion
 //   accept  → confirm the agreed slot (a calendar invite follows)

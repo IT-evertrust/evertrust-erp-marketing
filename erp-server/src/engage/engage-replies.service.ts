@@ -21,7 +21,11 @@ import {
   type SchedulingVerdict,
   type Slot,
 } from './meeting-loop';
-import { renderMeetingProse, renderSlotBullets, type MeetingKind } from './meeting-time-format';
+import {
+  renderAcceptConfirmation,
+  renderSlotBullets,
+  type MeetingKind,
+} from './meeting-time-format';
 
 // Invisible HTML-comment markers fence the system-owned meeting-time prose so re-stamping
 // replaces (never duplicates) it. They are stripped wherever the body is rendered (the
@@ -29,7 +33,7 @@ import { renderMeetingProse, renderSlotBullets, type MeetingKind } from './meeti
 // operator only ever see the natural sentence — the markers are pure internal plumbing.
 const MTG_OPEN = '<!--meeting-time-->';
 const MTG_CLOSE = '<!--/meeting-time-->';
-const MTG_BLOCK = new RegExp(`\\n*${MTG_OPEN}[\\s\\S]*?${MTG_CLOSE}`, 'g');
+const MTG_BLOCK = new RegExp(`[ \\t]*\\n*${MTG_OPEN}[\\s\\S]*?${MTG_CLOSE}`, 'g');
 
 // Scenario-2 proposing: how many concrete options to offer an interested lead, and the
 // (generous) window to search for genuinely-free business-hours slots. The window is
@@ -104,6 +108,29 @@ function insertAtSlotLeadIn(body: string, block: string): string | null {
   return tail ? `${head}\n\n${block}\n\n${tail}` : `${head}\n\n${block}`;
 }
 
+// A sentence in which the drafter says the meeting is set — the grounded confirmation is
+// appended right after it (same paragraph) so "I've added our call to my calendar." flows
+// straight into "You're all set for <time> …", not a detached block at the bottom.
+const BOOKING_SENTENCE_RE =
+  /\b(?:calendar|booked|confirm(?:ed|ing)?|scheduled?|all set|locked?\s+in|added\s+(?:our|the|this)|reserved|pencill?ed|set\s+up|see\s+you)\b/i;
+
+// Append `inline` immediately after the drafter's booking sentence, in the same paragraph.
+// Returns null when no such sentence exists (caller falls back to above the sign-off).
+function insertAfterBookingSentence(body: string, inline: string): string | null {
+  const paras = body.split(/\n{2,}/);
+  for (let i = 0; i < paras.length; i++) {
+    const para = paras[i] ?? '';
+    const sentences = para.match(/[^.!?]+[.!?]+(?:\s|$)|[^.!?]+$/g);
+    if (!sentences) continue;
+    const j = sentences.findIndex((s) => BOOKING_SENTENCE_RE.test(s));
+    if (j === -1) continue;
+    sentences[j] = `${(sentences[j] ?? '').trimEnd()} ${inline}`;
+    paras[i] = sentences.join('').trimEnd();
+    return paras.join('\n\n');
+  }
+  return null;
+}
+
 // A short, natural lead-in used ONLY when the drafter wrote none of its own — so the bullets
 // are never contextless. The trailing ask is left to the LLM, never a fixed wrapper.
 function fallbackLeadIn(kind: MeetingKind): string {
@@ -131,10 +158,13 @@ export function withMeetingTime(
   if (slots.length === 0) return stripped;
   const scrubbed = stripProposedTimeSentences(stripped);
 
-  // accept: a single confirmed time → keep the short confirmation sentence above the sign-off.
+  // accept: a single confirmed time → append the grounded confirmation right after the
+  // drafter's "I've added our call to my calendar." sentence (or, lacking one, above the
+  // sign-off), so it reads in the drafter's flow — not a detached paragraph at the bottom.
   if (kind === 'accept') {
-    const prose = renderMeetingProse(slots, primaryTz, secondaryTz, 'accept');
-    return placeBeforeSignoff(scrubbed, `${MTG_OPEN}${prose}${MTG_CLOSE}`);
+    const confirm = renderAcceptConfirmation(slots[0]!, primaryTz, secondaryTz);
+    const inline = `${MTG_OPEN}${confirm}${MTG_CLOSE}`;
+    return insertAfterBookingSentence(scrubbed, inline) ?? placeBeforeSignoff(scrubbed, inline);
   }
 
   // propose / counter: inject ONLY the grounded bullets, into the drafter's own flow.
