@@ -24,7 +24,7 @@ import { ContractsCard } from '@/components/growth/contracts-card';
 
 type Tab = 'pipeline' | 'contracts';
 
-export function campaignLabel(c: CampaignDto): string {
+function campaignLabel(c: CampaignDto): string {
   return c.name || c.project || c.nicheName || c.region;
 }
 
