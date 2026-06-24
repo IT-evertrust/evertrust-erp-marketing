@@ -81,7 +81,7 @@ async function getJson<T>(path: string): Promise<T> {
 }
 
 async function mutate<T>(
-  method: 'POST' | 'PATCH',
+  method: 'POST' | 'PATCH' | 'PUT',
   path: string,
   body?: unknown,
 ): Promise<T> {
@@ -125,6 +125,9 @@ export async function createReachAim(
     segment: values.segment || undefined,
     source: values.source || undefined,
     sender: values.sender || undefined,
+    targetType: values.targetType || undefined,
+    industryFocus: values.industryFocus || undefined,
+    tenderFocus: values.tenderFocus || undefined,
   });
   return mapAim(aim);
 }
@@ -215,6 +218,33 @@ export async function runReachBazooka(): Promise<BazookaSummary> {
 // org-scoped. Same cookie-authed GET shape as the other reach reads.
 export async function getDailySends(): Promise<DailySend[]> {
   return getJson<DailySend[]>('/growth/reach/daily-sends');
+}
+
+// ---- Default template + signature (org-wide, used by the Reach Bazooka) ----
+
+// The org's default three-round template; null until one has been saved.
+export async function getDefaultTemplate(): Promise<ReachTemplates | null> {
+  return getJson<ReachTemplates | null>('/growth/reach/default-template');
+}
+
+// Save the org's default template. The backend normalizes either the stored
+// keys or the pasted { COLD, FOLLOWUP, FINALPUSH } shape.
+export async function setDefaultTemplate(body: unknown): Promise<void> {
+  await mutate<{ ok: true }>('PUT', '/growth/reach/default-template', body);
+}
+
+// The org's signature image URL (shown beneath every outbound email).
+export async function getSignature(): Promise<{
+  signatureImageUrl: string | null;
+}> {
+  return getJson<{ signatureImageUrl: string | null }>(
+    '/growth/reach/signature',
+  );
+}
+
+// Save (or clear) the org's signature image URL.
+export async function setSignature(url: string | null): Promise<void> {
+  await mutate<{ ok: true }>('PUT', '/growth/reach/signature', { url });
 }
 
 // ---- mappers: backend -> the UI's local view types (UI structure untouched) ----

@@ -1,4 +1,4 @@
-export type ReachTab = 'scraper' | 'generator' | 'sender';
+export type ReachTab = 'scraper' | 'generator' | 'sender' | 'templates';
 
 export type CampaignStatus = 'NEW' | 'IN CAMPAIGN' | 'OVER';
 
@@ -71,6 +71,9 @@ export type NewCampaignFormValues = {
     segment: string;
     source: string;
     sender: string;
+    targetType: string;
+    industryFocus: string;
+    tenderFocus: string;
 }
 
 // A campaign enriched with the Ammo Forge output (templates + news brief) and the

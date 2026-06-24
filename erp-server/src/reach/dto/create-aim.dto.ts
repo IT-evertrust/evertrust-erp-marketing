@@ -14,6 +14,11 @@ export const createAimSchema = z.object({
   source: z.string().optional(),
   // The sending mailbox (info | hanna). Defaults to info.
   sender: z.string().optional(),
+  // Per-campaign template placeholders for the org default outreach template:
+  //   {{Type}} → targetType, {{IndustryFocus}} → industryFocus, {{TenderFocus}} → tenderFocus.
+  targetType: z.string().optional(),
+  industryFocus: z.string().optional(),
+  tenderFocus: z.string().optional(),
 });
 
 export type CreateAimDto = z.infer<typeof createAimSchema>;

@@ -9,6 +9,7 @@ const TABS: Array<{ id: ReachTab; label: string }> = [
   { id: 'scraper', label: 'Lead Scraper' },
   { id: 'generator', label: 'Email Generator' },
   { id: 'sender', label: 'Sequence Sender' },
+  { id: 'templates', label: 'Templates' },
 ];
 
 export function ReachTabs({ activeTab, onChange }: ReachTabsProps) {

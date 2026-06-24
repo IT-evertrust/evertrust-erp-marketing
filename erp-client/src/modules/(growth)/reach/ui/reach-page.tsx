@@ -5,6 +5,7 @@ import { LeadScraperPanel } from '../components/lead-scraper-panel';
 import { NewCampaignModal } from '../components/new-campaign-modal';
 import { ReachTabs } from '../components/reach-tabs';
 import { SequenceSenderPanel } from '../components/sequence-sender-panel';
+import { TemplatesEditorPanel } from '../components/templates-editor-panel';
 import { useReach } from '../hooks/use-reach';
 
 export function ReachPage() {
@@ -47,6 +48,8 @@ export function ReachPage() {
           bazookaRunning={reach.bazookaRunning}
         />
       ) : null}
+
+      {reach.activeTab === 'templates' ? <TemplatesEditorPanel /> : null}
 
       <NewCampaignModal
         open={reach.isCampaignFormOpen}

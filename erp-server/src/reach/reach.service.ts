@@ -187,6 +187,17 @@ export class ReachService {
     await this.repo.setDefaultTemplate(orgId, normalized);
   }
 
+  // The org signature image URL embedded in every outgoing email (or null).
+  getSignatureImageUrl(orgId: string): Promise<string | null> {
+    return this.repo.getSignatureImageUrl(orgId);
+  }
+
+  // Set (or clear with null/empty) the org signature image URL.
+  setSignatureImageUrl(orgId: string, url: string | null): Promise<void> {
+    const trimmed = url?.trim();
+    return this.repo.setSignatureImageUrl(orgId, trimmed ? trimmed : null);
+  }
+
   async getAim(orgId: string, aimId: string): Promise<ReachAim> {
     const aim = await this.repo.findAimById(orgId, aimId);
     if (!aim) throw new NotFoundException('Aim not found');

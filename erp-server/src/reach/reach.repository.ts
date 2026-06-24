@@ -135,6 +135,9 @@ export class ReachRepository {
         segment: dto.segment ?? null,
         source: dto.source ?? null,
         sender: dto.sender || 'info',
+        targetType: dto.targetType ?? null,
+        industryFocus: dto.industryFocus ?? null,
+        tenderFocus: dto.tenderFocus ?? null,
         status: 'DRAFT',
       })
       .returning();
@@ -821,5 +824,16 @@ export class ReachRepository {
       .where(eq(schema.orgConfig.organizationId, orgId))
       .limit(1);
     return row?.url ?? null;
+  }
+
+  // Set (or clear, with null) the org signature image URL (find-or-creates the row).
+  async setSignatureImageUrl(orgId: string, url: string | null): Promise<void> {
+    await this.db
+      .insert(schema.orgConfig)
+      .values({ organizationId: orgId, signatureImageUrl: url })
+      .onConflictDoUpdate({
+        target: schema.orgConfig.organizationId,
+        set: { signatureImageUrl: url, updatedAt: new Date() },
+      });
   }
 }

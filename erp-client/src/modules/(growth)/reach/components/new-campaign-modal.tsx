@@ -24,6 +24,9 @@ export function NewCampaignModal({
     segment: '',
     source: 'Company DB',
     sender: 'info',
+    targetType: '',
+    industryFocus: '',
+    tenderFocus: '',
   });
 
   if (!open) return null;
@@ -47,6 +50,9 @@ export function NewCampaignModal({
       ...values,
       name: values.name.trim(),
       segment: values.segment.trim(),
+      targetType: values.targetType.trim(),
+      industryFocus: values.industryFocus.trim(),
+      tenderFocus: values.tenderFocus.trim(),
     });
 
     setValues({
@@ -56,6 +62,9 @@ export function NewCampaignModal({
       segment: '',
       source: 'Company DB',
       sender: 'info',
+      targetType: '',
+      industryFocus: '',
+      tenderFocus: '',
     });
   }
 
@@ -138,6 +147,44 @@ export function NewCampaignModal({
                 className="w-full rounded-lg border border-[#d6dade] bg-[#f6f7f9] px-3 py-2.5 text-[13px] text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
               />
             </Field>
+
+            <Field label="Type">
+              <input
+                value={values.targetType}
+                onChange={(event) =>
+                  updateValue('targetType', event.target.value)
+                }
+                placeholder="e.g. provider, supplier"
+                className="w-full rounded-lg border border-[#d6dade] bg-[#f6f7f9] px-3 py-2.5 text-[13px] text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
+              />
+            </Field>
+
+            <Field label="Industry focus">
+              <input
+                value={values.industryFocus}
+                onChange={(event) =>
+                  updateValue('industryFocus', event.target.value)
+                }
+                placeholder="e.g. IT, Power, Transportation"
+                className="w-full rounded-lg border border-[#d6dade] bg-[#f6f7f9] px-3 py-2.5 text-[13px] text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
+              />
+            </Field>
+
+            <Field label="Tender focus">
+              <input
+                value={values.tenderFocus}
+                onChange={(event) =>
+                  updateValue('tenderFocus', event.target.value)
+                }
+                placeholder="e.g. Cloud Infrastructure, AI Platform"
+                className="w-full rounded-lg border border-[#d6dade] bg-[#f6f7f9] px-3 py-2.5 text-[13px] text-[#15171c] outline-none focus:border-[#15171c] focus:bg-white"
+              />
+            </Field>
+
+            <p className="text-[11px] text-[#959ca7]">
+              Used by the default email template ({'{{Type}}'} /{' '}
+              {'{{IndustryFocus}}'} / {'{{TenderFocus}}'}).
+            </p>
           </div>
 
           <div className="flex justify-end gap-2 border-t border-[#e4e7eb] px-5 py-4">

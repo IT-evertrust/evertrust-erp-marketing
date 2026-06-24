@@ -72,6 +72,20 @@ export class ReachController {
     return { ok: true };
   }
 
+  // ---- Signature image embedded in every outgoing email ----
+  @RequirePermissions('campaigns:write')
+  @Get('signature')
+  async getSignature(@OrgId() orgId: string) {
+    return { signatureImageUrl: await this.reachService.getSignatureImageUrl(orgId) };
+  }
+
+  @RequirePermissions('campaigns:write')
+  @Put('signature')
+  async setSignature(@OrgId() orgId: string, @Body() body: { url?: string | null }) {
+    await this.reachService.setSignatureImageUrl(orgId, body?.url ?? null);
+    return { ok: true };
+  }
+
   // Real daily email-send counts (last 10 days ending today) for the reach chart.
   @RequirePermissions('campaigns:read')
   @Get('daily-sends')
