@@ -30,6 +30,13 @@ const MTG_OPEN = '<!--meeting-time-->';
 const MTG_CLOSE = '<!--/meeting-time-->';
 const MTG_BLOCK = new RegExp(`\\n*${MTG_OPEN}[\\s\\S]*?${MTG_CLOSE}`, 'g');
 
+// Scenario-2 proposing: how many concrete options to offer an interested lead, and the
+// (generous) window to search for genuinely-free business-hours slots. The window is
+// intentionally wide — it surfaces the EARLIEST real availability, never a fixed "next
+// few days" — so it works on a live calendar however far out the next free slot is.
+const PROPOSE_SLOT_COUNT = 3;
+const PROPOSE_HORIZON_DAYS = 28;
+
 // Stamp the authoritative dual-zone meeting time onto an email body. The time is rendered
 // from the structured slot(s) — the SAME ones the calendar books — so the email can never
 // disagree with the invite. Idempotent: any prior block is stripped before re-appending,
@@ -287,6 +294,12 @@ export class EngageRepliesService {
             offeredSlots,
             inbound.id,
           );
+          // INTERESTED but no usable time was resolved (meetingStatus still NONE and no
+          // slots offered yet) → proactively offer concrete free slots so the lead has
+          // times to pick, instead of a vague "let's schedule soon".
+          if (out.status === 'INTERESTED') {
+            await this.maybeProposeSlots(orgId, aimId, lead.id);
+          }
         }
         // Propagate the classification into the Reach plane (stats cache + lead status)
         // so the Email Generator / Sequence Sender / Lead Scraper reflect the reply.
@@ -499,6 +512,48 @@ export class EngageRepliesService {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown error';
       this.logger.warn(`Engage applyScheduling lead ${leadId} failed: ${msg}`);
+    }
+  }
+
+  // Scenario 2: an INTERESTED lead gave no usable meeting time → proactively offer
+  // concrete free slots so the reply contains times to pick, not a vague "let's schedule
+  // soon". No-op when the lead is already in a meeting flow (PROPOSED/ACCEPTED/COUNTER/
+  // BOOKED) or slots were already offered. Best-effort: never fails the scan.
+  private async maybeProposeSlots(orgId: string, aimId: string, leadId: string): Promise<void> {
+    try {
+      const existing = await this.loadExistingReply(orgId, aimId, leadId);
+      if (!existing) return;
+      if (existing.meetingStatus !== 'NONE') return; // already resolved into a meeting flow
+      if ((existing.proposedSlots?.length ?? 0) > 0) return; // already offered times
+
+      // Pull genuinely-free business-hours slots from the real calendar over a generous
+      // window, then offer the earliest few — surfacing real availability, not a fixed cap.
+      const now = new Date();
+      const free = await this.calendar.freeSlots(orgId, {
+        timeMin: now.toISOString(),
+        timeMax: new Date(now.getTime() + PROPOSE_HORIZON_DAYS * 86_400_000).toISOString(),
+      });
+      if (!free.configured || free.slots.length === 0) return; // no availability → leave draft as-is
+
+      const slots = free.slots.slice(0, PROPOSE_SLOT_COUNT);
+      const body = await this.stampMeetingTime(orgId, existing.draftBody ?? '', slots);
+      await this.db
+        .update(schema.reachLeadReplies)
+        .set({
+          proposedSlots: slots,
+          meetingStatus: 'PROPOSED',
+          draftBody: body,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            tenantScope(orgId, schema.reachLeadReplies),
+            eq(schema.reachLeadReplies.id, existing.id),
+          ),
+        );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown error';
+      this.logger.warn(`Engage maybeProposeSlots lead ${leadId} failed: ${msg}`);
     }
   }
 
