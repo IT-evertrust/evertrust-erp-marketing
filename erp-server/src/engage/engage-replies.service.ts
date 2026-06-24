@@ -21,11 +21,12 @@ import {
   type SchedulingVerdict,
   type Slot,
 } from './meeting-loop';
-import { formatMeetingTimeBlock } from './meeting-time-format';
+import { renderMeetingProse, type MeetingKind } from './meeting-time-format';
 
-// Markers fence the system-owned meeting-time block so re-application replaces (never
-// duplicates) it, and so the time is unmistakably system-rendered (not LLM prose). They
-// are HTML comments — invisible in rendered email, harmless in plain text.
+// Invisible HTML-comment markers fence the system-owned meeting-time prose so re-stamping
+// replaces (never duplicates) it. They are stripped wherever the body is rendered (the
+// outgoing email's both MIME parts + the reply-detail editor), so the client and the
+// operator only ever see the natural sentence — the markers are pure internal plumbing.
 const MTG_OPEN = '<!--meeting-time-->';
 const MTG_CLOSE = '<!--/meeting-time-->';
 const MTG_BLOCK = new RegExp(`\\n*${MTG_OPEN}[\\s\\S]*?${MTG_CLOSE}`, 'g');
@@ -34,26 +35,25 @@ const MTG_BLOCK = new RegExp(`\\n*${MTG_OPEN}[\\s\\S]*?${MTG_CLOSE}`, 'g');
 // (generous) window to search for genuinely-free business-hours slots. The window is
 // intentionally wide — it surfaces the EARLIEST real availability, never a fixed "next
 // few days" — so it works on a live calendar however far out the next free slot is.
-const PROPOSE_SLOT_COUNT = 3;
+const PROPOSE_SLOT_COUNT = 2;
 const PROPOSE_HORIZON_DAYS = 28;
 
-// Stamp the authoritative dual-zone meeting time onto an email body. The time is rendered
-// from the structured slot(s) — the SAME ones the calendar books — so the email can never
-// disagree with the invite. Idempotent: any prior block is stripped before re-appending,
-// so re-stamping (e.g. ACCEPTED after PROPOSED) never duplicates it. No slots → unchanged.
+// Stamp the authoritative dual-zone meeting time onto an email body as a NATURAL sentence
+// (rendered from the structured slot(s) — the SAME ones the calendar books — so the email
+// can never disagree with the invite; the LLM never writes the time). `kind` shapes the
+// phrasing (propose / accept / counter). Idempotent: any prior block is stripped before
+// re-appending, so re-stamping (e.g. ACCEPTED after PROPOSED) never duplicates it.
 export function withMeetingTime(
   body: string,
   slots: Slot[],
   primaryTz: string,
   secondaryTz: string | null,
+  kind: MeetingKind = 'propose',
 ): string {
   const stripped = body.replace(MTG_BLOCK, '').trimEnd();
   if (slots.length === 0) return stripped;
-  const label = slots.length > 1 ? 'Proposed times' : 'Proposed time';
-  const block =
-    `${MTG_OPEN}\n\n${label}:\n` +
-    `${formatMeetingTimeBlock(slots, primaryTz, secondaryTz)}\n${MTG_CLOSE}`;
-  return `${stripped}\n\n${block}`;
+  const prose = renderMeetingProse(slots, primaryTz, secondaryTz, kind);
+  return `${stripped}\n\n${MTG_OPEN}${prose}${MTG_CLOSE}`;
 }
 
 // ===========================================================================
@@ -389,10 +389,11 @@ export class EngageRepliesService {
     orgId: string,
     body: string,
     slots: Slot[],
+    kind: MeetingKind = 'propose',
   ): Promise<string> {
     if (!slots.length) return body;
     const { primary, secondary } = await this.calendar.getOrgTimeZones(orgId);
-    return withMeetingTime(body, slots, primary, secondary);
+    return withMeetingTime(body, slots, primary, secondary, kind);
   }
 
   // Resolve a reply_glock scheduling verdict against the org's calendar — pure-ish,
@@ -438,9 +439,12 @@ export class EngageRepliesService {
         // time (the LLM's classify-time draft may state an invented time / none at all).
         const existingAccepted = await this.loadExistingReply(orgId, aim.id, leadId);
         const acceptedDraft = existingAccepted
-          ? await this.stampMeetingTime(orgId, existingAccepted.draftBody ?? '', [
-              resolution.acceptedSlot,
-            ])
+          ? await this.stampMeetingTime(
+              orgId,
+              existingAccepted.draftBody ?? '',
+              [resolution.acceptedSlot],
+              'accept',
+            )
           : undefined;
         await this.db
           .update(schema.reachLeadReplies)
@@ -504,6 +508,7 @@ export class EngageRepliesService {
           orgId,
           redrafted.draftBody ?? '',
           resolution.alternatives,
+          'counter',
         );
         await this.db
           .update(schema.reachLeadReplies)

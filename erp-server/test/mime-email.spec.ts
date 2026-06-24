@@ -47,6 +47,20 @@ describe('buildMimeEmail', () => {
     expect(msg).toContain('References: <id0> <id1>');
   });
 
+  it('strips internal meeting-time markers — never sent (and not shown as escaped text)', () => {
+    const msg = decode(
+      buildMimeEmail({
+        to: 'a@b.com',
+        from: 'm@e.de',
+        subject: 'x',
+        body: 'Hi\n\n<!--meeting-time-->Would Thursday at 09:00 work?<!--/meeting-time-->',
+      }),
+    );
+    expect(msg).not.toContain('meeting-time--'); // marker gone from both parts
+    expect(msg).not.toContain('&lt;!--'); // not escaped-visible in the HTML part
+    expect(msg).toContain('Would Thursday at 09:00 work?'); // the prose survives
+  });
+
   it('escapes HTML-special characters in the body', () => {
     const msg = decode(buildMimeEmail({ to: 'a@b.com', from: 'm@e.de', subject: 'x', body: 'A <b> & C' }));
     expect(msg).toContain('A &lt;b&gt; &amp; C');

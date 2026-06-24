@@ -38,8 +38,12 @@ export function buildMimeEmail(args: MimeEmailArgs): string {
   const fromHeader = args.fromName ? `${args.fromName} <${args.from}>` : args.from;
   const sig = args.signatureImageUrl?.trim() || null;
 
-  const plain = sig ? `${args.body}\n\n${sig}` : args.body;
-  const htmlBody = htmlEscape(args.body).replace(/\r?\n/g, '<br>');
+  // Strip the internal meeting-time markers — they're idempotency plumbing, never meant
+  // for the recipient (and an escaped "<!--…-->" would otherwise show as literal text).
+  const body = args.body.replace(/<!--\/?meeting-time-->/g, '');
+
+  const plain = sig ? `${body}\n\n${sig}` : body;
+  const htmlBody = htmlEscape(body).replace(/\r?\n/g, '<br>');
   const sigHtml = sig
     ? `<br><br><img src="${sig}" alt="signature" style="max-width:480px;height:auto;border:0;" />`
     : '';

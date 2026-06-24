@@ -71,7 +71,7 @@ describe('EngageRepliesService.maybeProposeSlots', () => {
 
     const r = await reply();
     expect(r!.meetingStatus).toBe('PROPOSED');
-    expect(r!.proposedSlots).toHaveLength(3); // PROPOSE_SLOT_COUNT — earliest few, not all
+    expect(r!.proposedSlots).toHaveLength(2); // PROPOSE_SLOT_COUNT — earliest two, not all
     expect(r!.draftBody).toContain('<!--meeting-time-->'); // system-owned block stamped
     expect(r!.draftBody).toContain('GMT+2'); // primary zone
     expect(r!.draftBody).toContain('GMT+7'); // cross-reference

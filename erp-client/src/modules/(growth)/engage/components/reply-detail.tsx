@@ -115,7 +115,9 @@ export function ReplyDetail({
   const replyId = reply?.id;
   useEffect(() => {
     setSubject(reply?.draftSubject ?? '');
-    setBody(reply?.draftBody ?? '');
+    // Strip the internal meeting-time markers from the editor view (the backend strips
+    // them from the outgoing email too) — the operator sees only the natural prose.
+    setBody((reply?.draftBody ?? '').replace(/<!--\/?meeting-time-->/g, ''));
     setSentMessages([]);
     setJustSent(false);
     setLoadingSlots(false);
@@ -264,7 +266,7 @@ export function ReplyDetail({
     try {
       const next = await redraftReply(reply.id, instruction);
       setSubject(next.draftSubject);
-      setBody(next.draftBody);
+      setBody(next.draftBody.replace(/<!--\/?meeting-time-->/g, ''));
       toast.success('Draft updated.');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not revise the draft.');
