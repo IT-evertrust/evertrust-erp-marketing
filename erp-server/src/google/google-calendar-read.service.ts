@@ -598,10 +598,20 @@ export class GoogleCalendarReadService {
   // The next upcoming real events from the org's primary calendar. Never throws —
   // returns a `configured: false` shell when the org has no default calendar mailbox
   // or Google is unreachable.
-  async upcoming(orgId: string, rangeInput: CalendarRangeInput = {}): Promise<CalendarUpcomingDto> {
+  async upcoming(
+    orgId: string,
+    rangeInput: CalendarRangeInput = {},
+    accountId?: string | null,
+  ): Promise<CalendarUpcomingDto> {
     const { primary: timeZone, secondary: secondaryTimeZone } =
       await this.resolveOrgTimeZones(orgId);
-    const access = await this.googleAccounts.resolveMailbox(orgId, 'calendar');
+    // accountId targets a SPECIFIC connected mailbox (the per-account calendar
+    // filter); null/undefined reproduces the org default exactly.
+    const access = await this.googleAccounts.resolveMailboxForAccount(
+      orgId,
+      accountId ?? null,
+      'calendar',
+    );
     if (!access.ok) {
       return {
         configured: false,
@@ -879,8 +889,15 @@ export class GoogleCalendarReadService {
     orgId: string,
     eventId: string,
     dto: UpdateCalendarEventDto,
+    accountId?: string | null,
   ): Promise<CalendarMutationResultDto> {
-    const access = await this.googleAccounts.resolveMailbox(orgId, 'calendar');
+    // Edit the event on the SAME mailbox it was read from (the per-account filter
+    // passes its accountId through); null reproduces the org default.
+    const access = await this.googleAccounts.resolveMailboxForAccount(
+      orgId,
+      accountId ?? null,
+      'calendar',
+    );
 
     if (!access.ok) {
       return {

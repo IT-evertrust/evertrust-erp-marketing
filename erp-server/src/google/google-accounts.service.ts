@@ -100,6 +100,7 @@ export class GoogleAccountsService {
         displayName: schema.googleAccounts.displayName,
         scopes: schema.googleAccounts.scopes,
         status: schema.googleAccounts.status,
+        color: schema.googleAccounts.color,
         connectedAt: schema.googleAccounts.connectedAt,
         role: schema.users.role,
       })
@@ -121,6 +122,7 @@ export class GoogleAccountsService {
           role: r.role as UserRole,
           scopes: r.scopes,
           status: r.status as GoogleAccountStatus,
+          color: r.color ?? null,
           isDefault,
           // Legacy fields mirror the single default until the web rewrite drops them.
           isDefaultGmail: isDefault,

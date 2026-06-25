@@ -862,6 +862,10 @@ export const ConnectedGoogleAccountDto = z.object({
   role: UserRole,
   scopes: z.array(z.string()),
   status: GoogleAccountStatus,
+  // Per-account hex color (e.g. "#34d399"), assigned on connect. Drives the
+  // per-account color-coding in the Activate calendar + the Engage inbox switcher.
+  // null for legacy rows connected before colors existed.
+  color: z.string().nullable(),
   // The org's single default mailbox (used for BOTH Gmail send and Calendar).
   isDefault: z.boolean(),
   // Legacy two-pointer flags — kept so the current web compiles; both mirror isDefault.

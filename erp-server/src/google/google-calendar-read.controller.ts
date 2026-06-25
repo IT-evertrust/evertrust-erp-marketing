@@ -44,12 +44,18 @@ export class GoogleCalendarReadController {
     @Query('timeMin') timeMin?: string,
     @Query('timeMax') timeMax?: string,
     @Query('timeZone') timeZone?: string,
+    // Optional: read a SPECIFIC connected mailbox's calendar (per-account filter).
+    @Query('accountId') accountId?: string,
   ) {
-    return this.calendar.upcoming(orgId, {
-      timeMin,
-      timeMax,
-      timeZone,
-    });
+    return this.calendar.upcoming(
+      orgId,
+      {
+        timeMin,
+        timeMax,
+        timeZone,
+      },
+      accountId,
+    );
   }
 
   @RequirePermissions('campaigns:read')
@@ -91,8 +97,15 @@ export class GoogleCalendarReadController {
     @OrgId() orgId: string,
     @Param('eventId') eventId: string,
     @Body() body: UpdateCalendarEventBodyDto,
+    // Edit the event on the mailbox it was read from (per-account filter).
+    @Query('accountId') accountId?: string,
   ): Promise<CalendarMutationResultDto> {
-    return this.calendar.updateEvent(orgId, eventId, body as UpdateCalendarEventDto);
+    return this.calendar.updateEvent(
+      orgId,
+      eventId,
+      body as UpdateCalendarEventDto,
+      accountId,
+    );
   }
 
   @RequirePermissions('campaigns:write')
