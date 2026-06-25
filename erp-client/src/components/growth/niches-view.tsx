@@ -350,7 +350,7 @@ export function NichesView() {
           if (!open) setSelected(null);
         }}
       >
-        <DialogContent className="max-h-[85vh] max-w-3xl overflow-y-auto">
+        <DialogContent className="max-h-[85vh] max-w-4xl overflow-y-auto">
           {selected ? (
             <>
               <DialogHeader>
