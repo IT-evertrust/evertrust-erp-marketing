@@ -43,7 +43,8 @@ def main(argv: list[str] | None = None) -> int:
         search, fetcher = OfflineSearch(), OfflineFetcher()
     else:
         search = WebSearch(settings.searxng_url, settings.searxng_api_key,
-                           pages=settings.ddg_pages, enable_ddg=settings.enable_ddg_fallback)
+                           pages=settings.ddg_pages, enable_ddg=settings.enable_ddg_fallback,
+                           engines=settings.searxng_engines)
         fetcher = HttpFetcher()
     try:
         result = run(settings, opts, erp, search, fetcher)

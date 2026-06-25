@@ -35,6 +35,41 @@ def test_ddg_optional_when_explicitly_enabled():
     assert ws._ddg is not None
 
 
+# --- SearXNG engines pinned (fixes the disabled-google / junk-default-mix discovery) ---
+
+class _RecordingHttp:
+    def __init__(self): self.params = None
+
+    def get(self, url, params=None):
+        self.params = params
+        return type("R", (), {"raise_for_status": lambda self: None,
+                              "json": lambda self: {"results": []}})()
+
+    def close(self): pass
+
+
+def test_searxng_pins_engines_in_request():
+    from satellite.clients.search import SearxngClient
+    c = SearxngClient("http://searx", engines="google,bing,brave")
+    c._http = _RecordingHttp()
+    c.query("widgets", language="pl")
+    assert c._http.params["engines"] == "google,bing,brave"   # pinned engines sent
+    assert c._http.params["q"] == "widgets" and c._http.params["language"] == "pl"
+
+
+def test_searxng_omits_engines_when_unset():
+    from satellite.clients.search import SearxngClient
+    c = SearxngClient("http://searx")          # default: no engines -> instance default
+    c._http = _RecordingHttp()
+    c.query("widgets")
+    assert "engines" not in c._http.params
+
+
+def test_websearch_threads_engines_to_searxng():
+    ws = WebSearch(searxng_url="http://searx", engines="google,bing")
+    assert ws._searx._engines == "google,bing"
+
+
 # --- crawler: source_url first + email provenance ------------------------------
 
 class _Fetcher:

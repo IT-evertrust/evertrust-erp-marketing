@@ -189,7 +189,11 @@ def build_segments(cfg: CampaignConfig) -> list[Segment]:
 
     out: list[Segment] = []
     for tg in targets:
-        phrase = str(tg.get("searchHint") or tg.get("name") or tg.get("slug") or cfg.niche).strip()
+        # searchHint (from the Sector page, e.g. "Berlin, > 5 staff") AUGMENTS the archetype name —
+        # it must NOT replace it, or the target ("Dental clinics") is lost and only the hint is searched.
+        tname = str(tg.get("name") or tg.get("slug") or cfg.niche).strip()
+        hint = str(tg.get("searchHint") or "").strip()
+        phrase = f"{tname} {hint}".strip()
         niche = phrase.upper()
         for city in cities:
             for focus in _FOCI[:max(1, min(seg_per_city, len(_FOCI)))]:

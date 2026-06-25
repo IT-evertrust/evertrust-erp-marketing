@@ -43,7 +43,8 @@ def get_erp(settings: Settings = Depends(get_settings)) -> ErpGateway:
 def get_search(settings: Settings = Depends(get_settings)) -> SearchGateway:
     # SearXNG-first (auth via X-Search-Key = SEARXNG_API_KEY); DDG only as an opt-in fallback.
     return WebSearch(settings.searxng_url, settings.searxng_api_key,
-                     pages=settings.ddg_pages, enable_ddg=settings.enable_ddg_fallback)
+                     pages=settings.ddg_pages, enable_ddg=settings.enable_ddg_fallback,
+                     engines=settings.searxng_engines)
 
 
 def get_fetcher() -> UrlFetcher:
