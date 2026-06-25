@@ -43,6 +43,28 @@ export type MeetingResolution =
 // Default meeting length when we materialise a window from a single counter instant.
 const COUNTER_WINDOW_MS = 30 * 60_000;
 
+// When the lead names a concrete time that lands inside a slot we ALREADY offered, they
+// are confirming that slot — return it. The lead can phrase an acceptance as a restated
+// time ("Thursday 13:00 works") rather than picking the option by number, in which case
+// the model reports it as a `counter_time` equal to the offered slot, not an
+// `accepted_index`. We offered the slot because it was bookable and the lead just agreed
+// to it, so this must resolve to ACCEPTED without a second free/business-hours check — a
+// re-check can wrongly disagree (a tentative hold placed on that very slot, a zone edge)
+// and bounce a genuine acceptance back to COUNTER, which is exactly the "keeps re-proposing
+// the same times" failure. `at` matches when it falls within the offered [start, end).
+function matchOfferedSlot(proposedSlots: Slot[], at: Date): Slot | null {
+  const t = at.getTime();
+  if (Number.isNaN(t)) return null;
+  for (const slot of proposedSlots) {
+    const start = new Date(slot.start).getTime();
+    const end = new Date(slot.end).getTime();
+    if (!Number.isNaN(start) && !Number.isNaN(end) && t >= start && t < end) {
+      return slot;
+    }
+  }
+  return null;
+}
+
 // Resolve a reply_glock scheduling verdict into a meeting outcome:
 //   - accepted one of the slots we offered → ACCEPTED with that slot.
 //   - counter-proposed a time inside business hours that is free → ACCEPTED with a
@@ -65,6 +87,11 @@ export async function resolveScheduling(
     // Unparseable/garbage time → we can't book it; treat as no usable time so the
     // caller's propose path offers concrete slots instead of materialising junk.
     if (Number.isNaN(at.getTime())) return { status: 'NONE' };
+
+    // The lead confirmed a time we already offered (restated it instead of picking the
+    // number) → accept that exact offered slot, no second free/hours check.
+    const offered = matchOfferedSlot(proposedSlots, at);
+    if (offered) return { status: 'ACCEPTED', acceptedSlot: offered };
 
     const { primary } = await calendar.getOrgTimeZones(orgId);
     const end = new Date(at.getTime() + COUNTER_WINDOW_MS).toISOString();

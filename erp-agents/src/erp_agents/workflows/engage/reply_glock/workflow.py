@@ -1,6 +1,8 @@
 import json
 import re
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from erp_agents.clients.llm_client import LlmClient
 from erp_agents.core.job import AgentJob
@@ -201,7 +203,9 @@ class ReplyGlockWorkflow(Workflow):
             now=workflow_input.now or "(not provided)",
             timezone=workflow_input.timezone or "(not provided)",
             campaign_context=self.serialize_campaign_context(workflow_input.campaign_context),
-            proposed_slots=self.serialize_proposed_slots(workflow_input.proposed_slots),
+            proposed_slots=self.serialize_proposed_slots(
+                workflow_input.proposed_slots, workflow_input.timezone
+            ),
             thread=self.serialize_previous_thread(workflow_input.previous_thread),
             sender_name=workflow_input.sender_name or "Unknown",
             company=workflow_input.company or "Unknown",
@@ -416,15 +420,39 @@ class ReplyGlockWorkflow(Workflow):
         )
 
     @staticmethod
-    def serialize_proposed_slots(slots: list[dict]) -> str:
-        """Number the offered slots from 0 so the model can accept one BY INDEX."""
+    def serialize_proposed_slots(slots: list[dict], timezone: str | None = None) -> str:
+        """Number the offered slots from 0 so the model can accept one BY INDEX.
+
+        Render each slot in the ORG TIMEZONE in human words ("Thursday, 25 June 13:00–13:30
+        (Europe/Berlin)") so the model can match a lead who confirms by restating the time in
+        their own words ("Thursday 13:00 works") to the slot we offered — the raw UTC instant
+        the lead saw was never local, so a UTC-only listing forces an error-prone conversion.
+        The exact UTC instant is kept alongside for unambiguous grounding.
+        """
         if not slots:
             return "No slots were offered to this lead yet."
+        tz = None
+        if timezone:
+            try:
+                tz = ZoneInfo(timezone)
+            except Exception:
+                tz = None
         lines = []
         for i, slot in enumerate(slots):
             start = slot.get("start", "?") if isinstance(slot, dict) else str(slot)
             end = slot.get("end", "?") if isinstance(slot, dict) else "?"
-            lines.append(f"[{i}] {start} -> {end}")
+            label = f"{start} -> {end}"
+            if tz is not None and isinstance(slot, dict):
+                try:
+                    s = datetime.fromisoformat(str(start).replace("Z", "+00:00")).astimezone(tz)
+                    e = datetime.fromisoformat(str(end).replace("Z", "+00:00")).astimezone(tz)
+                    human = (
+                        f"{s.strftime('%A, %d %B %H:%M')}–{e.strftime('%H:%M')} ({timezone})"
+                    )
+                    label = f"{human}  [exact UTC: {start} -> {end}]"
+                except Exception:
+                    pass
+            lines.append(f"[{i}] {label}")
         return "\n".join(lines)
 
     @staticmethod

@@ -24,27 +24,28 @@ Rules:
 - Extract concrete signals; leave a signal false/null when not present.
 
 SCHEDULING — match the reply against the meeting slots we already offered (listed under
-OFFERED SLOTS in the user message, numbered from 0). The CONCRETE TIME the lead states ALWAYS
-wins over how they label it: a lead can write "I confirm Slot 2" yet name a date+time we never
-offered — capture the time they actually stated, not the label. Return a "scheduling" object:
-- accepted_index: the 0-based number of an offered slot — use ONLY when the reply picks a
-  numbered option ("the first works", "option 2", "let's do the 09:30 one") AND does NOT state a
-  concrete date+time that differs from that slot. If they name a concrete date+time that does
-  not match the slot they reference, the stated time wins → use counter_time, not accepted_index.
-  Otherwise null.
-- counter_time: an ISO-8601 UTC timestamp whenever the lead names a concrete date+time they want
-  to meet at that is NOT one of the offered slots — INCLUDING when they phrase it as confirming
-  or accepting ("I confirm Slot 2: Thursday 26 June at 10:30", "Friday at 3pm works for me", "can
-  we do Friday 3pm instead?"). Resolve relative dates/times against the CURRENT DATE/TIME and org
-  timezone shown in the user message: e.g. "Friday this week at 10:00 CET" -> that Friday's date
-  at 10:00 in that zone, converted to UTC (trailing "Z"). A time stated with NO zone is in the
-  org timezone. IGNORE quoted earlier-message footers and their timestamps ("On ... wrote:",
-  "Vao ... da viet:") — only the lead's NEW request counts. If you cannot pin BOTH a concrete
-  date AND time, set counter_time null.
+OFFERED SLOTS in the user message, numbered from 0, shown in the org timezone with their exact
+UTC instant). The decision turns on ONE question: does the time the lead agrees to MATCH one of
+the offered slots, or is it a DIFFERENT time? Return a "scheduling" object:
+- accepted_index: the 0-based number of an offered slot — use WHENEVER the lead agrees to,
+  confirms, or picks one of the offered slots, in ANY phrasing: by number ("option 2", "the
+  first works", "let's do the 09:30 one"), OR by restating that slot's own date/time ("Thursday
+  13:00 works for me", "yes, the 13:00 on the 25th is good", "I confirm Slot 1"). Restating the
+  time of a slot we offered IS accepting that slot — resolve the lead's stated time against the
+  org timezone and match it to the offered slot at that same time, then return that slot's index.
+  This is the common confirmation path; do not miss it.
+- counter_time: an ISO-8601 UTC timestamp — use ONLY when the lead names a concrete date+time
+  that is NOT one of the offered slots ("can we do Friday 3pm instead?", "Tuesday morning is
+  better", "how about the 27th at 10:00?"). Resolve relative/zoned times against the CURRENT
+  DATE/TIME and org timezone shown in the user message: e.g. "Friday this week at 10:00 CET" ->
+  that Friday's date at 10:00 in that zone, converted to UTC (trailing "Z"). A time stated with
+  NO zone is in the org timezone. IGNORE quoted earlier-message footers and their timestamps
+  ("On ... wrote:", "Vao ... da viet:") — only the lead's NEW request counts. If you cannot pin
+  BOTH a concrete date AND time, set counter_time null.
 - Set BOTH to null only when there is no scheduling signal at all, no slots were offered, or the
-  reply is too vague to pin to a slot OR a concrete time. Never set both at once — prefer
-  counter_time when the lead names a concrete date/time (matching an offered slot or not), and
-  accepted_index only when they pick an offered slot purely by reference with no differing time.
+  reply is too vague to pin to a slot OR a concrete time. Never set both at once: if the agreed
+  time matches an offered slot use accepted_index; only a genuinely different time uses
+  counter_time.
 
 Respond with exactly this JSON shape:
 {

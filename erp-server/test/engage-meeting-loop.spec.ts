@@ -63,6 +63,20 @@ describe('resolveScheduling', () => {
     });
   });
 
+  it('(b2) counter_time that lands inside an offered slot → ACCEPTED with THAT offered slot, no free-check', async () => {
+    // The lead confirmed a slot we offered by restating its time (the model reports it as a
+    // counter_time equal to the slot, not an accepted_index). Even with the calendar
+    // reporting busy, this must accept the offered slot — never bounce to COUNTER.
+    const cal = fakeCalendar({ free: false, alternatives: OFFERED });
+    const res = await resolveScheduling(
+      cal,
+      ORG,
+      { accepted_index: null, counter_time: OFFERED[1]!.start },
+      OFFERED,
+    );
+    expect(res).toEqual({ status: 'ACCEPTED', acceptedSlot: OFFERED[1] });
+  });
+
   it('(c) counter_time in business hours but busy → COUNTER with alternatives', async () => {
     const alternatives: Slot[] = [
       { start: '2026-07-01T11:00:00.000Z', end: '2026-07-01T11:30:00.000Z' },
