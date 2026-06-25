@@ -140,9 +140,8 @@ export async function createReachAim(
     whatsappNumber: values.whatsappNumber || undefined,
     sender: values.sender || undefined,
     salesCalendarId: values.salesCalendarId || undefined,
-    targetType: values.targetType || undefined,
-    industryFocus: values.industryFocus || undefined,
-    tenderFocus: values.tenderFocus || undefined,
+    // {{Type}} / {{IndustryFocus}} / {{TenderFocus}} are derived server-side from the
+    // niche's Sector — not sent from the form.
   });
   return mapAim(aim);
 }
