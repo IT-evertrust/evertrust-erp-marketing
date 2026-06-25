@@ -147,16 +147,11 @@ export function NurturePipelineBoard({
     if (!dest) return;
     const card = items.find((p) => p.id === id);
     if (!card || card.pipelineStage === dest) return;
+    // The card already moved optimistically; persist silently (no success toast)
+    // and only surface a failure.
     setStage.mutate(
       { id, patch: { pipelineStage: dest } },
       {
-        onSuccess: () =>
-          toast.success(
-            t('pipeline.movedToast', {
-              name: card.companyName ?? card.email,
-              stage: t(`pipeline.stages.${dest}`),
-            }),
-          ),
         onError: (err) => toast.error(err.message ?? t('pipeline.moveError')),
       },
     );
@@ -336,8 +331,9 @@ export function NurturePipelineBoard({
               </StageColumn>
             ))}
           </div>
-          {/* The floating card follows the pointer; dropAnimation off = instant drop. */}
-          <DragOverlay dropAnimation={null}>
+          {/* The floating card follows the pointer and settles smoothly into its new
+              column (dnd-kit's default drop animation). */}
+          <DragOverlay>
             {activeCard ? <CardView p={activeCard} dragging /> : null}
           </DragOverlay>
         </DndContext>
@@ -636,6 +632,13 @@ const CardView = memo(function CardView({
         dragging && 'cursor-grabbing shadow-lg ring-1 ring-[#15171c]/30',
       )}
     >
+      {/* Drag handle — top-right corner (company name sits top-left). The whole card
+          is draggable: dnd-kit's listeners live on the wrapper, so this is the visual
+          handle. */}
+      <GripVertical
+        aria-hidden
+        className="absolute right-1.5 top-1.5 z-10 size-4 cursor-grab text-[#959ca7] active:cursor-grabbing"
+      />
       {onDelete ? (
         <Button
           type="button"
@@ -648,7 +651,7 @@ const CardView = memo(function CardView({
             stop(e);
             onDelete();
           }}
-          className="absolute right-1 top-1 z-10 text-[#959ca7] opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover/card:opacity-100"
+          className="absolute right-8 top-1 z-10 text-[#959ca7] opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover/card:opacity-100"
         >
           <Trash2 />
         </Button>
@@ -656,13 +659,7 @@ const CardView = memo(function CardView({
 
       {editable && onSaveCard ? (
         <>
-          <div className="flex items-center gap-1 pr-6 text-[12px] font-bold text-[#15171c]">
-            {/* Drag affordance — the whole card is draggable (dnd-kit listeners live
-                on the wrapper), so this grip is a visual handle to show the card moves. */}
-            <GripVertical
-              aria-hidden
-              className="-ml-0.5 size-3.5 shrink-0 cursor-grab text-[#959ca7]"
-            />
+          <div className="flex items-center gap-1 pr-12 text-[12px] font-bold text-[#15171c]">
             <EditableText
               value={p.companyName}
               placeholder={companyPlaceholder ?? ''}
@@ -704,7 +701,7 @@ const CardView = memo(function CardView({
         </>
       ) : (
         <>
-          <p className="truncate pr-6 text-[12px] font-bold text-[#15171c]">
+          <p className="truncate pr-12 text-[12px] font-bold text-[#15171c]">
             {p.companyName ?? p.email}
             {isWon ? <span className="text-[#15171c]"> ✓</span> : null}
           </p>
