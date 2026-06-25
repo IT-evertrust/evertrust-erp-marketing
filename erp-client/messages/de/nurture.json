@@ -29,6 +29,13 @@
     "deleteConfirm": "{name} aus der Pipeline entfernen?",
     "deletedToast": "{name} aus der Pipeline entfernt",
     "deleteError": "Karte konnte nicht entfernt werden",
+    "companyPlaceholder": "Firmenname",
+    "contactPlaceholder": "Ansprechpartner",
+    "phonePlaceholder": "Telefon",
+    "saveError": "Änderung konnte nicht gespeichert werden",
+    "addDeal": "Deal hinzufügen",
+    "addedToast": "Neuer Deal hinzugefügt",
+    "addError": "Deal konnte nicht hinzugefügt werden",
     "stages": {
       "INTEREST": "Interesse",
       "INTENT": "Absicht",
@@ -76,5 +83,10 @@
     "analysisNone": "Noch keine Analyse für diese Firma.",
     "termsTitle": "Wichtige Punkte",
     "due": "fällig {date}"
+  },
+  "niche": {
+    "empty": "Noch keine Nischen.",
+    "addPlaceholder": "Nische eingeben, Enter drücken…",
+    "addError": "Nische konnte nicht hinzugefügt werden."
   }
 }

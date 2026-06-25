@@ -28,9 +28,11 @@ import { setAuditContext } from '../common/audit-context';
 import { ArsenalTokenGuard } from '../common/guards/arsenal-token.guard';
 import { ProspectsService } from './prospects.service';
 import {
+  CreateProspectCardBodyDto,
   GraduateProspectBodyDto,
   ProspectBulkBodyDto,
   UpdateProspectBodyDto,
+  UpdateProspectCardBodyDto,
   UpdateProspectDealBodyDto,
   UpdateProspectStageBodyDto,
   UpdateProspectStatusBodyDto,
@@ -56,6 +58,8 @@ function toDto(r: ProspectRow, nicheTargetName: string | null = null): ProspectD
     nicheTargetId: r.nicheTargetId,
     nicheTargetName,
     contactName: r.contactName,
+    phone: r.phone,
+    niche: r.niche,
     email: r.email,
     companyName: r.companyName,
     website: r.website,
@@ -209,6 +213,55 @@ export class ProspectsController {
       entityId: row.id,
       action: 'DEAL_SET',
       after: { dealValue: row.dealValue },
+    });
+    return toDto(row);
+  }
+
+  // JWT: create a BLANK deal card on the Nurture board ("+ Add deal"). Org-scoped +
+  // audited (campaigns:write). The campaignId must belong to the caller's org (404
+  // otherwise); the server stamps a placeholder unique email so the new row satisfies
+  // the (campaignId, email) constraint. Fixed 'card' path — no machine POST /:id to clash.
+  @RequirePermissions('campaigns:write')
+  @Post('card')
+  async createCard(
+    @OrgId() orgId: string,
+    @Body() body: CreateProspectCardBodyDto,
+    @Req() req: Request,
+  ): Promise<ProspectDto> {
+    const row = await this.prospects.createCardForOrg(orgId, body);
+    setAuditContext(req, {
+      entity: 'prospects',
+      entityId: row.id,
+      action: 'CREATE',
+      after: { campaignId: row.campaignId, pipelineStage: row.pipelineStage },
+    });
+    return toDto(row);
+  }
+
+  // JWT: inline-edit a Nurture card's display fields (company, contact, phone, niche
+  // tag, € value). Org-scoped + audited (campaigns:write). Only provided fields are
+  // written; null clears a text field. 404 if the card isn't in this org. Distinct
+  // sub-path (':id/card') so it never collides with the machine PATCH /:id.
+  @RequirePermissions('campaigns:write')
+  @Patch(':id/card')
+  async updateCard(
+    @OrgId() orgId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: UpdateProspectCardBodyDto,
+    @Req() req: Request,
+  ): Promise<ProspectDto> {
+    const row = await this.prospects.updateCardForOrg(orgId, id, body);
+    setAuditContext(req, {
+      entity: 'prospects',
+      entityId: row.id,
+      action: 'CARD_EDIT',
+      after: {
+        companyName: row.companyName,
+        contactName: row.contactName,
+        phone: row.phone,
+        niche: row.niche,
+        dealValue: row.dealValue,
+      },
     });
     return toDto(row);
   }

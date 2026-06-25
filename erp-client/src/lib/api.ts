@@ -86,6 +86,8 @@ import {
   ProspectDto,
   ProspectListDto,
   ProspectStatus,
+  CreateProspectCardDto,
+  UpdateProspectCardDto,
   UpdateProspectStatusDto,
   UpdateProspectStageDto,
   UpdateProspectDealDto,
@@ -579,6 +581,24 @@ export const api = {
       request<ProspectDto>(`/prospects/${encodeURIComponent(id)}/deal`, {
         method: 'PATCH',
         body: UpdateProspectDealDto.parse({ dealValue }),
+        schema: ProspectDto,
+      }),
+
+    // Add a blank deal card to a Nurture board column ("+ Add deal"). The server
+    // stamps a placeholder email; the rest is filled in via the inline-edit PATCH.
+    createCard: (input: z.infer<typeof CreateProspectCardDto>) =>
+      request<ProspectDto>('/prospects/card', {
+        method: 'POST',
+        body: CreateProspectCardDto.parse(input),
+        schema: ProspectDto,
+      }),
+
+    // Inline-edit a Nurture card's display fields (company / contact / phone /
+    // niche tag / € value). Partial patch; null clears a text field.
+    updateCard: (id: string, patch: z.infer<typeof UpdateProspectCardDto>) =>
+      request<ProspectDto>(`/prospects/${encodeURIComponent(id)}/card`, {
+        method: 'PATCH',
+        body: UpdateProspectCardDto.parse(patch),
         schema: ProspectDto,
       }),
 

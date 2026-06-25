@@ -1,12 +1,15 @@
+import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, desc, eq, gte, inArray, lte } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 import type {
+  CreateProspectCardDto,
   GraduateProspectDto,
   GraduateProspectResultDto,
   LeadDto,
   PipelineStage,
   ProspectStatus,
+  UpdateProspectCardDto,
   UpdateProspectDto,
 } from '@evertrust/shared';
 import { DB, type DbClient } from '../db/db.tokens';
@@ -428,6 +431,71 @@ export class ProspectsService {
     return before;
   }
 
+  // Create a BLANK deal card from the Nurture board ("+ Add deal"). ORG-SCOPED:
+  // the campaign must belong to `orgId` (404 otherwise — never seed a deal into
+  // another tenant's campaign). The email column is NOT NULL and unique per
+  // (campaignId, email), so we stamp a collision-free placeholder; status defaults
+  // to NEW and dealValue to 0. Everything else is filled in via the inline-edit
+  // card PATCH. The JWT audit row is written by the controller.
+  async createCardForOrg(
+    orgId: string,
+    body: CreateProspectCardDto,
+  ): Promise<ProspectRow> {
+    // Confine to the tenant first: the campaign must be in the caller's org.
+    const campaign = await this.findCampaignForOrg(orgId, body.campaignId);
+    if (!campaign) throw new NotFoundException('Campaign not found');
+
+    const inserted = await this.db
+      .insert(schema.prospects)
+      .values({
+        organizationId: orgId,
+        campaignId: campaign.id,
+        email: `manual-${randomUUID()}@deal.local`,
+        companyName: body.companyName ?? null,
+        pipelineStage: body.pipelineStage ?? 'INTEREST',
+        status: 'NEW',
+        dealValue: 0,
+      })
+      .returning();
+    const row = inserted[0];
+    if (!row) throw new Error('Failed to create prospect card');
+    return row;
+  }
+
+  // Inline-edit a Nurture card's display fields (company, contact, phone, niche tag,
+  // € value). ORG-SCOPED: 404 if the prospect is not in `orgId`. Only the fields
+  // present in `patch` are written; a null clears a text field. Never touches the
+  // agent-driven status or the scrape fields. The JWT audit row is set by the
+  // controller.
+  async updateCardForOrg(
+    orgId: string,
+    id: string,
+    patch: UpdateProspectCardDto,
+  ): Promise<ProspectRow> {
+    const before = await this.getForOrg(orgId, id); // 404 cross-org / unknown
+
+    const set: Partial<typeof schema.prospects.$inferInsert> = {
+      updatedAt: new Date(),
+    };
+    if (patch.companyName !== undefined) set.companyName = patch.companyName;
+    if (patch.contactName !== undefined) set.contactName = patch.contactName;
+    if (patch.phone !== undefined) set.phone = patch.phone;
+    if (patch.niche !== undefined) set.niche = patch.niche;
+    if (patch.dealValue !== undefined) set.dealValue = patch.dealValue;
+
+    const updated = await this.db
+      .update(schema.prospects)
+      .set(set)
+      .where(
+        and(
+          eq(schema.prospects.organizationId, orgId),
+          eq(schema.prospects.id, id),
+        ),
+      )
+      .returning();
+    return updated[0] ?? before;
+  }
+
   // Partial update of one prospect (the send + reply stages stamp status/snooze/
   // followup/lastContacted/leadId). 404 if the id is unknown. Audited.
   async update(id: string, patch: UpdateProspectDto): Promise<ProspectRow> {
@@ -563,6 +631,26 @@ export class ProspectsService {
       .select()
       .from(schema.campaigns)
       .where(eq(schema.campaigns.id, id))
+      .limit(1);
+    return rows[0] ?? null;
+  }
+
+  // A campaign IN THE CALLER'S ORG (the JWT card create). null if missing or
+  // cross-org — the caller maps that to a 404 so a deal can never be seeded into
+  // another tenant's campaign.
+  private async findCampaignForOrg(
+    orgId: string,
+    id: string,
+  ): Promise<CampaignRow | null> {
+    const rows = await this.db
+      .select()
+      .from(schema.campaigns)
+      .where(
+        and(
+          eq(schema.campaigns.organizationId, orgId),
+          eq(schema.campaigns.id, id),
+        ),
+      )
       .limit(1);
     return rows[0] ?? null;
   }

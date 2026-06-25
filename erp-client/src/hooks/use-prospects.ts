@@ -2,8 +2,11 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  CreateProspectCardDto,
+  ProspectDto,
   ProspectListDto,
   ProspectStatus,
+  UpdateProspectCardDto,
   UpdateProspectStageDto,
   UpdateProspectStatusDto,
 } from '@evertrust/shared';
@@ -123,6 +126,68 @@ export function useUpdateProspectDeal() {
           items: data.items.map((p) =>
             p.id === id ? { ...p, dealValue } : p,
           ),
+        });
+      }
+      return {
+        snapshots: snapshots.filter(
+          (s): s is [readonly unknown[], ProspectListDto] => !!s[1],
+        ),
+      };
+    },
+    onError: (_e, _vars, ctx) => {
+      for (const [key, data] of ctx?.snapshots ?? []) {
+        queryClient.setQueryData(key, data);
+      }
+    },
+    onSettled: (_data, _err, vars) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.prospects.all });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.prospects.detail(vars.id),
+      });
+    },
+  });
+}
+
+// Add a blank deal card to a Nurture board column ("+ Add deal"). The server stamps
+// a placeholder email + the chosen stage; we invalidate the prospect tree on success
+// so the new card appears in its column (and the focus-the-new-card flow can pick it
+// up by the returned id). No optimistic insert — the row is server-generated.
+export function useCreateProspectCard() {
+  const queryClient = useQueryClient();
+  return useMutation<ProspectDto, ApiError, CreateProspectCardDto>({
+    mutationFn: (input) => api.prospects.createCard(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.prospects.all });
+    },
+  });
+}
+
+// Inline-edit a Nurture card's display fields (company / contact / phone / niche tag
+// / € value). Optimistically writes the patched fields on every cached board page so
+// the edit sticks instantly; rolls back on error; invalidates the prospect tree on
+// settle. Mirrors the optimistic shape of useUpdateProspectDeal.
+export function useUpdateProspectCard() {
+  const queryClient = useQueryClient();
+  return useMutation<
+    ProspectDto,
+    ApiError,
+    { id: string; patch: UpdateProspectCardDto },
+    { snapshots: [readonly unknown[], ProspectListDto][] }
+  >({
+    mutationFn: ({ id, patch }) => api.prospects.updateCard(id, patch),
+    onMutate: async ({ id, patch }) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.prospects.all });
+      const snapshots = queryClient.getQueriesData<ProspectListDto>({
+        queryKey: queryKeys.prospects.board(),
+        exact: false,
+      });
+      for (const [key, data] of snapshots) {
+        if (!data) continue;
+        const target = data.items.find((p) => p.id === id);
+        if (!target) continue;
+        queryClient.setQueryData<ProspectListDto>(key, {
+          ...data,
+          items: data.items.map((p) => (p.id === id ? { ...p, ...patch } : p)),
         });
       }
       return {
