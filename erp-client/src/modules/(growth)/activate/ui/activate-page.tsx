@@ -1,9 +1,11 @@
 'use client';
 
-// The blend: rework's Activate tabbed UI, but the Meeting Booker tab renders
-// MAIN's self-contained Google-Calendar component instead of rework's
-// MeetingBookerPanel. Research + After-Sales stay as rework's panels.
-import { Calendar } from '@/components/activate/calendar/calendar';
+// The blend: rework's Activate tabbed UI. The Meeting Booker tab renders the new
+// Saloot-design week-grid booker (MeetingBookerV2). The original full-featured
+// Calendar component is intentionally kept on disk (components/activate/calendar)
+// and untouched — it is simply no longer mounted here. Research + After-Sales stay
+// as rework's panels.
+import { MeetingBookerV2 } from '@/components/activate/meeting-booker-v2/meeting-booker';
 
 import { ActivateTabs } from '../components/activate-tabs';
 import { AfterSalesAnalysisPanel } from '../components/aftersales-analysis-panel';
@@ -20,7 +22,7 @@ export function ActivatePage() {
         onChange={activate.setActiveTab}
       />
 
-      {activate.activeTab === 'booker' ? <Calendar /> : null}
+      {activate.activeTab === 'booker' ? <MeetingBookerV2 /> : null}
 
       {activate.activeTab === 'research' ? (
         <CompanyResearchPanel
