@@ -32,7 +32,6 @@ from erp_agents.workflows.reach._inject import ConfigInjectingErp, satellite_con
 # MAIN's standalone agent (resolved via the _agents_path shim).
 from satellite.clients.erp import ErpClient  # type: ignore
 from satellite.clients.search import HttpFetcher, WebSearch  # type: ignore
-from satellite.domain import geo  # type: ignore
 from satellite.pipeline import RunOptions, run as satellite_run  # type: ignore
 from satellite.settings import (  # type: ignore
     load_settings,
@@ -136,6 +135,7 @@ class LeadSatelliteWorkflow(Workflow):
                 scraper.get("leadTarget"),
                 scraper.get("maxQueries"),
                 scraper.get("minScore"),
+                scraper.get("scrapeTimeoutMin"),
             )
         trace.append(
             AgentTraceStep(
@@ -153,16 +153,13 @@ class LeadSatelliteWorkflow(Workflow):
 
         # ERP gateway: real client for the campaigns flow; for the Reach flow wrap a
         # ConfigInjectingErp that serves the injected config and no-ops every write (return-only).
-        # Region is a ZONE word (North/South/…) in the Reach flow — pass it to the pipeline as
-        # region_focus (resolved via the LLM profiler), NOT as a literal city list.
+        # The region ZONE word (North/South/…/Near border) rides on cfg.region; the pipeline's
+        # zone-aware profiler (geo.is_zone) expands it into that part of the country's cities — so
+        # there is nothing extra to pass here.
         real_erp = ErpClient(settings.erp_base_url, settings.arsenal_token)
-        region_focus = None
         if injected:
             cfg = satellite_config(cfg_in)
             erp = ConfigInjectingErp(cfg, real=real_erp)
-            zone = (cfg.region or "").strip()
-            if zone and not geo.is_nationwide(zone):
-                region_focus = zone
         else:
             erp = real_erp
         search = WebSearch(
@@ -170,6 +167,7 @@ class LeadSatelliteWorkflow(Workflow):
             settings.searxng_api_key,
             pages=settings.ddg_pages,
             enable_ddg=settings.enable_ddg_fallback,
+            engines=settings.searxng_engines,
         )
         fetcher = HttpFetcher()
         opts = RunOptions(
@@ -178,7 +176,6 @@ class LeadSatelliteWorkflow(Workflow):
             persist=persist,
             use_llm=use_llm,
             max_segments=max_segments,
-            region_focus=region_focus,
         )
         try:
             result = satellite_run(settings, opts, erp, search, fetcher)
