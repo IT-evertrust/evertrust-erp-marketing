@@ -1,7 +1,9 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 
+import { Button } from '@/components/ui/button';
 import { GrowthCard, StatusPill } from '../../shared';
 
 import type { Campaign, Lead } from '../types';
@@ -24,6 +26,10 @@ type LeadScraperPanelProps = {
   scrapeError?: string | null;
 };
 
+// Client-side pagination: the leads list is already fully loaded, so we page through
+// it in memory — ten rows per page.
+const PAGE_SIZE = 10;
+
 export function LeadScraperPanel({
   campaigns,
   selectedCampaignId,
@@ -37,6 +43,18 @@ export function LeadScraperPanel({
   scrapeError = null,
 }: LeadScraperPanelProps) {
   const t = useTranslations('reach');
+
+  const [page, setPage] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(leads.length / PAGE_SIZE));
+  // Jump back to the first page when the operator switches campaigns.
+  useEffect(() => {
+    setPage(0);
+  }, [selectedCampaignId]);
+  // Clamp the page if the lead set shrinks (e.g. a rescan returns fewer rows).
+  useEffect(() => {
+    setPage((p) => Math.min(p, totalPages - 1));
+  }, [totalPages]);
+  const pageLeads = leads.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
 
   return (
     <div className="flex flex-col gap-4">
@@ -102,7 +120,7 @@ export function LeadScraperPanel({
             </thead>
 
             <tbody>
-              {leads.map((lead) => (
+              {pageLeads.map((lead) => (
                 <tr
                   key={lead.id}
                   className="border-t border-border hover:bg-muted"
@@ -127,6 +145,45 @@ export function LeadScraperPanel({
                 </tr>
               ))}
             </tbody>
+
+            {totalPages > 1 && (
+              <tfoot>
+                <tr>
+                  <td colSpan={5} className="px-3 pt-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+                        {t('scraper.pagination', {
+                          page: page + 1,
+                          total: totalPages,
+                        })}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={page === 0}
+                          onClick={() => setPage((p) => Math.max(0, p - 1))}
+                        >
+                          {t('scraper.prev')}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={page >= totalPages - 1}
+                          onClick={() =>
+                            setPage((p) => Math.min(totalPages - 1, p + 1))
+                          }
+                        >
+                          {t('scraper.next')}
+                        </Button>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </tfoot>
+            )}
           </table>
         )}
       </GrowthCard>
