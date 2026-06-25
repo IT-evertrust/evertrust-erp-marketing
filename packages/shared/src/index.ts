@@ -105,37 +105,21 @@ export const PermissionEnum = z.enum(
   [...PERMISSIONS] as [Permission, ...Permission[]],
 );
 
-// Authoritative role -> permissions mapping. SUPER_ADMIN holds every permission;
-// ADMIN is SUPER_ADMIN minus users:manage; MANAGER and EMPLOYEE are explicit
-// allow-lists. Changing access policy means changing this table, nothing else.
+// Authoritative role -> permissions mapping.
+//
+// AUTHORIZATION IS INTENTIONALLY DISABLED for this deployment: this is a single
+// internal tool with only a handful of trusted users, so the product decision is
+// that ANY authenticated user has FULL access. Every role therefore maps to the
+// COMPLETE permission set. Authentication (Google login) is still enforced — only
+// per-feature authorization is flattened. The RBAC scaffolding (PermissionsGuard,
+// @RequirePermissions, <Can>) is kept intact so role-based gating can be restored
+// later by simply narrowing the per-role lists below — nothing else changes.
 export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
-  // Owner (platform owner): every permission, AND the only role whose reach
-  // crosses the org boundary — but ONLY over the Users admin surface (see
-  // isOwner / users.service). All other data stays tenant-scoped for an Owner.
   OWNER: [...PERMISSIONS],
-  // Super Admin (CEO / org owner): every permission, within its OWN org only.
   SUPER_ADMIN: [...PERMISSIONS],
-  // Admin: everything except managing other users.
-  ADMIN: PERMISSIONS.filter((p) => p !== 'users:manage'),
-  // Manager (lead-level): full customer/campaign authority.
-  MANAGER: [
-    'customers:read',
-    'customers:write',
-    'campaigns:read',
-    'campaigns:write',
-    // Managers see scorecards and record manual KPIs, but editing KPI definitions
-    // + weights stays an admin (performance:admin) action.
-    'performance:read',
-    'performance:write',
-    'audit:read',
-  ],
-  // Employee (operator): read across the board, write where day-to-day work
-  // happens, but no campaign launches.
-  EMPLOYEE: [
-    'customers:read',
-    'campaigns:read',
-    'audit:read',
-  ],
+  ADMIN: [...PERMISSIONS],
+  MANAGER: [...PERMISSIONS],
+  EMPLOYEE: [...PERMISSIONS],
 };
 
 // Permissions granted to a role. Returns a fresh array so callers can't mutate
@@ -149,16 +133,18 @@ export function hasPermission(role: UserRole, perm: Permission): boolean {
   return ROLE_PERMISSIONS[role].includes(perm);
 }
 
-// A user's EFFECTIVE permissions: their explicit per-user set when customized,
-// otherwise their role's defaults. OWNER and SUPER_ADMIN ALWAYS hold every
-// permission (full control, not editable) so the org can never be locked out of
-// admin.
+// A user's EFFECTIVE permissions. AUTHORIZATION IS DISABLED for this deployment
+// (see ROLE_PERMISSIONS): every authenticated user holds the FULL permission set
+// regardless of role or any stored per-user override, so no logged-in user is
+// ever blocked from a feature. Both the API's PermissionsGuard (via JwtStrategy,
+// which attaches this set per request) and the client's UI gating read this, so
+// both layers grant full access in lock-step. To restore real RBAC, narrow the
+// per-role lists above and return `stored ?? permissionsForRole(role)` here.
 export function effectivePermissions(
-  role: UserRole,
-  stored: readonly string[] | null | undefined,
+  _role: UserRole,
+  _stored: readonly string[] | null | undefined,
 ): Permission[] {
-  if (role === 'OWNER' || role === 'SUPER_ADMIN') return [...PERMISSIONS];
-  return stored ? ([...stored] as Permission[]) : permissionsForRole(role);
+  return [...PERMISSIONS];
 }
 
 // True for the platform Owner — the only role whose authority crosses the org
