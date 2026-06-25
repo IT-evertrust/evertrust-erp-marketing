@@ -2,14 +2,13 @@
   "tabs": {
     "scraper": "Lead-Scraper",
     "generator": "E-Mail-Generator",
-    "sender": "Sequenz-Sender",
-    "templates": "Vorlagen"
+    "sender": "Sequenz-Sender"
   },
   "campaignTable": {
     "title": "Kampagnen",
-    "aim": "Zielen",
+    "aim": "+ Kampagne",
     "loading": "Kampagnen werden geladen…",
-    "empty": "Noch keine Kampagnen. Auf „Zielen“ klicken, um eine zu starten.",
+    "empty": "Noch keine Kampagnen. Auf „+ Kampagne“ klicken, um eine zu starten.",
     "col": {
       "campaign": "Kampagne",
       "niche": "Nische",

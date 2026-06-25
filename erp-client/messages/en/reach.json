@@ -2,14 +2,13 @@
   "tabs": {
     "scraper": "Lead Scraper",
     "generator": "Email Generator",
-    "sender": "Sequence Sender",
-    "templates": "Templates"
+    "sender": "Sequence Sender"
   },
   "campaignTable": {
     "title": "Campaigns",
-    "aim": "Aim",
+    "aim": "+ Campaign",
     "loading": "Loading campaigns…",
-    "empty": "No campaigns yet. Click Aim to launch one.",
+    "empty": "No campaigns yet. Click + Campaign to launch one.",
     "col": {
       "campaign": "Campaign",
       "niche": "Niche",
