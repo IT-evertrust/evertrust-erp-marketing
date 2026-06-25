@@ -171,17 +171,6 @@
       "toastConnectError": "Could not connect the Google account.",
       "toastError": "Could not update Google accounts."
     },
-    "other": {
-      "title": "Other integrations",
-      "emailLabel": "Transactional email",
-      "emailSublabel": "Sequence Sender (per-org send)",
-      "docusignLabel": "DocuSign",
-      "docusignSublabel": "Contract Assist",
-      "connected": "Connected",
-      "notConnected": "Not connected",
-      "connect": "Connect",
-      "comingSoon": "Coming soon"
-    },
     "ai": {
       "title": "AI engine",
       "modelLabel": "Model",

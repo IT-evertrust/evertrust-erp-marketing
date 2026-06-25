@@ -171,17 +171,6 @@
       "toastConnectError": "Google-Konto konnte nicht verbunden werden.",
       "toastError": "Google-Konten konnten nicht aktualisiert werden."
     },
-    "other": {
-      "title": "Weitere Integrationen",
-      "emailLabel": "Transaktions-E-Mail",
-      "emailSublabel": "Sequenz-Sender (Org-Versand)",
-      "docusignLabel": "DocuSign",
-      "docusignSublabel": "Vertrags-Assistent",
-      "connected": "Verbunden",
-      "notConnected": "Nicht verbunden",
-      "connect": "Verbinden",
-      "comingSoon": "Demnächst verfügbar"
-    },
     "ai": {
       "title": "KI-Engine",
       "modelLabel": "Modell",

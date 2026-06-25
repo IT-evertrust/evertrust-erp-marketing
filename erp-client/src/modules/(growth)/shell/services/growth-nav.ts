@@ -1,17 +1,11 @@
 import type { LucideIcon } from 'lucide-react';
 import {
-  BarChart3,
-  FileText,
-  Heart,
-  Layers,
+  Calendar,
   LayoutGrid,
-  MessageCircle,
-  Radio,
-  Settings,
+  Mail,
+  Share2,
   SlidersHorizontal,
-  Users,
-  Workflow,
-  Zap,
+  Target,
 } from 'lucide-react';
 import type { Permission } from '@evertrust/shared';
 
@@ -57,7 +51,7 @@ export const GROWTH_NAV_ITEMS: GrowthNavItem[] = [
     label: 'Reach',
     i18nKey: 'reach',
     href: '/reach',
-    icon: Radio,
+    icon: Target,
     permission: 'campaigns:read',
     group: 'rean',
     step: '01',
@@ -66,7 +60,7 @@ export const GROWTH_NAV_ITEMS: GrowthNavItem[] = [
     label: 'Engage',
     i18nKey: 'engage',
     href: '/engage',
-    icon: MessageCircle,
+    icon: Mail,
     permission: 'campaigns:read',
     group: 'rean',
     step: '02',
@@ -75,7 +69,7 @@ export const GROWTH_NAV_ITEMS: GrowthNavItem[] = [
     label: 'Activate',
     i18nKey: 'activate',
     href: '/activate',
-    icon: Zap,
+    icon: Calendar,
     permission: 'campaigns:read',
     group: 'rean',
     step: '03',
@@ -84,57 +78,15 @@ export const GROWTH_NAV_ITEMS: GrowthNavItem[] = [
     label: 'Nurture',
     i18nKey: 'nurture',
     href: '/nurture',
-    icon: Heart,
+    icon: Share2,
     permission: 'campaigns:read',
     group: 'rean',
     step: '04',
   },
 
-  // Insights.
-  {
-    label: 'Sector',
-    i18nKey: 'sector',
-    href: '/sector',
-    icon: Layers,
-    permission: 'campaigns:read',
-    group: 'insights',
-  },
-  {
-    label: 'Analytics',
-    i18nKey: 'analytics',
-    href: '/performance',
-    icon: BarChart3,
-    permission: 'campaigns:read',
-    group: 'insights',
-  },
-  {
-    label: 'Reports',
-    i18nKey: 'reports',
-    href: '/reports',
-    icon: FileText,
-    permission: 'campaigns:read',
-    group: 'insights',
-  },
-
-  // Settings: General is open to every authed user (permission: null);
-  // Configuration is admin-only (admin:config), and Users is users:manage —
-  // the sidebar hides each link for anyone the API would reject.
-  {
-    label: 'General',
-    i18nKey: 'general',
-    href: '/settings/general',
-    icon: Settings,
-    permission: null,
-    group: 'settings',
-  },
-  {
-    label: 'Reach',
-    i18nKey: 'reachSettings',
-    href: '/settings/reach',
-    icon: Radio,
-    permission: 'admin:config',
-    group: 'settings',
-  },
+  // Settings — only Configuration (admin-only). Insights (Sector / Analytics /
+  // Reports), the other Settings sub-pages (General / Reach / User management), and
+  // Automation are intentionally hidden from the rail for the stripped-down shell.
   {
     label: 'Configuration',
     i18nKey: 'configuration',
@@ -142,23 +94,6 @@ export const GROWTH_NAV_ITEMS: GrowthNavItem[] = [
     icon: SlidersHorizontal,
     permission: 'admin:config',
     group: 'settings',
-  },
-  {
-    label: 'User management',
-    i18nKey: 'userManagement',
-    href: '/users',
-    icon: Users,
-    permission: 'users:manage',
-    group: 'settings',
-  },
-
-  // Automation (top-level, ungrouped).
-  {
-    label: 'Automation',
-    i18nKey: 'automation',
-    href: '/automation',
-    icon: Workflow,
-    permission: 'campaigns:read',
   },
 ];
 

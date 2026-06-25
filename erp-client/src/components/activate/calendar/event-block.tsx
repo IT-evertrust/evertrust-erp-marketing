@@ -74,7 +74,8 @@ export function CalendarEventBlock({
         categoryStyle.bar,
         'hover:-translate-y-0.5 hover:bg-muted hover:shadow-xl',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        selected ? 'ring-2 ring-ring' : '',
+        // Selected outline matches the card's own category color, not the brand green.
+        selected ? `ring-2 ${categoryStyle.ring}` : '',
       ].join(' ')}
       style={style}
       title={
