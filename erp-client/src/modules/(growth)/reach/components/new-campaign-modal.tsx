@@ -64,10 +64,6 @@ const EMPTY_FORM: NewCampaignFormValues = {
   // Seeded from the org's primary calendar once the scan loads (see effect); ''
   // means "use the org default" (Google not connected).
   salesCalendarId: '',
-  // Optional targeting hints for the default email template's placeholders.
-  targetType: '',
-  industryFocus: '',
-  tenderFocus: '',
 };
 
 // Keep only letters/digits in a label token (drops spaces + punctuation), so
@@ -241,9 +237,6 @@ export function NewCampaignModal({
       whatsappNumber: form.whatsappNumber.trim(),
       sender: form.sender,
       salesCalendarId: form.salesCalendarId.trim(),
-      targetType: form.targetType.trim(),
-      industryFocus: form.industryFocus.trim(),
-      tenderFocus: form.tenderFocus.trim(),
     });
   }
 
@@ -452,51 +445,9 @@ export function NewCampaignModal({
             )}
           </div>
 
-          {/* Target type — feeds the default email template's {{Type}}
-              placeholder. Optional. */}
-          <div className="grid gap-2">
-            <Label htmlFor={`${fieldId}-targetType`}>
-              {t('modal.field.targetType')}
-            </Label>
-            <Input
-              id={`${fieldId}-targetType`}
-              value={form.targetType}
-              placeholder={t('modal.field.targetTypePlaceholder')}
-              maxLength={120}
-              onChange={(e) => set('targetType', e.target.value)}
-            />
-          </div>
-
-          {/* Industry focus — feeds {{IndustryFocus}}. Optional. */}
-          <div className="grid gap-2">
-            <Label htmlFor={`${fieldId}-industryFocus`}>
-              {t('modal.field.industryFocus')}
-            </Label>
-            <Input
-              id={`${fieldId}-industryFocus`}
-              value={form.industryFocus}
-              placeholder={t('modal.field.industryFocusPlaceholder')}
-              maxLength={120}
-              onChange={(e) => set('industryFocus', e.target.value)}
-            />
-          </div>
-
-          {/* Tender focus — feeds {{TenderFocus}}. Optional, full width. */}
-          <div className="grid gap-2 sm:col-span-2">
-            <Label htmlFor={`${fieldId}-tenderFocus`}>
-              {t('modal.field.tenderFocus')}
-            </Label>
-            <Input
-              id={`${fieldId}-tenderFocus`}
-              value={form.tenderFocus}
-              placeholder={t('modal.field.tenderFocusPlaceholder')}
-              maxLength={200}
-              onChange={(e) => set('tenderFocus', e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              {t('modal.field.focusHint')}
-            </p>
-          </div>
+          {/* {{Type}} / {{IndustryFocus}} / {{TenderFocus}} are auto-derived from the
+              selected niche's Sector on the server (Type ← first enabled target,
+              IndustryFocus ← parent industry, TenderFocus ← niche name) — no raw inputs. */}
         </div>
 
         <DialogFooter>

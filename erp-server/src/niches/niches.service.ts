@@ -79,6 +79,40 @@ export class NichesService {
       .orderBy(asc(schema.nicheTargets.name));
   }
 
+  // Resolve a niche's Sector context for the Reach outreach-template placeholders:
+  //   {{TenderFocus}} <- niche name, {{IndustryFocus}} <- parent industry name,
+  //   {{Type}} <- the niche's FIRST ENABLED target (alphabetical, via targets()).
+  // industryName / targetName are null when the niche has no industry assigned / no
+  // enabled target. ORG-SCOPED via require() (404 if the niche is not in `orgId`).
+  async resolveSectorContext(
+    orgId: string,
+    nicheId: string,
+  ): Promise<{ nicheName: string; industryName: string | null; targetName: string | null }> {
+    const niche = await this.require(orgId, nicheId); // 404 if missing / cross-org
+
+    let industryName: string | null = null;
+    if (niche.industryId) {
+      const rows = await this.db
+        .select({ name: schema.industries.name })
+        .from(schema.industries)
+        .where(
+          and(
+            tenantScope(orgId, schema.industries),
+            eq(schema.industries.id, niche.industryId),
+          ),
+        )
+        .limit(1);
+      industryName = rows[0]?.name ?? null;
+    }
+
+    const enabled = await this.targets(nicheId, true); // enabled-only, alphabetical
+    return {
+      nicheName: niche.name,
+      industryName,
+      targetName: enabled[0]?.name ?? null,
+    };
+  }
+
   // Upsert AI target archetypes by (nicheId, slugify(name)). Existing rows update
   // their searchHint (and re-enable nothing — disabling is a deliberate human act);
   // new rows insert as source AI. Returns the per-row created/updated counts + the

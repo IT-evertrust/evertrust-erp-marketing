@@ -145,20 +145,45 @@ export class ReachService {
   // Forge to generate the three templates + the news brief and store them. If the
   // agent is unreachable the aim is still created (DRAFT) so it can be regenerated.
   async createAim(orgId: string, dto: CreateAimDto): Promise<ReachAim> {
-    const aim = await this.repo.createAim(orgId, dto);
+    // Derive the outreach-template placeholders from the niche's Sector instead of raw
+    // input: {{Type}} <- first enabled target, {{IndustryFocus}} <- parent industry,
+    // {{TenderFocus}} <- niche name. findOrCreate resolves (or seeds) the niche row, which
+    // also bridges to the campaign link below — so a single lookup serves both. Best-effort:
+    // a free-text niche with no Sector (or a resolve failure) falls back to whatever the dto
+    // carried (normally nothing), so creation never blocks.
+    let nicheRow: { id: string } | null = null;
+    const derived: Pick<CreateAimDto, 'targetType' | 'industryFocus' | 'tenderFocus'> = {
+      targetType: dto.targetType,
+      industryFocus: dto.industryFocus,
+      tenderFocus: dto.tenderFocus,
+    };
+    try {
+      nicheRow = await this.niches.findOrCreate(orgId, dto.niche);
+      const ctx = await this.niches.resolveSectorContext(orgId, nicheRow.id);
+      derived.targetType = ctx.targetName ?? undefined;
+      derived.industryFocus = ctx.industryName ?? undefined;
+      derived.tenderFocus = ctx.nicheName;
+    } catch (err) {
+      this.logger.warn(
+        `Could not resolve Sector context for aim niche "${dto.niche}": ${err instanceof Error ? err.message : 'error'}`,
+      );
+    }
+
+    const aim = await this.repo.createAim(orgId, { ...dto, ...derived });
     // Link a 1:1 ACTIVE campaign so the aim's scraped leads flow into the shared
     // prospects/Nurture pipeline. Bare insert — NO AIM webhook / n8n (Reach owns
     // processing). Best-effort: a link failure must not block aim creation.
     let linked = aim;
-    try {
-      const niche = await this.niches.findOrCreate(orgId, aim.niche);
-      const campaignId = await this.repo.createLinkedCampaign(orgId, niche.id, aim);
-      await this.repo.setAimCampaign(orgId, aim.id, campaignId);
-      linked = { ...aim, campaignId };
-    } catch (err) {
-      this.logger.warn(
-        `Could not link aim ${aim.id} to a campaign: ${err instanceof Error ? err.message : 'error'}`,
-      );
+    if (nicheRow) {
+      try {
+        const campaignId = await this.repo.createLinkedCampaign(orgId, nicheRow.id, aim);
+        await this.repo.setAimCampaign(orgId, aim.id, campaignId);
+        linked = { ...aim, campaignId };
+      } catch (err) {
+        this.logger.warn(
+          `Could not link aim ${aim.id} to a campaign: ${err instanceof Error ? err.message : 'error'}`,
+        );
+      }
     }
     try {
       const config = await this.buildAgentConfig(orgId, linked);

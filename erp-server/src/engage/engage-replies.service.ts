@@ -71,6 +71,48 @@ function placeBeforeSignoff(body: string, block: string): string {
   return `${head}\n\n${block}\n\n${tail}`;
 }
 
+// The canonical closing EVERY drafted reply must end with, so all categories (interested /
+// unsure / temp / not-interested) sign off identically and match the cold-outreach signature.
+// The reply_glock LLM writes its own sign-off ("Best regards, … | Business Development Manager
+// | …"), so we overwrite it deterministically rather than hoping the model complies.
+// FLAG (multi-tenant): the name/company are the EverTrust defaults (mirroring the hardcoded
+// campaign_context below + Reach's gmail-sender fromName); resolve these per-org once reply
+// personas carry a signature block.
+const SENDER_NAME = 'Hanna Nguyen';
+const SENDER_COMPANY = 'EVERTRUST GmbH';
+// The From display name on outgoing replies — matches Reach's outreach ("EVERTRUST GmbH")
+// so the lead sees the same sender, not the bare mailbox name ("hanna").
+const REPLY_FROM_NAME = SENDER_COMPANY;
+const REPLY_SIGNATURE = [
+  'Kind regards,',
+  SENDER_NAME,
+  SENDER_COMPANY,
+  'We are at your disposal.',
+].join('\n');
+
+// Force a drafted reply body to end with REPLY_SIGNATURE: drop whatever closing the model
+// wrote (from its bottom-most salutation line to the end) and append the canonical block.
+// An empty draft is left untouched (no reply to sign); idempotent (re-detects "Kind regards,"
+// and re-appends the same block). Meeting-time prose lives ABOVE the sign-off, so it survives.
+// Exported for the pure-helper unit spec.
+export function enforceSignature(body: string): string {
+  if (!body.trim()) return body;
+  const lines = body.replace(/\s+$/, '').split('\n');
+  let cut = -1;
+  let examined = 0;
+  for (let i = lines.length - 1; i >= 0 && examined < 8; i--) {
+    const line = lines[i] ?? '';
+    if (line.trim() === '') continue;
+    examined++;
+    if (SIGNOFF_RE.test(line)) {
+      cut = i;
+      break;
+    }
+  }
+  const head = (cut >= 0 ? lines.slice(0, cut) : lines).join('\n').replace(/\s+$/, '');
+  return head ? `${head}\n\n${REPLY_SIGNATURE}` : REPLY_SIGNATURE;
+}
+
 // A concrete clock time the drafter should NEVER have written — the system owns the
 // authoritative meeting time. Matches "9:30am", "2 pm", "09:00", "14:00 CET".
 const CLOCK_TIME_RE = /\b\d{1,2}:\d{2}\b|\b\d{1,2}\s*(?:a\.?m\.?|p\.?m\.?)\b/i;
@@ -993,7 +1035,7 @@ export class EngageRepliesService {
       reasoning: String(o.reasoning ?? ''),
       recommendedAction: String(o.recommended_action ?? 'MANUAL_REVIEW'),
       draftSubject: String(draft.subject ?? inbound.subject ?? ''),
-      draftBody: String(draft.body ?? ''),
+      draftBody: enforceSignature(String(draft.body ?? '')),
       followUpWindow:
         typeof o.follow_up_date_or_window === 'string' ? o.follow_up_date_or_window : null,
       scheduling: {
@@ -1441,7 +1483,7 @@ export class EngageRepliesService {
       const draft = (o.draft ?? {}) as Record<string, unknown>;
       return {
         subject: String(draft.subject ?? ''),
-        body: String(draft.body ?? ''),
+        body: enforceSignature(String(draft.body ?? '')),
       };
     };
 
@@ -1684,6 +1726,7 @@ export class EngageRepliesService {
     const raw = buildRawReply({
       to: lead.email,
       from: access.account.email,
+      fromName: REPLY_FROM_NAME,
       subject: subject || row.inboundSubject || '(no subject)',
       body: finalBody,
       inReplyTo,

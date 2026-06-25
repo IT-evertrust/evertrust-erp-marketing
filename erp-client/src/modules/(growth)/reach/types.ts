@@ -84,11 +84,8 @@ export type NewCampaignFormValues = {
     whatsappNumber: string;
     sender: string;
     salesCalendarId: string;
-    // Optional targeting hints threaded into the default email template's
-    // {{Type}} / {{IndustryFocus}} / {{TenderFocus}} placeholders (org default).
-    targetType: string;
-    industryFocus: string;
-    tenderFocus: string;
+    // NOTE: {{Type}} / {{IndustryFocus}} / {{TenderFocus}} are no longer collected here —
+    // the server derives them from the selected niche's Sector at create time.
 }
 
 // A campaign enriched with the Ammo Forge output (templates + news brief) and the
