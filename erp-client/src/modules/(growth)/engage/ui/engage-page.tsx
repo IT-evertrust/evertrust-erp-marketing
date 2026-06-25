@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Pencil, Plus, RefreshCw } from 'lucide-react';
 
+import { useGoogleAccounts } from '@/hooks/use-arsenal';
 import { GrowthCard, Spinner } from '@/modules/(growth)/shared';
 
 import { EngageCampaignTable } from '../components/engage-campaign-table';
@@ -13,6 +14,12 @@ import { useEngage } from '../hooks/use-engage';
 
 export function EngagePage() {
   const engage = useEngage();
+  // The org's connected Google accounts (from Settings → Configuration). The
+  // account picker below chooses which one's Gmail the Reply Sorter scans/shows.
+  const googleAccounts = useGoogleAccounts();
+  const connectedAccounts = (googleAccounts.data ?? []).filter(
+    (account) => account.status === 'CONNECTED',
+  );
   // The persona dialog is shared for create + edit; null = closed.
   const [personaDialog, setPersonaDialog] = useState<
     { mode: 'create' } | { mode: 'edit'; id: string; name: string } | null
@@ -33,20 +40,23 @@ export function EngagePage() {
 
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-4">
-          {engage.inboxes.length > 1 && (
+          {/* Choose which connected Google account (from Configuration) the Reply
+              Sorter fetches Gmail from. Selecting one filters to that mailbox's
+              campaigns and points "Scan now" at it. */}
+          {connectedAccounts.length > 0 && (
             <div className="flex items-center gap-2">
               <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                Inbox
+                Google account
               </span>
               <select
                 value={engage.inboxFilter}
                 onChange={(event) => engage.setInboxFilter(event.target.value)}
                 className="rounded-[8px] border border-border bg-card px-3 py-1.5 text-[12.5px] text-foreground"
               >
-                <option value="">All inboxes</option>
-                {engage.inboxes.map((inbox) => (
-                  <option key={inbox} value={inbox}>
-                    {inbox}
+                <option value="">All accounts</option>
+                {connectedAccounts.map((account) => (
+                  <option key={account.id} value={account.email}>
+                    {account.email}
                   </option>
                 ))}
               </select>

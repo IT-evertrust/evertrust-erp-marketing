@@ -1726,6 +1726,10 @@ export type AssetKind = z.infer<typeof AssetKind>;
 export const ContractStatus = z.enum(['GENERATED', 'SENT', 'SIGNED', 'FAILED']);
 export type ContractStatus = z.infer<typeof ContractStatus>;
 
+// The contract document type generated for a deal (Contract Assist).
+export const ContractType = z.enum(['Vollmacht', 'Vertragsvereinbarung', 'NDA']);
+export type ContractType = z.infer<typeof ContractType>;
+
 // ---- Industries ----
 // An industry groups niches (one industry → many niches), org-scoped, for
 // grouping/search ONLY. It is NOT part of lead research — the campaign config and
@@ -2409,24 +2413,33 @@ export type CampaignTemplatesBodyDto = z.infer<typeof CampaignTemplatesBodyDto>;
 // ---- Contracts ----
 // Body for POST /contracts — ContractMaker output (the PDF stays in Drive). At least
 // one of leadId/customerId/campaignId is required (the API resolves the org from it).
-export const CreateContractDto = z
-  .object({
-    leadId: z.string().uuid().optional(),
-    customerId: z.string().uuid().optional(),
-    campaignId: z.string().uuid().optional(),
-    templateAssetId: z.string().uuid().optional(),
-    signingMeetingId: z.string().uuid().optional(),
-    driveFileId: z.string().max(256).optional(),
-    driveUrl: z.string().max(1000).optional(),
-    cooperationTerm: z.string().max(500).optional(),
-  })
-  .refine(
-    (o) => !!o.leadId || !!o.customerId || !!o.campaignId,
-    'leadId, customerId, or campaignId is required to resolve the org',
-  );
+// The Contract Assist deal snapshot/draft fields (shared by Create + Update). The
+// org is resolved from the auth context (@OrgId), so a contract can be created
+// blank ("+ New") and filled in — no deal link is required.
+const contractAssistFields = {
+  company: z.string().max(200).nullable().optional(),
+  sector: z.string().max(120).nullable().optional(),
+  value: z.number().int().min(0).max(1_000_000_000).nullable().optional(),
+  deadline: z.string().max(80).nullable().optional(),
+  contractType: ContractType.nullable().optional(),
+  analysis: z.string().max(5000).nullable().optional(),
+  terms: z.array(z.string().max(500)).max(50).optional(),
+};
+
+export const CreateContractDto = z.object({
+  leadId: z.string().uuid().optional(),
+  customerId: z.string().uuid().optional(),
+  campaignId: z.string().uuid().optional(),
+  templateAssetId: z.string().uuid().optional(),
+  signingMeetingId: z.string().uuid().optional(),
+  driveFileId: z.string().max(256).optional(),
+  driveUrl: z.string().max(1000).optional(),
+  cooperationTerm: z.string().max(500).optional(),
+  ...contractAssistFields,
+});
 export type CreateContractDto = z.infer<typeof CreateContractDto>;
 
-// Body for PATCH /contracts/:id — status flip (signing detection → SIGNED).
+// Body for PATCH /contracts/:id — status flip + Contract Assist field edits.
 export const UpdateContractDto = z
   .object({
     status: ContractStatus.optional(),
@@ -2434,6 +2447,8 @@ export const UpdateContractDto = z
     driveUrl: z.string().max(1000).nullable().optional(),
     signedAt: z.string().datetime().nullable().optional(),
     error: z.string().max(1000).nullable().optional(),
+    cooperationTerm: z.string().max(500).nullable().optional(),
+    ...contractAssistFields,
   })
   .refine((o) => Object.keys(o).length > 0, 'at least one field is required');
 export type UpdateContractDto = z.infer<typeof UpdateContractDto>;
@@ -2450,6 +2465,14 @@ export const ContractDto = z.object({
   driveFileId: z.string().nullable(),
   driveUrl: z.string().nullable(),
   cooperationTerm: z.string().nullable(),
+  // Contract Assist deal snapshot + draft fields.
+  company: z.string().nullable(),
+  sector: z.string().nullable(),
+  value: z.number().int().nullable(),
+  deadline: z.string().nullable(),
+  contractType: ContractType.nullable(),
+  analysis: z.string().nullable(),
+  terms: z.array(z.string()),
   signedAt: z.string().nullable(),
   error: z.string().nullable(),
   createdAt: z.string(),

@@ -1,4 +1,12 @@
-import { index, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { organizations } from './org';
 import { customers } from './core';
 import { campaignAssets, campaigns } from './campaigns';
@@ -31,6 +39,18 @@ export const contracts = pgTable(
     driveUrl: text('drive_url'),
     // The negotiated cooperation term as printed into the contract.
     cooperationTerm: text('cooperation_term'),
+    // --- Contract Assist (Nurture) display + draft fields ---
+    // Snapshot of the deal the contract is for, so the Contract Generator table is
+    // self-contained + editable. `value` is whole euros; `deadline` is free text
+    // ("28 Jun 2026"); `contractType` is Vollmacht | Vertragsvereinbarung | NDA.
+    company: text('company'),
+    sector: text('sector'),
+    value: integer('contract_value'),
+    deadline: text('deadline'),
+    contractType: text('contract_type'),
+    // Read AI analysis summary + key agreement terms shown in the analysis panel.
+    analysis: text('analysis'),
+    terms: jsonb('terms').$type<string[]>().notNull().default([]),
     signedAt: timestamp('signed_at', { withTimezone: true }),
     // Captured when generation/sending errors (status FAILED).
     error: text('error'),
