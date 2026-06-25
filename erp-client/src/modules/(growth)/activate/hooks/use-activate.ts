@@ -13,7 +13,7 @@ import {
   getMeetingAccounts,
   getPersonas,
   getResearchDossiers,
-  harvestReadAiMeetings,
+  syncReadAiMeetings,
 } from '../services/activate-service';
 import type {
   ActivateTab,
@@ -211,15 +211,23 @@ export function useActivate() {
     }
   }, [selectedResearchCompany, selectedDossier]);
 
-  // Harvest Read AI report emails (Gmail) into the after-sales list, then reload.
+  // Pull recent Read AI meetings + full transcripts via the API, auto-analyze them, reload.
   const [syncingReadAi, setSyncingReadAi] = useState(false);
   const syncReadAi = useCallback(async () => {
     setSyncingReadAi(true);
     try {
-      const { imported } = await harvestReadAiMeetings();
+      const res = await syncReadAiMeetings();
+      if (res.status === 'disabled') {
+        toast.error(
+          res.reason ?? 'Read AI is not configured (set the Read AI API key).',
+        );
+        return;
+      }
       const data = await getCallAnalyses(analysisQuery || undefined, analysisDate || undefined);
       setCallAnalyses(data);
-      toast.success(`Synced ${imported} Read AI meeting${imported === 1 ? '' : 's'}.`);
+      toast.success(
+        `Synced ${res.imported} meeting${res.imported === 1 ? '' : 's'} · analyzed ${res.analyzed}.`,
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Read AI sync failed.');
     } finally {

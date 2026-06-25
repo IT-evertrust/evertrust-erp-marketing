@@ -3,6 +3,7 @@ from erp_agents.workflows.activate.client_research.workflow import (
     ClientResearchWorkflow,
 )
 from erp_agents.workflows.activate.company_research import CompanyResearchWorkflow
+from erp_agents.workflows.activate.read_ai_sync import ReadAiSyncWorkflow
 from erp_agents.workflows.activate.sales_agent import SalesAgentWorkflow
 from erp_agents.workflows.engage.rag_agent import RagAgentWorkflow
 from erp_agents.workflows.engage.refine_training import RefineTrainingWorkflow
@@ -23,6 +24,7 @@ WORKFLOW_REGISTRY: dict[str, type[Workflow]] = {
     "activate.sales_agent": SalesAgentWorkflow,
     "activate.company_research": CompanyResearchWorkflow,
     "activate.client_research": ClientResearchWorkflow,
+    "activate.read_ai_sync": ReadAiSyncWorkflow,
     "nurture.sleeper_grenade": SleeperGrenadeWorkflow,
 }
 

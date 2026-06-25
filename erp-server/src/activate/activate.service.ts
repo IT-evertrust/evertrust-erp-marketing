@@ -212,6 +212,51 @@ export class ActivateService {
     return { scanned, imported: count };
   }
 
+  // Pull recent Read AI meetings + FULL transcripts via the Read AI API (activate.read_ai_sync
+  // agent workflow), upsert them, then auto-analyze any that now have a transcript but no
+  // analysis. This is what makes transcription + analysis "come through" without manual steps.
+  async syncReadAiFromApi(
+    orgId: string,
+    limit = 25,
+  ): Promise<{ imported: number; analyzed: number; status: string; reason?: string }> {
+    const result = await this.agent.run('activate.read_ai_sync', { limit });
+    const output = result.output as {
+      status?: string;
+      reason?: string;
+      items?: ReadAiImportItem[];
+    };
+    if (output.status === 'disabled') {
+      this.logger.warn(`Read AI API sync skipped: ${output.reason ?? 'not configured'}`);
+      return { imported: 0, analyzed: 0, status: 'disabled', reason: output.reason };
+    }
+    const items = (output.items ?? []) as ReadAiImportItem[];
+    const { count } = items.length
+      ? await this.repo.importReadAiMeetings(orgId, items)
+      : { count: 0 };
+    const analyzed = await this.autoAnalyzePending(orgId);
+    this.logger.log(`Read AI API sync: ${count} imported, ${analyzed} auto-analyzed.`);
+    return { imported: count, analyzed, status: 'ok' };
+  }
+
+  // Analyze every meeting that has a transcript but no analysis yet. Sequential on purpose
+  // (the local LLM gateway is memory-bound); best-effort per meeting so one failure doesn't
+  // abort the batch. Returns how many were analyzed.
+  async autoAnalyzePending(orgId: string): Promise<number> {
+    const ids = await this.repo.listMeetingIdsNeedingAnalysis(orgId);
+    let analyzed = 0;
+    for (const id of ids) {
+      try {
+        await this.analyzeMeeting(orgId, id);
+        analyzed += 1;
+      } catch (err) {
+        this.logger.warn(
+          `Auto-analyze ${id} failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+    return analyzed;
+  }
+
   // Score one meeting's transcript through the chosen persona via activate.sales_agent, then
   // persist the analysis onto the meeting and return the refreshed UI shape.
   async analyzeMeeting(

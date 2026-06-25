@@ -160,6 +160,22 @@ export class ActivateRepository {
     return filtered.map((r) => mapMeeting(r));
   }
 
+  // Meeting ids that have a transcript but no analysis yet — the auto-analyze worklist
+  // (run after a Read AI sync so a newly-arrived transcript gets scored automatically).
+  async listMeetingIdsNeedingAnalysis(orgId: string): Promise<string[]> {
+    const rows = await this.db
+      .select({ id: schema.meetings.id })
+      .from(schema.meetings)
+      .where(
+        and(
+          tenantScope(orgId, schema.meetings),
+          isNotNull(schema.meetings.transcript),
+          isNull(schema.meetings.analysis),
+        ),
+      );
+    return rows.map((r) => r.id);
+  }
+
   async requireMeeting(orgId: string, id: string): Promise<MeetingRow> {
     const rows = await this.db
       .select()

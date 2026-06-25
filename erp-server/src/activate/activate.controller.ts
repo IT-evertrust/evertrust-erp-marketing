@@ -123,6 +123,14 @@ export class ActivateController {
     return this.activate.harvestReadAi(orgId);
   }
 
+  // Pull recent Read AI meetings + FULL transcripts via the Read AI API, upsert them, and
+  // auto-analyze any that gained a transcript. This is the "Sync Read AI" button action.
+  @RequirePermissions('campaigns:write')
+  @Post('read-ai/sync')
+  syncReadAi(@OrgId() orgId: string) {
+    return this.activate.syncReadAiFromApi(orgId);
+  }
+
   // Score a meeting through the chosen persona (default = the org's first persona). The body
   // is validated by the global ZodValidationPipe against AnalyzeMeetingBodyDto.
   @RequirePermissions('campaigns:write')

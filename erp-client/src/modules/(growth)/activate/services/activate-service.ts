@@ -135,6 +135,17 @@ export function harvestReadAiMeetings(): Promise<{
   return postJson('/growth/activate/read-ai/harvest');
 }
 
+// Pull recent Read AI meetings + FULL transcripts via the Read AI API, then auto-analyze
+// any that gained a transcript. status="disabled" when no Read AI API key is configured.
+export function syncReadAiMeetings(): Promise<{
+  imported: number;
+  analyzed: number;
+  status: string;
+  reason?: string;
+}> {
+  return postJson('/growth/activate/read-ai/sync');
+}
+
 export function analyzeMeeting(
   meetingId: string,
   persona?: string,
