@@ -76,11 +76,17 @@ function placeBeforeSignoff(body: string, block: string): string {
 // The reply_glock LLM writes its own sign-off ("Best regards, … | Business Development Manager
 // | …"), so we overwrite it deterministically rather than hoping the model complies.
 // FLAG (multi-tenant): the name/company are the EverTrust defaults (mirroring the hardcoded
-// campaign_context below); resolve these per-org once reply personas carry a signature block.
+// campaign_context below + Reach's gmail-sender fromName); resolve these per-org once reply
+// personas carry a signature block.
+const SENDER_NAME = 'Hanna Nguyen';
+const SENDER_COMPANY = 'EVERTRUST GmbH';
+// The From display name on outgoing replies — matches Reach's outreach ("EVERTRUST GmbH")
+// so the lead sees the same sender, not the bare mailbox name ("hanna").
+const REPLY_FROM_NAME = SENDER_COMPANY;
 const REPLY_SIGNATURE = [
   'Kind regards,',
-  'Hanna Nguyen',
-  'EVERTRUST GmbH',
+  SENDER_NAME,
+  SENDER_COMPANY,
   'We are at your disposal.',
 ].join('\n');
 
@@ -1720,6 +1726,7 @@ export class EngageRepliesService {
     const raw = buildRawReply({
       to: lead.email,
       from: access.account.email,
+      fromName: REPLY_FROM_NAME,
       subject: subject || row.inboundSubject || '(no subject)',
       body: finalBody,
       inReplyTo,

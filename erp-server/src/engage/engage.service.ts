@@ -197,6 +197,9 @@ export function parseGmailMessage(msg: GmailMessage): ParsedReply | null {
 export function buildRawReply(args: {
   to: string;
   from: string;
+  // Display name for the From header (e.g. "EVERTRUST GmbH"), so replies show the same
+  // sender as the Reach outreach instead of the bare mailbox name ("hanna"). Optional.
+  fromName?: string | null;
   subject: string;
   body: string;
   inReplyTo: string | null;
@@ -211,6 +214,7 @@ export function buildRawReply(args: {
   return buildMimeEmail({
     to: args.to,
     from: args.from,
+    fromName: args.fromName ?? undefined,
     subject,
     body: args.body,
     signatureImageUrl: args.signatureImageUrl,
@@ -569,6 +573,10 @@ export class EngageService {
     const raw = buildRawReply({
       to: row.prospect.email,
       from: perOrg.account.email,
+      // Same From display name as Reach outreach + the campaign reply path, so the lead
+      // sees "EVERTRUST GmbH", not the bare mailbox name. FLAG: hardcoded EverTrust default —
+      // resolve per-org once mailbox identities are configurable.
+      fromName: 'EVERTRUST GmbH',
       subject: inbound?.subject ?? '(no subject)',
       body: text,
       inReplyTo: extractInReplyTo(row.classification.raw),
