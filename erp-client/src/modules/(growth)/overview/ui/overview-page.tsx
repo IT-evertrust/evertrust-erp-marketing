@@ -41,7 +41,7 @@ export function OverviewUI() {
 
   return (
     <main className="min-h-[calc(100vh-80px)] bg-[#eef0f3] px-6 py-5 text-[#15171c] duration-300 animate-in fade-in">
-      {overview.isError ? (
+      {overview.usingFallback ? (
         <div className="mb-4 rounded-[10px] border border-[#e4e7eb] bg-white px-4 py-3 text-[12.5px] font-bold text-[#5b626d]">
           {tOverview('loadError')}
         </div>

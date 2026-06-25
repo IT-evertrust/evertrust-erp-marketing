@@ -352,6 +352,18 @@ export function useOverview() {
   const activity = serverActivity.length > 0 ? serverActivity : clientActivity;
   const alerts = engine.data?.alerts ?? [];
 
+  // We are genuinely on the hardcoded demo cockpit ONLY when there is no live
+  // endpoint data AND nothing real to synthesize from (no campaigns/meetings). If
+  // any real data is on screen — even client-synthesized because the metrics
+  // endpoint errored — we are NOT on fallback, so we must not show the scary
+  // "showing fallback metrics" banner (that mismatch is what confused users).
+  const usingFallback =
+    serverKpis.length === 0 &&
+    serverFunnel.length === 0 &&
+    serverActivity.length === 0 &&
+    campaignRows.length === 0 &&
+    meetingRows.length === 0;
+
   return {
     kpis,
     funnel,
@@ -359,5 +371,8 @@ export function useOverview() {
     alerts,
     isLoading: campaigns.isLoading || meetings.isLoading || metrics.isLoading,
     isError: campaigns.isError || meetings.isError || metrics.isError,
+    // Drives the "showing fallback cockpit metrics" notice — true only when the
+    // displayed numbers are the hardcoded demo set, never when real data is shown.
+    usingFallback,
   };
 }

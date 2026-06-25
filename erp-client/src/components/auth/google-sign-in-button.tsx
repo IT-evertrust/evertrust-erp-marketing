@@ -134,10 +134,13 @@ export function GoogleSignInButton() {
     );
   }
 
-  // Disabled until GIS is ready (the client must exist before requestCode) or while
-  // the login mutation is in flight. The button is our own design-system control —
-  // a full-width pill on the dark surface with the Google glyph + our i18n label.
-  const disabled = !scriptReady || login.isPending;
+  // Stay in the "logging you in!" state from the moment the code is exchanged through
+  // the redirect into the ERP: isPending covers the /auth/google/code call, and
+  // isSuccess covers the brief window until router.replace navigates away and unmounts
+  // this button (so it never flickers back to "Continue with Google"). Disabled the
+  // whole time so the popup can't be re-triggered.
+  const busy = login.isPending || login.isSuccess;
+  const disabled = !scriptReady || busy;
 
   return (
     <>
@@ -152,10 +155,10 @@ export function GoogleSignInButton() {
         size="lg"
         onClick={handleClick}
         disabled={disabled}
-        aria-busy={login.isPending}
+        aria-busy={busy}
         className="w-full rounded-full border-border/70 bg-card/60 font-medium hover:bg-accent"
       >
-        {login.isPending ? (
+        {busy ? (
           <>
             <Loader2 className="size-4 animate-spin" aria-hidden />
             {t('form.submitting')}

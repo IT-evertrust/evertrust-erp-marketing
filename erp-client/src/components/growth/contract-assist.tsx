@@ -7,7 +7,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
-import { Download, Loader2, Plus, Trash2 } from 'lucide-react';
+import { ArrowUpRight, Download, Loader2, Plus, Trash2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import type { ContractDto, ContractType } from '@evertrust/shared';
 import {
   useContracts,
@@ -222,6 +223,7 @@ function ContractRow({
   const t = useTranslations('nurture');
   const update = useUpdateContract();
   const del = useDeleteContract();
+  const router = useRouter();
 
   // Commit a single field to the server when it changed from the server value.
   function commit<K extends 'company' | 'sector' | 'value' | 'deadline'>(
@@ -274,17 +276,41 @@ function ContractRow({
         selected ? 'bg-muted/60' : 'hover:bg-muted/30',
       )}
     >
-      {/* COMPANY — click name to select the row */}
+      {/* COMPANY — click name to select the row; the arrow opens this company's
+          research in Activate. */}
       <td className="px-5 py-2">
-        <input
-          type="text"
-          defaultValue={row.company ?? ''}
-          placeholder={t('contracts.companyPlaceholder')}
-          onFocus={onSelect}
-          onClick={onSelect}
-          onBlur={(e) => commit('company', e.target.value.trim() || null)}
-          className="w-full min-w-[10rem] cursor-pointer rounded-sm bg-transparent px-1 py-0.5 font-semibold text-foreground outline-none focus:bg-background focus:ring-1 focus:ring-ring"
-        />
+        <div className="flex items-center gap-1">
+          <input
+            type="text"
+            defaultValue={row.company ?? ''}
+            placeholder={t('contracts.companyPlaceholder')}
+            onFocus={onSelect}
+            onClick={onSelect}
+            onBlur={(e) => commit('company', e.target.value.trim() || null)}
+            className="w-full min-w-[10rem] cursor-pointer rounded-sm bg-transparent px-1 py-0.5 font-semibold text-foreground outline-none focus:bg-background focus:ring-1 focus:ring-ring"
+          />
+          {row.company ? (
+            <button
+              type="button"
+              title={t('contracts.viewResearch', {
+                default: 'View company research in Activate',
+              })}
+              aria-label={t('contracts.viewResearch', {
+                default: 'View company research in Activate',
+              })}
+              onClick={() =>
+                router.push(
+                  `/activate?tab=research&company=${encodeURIComponent(
+                    row.company ?? '',
+                  )}`,
+                )
+              }
+              className="shrink-0 rounded-sm p-1 text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ArrowUpRight className="size-4" />
+            </button>
+          ) : null}
+        </div>
       </td>
 
       {/* SECTOR — the same Sector/niche pick-or-create dropdown as the deal card */}

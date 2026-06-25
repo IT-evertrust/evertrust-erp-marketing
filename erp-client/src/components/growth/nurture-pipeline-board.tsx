@@ -14,7 +14,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
-import { Plus, Search, Trash2 } from 'lucide-react';
+import { GripVertical, Plus, Search, Trash2 } from 'lucide-react';
 import {
   PIPELINE_STAGE_ORDER,
   type CampaignDto,
@@ -657,6 +657,12 @@ const CardView = memo(function CardView({
       {editable && onSaveCard ? (
         <>
           <div className="flex items-center gap-1 pr-6 text-[12px] font-bold text-[#15171c]">
+            {/* Drag affordance — the whole card is draggable (dnd-kit listeners live
+                on the wrapper), so this grip is a visual handle to show the card moves. */}
+            <GripVertical
+              aria-hidden
+              className="-ml-0.5 size-3.5 shrink-0 cursor-grab text-[#959ca7]"
+            />
             <EditableText
               value={p.companyName}
               placeholder={companyPlaceholder ?? ''}

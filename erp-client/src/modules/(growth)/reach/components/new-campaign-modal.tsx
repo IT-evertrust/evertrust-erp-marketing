@@ -219,8 +219,9 @@ export function NewCampaignModal({
             />
           </div>
 
-          {/* Niche + Region — paired row. */}
-          <div className="grid gap-5 sm:grid-cols-2">
+          {/* Niche + Region — paired row. Wider column gap so the two controls never
+              crowd / overlap on the dialog width. */}
+          <div className="grid gap-y-5 gap-x-8 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor={`${fieldId}-niche`}>{t('modal.field.niche')}</Label>
               {nicheOptions.length > 0 ? (
