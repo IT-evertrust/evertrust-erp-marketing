@@ -20,7 +20,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { NurturePipelineBoard } from '@/components/growth/nurture-pipeline-board';
-import { ContractsCard } from '@/components/growth/contracts-card';
+import { ContractAssist } from '@/components/growth/contract-assist';
 
 type Tab = 'pipeline' | 'contracts';
 
@@ -124,12 +124,7 @@ function NurtureView() {
               ))}
             </SelectContent>
           </Select>
-          <ContractsCard
-            filters={{ campaignId: campaignId ?? undefined }}
-            title={tn('contracts.listTitle')}
-            emptyHint={tn('contracts.listEmpty')}
-            showDraftForm
-          />
+          <ContractAssist campaignId={campaignId ?? undefined} />
         </div>
       )}
     </main>

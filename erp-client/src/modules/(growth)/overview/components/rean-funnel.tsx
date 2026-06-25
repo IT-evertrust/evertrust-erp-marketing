@@ -40,9 +40,9 @@ function FunnelRow({ stage }: { stage: FunnelStage }) {
         {t(`funnel.stage.${stage.nameKey}`)}
       </span>
 
-      <div className="flex h-full items-stretch">
+      <div className="flex h-full items-stretch justify-center">
         <div
-          className="flex h-full min-w-[44px] items-center justify-center rounded-[6px] bg-[#15171c] text-[11px] font-bold text-white transition-[width] duration-700"
+          className="flex h-full min-w-[44px] items-center justify-center rounded-[8px] bg-[#15171c] text-[11px] font-bold text-white transition-[width] duration-700"
           style={{ width: `${width}%` }}
         >
           {stage.value}

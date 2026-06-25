@@ -372,6 +372,13 @@
 			"when": 1780600000000,
 			"tag": "0052_settings_and_contact",
 			"breakpoints": true
+		},
+		{
+			"idx": 53,
+			"version": "7",
+			"when": 1780601000000,
+			"tag": "0053_contract_assist_fields",
+			"breakpoints": true
 		}
 	]
 }

@@ -86,23 +86,11 @@ export const queryKeys = {
       ['reply-drafts', 'queue', prospectId ?? 'all'] as const,
   },
 
-  // Growth Engine: contracts (ContractMaker output), filtered by lead/campaign/status.
+  // Growth Engine: Contract Assist deal rows, optionally scoped to a campaign.
   contracts: {
     all: ['contracts'] as const,
-    list: (
-      f: {
-        leadId?: string | null;
-        campaignId?: string | null;
-        status?: string | null;
-      } = {},
-    ) =>
-      [
-        'contracts',
-        'list',
-        f.leadId ?? 'all',
-        f.campaignId ?? 'all',
-        f.status ?? 'all',
-      ] as const,
+    list: (f: { campaignId?: string | null } = {}) =>
+      ['contracts', 'list', f.campaignId ?? 'all'] as const,
   },
 
   // Growth Engine: the org's do-not-contact (suppression) list.

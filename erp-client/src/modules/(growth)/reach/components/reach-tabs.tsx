@@ -9,7 +9,7 @@ type ReachTabsProps = {
   onChange: (tab: ReachTab) => void;
 };
 
-const TAB_IDS: ReachTab[] = ['scraper', 'generator', 'sender', 'templates'];
+const TAB_IDS: ReachTab[] = ['scraper', 'generator', 'sender'];
 
 export function ReachTabs({ activeTab, onChange }: ReachTabsProps) {
   const t = useTranslations('reach');

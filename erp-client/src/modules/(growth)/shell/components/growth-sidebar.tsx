@@ -3,9 +3,11 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { LogOut } from 'lucide-react';
 import { hasPermission, type Permission } from '@evertrust/shared';
 
-import { useMe } from '@/hooks/use-auth';
+import { useLogout, useMe } from '@/hooks/use-auth';
+import { Button } from '@/components/ui/button';
 
 import { GROWTH_NAV_ITEMS, type GrowthNavItem } from '../services/growth-nav';
 
@@ -35,6 +37,7 @@ export function GrowthSidebar() {
   const pathname = usePathname();
   const t = useTranslations('nav');
   const { data: user } = useMe();
+  const logout = useLogout();
 
   const can = (permission: Permission | null) =>
     permission === null || (user ? hasPermission(user.role, permission) : false);
@@ -82,7 +85,7 @@ export function GrowthSidebar() {
         <div className="grid h-[30px] w-[30px] place-items-center rounded-lg border border-sidebar-border bg-sidebar-accent text-[12px] font-bold text-sidebar-foreground">
           ET
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="truncate text-[12.5px] font-bold leading-tight text-sidebar-foreground">
             {user?.organizationName ?? 'Evertrust'}
           </div>
@@ -90,6 +93,18 @@ export function GrowthSidebar() {
             {user?.name ?? 'Marketing ERP'}
           </div>
         </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={t('logout', { default: 'Log out' })}
+          title={t('logout', { default: 'Log out' })}
+          disabled={logout.isPending}
+          onClick={() => logout.mutate()}
+          className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
+        >
+          <LogOut className="size-4" />
+        </Button>
       </div>
     </aside>
   );

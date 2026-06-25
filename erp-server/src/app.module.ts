@@ -25,6 +25,7 @@ import { ReachModule } from './reach/reach.module';
 import { ActivateModule } from './activate/activate.module';
 import { OverviewModule } from './overview/overview.module';
 import { SettingsModule } from './settings/settings.module';
+import { ContractsModule } from './contracts/contracts.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from './auth/guards/permissions.guard';
 import { AuditInterceptor } from './common/audit.interceptor';
@@ -55,6 +56,7 @@ import { AuditInterceptor } from './common/audit.interceptor';
     ActivateModule,
     OverviewModule,
     SettingsModule,
+    ContractsModule,
   ],
   providers: [
     // Zod DTOs are the contract: validate every request body/param/query.

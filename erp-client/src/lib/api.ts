@@ -92,7 +92,8 @@ import {
   ReplyDraftDto,
   OutreachMessageDto,
   ContractDto,
-  ContractStatus,
+  CreateContractDto,
+  UpdateContractDto,
   SuppressionListItemDto,
 
   // Google / Calendar / Gmail.
@@ -620,27 +621,41 @@ export const api = {
   },
 
   contracts: {
-    list: (
-      filters: {
-        leadId?: string;
-        campaignId?: string;
-        status?: z.infer<typeof ContractStatus>;
-      } = {},
-      signal?: AbortSignal,
-    ) => {
+    // Contract Assist deal rows (newest first). Optionally scoped to a campaign.
+    list: (params: { campaignId?: string } = {}, signal?: AbortSignal) => {
       const q = new URLSearchParams();
 
-      if (filters.leadId) q.set('leadId', filters.leadId);
-      if (filters.campaignId) q.set('campaignId', filters.campaignId);
-      if (filters.status) q.set('status', filters.status);
+      if (params.campaignId) q.set('campaignId', params.campaignId);
 
       const qs = q.toString();
 
-      return request<ContractDto[]>(`/contracts/list${qs ? `?${qs}` : ''}`, {
+      return request<ContractDto[]>(`/contracts${qs ? `?${qs}` : ''}`, {
         schema: ContractListDto,
         signal,
       });
     },
+
+    // Create a (possibly blank) Contract Assist row. The org resolves from auth.
+    create: (input: CreateContractDto = {}) =>
+      request<ContractDto>('/contracts', {
+        method: 'POST',
+        body: CreateContractDto.parse(input),
+        schema: ContractDto,
+      }),
+
+    // Patch any subset of a row's fields (inline edits, status flips).
+    update: (id: string, input: UpdateContractDto) =>
+      request<ContractDto>(`/contracts/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: UpdateContractDto.parse(input),
+        schema: ContractDto,
+      }),
+
+    remove: (id: string) =>
+      request<{ id: string }>(`/contracts/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        schema: z.object({ id: z.string() }),
+      }),
   },
 
   suppressions: {

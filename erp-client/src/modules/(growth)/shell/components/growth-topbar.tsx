@@ -3,22 +3,15 @@
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 
-import { LogoutButton } from '@/components/auth/logout-button';
-import { NotificationBell } from '@/components/shell/notification-bell';
-import { UserMenu } from '@/components/shell/user-menu';
-import { useMe } from '@/hooks/use-auth';
-
 import { getGrowthPageMeta } from '../services/growth-nav';
 
-// The single masthead for the whole app: page icon + title + subtitle on the
-// left, account controls on the right. Pages render NO header of their own — the
-// title here is the only one, so there's no Dashboard/Overview double-header.
-// Right cluster: notifications + the user menu (profile / settings / log out).
-// When the session is stale and no user resolves, a plain Sign out stays reachable.
+// The single masthead for the whole app: page icon + title + subtitle. Account
+// controls (notifications + user menu) were moved off the topbar — the sidebar
+// footer now carries the user identity + logout. Pages render NO header of their
+// own, so this title is the only one (no Dashboard/Overview double-header).
 export function GrowthTopbar() {
   const pathname = usePathname();
   const t = useTranslations('nav');
-  const { data: user } = useMe();
   const meta = getGrowthPageMeta(pathname);
   const Icon = meta.icon;
 
@@ -38,17 +31,6 @@ export function GrowthTopbar() {
       </div>
 
       <div className="flex-1" />
-
-      <div className="flex items-center gap-2">
-        {user ? (
-          <>
-            <NotificationBell />
-            <UserMenu user={user} />
-          </>
-        ) : (
-          <LogoutButton variant="ghost" size="sm" />
-        )}
-      </div>
     </header>
   );
 }

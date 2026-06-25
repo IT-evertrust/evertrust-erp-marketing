@@ -1,4 +1,4 @@
-export type ReachTab = 'scraper' | 'generator' | 'sender' | 'templates';
+export type ReachTab = 'scraper' | 'generator' | 'sender';
 
 export type CampaignStatus = 'NEW' | 'SCRAPING' | 'IN CAMPAIGN' | 'OVER';
 
