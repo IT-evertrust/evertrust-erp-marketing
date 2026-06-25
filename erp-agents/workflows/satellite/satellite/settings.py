@@ -30,10 +30,11 @@ class Settings:
     searxng_url: str = ""
     searxng_api_key: str = ""   # sent as the X-Search-Key header to the searxng-auth proxy
     # Pinned SearXNG engines (comma-separated). Our instance disables google by default and the
-    # remaining default mix returns off-topic junk (zhihu / support pages) for company discovery;
-    # naming engines explicitly enables a disabled one and keeps results on-target. Empty = instance
-    # default. Override with SEARXNG_ENGINES.
-    searxng_engines: str = "google,bing,brave,duckduckgo"
+    # remaining default mix (bing/brave/ddg here) returns off-topic GLOBAL junk for company
+    # discovery — a Germany cybersecurity sweep on the mix yielded 4 junk leads, while google-only
+    # yielded clean localized companies. So we pin GOOGLE only for quality. Override SEARXNG_ENGINES
+    # (e.g. add bing/brave) only if google starts getting rate-limited. Empty = instance default.
+    searxng_engines: str = "google"
     llm_base_url: str = ""
     llm_api_key: str = "sk-anything"
     lead_model: str = "hermes"  # n8n LEAD SATELLITE (PG) uses hermes
@@ -107,7 +108,7 @@ def load_settings() -> Settings:
         arsenal_token=os.environ.get("ARSENAL_TOKEN", os.environ.get("ARSENAL_INGEST_TOKEN", "")),
         searxng_url=os.environ.get("SEARXNG_URL", ""),
         searxng_api_key=os.environ.get("SEARXNG_API_KEY", ""),
-        searxng_engines=os.environ.get("SEARXNG_ENGINES", "google,bing,brave,duckduckgo"),
+        searxng_engines=os.environ.get("SEARXNG_ENGINES", "google"),
         llm_base_url=os.environ.get("LLM_BASE_URL", os.environ.get("LITELLM_BASE_URL", "")),
         llm_api_key=os.environ.get("LLM_API_KEY", os.environ.get("LITELLM_API_KEY", "sk-anything")),
         lead_model=_extract,
