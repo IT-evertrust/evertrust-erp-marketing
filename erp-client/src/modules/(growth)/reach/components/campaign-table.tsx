@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
 
 import { GrowthCard, StatusPill } from '../../shared';
@@ -16,6 +17,10 @@ type CampaignTableProps = {
   actionLabel?: string;
   onActionClick?: () => void;
   loading?: boolean;
+  // The 4th column. Defaults to the "Companies" count; the Email Generator tab
+  // overrides it to show "Sent" (total emails sent across the three rounds).
+  metricLabel?: string;
+  metricValue?: (campaign: Campaign) => ReactNode;
 };
 
 export function CampaignTable({
@@ -27,6 +32,8 @@ export function CampaignTable({
   actionLabel,
   onActionClick,
   loading = false,
+  metricLabel,
+  metricValue,
 }: CampaignTableProps) {
   const t = useTranslations('reach');
 
@@ -66,7 +73,7 @@ export function CampaignTable({
                 {t('campaignTable.col.region')}
               </th>
               <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                {t('campaignTable.col.companies')}
+                {metricLabel ?? t('campaignTable.col.companies')}
               </th>
               <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                 {t('campaignTable.col.status')}
@@ -100,7 +107,7 @@ export function CampaignTable({
                     {campaign.region}
                   </td>
                   <td className="px-3 py-3 text-[12.5px] text-muted-foreground">
-                    {campaign.companies}
+                    {metricValue ? metricValue(campaign) : campaign.companies}
                   </td>
                   <td className="px-3 py-3">
                     <StatusPill live={live}>

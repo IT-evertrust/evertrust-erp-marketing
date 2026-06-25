@@ -1,43 +1,66 @@
 'use client';
 
+import { useMemo, useState } from 'react';
+
 import { useTranslations } from 'next-intl';
 
-import { LiveDot } from '@/modules/(growth)/shared';
-
 import { EngineActivityFeed } from '../components/activity-feed';
+import { EngineWheel } from '../components/engine-wheel';
 import { KpiGrid } from '../components/kpi-grid';
 import { ReanFunnel } from '../components/rean-funnel';
+import { ENGINE_MODULES, activityMatchesModule } from '../engine-modules';
 import { useOverview } from '../hooks/use-overview';
 
-// The Overview body renders NO masthead — the GrowthTopbar is the single page
-// header (title "Overview" + subtitle), so there's no Dashboard/Overview
-// duplicate. Only a slim ENGINE LIVE status pill rides at the top of the content.
-// Font is inherited (Geist) — no inline override.
+// The Overview body — a faithful port of the Saloot demo's report view. The
+// GrowthTopbar is still the single page header (title "Overview"). Two rows:
+//   A) the Engine Modules wheel + the live Engine Activity feed
+//   B) the R.E.A.N funnel + the 6-KPI grid
+// All numbers/feed come from the live `useOverview` data; the wheel is the static
+// module map, and hovering a module filters the activity feed to its runs.
 export function OverviewUI() {
   const overview = useOverview();
-  const t = useTranslations('nav');
   const tOverview = useTranslations('overview');
 
-  return (
-    <main className="min-h-[calc(100vh-80px)] bg-background px-6 py-5 text-foreground duration-300 animate-in fade-in">
-      <div className="mb-5 flex items-center justify-end">
-        <div className="hidden items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground md:flex">
-          <LiveDot />
-          {t('engineLive')}
-        </div>
-      </div>
+  const [activeModuleKey, setActiveModuleKey] = useState<string | null>(null);
 
+  const activeModule = useMemo(
+    () =>
+      activeModuleKey
+        ? (ENGINE_MODULES.find((m) => m.key === activeModuleKey) ?? null)
+        : null,
+    [activeModuleKey],
+  );
+
+  // When a module is hovered/pinned on the wheel, narrow the feed to its runs.
+  const feedActivity = useMemo(() => {
+    if (!activeModule) return overview.activity;
+    return overview.activity.filter((item) =>
+      activityMatchesModule(item.source, activeModule),
+    );
+  }, [overview.activity, activeModule]);
+
+  return (
+    <main className="min-h-[calc(100vh-80px)] bg-[#eef0f3] px-6 py-5 text-[#15171c] duration-300 animate-in fade-in">
       {overview.isError ? (
-        <div className="mb-4 rounded-[10px] border border-border bg-card px-4 py-3 text-[12.5px] font-bold text-muted-foreground">
+        <div className="mb-4 rounded-[10px] border border-[#e4e7eb] bg-white px-4 py-3 text-[12.5px] font-bold text-[#5b626d]">
           {tOverview('loadError')}
         </div>
       ) : null}
 
-      <KpiGrid kpis={overview.kpis} />
+      {/* Row A — Engine Modules wheel + Engine Activity feed */}
+      <section className="grid grid-cols-1 gap-4 xl:h-[520px] xl:grid-cols-[1.35fr_1fr]">
+        <EngineWheel onActiveChange={setActiveModuleKey} />
+        <EngineActivityFeed
+          activity={feedActivity}
+          alerts={activeModule ? [] : overview.alerts}
+          emptyHint={activeModule ? 'No recent runs for this module.' : undefined}
+        />
+      </section>
 
-      <section className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[1.35fr_1fr]">
+      {/* Row B — R.E.A.N funnel + KPI grid */}
+      <section className="mt-4 grid grid-cols-1 items-stretch gap-4 xl:grid-cols-[1.6fr_1fr]">
         <ReanFunnel stages={overview.funnel} />
-        <EngineActivityFeed activity={overview.activity} alerts={overview.alerts} />
+        <KpiGrid kpis={overview.kpis} />
       </section>
     </main>
   );

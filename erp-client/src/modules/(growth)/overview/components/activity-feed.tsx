@@ -2,123 +2,86 @@
 
 import { useTranslations } from 'next-intl';
 
-import { GrowthCard, LiveDot } from '@/modules/(growth)/shared';
-
-import type { ActivityLevel, EngineActivityItem, EngineAlert } from '../types';
+import type { EngineActivityItem, EngineAlert } from '../types';
 
 type EngineActivityFeedProps = {
   activity: EngineActivityItem[];
   alerts?: EngineAlert[];
+  // Shown in place of the feed when it is empty (e.g. a module is selected on the
+  // wheel but has no recent runs). Falls back to the generic empty copy.
+  emptyHint?: string;
 };
 
-// Level -> dot colour. Info stays the neutral ink so routine activity reads calm and only
-// warnings/errors/successes draw the eye. Dots are saturated brand colours that read on both
-// light and dark surfaces.
-const LEVEL_DOT: Record<ActivityLevel, string> = {
-  info: 'bg-muted-foreground',
-  success: 'bg-emerald-500',
-  warning: 'bg-amber-500',
+// Alert level → dot colour for the source badge. Routine info stays the neutral
+// ink; warnings/errors draw the eye.
+const ALERT_DOT: Record<EngineAlert['level'], string> = {
   error: 'bg-red-500',
-};
-// Tinted alert rows: pale tint + darker ink in light, deep tint + light ink in dark.
-const ALERT_ACCENT: Record<EngineAlert['level'], { box: string; text: string }> = {
-  error: {
-    box: 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40',
-    text: 'text-red-800 dark:text-red-300',
-  },
-  warning: {
-    box: 'border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40',
-    text: 'text-amber-800 dark:text-amber-300',
-  },
-  info: {
-    box: 'border-border bg-muted',
-    text: 'text-muted-foreground',
-  },
+  warning: 'bg-amber-500',
+  info: 'bg-[#15171c]',
 };
 
-export function EngineActivityFeed({ activity, alerts = [] }: EngineActivityFeedProps) {
+// The "Engine Activity" live-log card — a faithful port of the Saloot demo's
+// `.ov-engine` feed. Real alerts (when present) ride at the top as tinted rows so
+// the operational signal isn't lost; the rest is the live cross-system feed.
+export function EngineActivityFeed({ activity, alerts = [], emptyHint }: EngineActivityFeedProps) {
   const t = useTranslations('overview');
 
   return (
-    <GrowthCard
-      title={t('activity.title')}
-      hint={
-        <span className="inline-flex items-center gap-2">
-          <LiveDot />
+    <div className="flex min-h-0 min-w-0 flex-col rounded-[10px] border border-[#e4e7eb] bg-white">
+      <div className="flex items-center justify-between border-b border-[#e4e7eb] px-4 py-[15px]">
+        <h3 className="text-[13.5px] font-bold text-[#15171c]">{t('activity.title')}</h3>
+        <span className="inline-flex items-center gap-[7px] text-[10px] font-bold tracking-[0.08em] text-[#5b626d]">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-[#15171c]" />
           {t('activity.liveLog')}
         </span>
-      }
-    >
-      {alerts.length > 0 ? (
-        <div className="mb-3">
-          <div className="mb-2 flex items-center gap-2 text-[9.5px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-            {t('activity.alerts')} · {alerts.length}
-          </div>
-          <div className="flex flex-col gap-1.5">
-            {alerts.map((alert) => (
-              <AlertRow key={alert.id} alert={alert} />
-            ))}
-          </div>
-        </div>
-      ) : null}
+      </div>
 
-      <div className="max-h-[420px] overflow-y-auto pr-2">
-        {activity.length === 0 ? (
-          <div className="py-6 text-center text-[12px] font-bold text-muted-foreground">
-            {t('activity.empty')}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 pr-[10px]">
+        {alerts.map((alert) => (
+          <AlertRow key={alert.id} alert={alert} />
+        ))}
+
+        {activity.length === 0 && alerts.length === 0 ? (
+          <div className="py-[26px] text-center text-[12px] font-bold text-[#959ca7]">
+            {emptyHint ?? t('activity.empty')}
           </div>
         ) : (
           activity.map((item, index) => (
-            <ActivityRow key={`${item.at ?? item.time}-${index}`} item={item} index={index} />
+            <ActivityRow key={`${item.at ?? item.time}-${index}`} item={item} />
           ))
         )}
-      </div>
-    </GrowthCard>
-  );
-}
-
-function AlertRow({ alert }: { alert: EngineAlert }) {
-  const accent = ALERT_ACCENT[alert.level];
-  return (
-    <div
-      className={[
-        'rounded-[8px] border px-3 py-2 duration-300 animate-in fade-in zoom-in-95',
-        accent.box,
-      ].join(' ')}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className={['text-[12px] font-bold', accent.text].join(' ')}>
-          {alert.title}
-        </div>
-        <span className="shrink-0 text-[10px] font-bold text-muted-foreground">{alert.time}</span>
-      </div>
-      {alert.detail ? (
-        <div className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground">{alert.detail}</div>
-      ) : null}
-      <div className="mt-1 text-[9px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-        {alert.source}
       </div>
     </div>
   );
 }
 
-function ActivityRow({ item, index = 0 }: { item: EngineActivityItem; index?: number }) {
-  const dot = LEVEL_DOT[item.level ?? 'info'];
+function ActivityRow({ item }: { item: EngineActivityItem }) {
   return (
-    <div
-      className="grid grid-cols-[46px_1fr] gap-3 rounded-md border-b border-dashed border-border px-1 py-2.5 -mx-1 transition-colors duration-150 last:border-b-0 hover:bg-muted fill-mode-both animate-in fade-in"
-      style={{ animationDelay: `${Math.min(index, 12) * 30}ms` }}
-    >
-      <span className="text-[10.5px] font-bold text-muted-foreground">{item.time}</span>
-
-      <div>
-        <span className="mb-1 inline-flex items-center gap-1.5 rounded-[5px] border border-border bg-muted px-1.5 py-px text-[9px] font-bold uppercase tracking-[0.1em] text-foreground">
-          <span
-            className={['inline-block h-1.5 w-1.5 rounded-full', dot].join(' ')}
-          />
+    <div className="grid grid-cols-[46px_1fr] gap-3 border-b border-dashed border-[#d6dade] py-[10px] last:border-b-0">
+      <span className="text-[10.5px] font-bold text-[#959ca7]">{item.time}</span>
+      <div className="min-w-0">
+        <span className="mb-[3px] inline-block rounded-[5px] border border-[#d6dade] bg-[#eceef1] px-[6px] py-px text-[9px] font-bold uppercase tracking-[0.1em] text-[#15171c]">
           {item.source}
         </span>
-        <div className="text-[12.5px] text-muted-foreground">{item.message}</div>
+        <div className="text-[12.5px] text-[#5b626d]">{item.message}</div>
+      </div>
+    </div>
+  );
+}
+
+function AlertRow({ alert }: { alert: EngineAlert }) {
+  return (
+    <div className="grid grid-cols-[46px_1fr] gap-3 border-b border-dashed border-[#d6dade] py-[10px]">
+      <span className="text-[10.5px] font-bold text-[#959ca7]">{alert.time}</span>
+      <div className="min-w-0">
+        <span className="mb-[3px] inline-flex items-center gap-1.5 rounded-[5px] border border-[#d6dade] bg-[#eceef1] px-[6px] py-px text-[9px] font-bold uppercase tracking-[0.1em] text-[#15171c]">
+          <span className={`h-1.5 w-1.5 rounded-full ${ALERT_DOT[alert.level]}`} />
+          {alert.source}
+        </span>
+        <div className="text-[12.5px] font-bold text-[#15171c]">{alert.title}</div>
+        {alert.detail ? (
+          <div className="text-[11.5px] leading-snug text-[#5b626d]">{alert.detail}</div>
+        ) : null}
       </div>
     </div>
   );

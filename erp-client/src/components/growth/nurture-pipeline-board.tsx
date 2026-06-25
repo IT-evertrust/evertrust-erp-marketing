@@ -28,14 +28,8 @@ import {
   useDeleteProspect,
 } from '@/hooks/use-prospects';
 import { useNicheTargets } from '@/hooks/use-niche-targets';
-import {
-  PIPELINE_STAGE_CLASS,
-  PROSPECT_STATUS_CLASS,
-  PROSPECT_STATUS_LABEL,
-} from '@/lib/growth-format';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Select,
@@ -334,34 +328,31 @@ function StageColumn({
     <div
       ref={setNodeRef}
       className={cn(
-        'flex min-h-[16rem] flex-col gap-2 rounded-lg border border-sidebar-border bg-card/40 p-2 transition-colors',
-        isOver && 'border-primary/60 bg-primary/5',
+        'flex min-h-[16rem] flex-col rounded-[10px] border border-[#e4e7eb] bg-[#f6f7f9] p-[10px] transition-colors',
+        isOver && 'border-[#959ca7] bg-[#eceef1]',
       )}
     >
-      <div className="flex items-center justify-between gap-2 px-1 pb-1">
-        <span
-          className={cn(
-            'rounded-md border px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide',
-            PIPELINE_STAGE_CLASS[stage],
-          )}
-        >
+      <div className="mb-[9px] flex items-center justify-between gap-2 border-b border-[#e4e7eb] px-0.5 pb-[9px]">
+        <b className="text-[9.5px] font-bold uppercase tracking-[0.08em] text-[#15171c]">
           {label}
-        </span>
-        <span className="flex items-baseline gap-1.5 tabular-nums">
-          <span className="text-xs font-semibold text-foreground">{total}</span>
-          <span className="text-xs font-semibold text-muted-foreground">
-            {count}
-          </span>
+        </b>
+        <span className="rounded-[20px] border border-[#d6dade] bg-[#eceef1] px-[6px] text-[11px] font-bold tabular-nums text-[#5b626d]">
+          {count}
         </span>
       </div>
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-1 flex-col gap-2">
         {empty ? (
-          <p className="px-1 py-6 text-center text-xs text-muted-foreground/70">
+          <p className="px-1 py-6 text-center text-xs text-[#959ca7]">
             {emptyLabel}
           </p>
         ) : (
           children
         )}
+      </div>
+      <div className="mt-[9px] border-t border-[#e4e7eb] pt-[9px] text-center">
+        <div className="text-[11.5px] font-bold text-[#15171c]">
+          Total: {total}
+        </div>
       </div>
     </div>
   );
@@ -469,12 +460,18 @@ const CardView = memo(function CardView({
   deleteLabel?: string;
   dealLabel?: string;
 }) {
-  const location = [p.city, p.country].filter(Boolean).join(', ');
+  // Card content matches the HTML deal card: company (✓ when Won) / contact person
+  // / niche tag + € value. Falls back to the location line when no contact name.
+  const secondary = p.contactName?.trim() || [p.city, p.country].filter(Boolean).join(', ');
+  const tag = p.nicheTargetName?.trim();
+  const isWon = p.pipelineStage === 'WON';
+  const isLost = p.pipelineStage === 'LOST';
   return (
     <div
       className={cn(
-        'group/card relative rounded-md border border-sidebar-border bg-card p-2.5 text-left shadow-sm',
-        dragging && 'cursor-grabbing shadow-lg ring-1 ring-primary/40',
+        'group/card relative rounded-[8px] border border-[#d6dade] bg-white p-[10px] text-left',
+        isLost && 'opacity-60',
+        dragging && 'cursor-grabbing shadow-lg ring-1 ring-[#15171c]/30',
       )}
     >
       {onDelete ? (
@@ -489,24 +486,26 @@ const CardView = memo(function CardView({
             stop(e);
             onDelete();
           }}
-          className="absolute right-1 top-1 text-muted-foreground opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover/card:opacity-100"
+          className="absolute right-1 top-1 text-[#959ca7] opacity-0 transition-opacity hover:text-destructive focus-visible:opacity-100 group-hover/card:opacity-100"
         >
           <Trash2 />
         </Button>
       ) : null}
-      <p className="truncate pr-6 text-sm font-semibold text-foreground">
+      <p className="truncate pr-6 text-[12px] font-bold text-[#15171c]">
         {p.companyName ?? p.email}
+        {isWon ? <span className="text-[#15171c]"> ✓</span> : null}
       </p>
-      {location ? (
-        <p className="mt-0.5 truncate text-xs text-muted-foreground">{location}</p>
+      {secondary ? (
+        <p className="mt-px truncate text-[10.5px] text-[#959ca7]">{secondary}</p>
       ) : null}
-      <div className="mt-2 flex items-center justify-between gap-2">
-        <Badge
-          variant="outline"
-          className={cn('text-[10px]', PROSPECT_STATUS_CLASS[p.status])}
-        >
-          {PROSPECT_STATUS_LABEL[p.status]}
-        </Badge>
+      <div className="mt-[9px] flex items-center justify-between gap-2">
+        {tag ? (
+          <span className="max-w-[60%] truncate rounded-[5px] border border-[#c2c7ce] px-[5px] py-px text-[9px] font-bold uppercase tracking-[0.05em] text-[#5b626d]">
+            {tag}
+          </span>
+        ) : (
+          <span />
+        )}
         <DealValue value={p.dealValue} label={dealLabel ?? ''} onSave={onSaveDeal} />
       </div>
     </div>

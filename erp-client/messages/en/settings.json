@@ -44,6 +44,49 @@
       "toast": "Language set to {label}."
     }
   },
+  "system": {
+    "sender": {
+      "title": "Sender Identity",
+      "description": "The name, address and sign-off shown on outgoing Reach mail.",
+      "nameLabel": "Sender name",
+      "namePlaceholder": "EVERTRUST GmbH",
+      "emailLabel": "Sender email",
+      "emailPlaceholder": "info@example.com",
+      "signatureLabel": "Signature",
+      "signaturePlaceholder": "Best regards, …"
+    },
+    "sending": {
+      "title": "Sending Parameters",
+      "description": "How much, when, and how the sequence is paced.",
+      "dailyCapLabel": "Daily send limit",
+      "hoursStartLabel": "Sending hours — start",
+      "hoursEndLabel": "Sending hours — end",
+      "round2Label": "Follow-up round 2 — days",
+      "round3Label": "Follow-up round 3 — days"
+    },
+    "integrations": {
+      "title": "Integrations",
+      "gmailLabel": "Gmail / Google Workspace",
+      "gmailHint": "Send and read outreach mail through the connected mailbox.",
+      "calendarLabel": "Google Calendar",
+      "calendarHint": "Read free slots and book meetings in Activate.",
+      "readAiLabel": "Read AI",
+      "readAiHint": "Capture meeting transcripts and notes.",
+      "sheetsLabel": "Google Sheets",
+      "sheetsHint": "Sync leads and reports to a spreadsheet."
+    },
+    "engine": {
+      "title": "Engine Mode",
+      "approvalLabel": "Approval before sending",
+      "approvalHint": "Hold drafted replies for review before they go out.",
+      "autoSendLabel": "Auto-send",
+      "autoSendHint": "Send approved drafts automatically without a manual click.",
+      "weeklyReportLabel": "Weekly report",
+      "weeklyReportHint": "Email a weekly performance summary."
+    },
+    "toastSaved": "Settings saved.",
+    "toastError": "Could not save settings."
+  },
   "config": {
     "header": {
       "title": "Configuration",
@@ -170,17 +213,6 @@
       "toastDisconnected": "Google account disconnected.",
       "toastConnectError": "Could not connect the Google account.",
       "toastError": "Could not update Google accounts."
-    },
-    "other": {
-      "title": "Other integrations",
-      "emailLabel": "Transactional email",
-      "emailSublabel": "Sequence Sender (per-org send)",
-      "docusignLabel": "DocuSign",
-      "docusignSublabel": "Contract Assist",
-      "connected": "Connected",
-      "notConnected": "Not connected",
-      "connect": "Connect",
-      "comingSoon": "Coming soon"
     },
     "ai": {
       "title": "AI engine",

@@ -186,6 +186,12 @@ export const queryKeys = {
     drafts: () => ['marketing', 'drafts'] as const,
   },
 
+  // Growth Engine: the org's effective settings (Settings page — sender identity,
+  // sending parameters, integration + engine-mode toggles).
+  settings: {
+    all: ['settings'] as const,
+  },
+
   // Engage: ERP-direct Gmail reply triage queue.
   engage: {
     all: ['engage'] as const,

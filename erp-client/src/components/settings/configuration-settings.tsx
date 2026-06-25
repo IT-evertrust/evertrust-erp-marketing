@@ -33,7 +33,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Table,
   TableBody,
@@ -58,48 +57,6 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
     <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
       {children}
     </span>
-  );
-}
-
-// A small "not live yet" affordance for the mockup cards below. Rendered as the
-// card's head hint, it marks the section as a non-wired preview (no API, no hooks)
-// using theme tokens only so it stays dark-mode safe.
-function MockupBadge({ children }: { children?: React.ReactNode }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-sidebar-border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
-      <span className="size-1.5 rounded-full bg-muted-foreground/60" aria-hidden />
-      {children ?? 'Coming soon'}
-    </span>
-  );
-}
-
-// A disabled, presentational toggle for the mockup cards (no Switch component
-// exists in the kit). `on` only sets the static visual state; it never changes.
-// Always disabled — these are previews, not live controls.
-function MockToggle({
-  on = false,
-  label,
-}: {
-  on?: boolean;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={label}
-      disabled
-      className="inline-flex h-5 w-9 shrink-0 cursor-not-allowed items-center rounded-full border border-sidebar-border bg-muted/60 p-0.5 opacity-60 transition-colors data-[on=true]:bg-foreground/80"
-      data-on={on}
-    >
-      <span
-        className={[
-          'size-3.5 rounded-full bg-background shadow-sm transition-transform',
-          on ? 'translate-x-4' : 'translate-x-0',
-        ].join(' ')}
-      />
-    </button>
   );
 }
 
@@ -369,65 +326,6 @@ function GoogleWorkspaceCard() {
           </div>
         )}
       </Can>
-    </SettingsCard>
-  );
-}
-
-// ============================================================================
-// Card 2 — Other integrations
-// ============================================================================
-// Two rows: Transactional email (connected when at least one Google account is
-// connected) and DocuSign (a placeholder "Connect" — no backend yet).
-function OtherIntegrationsCard() {
-  const t = useTranslations('settings');
-  const accounts = useGoogleAccounts();
-  const emailConnected = (accounts.data ?? []).length > 0;
-
-  return (
-    <SettingsCard title={t('config.other.title')}>
-      <div className="overflow-x-auto rounded-lg border">
-        <Table>
-          <TableBody>
-            <TableRow>
-              <TableCell className="font-semibold">
-                {t('config.other.emailLabel')}
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {t('config.other.emailSublabel')}
-              </TableCell>
-              <TableCell className="text-right">
-                {emailConnected ? (
-                  <ToneBadge tone="emerald">
-                    {t('config.other.connected')}
-                  </ToneBadge>
-                ) : (
-                  <ToneBadge tone="muted">
-                    {t('config.other.notConnected')}
-                  </ToneBadge>
-                )}
-              </TableCell>
-            </TableRow>
-            <TableRow>
-              <TableCell className="font-semibold">
-                {t('config.other.docusignLabel')}
-              </TableCell>
-              <TableCell className="text-muted-foreground">
-                {t('config.other.docusignSublabel')}
-              </TableCell>
-              <TableCell className="text-right">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => toast(t('config.other.comingSoon'))}
-                >
-                  {t('config.other.connect')}
-                </Button>
-              </TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
-      </div>
     </SettingsCard>
   );
 }
@@ -819,234 +717,6 @@ function SalesCalendarCard() {
   );
 }
 
-// ============================================================================
-// MOCKUP CARDS (not wired to any backend yet)
-// ----------------------------------------------------------------------------
-// The four cards below are visual mockups in the same SettingsCard idiom as the
-// live cards above. They call NO API, use NO hooks/mutations, and every control
-// is disabled. Each carries a MockupBadge so it reads as a preview. Strings are
-// plain English (this file's `settings` namespace has no keys for them yet) and
-// should be swept into i18n when these wire to the backend.
-// ============================================================================
-
-// Mockup B — Branding & sender identity. Org logo drop area, sender display name,
-// email signature, and an accent-color swatch. All disabled.
-function BrandingCard() {
-  return (
-    <SettingsCard
-      title="Branding & sender identity"
-      description="How your org presents itself in outbound email and across the app — logo, sender name, signature, and accent color."
-      action={<MockupBadge>Coming soon</MockupBadge>}
-         >
-      <div className="flex flex-col gap-1.5">
-        <Eyebrow>Org logo</Eyebrow>
-        {/* Dashed drop area placeholder — disabled, non-interactive. */}
-        <div
-          aria-disabled
-          className="flex flex-col items-center justify-center gap-1 rounded-[10px] border border-dashed border-sidebar-border bg-muted/30 px-4 py-8 text-center opacity-70"
-        >
-          <Plus className="size-5 text-muted-foreground" aria-hidden />
-          <span className="text-xs font-medium text-foreground">
-            Drag a logo here, or browse
-          </span>
-          <span className="text-[11px] text-muted-foreground">
-            PNG or SVG, up to 1 MB
-          </span>
-        </div>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="branding-sender-name">
-            <Eyebrow>Sender display name</Eyebrow>
-          </Label>
-          <Input
-            id="branding-sender-name"
-            disabled
-            autoComplete="off"
-            placeholder="EverTrust Sales"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="branding-accent">
-            <Eyebrow>Accent color</Eyebrow>
-          </Label>
-          <div className="flex items-center gap-2">
-            <span
-              aria-hidden
-              className="size-9 shrink-0 rounded-md border border-sidebar-border bg-foreground/80"
-            />
-            <Input
-              id="branding-accent"
-              disabled
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="#3B5BDB"
-              className="font-mono"
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="branding-signature">
-          <Eyebrow>Email signature</Eyebrow>
-        </Label>
-        <Textarea
-          id="branding-signature"
-          disabled
-          rows={4}
-          placeholder={'Best regards,\nThe EverTrust Team'}
-        />
-        <p className="text-xs text-muted-foreground">
-          Appended to outbound email from this org.
-        </p>
-      </div>
-
-      <Button type="button" className="self-start" disabled>
-        Save branding
-      </Button>
-    </SettingsCard>
-  );
-}
-
-// Mockup C — Notifications & alerts. A list of event rows, each with an in-app and
-// an email toggle. All toggles disabled (static preview state).
-function NotificationsCard() {
-  const rows: {
-    key: string;
-    label: string;
-    description: string;
-    inApp: boolean;
-    email: boolean;
-  }[] = [
-    {
-      key: 'engine-failure',
-      label: 'Engine-failure alerts',
-      description: 'An agent run errors or stalls.',
-      inApp: true,
-      email: true,
-    },
-    {
-      key: 'new-reply',
-      label: 'New reply received',
-      description: 'A prospect replies to an outbound thread.',
-      inApp: true,
-      email: false,
-    },
-    {
-      key: 'meeting-booked',
-      label: 'Meeting booked / reminders',
-      description: 'A meeting is scheduled or coming up.',
-      inApp: true,
-      email: true,
-    },
-  ];
-
-  return (
-    <SettingsCard
-      title="Notifications & alerts"
-      description="Choose where each event shows up. In-app surfaces in the notification bell; email sends to your address."
-      action={<MockupBadge>Coming soon</MockupBadge>}
-         >
-      <div className="overflow-hidden rounded-[10px] border border-sidebar-border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Event</TableHead>
-              <TableHead className="w-20 text-center">In-app</TableHead>
-              <TableHead className="w-20 text-center">Email</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((r) => (
-              <TableRow key={r.key}>
-                <TableCell>
-                  <div className="flex flex-col gap-0.5">
-                    <span className="font-semibold">{r.label}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {r.description}
-                    </span>
-                  </div>
-                </TableCell>
-                <TableCell className="text-center">
-                  <div className="flex justify-center">
-                    <MockToggle
-                      on={r.inApp}
-                      label={`${r.label} — in-app`}
-                    />
-                  </div>
-                </TableCell>
-                <TableCell className="text-center">
-                  <div className="flex justify-center">
-                    <MockToggle on={r.email} label={`${r.label} — email`} />
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </SettingsCard>
-  );
-}
-
-// Mockup D — Integrations marketplace. A small grid of connect tiles for the
-// not-yet-built integrations, placed as a sibling of the live Google Workspace
-// card (which stays the one real, working integration). Disabled Connect buttons.
-function IntegrationsMarketplaceCard() {
-  const tiles: { key: string; name: string; blurb: string }[] = [
-    { key: 'hubspot', name: 'HubSpot', blurb: 'Sync contacts & deals' },
-    { key: 'docusign', name: 'DocuSign', blurb: 'E-signature for contracts' },
-    { key: 'whatsapp', name: 'WhatsApp', blurb: 'Outbound messaging' },
-  ];
-
-  return (
-    <SettingsCard
-      title="Integrations marketplace"
-      description="Connect more tools to your org. Google Workspace is live above; these are on the way."
-      action={<MockupBadge>Coming soon</MockupBadge>}
-    >
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {tiles.map((tile) => (
-          <div
-            key={tile.key}
-            className="flex flex-col gap-3 rounded-[10px] border border-sidebar-border bg-card p-4"
-          >
-            <div className="flex items-center gap-3">
-              {/* Logo placeholder — the integration's initial in a token tile. */}
-              <span
-                aria-hidden
-                className="flex size-9 shrink-0 items-center justify-center rounded-md border border-sidebar-border bg-muted/50 text-sm font-bold text-muted-foreground"
-              >
-                {tile.name.charAt(0)}
-              </span>
-              <div className="min-w-0">
-                <div className="truncate text-sm font-semibold text-foreground">
-                  {tile.name}
-                </div>
-                <div className="truncate text-xs text-muted-foreground">
-                  {tile.blurb}
-                </div>
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="self-start"
-              disabled
-            >
-              <Plus className="size-4" />
-              Connect
-            </Button>
-          </div>
-        ))}
-      </div>
-    </SettingsCard>
-  );
-}
-
 // Configuration: integrations + AI engine + sales-calendar timezone, admin-only (the
 // route gates on admin:config).
 export function ConfigurationSettings() {
@@ -1058,17 +728,10 @@ export function ConfigurationSettings() {
           the width instead of hugging the left. break-inside-avoid keeps each
           card whole; mb-4 spaces them within a column. */}
       <div className="columns-1 gap-4 xl:columns-2 [&>*]:mb-4 [&>*]:break-inside-avoid">
-        {/* Live, working integration first, with the (mockup) marketplace as a
-            sibling right beside it. */}
         <GoogleWorkspaceCard />
-        <IntegrationsMarketplaceCard />
-        <OtherIntegrationsCard />
         <AiEngineCard />
         <LeadScraperCard />
         <SalesCalendarCard />
-        {/* Mockup sections — not wired to any backend yet. */}
-        <BrandingCard />
-        <NotificationsCard />
       </div>
     </main>
   );

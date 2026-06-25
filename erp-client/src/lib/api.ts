@@ -44,6 +44,8 @@ import {
   WorkflowConfigDto,
   UpdateWorkflowConfigDto,
   OrgSenderDto,
+  OrgSettingsDto,
+  UpdateOrgSettingsDto,
   ConnectedGoogleAccountDto,
   SetGoogleDefaultsDto,
   SetDefaultMailboxDto,
@@ -840,6 +842,24 @@ export const api = {
         method: 'PUT',
         body: UpdateLeadScraperDto.parse(input),
         schema: LeadScraperConfigDto,
+      }),
+  },
+
+  settings: {
+    // The org's effective Growth Engine settings (sender identity, sending
+    // parameters, integration + engine-mode toggles).
+    get: (signal?: AbortSignal) =>
+      request<OrgSettingsDto>('/growth/settings', {
+        schema: OrgSettingsDto,
+        signal,
+      }),
+
+    // Partial update — any subset of the fields. Returns the full settings.
+    update: (patch: UpdateOrgSettingsDto) =>
+      request<OrgSettingsDto>('/growth/settings', {
+        method: 'PATCH',
+        body: UpdateOrgSettingsDto.parse(patch),
+        schema: OrgSettingsDto,
       }),
   },
 

@@ -13,10 +13,10 @@ export type SegmentedTab = {
   icon?: ReactNode;
 };
 
-// The mockup's `.tabs` / `.tab` / `.tab.on` segmented control (style block
-// lines 96–101): a bordered pill group whose active tab gets the emerald-soft
-// background + emerald text. This is a thin styled wrapper over the shadcn Tabs
-// primitive so pages get the prototype look without re-skinning every tab.
+// A bordered pill group whose active tab is a neutral raised pill (white bg +
+// foreground text + subtle shadow) — no brand-green accent, so it doesn't clash
+// with the calendar's color-coded event cards. A thin styled wrapper over the
+// shadcn Tabs primitive so pages get the look without re-skinning every tab.
 //
 // Renders only the tab strip (TabsList). Pair it with shadcn `TabsContent`
 // inside the same `<Tabs>` if you need it, or use it controlled (value +
@@ -48,8 +48,8 @@ export function SegmentedTabs({
             value={t.value}
             className={cn(
               'gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold text-muted-foreground',
-              'data-[state=active]:bg-emerald-500/10 data-[state=active]:text-emerald-600 data-[state=active]:shadow-none',
-              'dark:data-[state=active]:bg-emerald-500/10 dark:data-[state=active]:text-emerald-400 dark:data-[state=active]:border-transparent',
+              // Neutral active segment (raised white pill) — no clashing brand-green.
+              'data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm',
             )}
           >
             {t.icon}

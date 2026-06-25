@@ -15,6 +15,7 @@
       "niche": "Nische",
       "region": "Region",
       "companies": "Firmen",
+      "sent": "Gesendet",
       "status": "Status"
     },
     "status": {
@@ -130,6 +131,8 @@
       "country": "Land",
       "countryPlaceholder": "z. B. Deutschland",
       "region": "Region",
+      "segment": "Segment",
+      "segmentPlaceholder": "z. B. Portfolio-Inhaber ≥ 500 Einheiten",
       "project": "Projekt",
       "projectPlaceholder": "z. B. PV-Ausbau, LED-Umrüstung, Wärmepumpen",
       "gmailLabel": "Gmail-Label",

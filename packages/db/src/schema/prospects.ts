@@ -36,6 +36,9 @@ export const prospects = pgTable(
     nicheTargetId: uuid('niche_target_id').references(() => nicheTargets.id),
     email: text('email').notNull(),
     companyName: text('company_name'),
+    // Deal's contact person, e.g. "Mr. Albers" — shown on the Nurture pipeline
+    // card. Null = unknown / not captured.
+    contactName: text('contact_name'),
     website: text('website'),
     city: text('city'),
     country: text('country'),

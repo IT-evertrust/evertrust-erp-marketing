@@ -8,6 +8,9 @@ export type Campaign = {
   niche: string;
   region: string;
   companies: number;
+  // Total emails sent across all three rounds (cold + follow-up + final). Drives
+  // the Email Generator tab's "Sent" column; Lead Scraper shows `companies`.
+  sent: number;
   status: CampaignStatus;
 };
 
@@ -79,6 +82,10 @@ export type NewCampaignFormValues = {
     niche: string;
     country: string;
     region: string;
+    // Free-text target descriptor (HTML "Segment", e.g. "Portfolio holders ≥ 500
+    // units"). Maps to the backend aim's optional `segment` field. Optional so the
+    // preserved legacy modal (which doesn't collect it) still type-checks.
+    segment?: string;
     project: string;
     gmailLabel: string;
     whatsappNumber: string;

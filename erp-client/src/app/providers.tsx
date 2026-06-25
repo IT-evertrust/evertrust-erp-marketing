@@ -24,14 +24,12 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Theme is user-switchable from Settings → General (next-themes persists the
-          choice in localStorage). Default stays dark to preserve the existing look;
-          "system" follows the OS, light/dark force a palette. globals.css defines
-          both :root (light) and .dark. */}
+      {/* Light mode only: `forcedTheme` locks the palette to light and makes setTheme a
+          no-op, so there's no theme toggle in the UI. globals.css :root defines light. */}
       <ThemeProvider
         attribute="class"
-        defaultTheme="dark"
-        enableSystem
+        defaultTheme="light"
+        forcedTheme="light"
         disableTransitionOnChange
       >
         {/* Applies the stored display-density preference to <html> before paint,

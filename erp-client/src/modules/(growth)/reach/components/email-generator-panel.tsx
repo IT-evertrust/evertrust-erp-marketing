@@ -39,6 +39,8 @@ export function EmailGeneratorPanel({
         selectedCampaignId={selectedCampaignId}
         onSelectCampaign={onSelectCampaign}
         loading={loadingCampaigns}
+        metricLabel={t('campaignTable.col.sent')}
+        metricValue={(campaign) => campaign.sent}
       />
 
       <GrowthCard

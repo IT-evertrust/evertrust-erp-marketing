@@ -1,5 +1,5 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, desc, eq, gte, lte } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lte } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 import type {
   GraduateProspectDto,
@@ -58,12 +58,14 @@ export interface ProspectBoardFilters {
 
 // One org-scoped board page: the page rows, the post-filter pre-page total, and the
 // per-status + per-stage tallies for the board columns (the Nurture kanban groups by
-// stage; the Engage board groups by status).
+// stage; the Engage board groups by status). `nicheNames` resolves each page row's
+// nicheTargetId -> its display name (the Nurture card tag); ids with no niche/name omitted.
 export interface ProspectBoardResult {
   items: ProspectRow[];
   total: number;
   statusCounts: Record<string, number>;
   stageCounts: Record<string, number>;
+  nicheNames: Record<string, string>;
 }
 
 // Map a leads row to its HTTP DTO (timestamps → ISO strings). Local to the
@@ -269,7 +271,32 @@ export class ProspectsService {
     const limit = filters.limit && filters.limit > 0 ? filters.limit : 50;
     const items = filtered.slice(offset, offset + limit);
 
-    return { items, total, statusCounts, stageCounts };
+    // Resolve the niche-target display names for the PAGE rows only (the same
+    // nicheTargets lookup the detail drawer uses via resolveNames, batched). The card
+    // shows the niche name as a tag; null-niche rows simply have no entry.
+    const nicheNames = await this.resolveNicheNames(
+      items.map((r) => r.nicheTargetId),
+    );
+
+    return { items, total, statusCounts, stageCounts, nicheNames };
+  }
+
+  // Batch-resolve nicheTargetId -> display name for a set of (possibly null/dup) ids,
+  // org-independent (nicheTargets inherit tenancy via their parent niche; the board
+  // rows are already org-confined upstream). Returns a map keyed by niche-target id;
+  // ids with no matching row are omitted.
+  private async resolveNicheNames(
+    ids: Array<string | null>,
+  ): Promise<Record<string, string>> {
+    const unique = [...new Set(ids.filter((id): id is string => id !== null))];
+    if (unique.length === 0) return {};
+    const rows = await this.db
+      .select({ id: schema.nicheTargets.id, name: schema.nicheTargets.name })
+      .from(schema.nicheTargets)
+      .where(inArray(schema.nicheTargets.id, unique));
+    const map: Record<string, string> = {};
+    for (const r of rows) map[r.id] = r.name;
+    return map;
   }
 
   // One prospect IN THE CALLER'S ORG (the UI drawer). 404 if missing or cross-org.

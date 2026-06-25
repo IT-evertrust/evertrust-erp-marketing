@@ -109,6 +109,31 @@ export const orgConfig = pgTable(
     respectSuppressions: boolean('respect_suppressions'),
     dedupDays: integer('dedup_days'),
     requireNicheAnalysis: boolean('require_niche_analysis'),
+    // --- Settings page: sender identity ---
+    // Display name + reply-to address shown on outgoing Reach mail. Null = fall
+    // back to the product/account default.
+    senderName: text('sender_name'),
+    senderEmail: text('sender_email'),
+    // --- Settings page: sending parameters ---
+    // Daily send window (HH:MM, org-local). NOT NULL with sensible defaults.
+    sendingHoursStart: text('sending_hours_start').notNull().default('08:00'),
+    sendingHoursEnd: text('sending_hours_end').notNull().default('17:00'),
+    // Days to wait before the 2nd / 3rd follow-up round.
+    followupRound2Days: integer('followup_round2_days').notNull().default(4),
+    followupRound3Days: integer('followup_round3_days').notNull().default(9),
+    // --- Settings page: integration toggles ---
+    gmailEnabled: boolean('gmail_enabled').notNull().default(true),
+    calendarEnabled: boolean('calendar_enabled').notNull().default(true),
+    readAiEnabled: boolean('read_ai_enabled').notNull().default(true),
+    sheetsEnabled: boolean('sheets_enabled').notNull().default(true),
+    // --- Settings page: engine mode toggles ---
+    approvalBeforeSending: boolean('approval_before_sending')
+      .notNull()
+      .default(true),
+    autoSend: boolean('auto_send').notNull().default(false),
+    weeklyReportEnabled: boolean('weekly_report_enabled')
+      .notNull()
+      .default(true),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

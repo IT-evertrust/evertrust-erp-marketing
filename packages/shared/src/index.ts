@@ -1965,7 +1965,13 @@ export const ProspectDto = z.object({
   organizationId: z.string().uuid(),
   campaignId: z.string().uuid(),
   nicheTargetId: z.string().uuid().nullable(),
+  // The resolved niche-target display name (for the Nurture card tag); null when the
+  // prospect has no niche target. Resolved server-side from nicheTargetId.
+  nicheTargetName: z.string().nullable().default(null),
   email: z.string(),
+  // The contact person on the prospect's company (mirrored from the source lead);
+  // null when unknown.
+  contactName: z.string().nullable().default(null),
   companyName: z.string().nullable(),
   website: z.string().nullable(),
   city: z.string().nullable(),
@@ -2066,6 +2072,59 @@ export const UpdateProspectDealDto = z.object({
   dealValue: z.number().int().nonnegative().max(1_000_000_000),
 });
 export type UpdateProspectDealDto = z.infer<typeof UpdateProspectDealDto>;
+
+// ---- Org Settings (Growth Engine settings page; org_config columns) ----
+// GET /growth/settings response — the org's effective Growth Engine settings. Each
+// field is resolved server-side as (org_config value ?? sensible default), so the
+// values are never null except senderName/senderEmail (which legitimately have none).
+export const OrgSettingsDto = z.object({
+  // Sender identity shown on outgoing Reach mail. null = use the account/product default.
+  senderName: z.string().nullable(),
+  senderEmail: z.string().nullable(),
+  // Sign-off block appended to outgoing mail. null = none.
+  signature: z.string().nullable(),
+  // Max emails sent per day.
+  dailySendCap: z.number().int(),
+  // Daily send window (HH:MM, org-local).
+  sendingHoursStart: z.string(),
+  sendingHoursEnd: z.string(),
+  // Days to wait before the 2nd / 3rd follow-up round.
+  followupRound2Days: z.number().int(),
+  followupRound3Days: z.number().int(),
+  // Integration toggles.
+  gmailEnabled: z.boolean(),
+  calendarEnabled: z.boolean(),
+  readAiEnabled: z.boolean(),
+  sheetsEnabled: z.boolean(),
+  // Engine mode toggles (persisted flags; the send pipeline is NOT yet rewired to them).
+  approvalBeforeSending: z.boolean(),
+  autoSend: z.boolean(),
+  weeklyReportEnabled: z.boolean(),
+});
+export type OrgSettingsDto = z.infer<typeof OrgSettingsDto>;
+
+// Body for PATCH /growth/settings — a PARTIAL update. Every field is optional; an
+// omitted field is left unchanged. senderName/senderEmail accept null to clear them.
+export const UpdateOrgSettingsDto = z
+  .object({
+    senderName: z.string().max(200).nullable().optional(),
+    senderEmail: z.string().email().max(320).nullable().optional(),
+    signature: z.string().max(2000).nullable().optional(),
+    dailySendCap: z.number().int().min(1).max(100000).optional(),
+    sendingHoursStart: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    sendingHoursEnd: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+    followupRound2Days: z.number().int().min(0).max(365).optional(),
+    followupRound3Days: z.number().int().min(0).max(365).optional(),
+    gmailEnabled: z.boolean().optional(),
+    calendarEnabled: z.boolean().optional(),
+    readAiEnabled: z.boolean().optional(),
+    sheetsEnabled: z.boolean().optional(),
+    approvalBeforeSending: z.boolean().optional(),
+    autoSend: z.boolean().optional(),
+    weeklyReportEnabled: z.boolean().optional(),
+  })
+  .refine((o) => Object.keys(o).length > 0, 'at least one field is required');
+export type UpdateOrgSettingsDto = z.infer<typeof UpdateOrgSettingsDto>;
 
 // ---- Reply classifications ----
 // Body for POST /reply-classifications — Reply Glock / RAG verdict. Inserted as

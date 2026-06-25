@@ -44,6 +44,49 @@
       "toast": "Sprache auf {label} gesetzt."
     }
   },
+  "system": {
+    "sender": {
+      "title": "Absenderidentität",
+      "description": "Name, Adresse und Grußformel auf ausgehenden Reach-Mails.",
+      "nameLabel": "Absendername",
+      "namePlaceholder": "EVERTRUST GmbH",
+      "emailLabel": "Absender-E-Mail",
+      "emailPlaceholder": "info@example.com",
+      "signatureLabel": "Signatur",
+      "signaturePlaceholder": "Mit freundlichen Grüßen, …"
+    },
+    "sending": {
+      "title": "Versandparameter",
+      "description": "Wie viel, wann und in welchem Takt die Sequenz versendet.",
+      "dailyCapLabel": "Tägliches Sendelimit",
+      "hoursStartLabel": "Sendezeiten — Beginn",
+      "hoursEndLabel": "Sendezeiten — Ende",
+      "round2Label": "Nachfass-Runde 2 — Tage",
+      "round3Label": "Nachfass-Runde 3 — Tage"
+    },
+    "integrations": {
+      "title": "Integrationen",
+      "gmailLabel": "Gmail / Google Workspace",
+      "gmailHint": "Outreach-Mails über das verbundene Postfach senden und lesen.",
+      "calendarLabel": "Google Kalender",
+      "calendarHint": "Freie Termine lesen und Meetings in Aktivierung buchen.",
+      "readAiLabel": "Read AI",
+      "readAiHint": "Meeting-Transkripte und Notizen erfassen.",
+      "sheetsLabel": "Google Sheets",
+      "sheetsHint": "Leads und Berichte mit einer Tabelle synchronisieren."
+    },
+    "engine": {
+      "title": "Engine-Modus",
+      "approvalLabel": "Freigabe vor dem Senden",
+      "approvalHint": "Entworfene Antworten vor dem Versand zur Prüfung zurückhalten.",
+      "autoSendLabel": "Automatischer Versand",
+      "autoSendHint": "Freigegebene Entwürfe automatisch ohne manuellen Klick senden.",
+      "weeklyReportLabel": "Wochenbericht",
+      "weeklyReportHint": "Eine wöchentliche Leistungszusammenfassung per E-Mail senden."
+    },
+    "toastSaved": "Einstellungen gespeichert.",
+    "toastError": "Einstellungen konnten nicht gespeichert werden."
+  },
   "config": {
     "header": {
       "title": "Konfiguration",
@@ -170,17 +213,6 @@
       "toastDisconnected": "Google-Konto getrennt.",
       "toastConnectError": "Google-Konto konnte nicht verbunden werden.",
       "toastError": "Google-Konten konnten nicht aktualisiert werden."
-    },
-    "other": {
-      "title": "Weitere Integrationen",
-      "emailLabel": "Transaktions-E-Mail",
-      "emailSublabel": "Sequenz-Sender (Org-Versand)",
-      "docusignLabel": "DocuSign",
-      "docusignSublabel": "Vertrags-Assistent",
-      "connected": "Verbunden",
-      "notConnected": "Nicht verbunden",
-      "connect": "Verbinden",
-      "comingSoon": "Demnächst verfügbar"
     },
     "ai": {
       "title": "KI-Engine",
