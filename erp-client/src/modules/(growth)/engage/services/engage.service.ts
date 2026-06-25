@@ -42,6 +42,7 @@ interface BackendReply {
   draftSource: string | null;
   citations: string[];
   followUpWindow: string | null;
+  personaId: string | null;
   handled: boolean;
   thread: BackendThreadMessage[];
   time: string;
@@ -130,6 +131,37 @@ export async function scanInbox(
   email: string,
 ): Promise<{ aims: number; scanned: number; classified: number }> {
   return mutate('POST', `/engage/scan-inbox?email=${encodeURIComponent(email)}`);
+}
+
+// Scan EVERY campaign in the org (the same work the hourly auto-scan does). Backs
+// the manual "Scan all" button. SLOW — sequential per campaign on the local model.
+export async function scanAllInboxes(): Promise<{
+  aims: number;
+  scanned: number;
+  classified: number;
+}> {
+  return mutate('POST', '/engage/scan-all');
+}
+
+// A connected Google mailbox (one of the org's linked accounts — incl. colleagues').
+// Backs the inbox filter so any linked inbox can be reviewed, not just campaign senders.
+export interface EngageAccount {
+  id: string;
+  email: string;
+  displayName: string | null;
+}
+
+// List every Google mailbox connected to this org. Used to populate the inbox
+// filter with all linked inboxes (so you can see other users' inboxes too).
+export async function getEngageAccounts(): Promise<EngageAccount[]> {
+  const data = await getJson<
+    { id?: string; email?: string; displayName?: string | null }[]
+  >('/engage/accounts');
+  return data.flatMap((a) =>
+    a.id && a.email
+      ? [{ id: a.id, email: a.email, displayName: a.displayName ?? null }]
+      : [],
+  );
 }
 
 // The reply-sorter queue for a campaign: the persisted, reply_glock-classified
@@ -283,6 +315,23 @@ export async function setCampaignPersona(
   await mutate('PATCH', `/engage/campaigns/${aimId}/persona`, { personaId });
 }
 
+// Set (or clear) the drafting persona for ONE reply. Persisted, no redraft.
+export async function setReplyPersona(
+  replyId: string,
+  personaId: string | null,
+): Promise<void> {
+  await mutate('PATCH', `/engage/campaign-replies/${replyId}/persona`, {
+    personaId,
+  });
+}
+
+// Re-draft one reply fresh in its current per-reply persona voice.
+export async function redraftReplyPersona(
+  replyId: string,
+): Promise<{ draftSubject: string; draftBody: string }> {
+  return mutate('POST', `/engage/campaign-replies/${replyId}/redraft-persona`);
+}
+
 // The campaign's "teach the AI" notes.
 export async function getCampaignTraining(
   aimId: string,
@@ -295,8 +344,14 @@ export async function getCampaignTraining(
 export async function addCampaignTraining(
   aimId: string,
   note: string,
+  // The persona whose prompt the note should adjust (the selected per-email persona).
+  // null = the campaign's default persona.
+  personaId: string | null = null,
 ): Promise<void> {
-  await mutate('POST', `/engage/campaigns/${aimId}/training`, { note });
+  await mutate('POST', `/engage/campaigns/${aimId}/training`, {
+    note,
+    personaId,
+  });
 }
 
 export async function removeCampaignTraining(id: string): Promise<void> {
@@ -398,6 +453,7 @@ function mapReply(r: BackendReply): CampaignReply {
     handled: r.handled,
     draftSource: r.draftSource,
     citations: r.citations,
+    personaId: r.personaId ?? null,
     meetingStatus: mapMeetingStatus(r.meetingStatus),
     acceptedSlot: r.acceptedSlot ?? undefined,
     proposedSlots: r.proposedSlots ?? [],

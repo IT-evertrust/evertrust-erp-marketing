@@ -40,6 +40,8 @@ function FunnelRow({ stage }: { stage: FunnelStage }) {
         {t(`funnel.stage.${stage.nameKey}`)}
       </span>
 
+      {/* Center the fill so every stage's bar shares one middle axis and extends
+          out symmetrically (a true funnel/pyramid), rather than left-anchoring. */}
       <div className="flex h-full items-stretch justify-center">
         <div
           className="flex h-full min-w-[44px] items-center justify-center rounded-[8px] bg-[#15171c] text-[11px] font-bold text-white transition-[width] duration-700"

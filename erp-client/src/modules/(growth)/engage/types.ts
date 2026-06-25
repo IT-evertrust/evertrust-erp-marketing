@@ -52,6 +52,8 @@ export type CampaignReply = {
   recommendedAction?: string | null;
   followUpWindow?: string | null;
   handled?: boolean;
+  // Per-email drafting persona override (null = campaign / default voice).
+  personaId?: string | null;
   // Draft provenance — 'reply_glock' (thread) or 'rag_agent' (knowledge base), plus
   // the KB citations the unsure-drafter pulled from (Phase 4).
   draftSource?: string | null;

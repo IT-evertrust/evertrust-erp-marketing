@@ -24,3 +24,4 @@ export * from './google-accounts';
 export * from './reach';
 export * from './engage-replies';
 export * from './client-research';
+export * from './knowledge';

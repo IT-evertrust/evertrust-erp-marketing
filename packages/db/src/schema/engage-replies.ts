@@ -11,6 +11,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { meetings } from './meetings';
 import { organizations } from './org';
+import { personas } from './personas';
 import { reachAims } from './reach';
 import { reachLeads } from './reach';
 
@@ -49,6 +50,10 @@ export const reachLeadReplies = pgTable(
     // Whether the draft was sourced from the knowledge base (Phase 4) + any citations.
     draftSource: text('draft_source'),
     citations: jsonb('citations'),
+    // Per-email drafting persona OVERRIDE. null = use the campaign's persona (or the
+    // default Hanna voice). Set when the operator picks a persona for this specific
+    // reply in the reply detail; the draft is re-drafted in that voice on demand.
+    personaId: uuid('persona_id').references(() => personas.id),
     // Rendered thread snapshot ([{direction, header, subject, body}, ...]) for the UI.
     thread: jsonb('thread'),
     // For TEMPORARY: the follow-up window the lead suggested.

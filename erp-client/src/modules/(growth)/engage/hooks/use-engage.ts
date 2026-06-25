@@ -5,15 +5,18 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import {
+  type EngageAccount,
   type EngagePersona,
   createEngagePersona,
   getCampaignReplies,
+  getEngageAccounts,
   getEngageCampaigns,
   getEngagePersonas,
-  redraftCampaign,
+  redraftReplyPersona,
   scanCampaign,
   scanInbox,
-  setCampaignPersona,
+  sendReply,
+  setReplyPersona as setReplyPersonaApi,
   syncEngageInbox,
   updateEngagePersona,
 } from '../services/engage.service';
@@ -45,8 +48,17 @@ export function useEngage() {
   const [loadingReplies, setLoadingReplies] = useState(false);
   // Manual "Scan now" in flight for the selected campaign.
   const [scanning, setScanning] = useState(false);
-  // Re-drafting the whole campaign in a newly-selected persona voice (F4 switch).
+  // Re-drafting the whole campaign in the current persona voice. Triggered MANUALLY
+  // by the Redraft button — switching persona no longer auto-redrafts.
   const [redrafting, setRedrafting] = useState(false);
+  // Mass-send in flight + progress (sent / total) so the button can show "3 / 12".
+  const [massSending, setMassSending] = useState(false);
+  const [massProgress, setMassProgress] = useState<{ sent: number; total: number } | null>(
+    null,
+  );
+  // The org's connected Google mailboxes (incl. colleagues') — populate the inbox
+  // filter so any linked inbox is reviewable, not just campaign senders.
+  const [accounts, setAccounts] = useState<EngageAccount[]>([]);
 
   // Load campaigns once; default the selection to the first with replies. Best-effort
   // inbox sync first so real inbound Gmail (matched to known prospects) is in the queue.
@@ -84,58 +96,19 @@ export function useEngage() {
     };
   }, []);
 
-  // F4: switch the selected campaign's drafting persona. Persists the choice, then
-  // RE-DRAFTS every unhandled reply in the new voice and refreshes the queue so the
-  // drafts on screen immediately reflect the persona. Slow (LLM/reply) — `redrafting`
-  // drives the spinner. Optimistic local update keeps the picker snappy.
-  async function changePersona(personaId: string | null) {
-    const aimId = selectedCampaignId;
-    if (!aimId || redrafting) return;
-    setCampaigns((prev) =>
-      prev.map((c) => (c.id === aimId ? { ...c, personaId } : c)),
-    );
-    const name = personas.find((p) => p.id === personaId)?.name;
-    try {
-      await setCampaignPersona(aimId, personaId);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Could not set the persona.');
-      return;
-    }
-    // No replies yet → nothing to redraft; the next scan will use the new voice.
-    if (replies.filter((r) => !r.handled).length === 0) {
-      toast.success(
-        personaId
-          ? `Drafts will use the ${name ?? 'selected'} persona.`
-          : 'Drafts will use the default voice.',
-      );
-      return;
-    }
-    setRedrafting(true);
-    toast.info(
-      personaId
-        ? `Re-drafting replies in the ${name ?? 'selected'} voice…`
-        : 'Re-drafting replies in the default voice…',
-    );
-    try {
-      const r = await redraftCampaign(aimId);
-      const data = await getCampaignReplies(aimId);
-      setReplies(data);
-      toast.success(
-        `Re-drafted ${r.redrafted} repl${r.redrafted === 1 ? 'y' : 'ies'}${
-          r.failed ? ` · ${r.failed} failed` : ''
-        }.`,
-      );
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : 'Could not re-draft the replies.',
-      );
-    } finally {
-      setRedrafting(false);
-    }
-  }
+  // Load the org's connected Google mailboxes once (for the inbox filter).
+  useEffect(() => {
+    let active = true;
+    getEngageAccounts()
+      .then((data) => active && setAccounts(data))
+      .catch(() => active && setAccounts([]));
+    return () => {
+      active = false;
+    };
+  }, []);
 
-  // F4: create a new persona (name + voice rules), then select it for the campaign
-  // (which redrafts the queue in the new voice). Returns true on success.
+  // Create a new persona (name + voice rules), then select it for the CURRENT reply
+  // (per-email persona). Does NOT redraft — the operator hits Redraft when ready.
   async function createPersona(name: string, rules: string): Promise<boolean> {
     try {
       const persona = await createEngagePersona(name, rules);
@@ -143,7 +116,7 @@ export function useEngage() {
         [...prev, persona].sort((a, b) => a.name.localeCompare(b.name)),
       );
       toast.success(`Persona "${persona.name}" created.`);
-      await changePersona(persona.id);
+      await selectReplyPersona(persona.id);
       return true;
     } catch (err) {
       toast.error(
@@ -168,27 +141,15 @@ export function useEngage() {
           .map((p) => (p.id === id ? { ...p, name: updated.name } : p))
           .sort((a, b) => a.name.localeCompare(b.name)),
       );
-      toast.success(`Persona "${updated.name}" updated.`);
       const aimId = selectedCampaignId;
       const isActive =
-        !!aimId &&
-        campaigns.find((c) => c.id === aimId)?.personaId === id;
-      if (isActive && replies.filter((r) => !r.handled).length > 0 && !redrafting) {
-        setRedrafting(true);
-        toast.info(`Re-drafting replies in the updated ${updated.name} voice…`);
-        try {
-          const r = await redraftCampaign(aimId);
-          const data = await getCampaignReplies(aimId);
-          setReplies(data);
-          toast.success(
-            `Re-drafted ${r.redrafted} repl${r.redrafted === 1 ? 'y' : 'ies'}${
-              r.failed ? ` · ${r.failed} failed` : ''
-            }.`,
-          );
-        } finally {
-          setRedrafting(false);
-        }
-      }
+        !!aimId && campaigns.find((c) => c.id === aimId)?.personaId === id;
+      // Save only — the operator redrafts manually when ready (Redraft button).
+      toast.success(
+        isActive && replies.some((r) => !r.handled)
+          ? `Persona "${updated.name}" updated. Hit Redraft to apply it to the queue.`
+          : `Persona "${updated.name}" updated.`,
+      );
       return true;
     } catch (err) {
       toast.error(
@@ -272,9 +233,95 @@ export function useEngage() {
     }
   }
 
-  // Distinct inboxes present across all campaigns (the filter options).
+  // Per-email persona: set the drafting voice for the SELECTED reply. Persisted, no
+  // redraft (the operator hits Redraft when ready). Optimistic local update.
+  async function selectReplyPersona(personaId: string | null) {
+    const id = selectedReplyId;
+    if (!id) return;
+    setReplies((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, personaId } : r)),
+    );
+    try {
+      await setReplyPersonaApi(id, personaId);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not set the persona.');
+    }
+  }
+
+  // Re-draft the SELECTED reply fresh in its current per-email persona voice.
+  async function redraftSelectedReply() {
+    const id = selectedReplyId;
+    if (!id || redrafting) return;
+    setRedrafting(true);
+    toast.info('Re-drafting this reply…');
+    try {
+      const r = await redraftReplyPersona(id);
+      setReplies((prev) =>
+        prev.map((x) =>
+          x.id === id
+            ? { ...x, draftSubject: r.draftSubject, draftBody: r.draftBody }
+            : x,
+        ),
+      );
+      toast.success('Draft updated.');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Could not re-draft.');
+    } finally {
+      setRedrafting(false);
+    }
+  }
+
+  // Mass-send: send every drafted, unsent reply in the CURRENT view, one at a time,
+  // from the BOTTOM of the list upward. Sequential (never parallel) so each Gmail send
+  // settles before the next — and a single failure doesn't abort the rest.
+  async function massSend() {
+    if (massSending) return;
+    const pool = (
+      categoryFilter === 'ALL'
+        ? replies
+        : replies.filter((r) => r.category === categoryFilter)
+    ).filter((r) => !r.handled && r.draftBody.trim().length > 0);
+    if (pool.length === 0) {
+      toast.message('No drafted, unsent replies to send here.');
+      return;
+    }
+    const ordered = [...pool].reverse(); // bottom-up
+    setMassSending(true);
+    setMassProgress({ sent: 0, total: ordered.length });
+    let sent = 0;
+    let failed = 0;
+    for (const reply of ordered) {
+      try {
+        await sendReply(reply.id, reply.draftSubject, reply.draftBody);
+        sent += 1;
+        setReplies((prev) =>
+          prev.map((r) => (r.id === reply.id ? { ...r, handled: true } : r)),
+        );
+      } catch {
+        failed += 1;
+      }
+      setMassProgress({ sent: sent + failed, total: ordered.length });
+    }
+    setMassSending(false);
+    setMassProgress(null);
+    toast.success(
+      `Sent ${sent} repl${sent === 1 ? 'y' : 'ies'}${failed ? ` · ${failed} failed` : ''}.`,
+    );
+    if (selectedCampaignId) {
+      const data = await getCampaignReplies(selectedCampaignId).catch(() => null);
+      if (data) setReplies(data);
+    }
+  }
+
+  // Distinct inboxes the filter can pick: every campaign sender PLUS every connected
+  // Google mailbox (so colleagues' inboxes show even when no campaign sends from them).
   const inboxes = Array.from(
-    new Set(campaigns.map((campaign) => campaign.senderEmail)),
+    new Set(
+      [
+        ...campaigns.map((campaign) => campaign.senderEmail),
+        ...accounts.map((account) => account.email),
+      ].filter(Boolean),
+    ),
   ).sort();
 
   // Campaigns shown for the active inbox filter ('' = all inboxes).
@@ -330,6 +377,7 @@ export function useEngage() {
     selectedCampaignId,
     setSelectedCampaignId,
     selectedCampaign,
+    accounts,
     inboxes,
     inboxFilter,
     setInboxFilter,
@@ -345,11 +393,15 @@ export function useEngage() {
     aiMode,
     setAiMode,
     personas,
-    changePersona,
     createPersona,
     updatePersona,
+    selectReplyPersona,
+    redraftSelectedReply,
     redrafting,
     scanning,
     scanNow,
+    massSending,
+    massProgress,
+    massSend,
   };
 }

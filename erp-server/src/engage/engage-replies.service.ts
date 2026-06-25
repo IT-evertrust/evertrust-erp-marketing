@@ -922,22 +922,27 @@ export class EngageRepliesService {
   private async loadDrafting(
     orgId: string,
     aim: typeof schema.reachAims.$inferSelect,
+    // Per-reply persona override: pass the reply's persona_id. `undefined` = use the
+    // campaign's persona; an id = that persona; explicit `null` = the default voice.
+    replyPersonaId?: string | null,
   ): Promise<{ persona: string | null; guidance: string[] }> {
     let persona: string | null = null;
-    if (aim.personaId) {
+    const effectivePersonaId =
+      replyPersonaId !== undefined ? replyPersonaId : aim.personaId;
+    if (effectivePersonaId) {
       const rows = await this.db
         .select({ systemPrompt: schema.personas.systemPrompt })
         .from(schema.personas)
         .where(
           and(
-            eq(schema.personas.id, aim.personaId),
+            eq(schema.personas.id, effectivePersonaId),
             eq(schema.personas.organizationId, orgId),
           ),
         )
         .limit(1);
       persona = rows[0]?.systemPrompt ?? null;
     }
-    // DEFAULT VOICE = Hanna. When a campaign has no persona explicitly set, drafts
+    // DEFAULT VOICE = Hanna. When no persona is set (campaign or per-reply), drafts
     // are still written in Hanna's voice/pattern (our standing response identity).
     if (!persona) {
       persona = (await this.hannaPersona(orgId))?.systemPrompt ?? null;
@@ -1158,6 +1163,8 @@ export class EngageRepliesService {
       draftSource: r.draftSource ?? null,
       citations: (r.citations as string[] | null) ?? [],
       followUpWindow: r.followUpWindow ?? null,
+      // Per-email persona override (null = campaign/default voice).
+      personaId: r.personaId ?? null,
       handled: r.handled,
       // --- meeting loop (propose → accept/counter → book) ---
       meetingStatus: r.meetingStatus,
@@ -1348,11 +1355,17 @@ export class EngageRepliesService {
   }
 
   // Persist a piece of operator feedback the draft agent should always apply, AND fold
-  // it into the campaign's drafting persona's rules so the persona itself evolves with
-  // the feedback (the "make the LLM remember" → update the rule). The note is appended
-  // under a managed "LEARNED PREFERENCES" block in the persona's system_prompt; the
-  // target persona is the campaign's (aim.personaId) or, when unset, the default Hanna.
-  async addTraining(orgId: string, aimId: string, note: string) {
+  // it into the SELECTED persona's rules so the persona itself evolves with the feedback
+  // (the "make the LLM remember" → update the rule). The note is appended under a managed
+  // "LEARNED PREFERENCES" block in the persona's system_prompt. `targetPersonaId` is the
+  // persona chosen for the reply (per-email); when null it falls back to the campaign's
+  // persona, and when that's unset, the default Hanna.
+  async addTraining(
+    orgId: string,
+    aimId: string,
+    note: string,
+    targetPersonaId: string | null = null,
+  ) {
     const resolved = await this.resolveCampaign(orgId, aimId);
     if (!resolved) throw new NotFoundException('Unknown campaign');
     const trimmed = note.trim();
@@ -1362,10 +1375,58 @@ export class EngageRepliesService {
       .values({ organizationId: orgId, aimId, note: trimmed, source: 'feedback' })
       .returning({ id: schema.engageTraining.id });
 
-    // Also update the persona rule so the learned preference persists in the voice.
-    await this.appendPersonaRule(orgId, resolved.aim.personaId, trimmed);
+    // The persona this feedback adjusts: the one selected for the reply, else the
+    // campaign default (appendPersonaRule falls back to Hanna when both are unset).
+    const personaId = targetPersonaId ?? resolved.aim.personaId;
+    // Rephrase the raw note into a clean, declarative persona rule via the agent, then
+    // append THAT to the persona's system prompt (so the learned preference reads well
+    // as a standing instruction). The raw note stays in engage_training for audit.
+    const rule = await this.refineTrainingNote(orgId, personaId, resolved.aim, trimmed);
+    await this.appendPersonaRule(orgId, personaId, rule);
 
-    return { ok: true, id: rows[0]?.id ?? null };
+    return { ok: true, id: rows[0]?.id ?? null, rule };
+  }
+
+  // Turn the operator's raw "teach the AI" note into a single persona rule via the
+  // engage.refine_training agent. Best-effort: if the agent isn't configured or errors,
+  // fall back to the raw note so the preference is never dropped.
+  private async refineTrainingNote(
+    orgId: string,
+    personaId: string | null,
+    aim: typeof schema.reachAims.$inferSelect,
+    note: string,
+  ): Promise<string> {
+    if (!this.agent.isConfigured()) return note;
+    try {
+      let personaName: string | null = null;
+      if (personaId) {
+        const prows = await this.db
+          .select({ name: schema.personas.name })
+          .from(schema.personas)
+          .where(
+            and(
+              eq(schema.personas.id, personaId),
+              eq(schema.personas.organizationId, orgId),
+            ),
+          )
+          .limit(1);
+        personaName = prows[0]?.name ?? null;
+      }
+      const result = await this.agent.run('engage.refine_training', {
+        note,
+        persona_name: personaName,
+        campaign_context:
+          [aim.name, aim.niche].filter(Boolean).join(' · ') || null,
+      });
+      const rule =
+        typeof result.output?.rule === 'string' ? result.output.rule.trim() : '';
+      return rule || note;
+    } catch (err) {
+      this.logger.warn(
+        `refine_training failed, using raw note: ${err instanceof Error ? err.message : 'unknown'}`,
+      );
+      return note;
+    }
   }
 
   // Append a learned preference to a persona's system_prompt under a managed block, so
@@ -1431,7 +1492,8 @@ export class EngageRepliesService {
     const resolved = await this.resolveCampaign(orgId, row.aimId);
     if (!resolved) throw new NotFoundException('Unknown campaign');
     const { aim } = resolved;
-    const drafting = await this.loadDrafting(orgId, aim);
+    // Honor a per-reply persona override (set in the reply detail) when revising.
+    const drafting = await this.loadDrafting(orgId, aim, row.personaId);
     const lead = (
       await this.db
         .select({
@@ -1505,6 +1567,111 @@ export class EngageRepliesService {
     await this.db
       .update(schema.reachLeadReplies)
       .set({ draftSubject, draftBody, draftSource: 'reply_glock:redraft', updatedAt: new Date() })
+      .where(eq(schema.reachLeadReplies.id, row.id));
+    return { ok: true, draftSubject, draftBody };
+  }
+
+  // --- PER-EMAIL PERSONA ----------------------------------------------------
+  // Set (or clear, personaId=null) the drafting persona for ONE reply. Persisted —
+  // no redraft (the operator hits Redraft when ready). Validates persona ownership.
+  async setReplyPersona(orgId: string, replyId: string, personaId: string | null) {
+    const row = await this.ownedReply(orgId, replyId);
+    if (personaId) {
+      const owns = await this.db
+        .select({ id: schema.personas.id })
+        .from(schema.personas)
+        .where(
+          and(
+            eq(schema.personas.id, personaId),
+            eq(schema.personas.organizationId, orgId),
+          ),
+        )
+        .limit(1);
+      if (!owns[0]) throw new BadRequestException('Unknown persona');
+    }
+    await this.db
+      .update(schema.reachLeadReplies)
+      .set({ personaId, updatedAt: new Date() })
+      .where(eq(schema.reachLeadReplies.id, row.id));
+    return { ok: true, personaId };
+  }
+
+  // Re-draft ONE reply FRESH in its current per-reply persona (the operator picked it
+  // in the reply detail and hit Redraft). Unlike "Write & Fix" there's no instruction
+  // and no current_draft — reply_glock drafts anew in that voice, keeping the prior
+  // classification (no re-sort). Persists the new draft.
+  async redraftReplyInPersona(orgId: string, replyId: string) {
+    const row = await this.ownedReply(orgId, replyId);
+    const resolved = await this.resolveCampaign(orgId, row.aimId);
+    if (!resolved) throw new NotFoundException('Unknown campaign');
+    const { aim } = resolved;
+    const drafting = await this.loadDrafting(orgId, aim, row.personaId);
+    const lead = (
+      await this.db
+        .select({
+          company: schema.reachLeads.company,
+          email: schema.reachLeads.email,
+          contactName: schema.reachLeads.contactName,
+        })
+        .from(schema.reachLeads)
+        .where(eq(schema.reachLeads.id, row.leadId))
+        .limit(1)
+    )[0];
+    const threadSnap =
+      (row.thread as { direction: string; subject?: string; body?: string }[] | null) ?? [];
+
+    const input = {
+      reply_id: `${aim.id}:persona:${row.id}`,
+      campaign_id: aim.id,
+      sender_name: lead?.contactName ?? lead?.company ?? null,
+      sender_email: lead?.email ?? '',
+      company: lead?.company ?? '',
+      subject: row.inboundSubject ?? '(no subject)',
+      body: (row.inboundBody ?? '').slice(0, THREAD_BODY_MAX),
+      previous_thread: threadSnap.map((m) => ({
+        direction: m.direction,
+        subject: m.subject ?? '',
+        body: (m.body ?? '').slice(0, THREAD_BODY_MAX),
+      })),
+      campaign_context: {
+        campaign_id: aim.id,
+        campaign_name: aim.name,
+        product_or_service: `EVERTRUST partnership for ${aim.niche} providers — scale capacity and cut overhead`,
+        offer: 'A short 15-minute intro call',
+        sender_name: 'Hanna Nguyen',
+        sender_company: 'EVERTRUST GmbH',
+        sender_signature: 'Hanna Nguyen\nEVERTRUST GmbH',
+      },
+      persona: drafting.persona,
+      guidance: drafting.guidance,
+      // Keep the prior bucket so reply_glock skips re-classification and only drafts.
+      prior_status: row.category,
+    };
+
+    const prevBody = (row.draftBody ?? '').trim();
+    const runOnce = async (): Promise<{ subject: string; body: string }> => {
+      const result = await this.agent.run('engage.reply_glock', input);
+      const o = (result?.output ?? {}) as Record<string, unknown>;
+      const draft = (o.draft ?? {}) as Record<string, unknown>;
+      return {
+        subject: String(draft.subject ?? ''),
+        body: enforceSignature(String(draft.body ?? '')),
+      };
+    };
+
+    let out = await runOnce();
+    if (!out.body.trim() || out.body.trim() === prevBody) out = await runOnce();
+    if (!out.body.trim()) {
+      throw new BadRequestException(
+        'The model did not return a draft. Please try again.',
+      );
+    }
+
+    const draftSubject = out.subject.trim() || row.draftSubject || '';
+    const draftBody = out.body;
+    await this.db
+      .update(schema.reachLeadReplies)
+      .set({ draftSubject, draftBody, draftSource: 'reply_glock:persona', updatedAt: new Date() })
       .where(eq(schema.reachLeadReplies.id, row.id));
     return { ok: true, draftSubject, draftBody };
   }

@@ -262,7 +262,12 @@ export class EngageController {
     @Param('aimId', ParseUUIDPipe) aimId: string,
     @Body() body: TrainingNoteBodyDto,
   ) {
-    return this.campaignReplies.addTraining(orgId, aimId, body.note);
+    return this.campaignReplies.addTraining(
+      orgId,
+      aimId,
+      body.note,
+      body.personaId ?? null,
+    );
   }
 
   @RequirePermissions('campaigns:write')
@@ -283,6 +288,29 @@ export class EngageController {
     @Body() body: RedraftBodyDto,
   ) {
     return this.campaignReplies.redraftReply(orgId, id, body.instruction);
+  }
+
+  // --- PER-EMAIL PERSONA: pick the drafting voice for ONE reply ---
+  // Persist a reply's persona override (personaId=null clears to default). No redraft
+  // here — the operator hits Redraft when ready (drafting is never automatic).
+  @RequirePermissions('campaigns:write')
+  @Patch('campaign-replies/:id/persona')
+  setReplyPersona(
+    @OrgId() orgId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: CampaignPersonaBodyDto,
+  ) {
+    return this.campaignReplies.setReplyPersona(orgId, id, body.personaId);
+  }
+
+  // Re-draft ONE reply fresh in its current per-reply persona voice.
+  @RequirePermissions('campaigns:write')
+  @Post('campaign-replies/:id/redraft-persona')
+  redraftReplyInPersona(
+    @OrgId() orgId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.campaignReplies.redraftReplyInPersona(orgId, id);
   }
 
   // The org's connected Google mailboxes — feeds the inbox account switcher.

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Pencil, Plus, RefreshCw } from 'lucide-react';
+import { RefreshCw } from 'lucide-react';
 
 import { useGoogleAccounts } from '@/hooks/use-arsenal';
 import { GrowthCard, Spinner } from '@/modules/(growth)/shared';
@@ -15,17 +15,24 @@ import { useEngage } from '../hooks/use-engage';
 export function EngagePage() {
   const engage = useEngage();
   // The org's connected Google accounts (from Settings → Configuration). The
-  // account picker below chooses which one's Gmail the Reply Sorter scans/shows.
+  // account picker below chooses which one's Gmail the Reply Sorter scans/shows
+  // (includes colleagues' linked mailboxes).
   const googleAccounts = useGoogleAccounts();
   const connectedAccounts = (googleAccounts.data ?? []).filter(
     (account) => account.status === 'CONNECTED',
   );
-  // The persona dialog is shared for create + edit; null = closed.
+  // The persona dialog is shared for create + edit; null = closed. Opened from the
+  // per-email persona toggle inside the reply detail.
   const [personaDialog, setPersonaDialog] = useState<
     { mode: 'create' } | { mode: 'edit'; id: string; name: string } | null
   >(null);
-  const activePersonaId = engage.selectedCampaign?.personaId ?? null;
-  const activePersona = engage.personas.find((p) => p.id === activePersonaId);
+
+  // The persona this reply will be drafted in: its own override, else the campaign's
+  // default, else the default (Hanna) voice.
+  const replyPersonaId =
+    engage.selectedReply?.personaId ??
+    engage.selectedCampaign?.personaId ??
+    null;
 
   return (
     <main className="px-6 py-5 duration-300 animate-in fade-in">
@@ -41,8 +48,9 @@ export function EngagePage() {
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-4">
           {/* Choose which connected Google account (from Configuration) the Reply
-              Sorter fetches Gmail from. Selecting one filters to that mailbox's
-              campaigns and points "Scan now" at it. */}
+              Sorter fetches Gmail from — any linked mailbox, incl. colleagues'.
+              Selecting one filters to that mailbox's campaigns and points Scan at
+              it. The Scan control lives in the Reply Sorter card header below. */}
           {connectedAccounts.length > 0 && (
             <div className="flex items-center gap-2">
               <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
@@ -62,84 +70,6 @@ export function EngagePage() {
               </select>
             </div>
           )}
-
-          {/* F4: the salesperson persona reply drafts are written in. Switching the
-              persona re-drafts the campaign's replies in that voice; the "+" creates a
-              new persona (name + rules) and applies it. */}
-          {engage.selectedCampaign && (
-            <div className="flex items-center gap-2">
-              <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-                Draft persona
-              </span>
-              <select
-                value={engage.selectedCampaign.personaId ?? ''}
-                onChange={(event) =>
-                  void engage.changePersona(event.target.value || null)
-                }
-                disabled={engage.redrafting}
-                className="rounded-[8px] border border-border bg-card px-3 py-1.5 text-[12.5px] text-foreground disabled:opacity-50"
-              >
-                <option value="">Default voice</option>
-                {engage.personas.map((persona) => (
-                  <option key={persona.id} value={persona.id}>
-                    {persona.name}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => setPersonaDialog({ mode: 'create' })}
-                disabled={engage.redrafting}
-                title="Create a new draft persona"
-                className="inline-flex size-[30px] items-center justify-center rounded-[8px] border border-border bg-card text-foreground transition-colors hover:border-foreground disabled:opacity-50"
-              >
-                <Plus className="size-3.5" />
-              </button>
-              {activePersona && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setPersonaDialog({
-                      mode: 'edit',
-                      id: activePersona.id,
-                      name: activePersona.name,
-                    })
-                  }
-                  disabled={engage.redrafting}
-                  title={`Edit the ${activePersona.name} persona`}
-                  className="inline-flex size-[30px] items-center justify-center rounded-[8px] border border-border bg-card text-foreground transition-colors hover:border-foreground disabled:opacity-50"
-                >
-                  <Pencil className="size-3.5" />
-                </button>
-              )}
-              {engage.redrafting && (
-                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.06em] text-muted-foreground">
-                  <Spinner inline size={14} />
-                  Re-drafting…
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Manual "Scan now" — classify the selected campaign's mailbox for new
-              replies. Slow on the local model, so it shows a spinner while running. */}
-          <button
-            type="button"
-            onClick={engage.scanNow}
-            disabled={
-              (!engage.selectedCampaignId && !engage.inboxFilter) ||
-              engage.scanning
-            }
-            className="ml-auto inline-flex items-center gap-1.5 rounded-[7px] border border-foreground bg-foreground px-[11px] py-[7px] text-[10px] font-bold uppercase tracking-[0.08em] text-background transition-colors hover:bg-foreground/90 disabled:cursor-not-allowed disabled:opacity-50"
-            title="Scan this campaign's inbox for new replies"
-          >
-            {engage.scanning ? (
-              <Spinner inline size={14} />
-            ) : (
-              <RefreshCw className="size-3.5" />
-            )}
-            {engage.scanning ? 'Scanning…' : 'Scan now'}
-          </button>
         </div>
 
         <EngageCampaignTable
@@ -149,7 +79,28 @@ export function EngagePage() {
           loading={engage.loadingCampaigns}
         />
 
-        <GrowthCard title="Reply Sorter">
+        <GrowthCard
+          title="Reply Sorter"
+          hint={
+            <button
+              type="button"
+              onClick={engage.scanNow}
+              disabled={
+                (!engage.selectedCampaignId && !engage.inboxFilter) ||
+                engage.scanning
+              }
+              title="Scan this inbox for new replies (auto-scan also runs hourly)"
+              className="inline-flex items-center gap-1.5 rounded-[7px] border border-border bg-card px-[11px] py-[7px] text-[10px] font-bold uppercase tracking-[0.08em] text-foreground transition-colors hover:border-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {engage.scanning ? (
+                <Spinner inline size={14} />
+              ) : (
+                <RefreshCw className="size-3.5" />
+              )}
+              {engage.scanning ? 'Scanning…' : 'Scan'}
+            </button>
+          }
+        >
           <div className="grid min-h-[560px] grid-cols-[320px_1fr] overflow-hidden rounded-[10px] border border-border">
             <ReplyList
               replies={engage.replies}
@@ -166,6 +117,15 @@ export function EngagePage() {
               aiMode={engage.aiMode}
               onChangeAiMode={engage.setAiMode}
               mailboxAccountId={engage.selectedCampaign?.mailboxAccountId ?? null}
+              personas={engage.personas}
+              replyPersonaId={replyPersonaId}
+              onSelectPersona={engage.selectReplyPersona}
+              onRedraftPersona={engage.redraftSelectedReply}
+              redrafting={engage.redrafting}
+              onCreatePersona={() => setPersonaDialog({ mode: 'create' })}
+              onEditPersona={(id, name) =>
+                setPersonaDialog({ mode: 'edit', id, name })
+              }
             />
           </div>
         </GrowthCard>

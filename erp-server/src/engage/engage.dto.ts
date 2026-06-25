@@ -53,9 +53,12 @@ export class CampaignPersonaBodyDto extends createZodDto(
   campaignPersonaBodySchema,
 ) {}
 
-// Body for adding a "teach the AI" training note to a campaign.
+// Body for adding a "teach the AI" training note to a campaign. `personaId` is the
+// persona whose prompt the note should adjust (the selected per-email persona);
+// null/omitted falls back to the campaign's default persona.
 export const trainingNoteBodySchema = z.object({
   note: z.string().min(1).max(500),
+  personaId: z.string().uuid().nullish(),
 });
 export class TrainingNoteBodyDto extends createZodDto(trainingNoteBodySchema) {}
 

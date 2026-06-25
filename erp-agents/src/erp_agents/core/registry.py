@@ -5,6 +5,7 @@ from erp_agents.workflows.activate.client_research.workflow import (
 from erp_agents.workflows.activate.company_research import CompanyResearchWorkflow
 from erp_agents.workflows.activate.sales_agent import SalesAgentWorkflow
 from erp_agents.workflows.engage.rag_agent import RagAgentWorkflow
+from erp_agents.workflows.engage.refine_training import RefineTrainingWorkflow
 from erp_agents.workflows.engage.reply_glock import ReplyGlockWorkflow
 from erp_agents.workflows.nurture.sleeper_grenade import SleeperGrenadeWorkflow
 from erp_agents.workflows.reach.ammo_forge import AmmoForgeWorkflow
@@ -15,6 +16,7 @@ from erp_agents.workflows.reach.reach_bazooka import ReachBazookaWorkflow
 WORKFLOW_REGISTRY: dict[str, type[Workflow]] = {
     "engage.reply_glock": ReplyGlockWorkflow,
     "engage.rag_agent": RagAgentWorkflow,
+    "engage.refine_training": RefineTrainingWorkflow,
     "reach.ammo_forge": AmmoForgeWorkflow,
     "reach.lead_satellite": LeadSatelliteWorkflow,
     "reach.reach_bazooka": ReachBazookaWorkflow,

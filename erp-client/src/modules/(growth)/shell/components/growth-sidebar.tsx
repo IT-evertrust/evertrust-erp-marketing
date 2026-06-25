@@ -7,7 +7,6 @@ import { LogOut } from 'lucide-react';
 import { hasPermission, type Permission } from '@evertrust/shared';
 
 import { useLogout, useMe } from '@/hooks/use-auth';
-import { Button } from '@/components/ui/button';
 
 import { GROWTH_NAV_ITEMS, type GrowthNavItem } from '../services/growth-nav';
 
@@ -81,31 +80,29 @@ export function GrowthSidebar() {
         ))}
       </nav>
 
-      <div className="flex items-center gap-2.5 border-t border-sidebar-border p-3.5">
+      {/* The identity strip is the ONLY log-out control (the topbar account menu was
+          removed). Click anywhere on it to sign out. */}
+      <button
+        type="button"
+        onClick={() => logout.mutate()}
+        disabled={logout.isPending}
+        title={t('logOut', { default: 'Log out' })}
+        aria-label={t('logOut', { default: 'Log out' })}
+        className="group flex w-full items-center gap-2.5 border-t border-sidebar-border p-3.5 text-left transition hover:bg-sidebar-accent/60 disabled:opacity-60"
+      >
         <div className="grid h-[30px] w-[30px] place-items-center rounded-lg border border-sidebar-border bg-sidebar-accent text-[12px] font-bold text-sidebar-foreground">
           ET
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-[12.5px] font-bold leading-tight text-sidebar-foreground">
-            {user?.organizationName ?? 'Evertrust'}
-          </div>
-          <div className="truncate text-[10px] text-muted-foreground">
             {user?.name ?? 'Marketing ERP'}
           </div>
+          <div className="truncate text-[10px] text-muted-foreground">
+            {user?.organizationName ?? 'Evertrust'}
+          </div>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label={t('logout', { default: 'Log out' })}
-          title={t('logout', { default: 'Log out' })}
-          disabled={logout.isPending}
-          onClick={() => logout.mutate()}
-          className="size-8 shrink-0 text-muted-foreground hover:text-destructive"
-        >
-          <LogOut className="size-4" />
-        </Button>
-      </div>
+        <LogOut className="size-4 shrink-0 text-muted-foreground transition group-hover:text-sidebar-foreground" />
+      </button>
     </aside>
   );
 }

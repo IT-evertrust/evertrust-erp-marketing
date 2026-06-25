@@ -45,6 +45,13 @@ const VERDICT_LEVEL: Record<string, ActivityLevel> = {
   NOT_INTERESTED: 'warning',
   BOUNCE: 'warning',
 };
+// Campaign-reply (reach_lead_replies) category -> activity level.
+const CATEGORY_LEVEL: Record<string, ActivityLevel> = {
+  INTERESTED: 'success',
+  UNSURE: 'info',
+  TEMPORARY: 'info',
+  UNINTERESTED: 'warning',
+};
 
 @Injectable()
 export class OverviewService {
@@ -154,8 +161,20 @@ export class OverviewService {
     // Each source degrades to [] on its own error so a single drifted/empty table can never
     // 500 the whole feed. Explicit column lists avoid selecting columns this DB may not have.
     const safe = <T>(p: Promise<T[]>): Promise<T[]> => p.catch(() => [] as T[]);
-    const [runs, execs, meetings, classifications, grants, dueSnoozes, notifs] =
-      await Promise.all([
+    const [
+      runs,
+      execs,
+      meetings,
+      classifications,
+      grants,
+      dueSnoozes,
+      notifs,
+      reachReplies,
+      aims,
+      research,
+      training,
+      kbDocs,
+    ] = await Promise.all([
         safe(
           this.db
             .select({
@@ -259,6 +278,89 @@ export class OverviewService {
             .orderBy(desc(schema.notifications.createdAt))
             .limit(10),
         ),
+        // CURRENT Engage flow: campaign reply classifications + sends (reach_lead_replies).
+        safe(
+          this.db
+            .select({
+              id: schema.reachLeadReplies.id,
+              category: schema.reachLeadReplies.category,
+              handled: schema.reachLeadReplies.handled,
+              sentAt: schema.reachLeadReplies.sentAt,
+              classifiedAt: schema.reachLeadReplies.classifiedAt,
+              updatedAt: schema.reachLeadReplies.updatedAt,
+              company: schema.reachLeads.company,
+            })
+            .from(schema.reachLeadReplies)
+            .innerJoin(
+              schema.reachLeads,
+              eq(schema.reachLeadReplies.leadId, schema.reachLeads.id),
+            )
+            .where(tenantScope(orgId, schema.reachLeadReplies))
+            .orderBy(desc(schema.reachLeadReplies.updatedAt))
+            .limit(20),
+        ),
+        // Reach campaigns (AIMs) created / scraping.
+        safe(
+          this.db
+            .select({
+              id: schema.reachAims.id,
+              name: schema.reachAims.name,
+              niche: schema.reachAims.niche,
+              status: schema.reachAims.status,
+              scrapeError: schema.reachAims.scrapeError,
+              createdAt: schema.reachAims.createdAt,
+            })
+            .from(schema.reachAims)
+            .where(tenantScope(orgId, schema.reachAims))
+            .orderBy(desc(schema.reachAims.createdAt))
+            .limit(10),
+        ),
+        // Activate client research dossiers.
+        safe(
+          this.db
+            .select({
+              id: schema.clientResearch.id,
+              company: schema.clientResearch.company,
+              stage: schema.clientResearch.stage,
+              generatedAt: schema.clientResearch.generatedAt,
+              updatedAt: schema.clientResearch.updatedAt,
+            })
+            .from(schema.clientResearch)
+            .where(tenantScope(orgId, schema.clientResearch))
+            .orderBy(desc(schema.clientResearch.updatedAt))
+            .limit(10),
+        ),
+        // Engage "teach the AI" training notes.
+        safe(
+          this.db
+            .select({
+              id: schema.engageTraining.id,
+              note: schema.engageTraining.note,
+              createdAt: schema.engageTraining.createdAt,
+            })
+            .from(schema.engageTraining)
+            .where(
+              and(
+                tenantScope(orgId, schema.engageTraining),
+                eq(schema.engageTraining.active, true),
+              ),
+            )
+            .orderBy(desc(schema.engageTraining.createdAt))
+            .limit(10),
+        ),
+        // Knowledge-base document uploads.
+        safe(
+          this.db
+            .select({
+              id: schema.knowledgeDocuments.id,
+              filename: schema.knowledgeDocuments.filename,
+              createdAt: schema.knowledgeDocuments.createdAt,
+            })
+            .from(schema.knowledgeDocuments)
+            .where(tenantScope(orgId, schema.knowledgeDocuments))
+            .orderBy(desc(schema.knowledgeDocuments.createdAt))
+            .limit(10),
+        ),
       ]);
 
     // ---- activity feed ----
@@ -307,6 +409,53 @@ export class OverviewService {
       const who = c.company?.trim() || c.email;
       const level = VERDICT_LEVEL[c.verdict] ?? 'info';
       push(c.createdAt, 'ENGAGE · GLOCK', `Reply classified ${c.verdict} — ${who}`, level);
+    }
+
+    // CURRENT Engage campaign flow (reach_lead_replies): a sent reply, else a classify.
+    for (const r of reachReplies) {
+      const who = r.company?.trim() || 'a lead';
+      if (r.handled && r.sentAt) {
+        push(r.sentAt, 'ENGAGE · SENDER', `Reply sent to ${who}`, 'success');
+      } else {
+        push(
+          r.classifiedAt,
+          'ENGAGE · GLOCK',
+          `Reply classified ${r.category} — ${who}`,
+          CATEGORY_LEVEL[r.category] ?? 'info',
+        );
+      }
+    }
+
+    for (const a of aims) {
+      const label = a.niche ? `${a.name} (${a.niche})` : a.name;
+      push(a.createdAt, 'REACH · AIM', `Campaign launched: ${label}`, 'info');
+    }
+
+    for (const d of research) {
+      const company = d.company?.trim() || 'a client';
+      const ready =
+        d.stage === 'POST_MEETING' ? 'updated after meeting' : 'ready';
+      push(
+        d.generatedAt ?? d.updatedAt,
+        'ACTIVATE · RESEARCH',
+        `Client dossier ${ready} for ${company}`,
+        'success',
+      );
+    }
+
+    for (const tnote of training) {
+      const snippet =
+        tnote.note.length > 80 ? `${tnote.note.slice(0, 80)}…` : tnote.note;
+      push(tnote.createdAt, 'ENGAGE · TRAINING', `AI taught: ${snippet}`, 'info');
+    }
+
+    for (const doc of kbDocs) {
+      push(
+        doc.createdAt,
+        'ENGAGE · KB',
+        `Knowledge doc uploaded: ${doc.filename}`,
+        'info',
+      );
     }
 
     const activity = feed

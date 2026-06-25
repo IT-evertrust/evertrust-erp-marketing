@@ -3,13 +3,14 @@
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
-import { CalendarCheck, CalendarPlus } from 'lucide-react';
+import { CalendarCheck, CalendarPlus, Pencil, Plus, RotateCcw } from 'lucide-react';
 
-import { LiveDot } from '@/modules/(growth)/shared';
+import { LiveDot, Spinner } from '@/modules/(growth)/shared';
 
 import {
   addCampaignTraining,
   type CalendarSlot,
+  type EngagePersona,
   getCampaignFreeSlots,
   markReplyBooked,
   redraftReply,
@@ -79,6 +80,15 @@ type ReplyDetailProps = {
   onChangeAiMode: (mode: AiAgentMode) => void;
   // The campaign's mailbox google_accounts id — books meetings on that calendar.
   mailboxAccountId?: string | null;
+  // Per-email persona controls (the toggle next to Send).
+  personas?: EngagePersona[];
+  // The persona this reply is drafted in (its override, else campaign/default).
+  replyPersonaId?: string | null;
+  onSelectPersona?: (personaId: string | null) => void;
+  onRedraftPersona?: () => void;
+  redrafting?: boolean;
+  onCreatePersona?: () => void;
+  onEditPersona?: (id: string, name: string) => void;
 };
 
 export function ReplyDetail({
@@ -86,7 +96,18 @@ export function ReplyDetail({
   aiMode,
   onChangeAiMode,
   mailboxAccountId = null,
+  personas = [],
+  replyPersonaId = null,
+  onSelectPersona,
+  onRedraftPersona,
+  redrafting = false,
+  onCreatePersona,
+  onEditPersona,
 }: ReplyDetailProps) {
+  // The persona currently chosen for this reply (null = default voice) — drives the
+  // edit pencil and the Train-Feedback target.
+  const selectedPersona =
+    personas.find((p) => p.id === replyPersonaId) ?? null;
   // Draft is editable + controlled, so switching replies always shows the right text
   // and Send/Save read the latest edits.
   const [subject, setSubject] = useState('');
@@ -287,8 +308,15 @@ export function ReplyDetail({
   async function handleSaveTraining(note: string) {
     if (!reply) return;
     try {
-      await addCampaignTraining(reply.campaignId, note);
-      toast.success('Got it — future drafts will apply this.');
+      // Adjust the SELECTED persona's prompt directly (per-email persona, else the
+      // campaign default). The server rephrases the note into a clean rule and
+      // appends it to that persona's prompt.
+      await addCampaignTraining(reply.campaignId, note, replyPersonaId ?? null);
+      toast.success(
+        selectedPersona
+          ? `Got it — added to the ${selectedPersona.name} persona.`
+          : 'Got it — added to the default persona.',
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Could not save feedback.');
     }
@@ -425,6 +453,78 @@ export function ReplyDetail({
               className="w-full resize-y bg-transparent px-3 py-3 text-[12.5px] leading-relaxed text-foreground outline-none focus:bg-card"
             />
           </div>
+
+          {/* Per-email persona — the voice THIS reply is drafted in. A single dropdown
+              to pick the persona; the pencil edits the selected one (name + prompt),
+              "+" makes a new one. Selecting persists it (no auto-redraft); hit Redraft
+              to apply it to this email. */}
+          {onSelectPersona && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="mr-1 text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+                Persona
+              </span>
+
+              <select
+                value={replyPersonaId ?? ''}
+                onChange={(event) =>
+                  onSelectPersona(event.target.value || null)
+                }
+                disabled={redrafting}
+                className="rounded-[8px] border border-border bg-card px-3 py-1.5 text-[12.5px] text-foreground disabled:opacity-50"
+              >
+                <option value="">Default voice</option>
+                {personas.map((persona) => (
+                  <option key={persona.id} value={persona.id}>
+                    {persona.name}
+                  </option>
+                ))}
+              </select>
+
+              {/* Edit the currently-selected persona (only when a real one is picked). */}
+              {selectedPersona && onEditPersona && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    onEditPersona(selectedPersona.id, selectedPersona.name)
+                  }
+                  disabled={redrafting}
+                  title={`Edit the ${selectedPersona.name} persona`}
+                  className="inline-flex size-[30px] items-center justify-center rounded-[8px] border border-border bg-card text-foreground transition-colors hover:border-foreground disabled:opacity-50"
+                >
+                  <Pencil className="size-3.5" />
+                </button>
+              )}
+
+              {onCreatePersona && (
+                <button
+                  type="button"
+                  onClick={onCreatePersona}
+                  disabled={redrafting}
+                  title="Create a new persona"
+                  className="inline-flex size-[30px] items-center justify-center rounded-[8px] border border-border bg-card text-foreground transition-colors hover:border-foreground disabled:opacity-50"
+                >
+                  <Plus className="size-3.5" />
+                </button>
+              )}
+
+              {onRedraftPersona && (
+                <button
+                  type="button"
+                  onClick={onRedraftPersona}
+                  disabled={redrafting}
+                  title="Re-draft this reply in the selected persona"
+                  className="ml-1 inline-flex items-center gap-1.5 rounded-[7px] border border-border bg-card px-[11px] py-[7px] text-[10px] font-bold uppercase tracking-[0.08em] text-foreground transition-colors hover:border-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {redrafting ? (
+                    <Spinner inline size={14} />
+                  ) : (
+                    <RotateCcw className="size-3.5" />
+                  )}
+                  {redrafting ? 'Re-drafting…' : 'Redraft'}
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="mt-3 flex flex-wrap gap-2">
             <button
