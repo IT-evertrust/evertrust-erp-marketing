@@ -1976,6 +1976,11 @@ export const ProspectDto = z.object({
   // The contact person on the prospect's company (mirrored from the source lead);
   // null when unknown.
   contactName: z.string().nullable().default(null),
+  // Deal contact phone, shown + edited on the Nurture card.
+  phone: z.string().nullable().default(null),
+  // The deal's editable niche tag (the "PV" pill) — a niche name from the Sector
+  // taxonomy, stored denormalized on the deal.
+  niche: z.string().nullable().default(null),
   companyName: z.string().nullable(),
   website: z.string().nullable(),
   city: z.string().nullable(),
@@ -2076,6 +2081,31 @@ export const UpdateProspectDealDto = z.object({
   dealValue: z.number().int().nonnegative().max(1_000_000_000),
 });
 export type UpdateProspectDealDto = z.infer<typeof UpdateProspectDealDto>;
+
+// Body for POST /prospects/card — the human adding a blank deal to a Nurture board
+// column ("+ Add deal"). The server stamps a placeholder unique email so the row
+// satisfies the (campaignId, email) constraint; everything else is filled in via
+// the inline-edit PATCH below.
+export const CreateProspectCardDto = z.object({
+  campaignId: z.string().uuid(),
+  pipelineStage: PipelineStage.optional(),
+  companyName: z.string().max(300).optional(),
+});
+export type CreateProspectCardDto = z.infer<typeof CreateProspectCardDto>;
+
+// Body for PATCH /prospects/:id/card — the human editing a Nurture card's display
+// fields inline (company, contact, phone, niche tag, € value). Partial; null
+// clears a text field. Independent of the agent-driven status + the scrape fields.
+export const UpdateProspectCardDto = z
+  .object({
+    companyName: z.string().max(300).nullable().optional(),
+    contactName: z.string().max(200).nullable().optional(),
+    phone: z.string().max(60).nullable().optional(),
+    niche: z.string().max(120).nullable().optional(),
+    dealValue: z.number().int().nonnegative().max(1_000_000_000).optional(),
+  })
+  .refine((o) => Object.keys(o).length > 0, 'at least one field is required');
+export type UpdateProspectCardDto = z.infer<typeof UpdateProspectCardDto>;
 
 // ---- Org Settings (Growth Engine settings page; org_config columns) ----
 // GET /growth/settings response — the org's effective Growth Engine settings. Each

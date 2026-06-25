@@ -17,6 +17,7 @@ import {
 } from '@/hooks/use-contracts';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { NicheSelect } from './niche-select';
 
 const CONTRACT_TYPES: readonly ContractType[] = [
   'Vollmacht',
@@ -286,14 +287,12 @@ function ContractRow({
         />
       </td>
 
-      {/* SECTOR */}
+      {/* SECTOR — the same Sector/niche pick-or-create dropdown as the deal card */}
       <td className="px-3 py-2">
-        <input
-          type="text"
-          defaultValue={row.sector ?? ''}
+        <NicheSelect
+          value={row.sector}
           placeholder="PV"
-          onBlur={(e) => commit('sector', e.target.value.trim() || null)}
-          className="w-20 rounded-full bg-muted px-2.5 py-0.5 text-center text-[12px] font-medium text-muted-foreground outline-none focus:bg-background focus:ring-1 focus:ring-ring"
+          onChange={(name) => commit('sector', name)}
         />
       </td>
 

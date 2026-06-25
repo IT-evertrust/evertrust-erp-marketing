@@ -1,7 +1,9 @@
 import { createZodDto } from 'nestjs-zod';
 import {
+  CreateProspectCardDto as CreateProspectCardSchema,
   GraduateProspectDto as GraduateProspectSchema,
   ProspectBulkDto as ProspectBulkSchema,
+  UpdateProspectCardDto as UpdateProspectCardSchema,
   UpdateProspectDealDto as UpdateProspectDealSchema,
   UpdateProspectDto as UpdateProspectSchema,
   UpdateProspectStageDto as UpdateProspectStageSchema,
@@ -26,4 +28,12 @@ export class UpdateProspectStageBodyDto extends createZodDto(
 // JWT manual € deal-value set from the Nurture card (PATCH /prospects/:id/deal).
 export class UpdateProspectDealBodyDto extends createZodDto(
   UpdateProspectDealSchema,
+) {}
+// JWT manual blank-deal creation on the Nurture board (POST /prospects/card).
+export class CreateProspectCardBodyDto extends createZodDto(
+  CreateProspectCardSchema,
+) {}
+// JWT manual inline-edit of a Nurture card's display fields (PATCH /prospects/:id/card).
+export class UpdateProspectCardBodyDto extends createZodDto(
+  UpdateProspectCardSchema,
 ) {}

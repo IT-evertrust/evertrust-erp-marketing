@@ -39,6 +39,12 @@ export const prospects = pgTable(
     // Deal's contact person, e.g. "Mr. Albers" — shown on the Nurture pipeline
     // card. Null = unknown / not captured.
     contactName: text('contact_name'),
+    // Deal contact phone, shown + edited on the Nurture card. Null = unknown.
+    phone: text('phone'),
+    // The deal's niche tag (the editable "PV" pill on the card). A denormalized
+    // niche NAME chosen from the org's Sector/niche taxonomy (niches table) — kept
+    // as a string like `contracts.sector` so the tag is self-contained + editable.
+    niche: text('niche'),
     website: text('website'),
     city: text('city'),
     country: text('country'),

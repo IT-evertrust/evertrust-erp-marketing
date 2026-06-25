@@ -1,7 +1,11 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import type { NicheListItemDto } from '@evertrust/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type {
+  CreateNicheDto,
+  NicheDto,
+  NicheListItemDto,
+} from '@evertrust/shared';
 import { ApiError, api } from '@/lib/api';
 import { queryKeys } from '@/lib/query-keys';
 
@@ -16,5 +20,18 @@ export function useNiches(enabled = true) {
     queryFn: ({ signal }) => api.niches.list(signal),
     enabled,
     staleTime: 60_000,
+  });
+}
+
+// Create a niche directly (the Sector/niche "add-new" path from the NicheSelect
+// dropdown). Invalidates the niche list so the new option shows up everywhere the
+// catalog is read (the pick-or-create combobox + the niche-management view).
+export function useCreateNiche() {
+  const queryClient = useQueryClient();
+  return useMutation<NicheDto, ApiError, CreateNicheDto>({
+    mutationFn: (input) => api.niches.create(input),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.niches.list() });
+    },
   });
 }

@@ -29,6 +29,13 @@
     "deleteConfirm": "Remove {name} from the pipeline?",
     "deletedToast": "{name} removed from the pipeline",
     "deleteError": "Could not remove the card",
+    "companyPlaceholder": "Company name",
+    "contactPlaceholder": "Contact person",
+    "phonePlaceholder": "Phone",
+    "saveError": "Could not save the change",
+    "addDeal": "Add deal",
+    "addedToast": "New deal added",
+    "addError": "Could not add a deal",
     "stages": {
       "INTEREST": "Interest",
       "INTENT": "Intent",
@@ -76,5 +83,10 @@
     "analysisNone": "No analysis yet for this company.",
     "termsTitle": "Key terms",
     "due": "due {date}"
+  },
+  "niche": {
+    "empty": "No niches yet.",
+    "addPlaceholder": "Type a niche, press Enter…",
+    "addError": "Could not add the niche."
   }
 }
