@@ -105,6 +105,26 @@ function verified(over: Partial<VerifiedGoogleUser> = {}): VerifiedGoogleUser {
   };
 }
 
+// Build a decodable (UNSIGNED) Google id_token for the code-flow tests. The code path
+// now trusts the token from the direct token-endpoint exchange and decodes it OFFLINE,
+// so only the base64url payload matters (header + signature are ignored — no cert fetch).
+// Defaults to a valid audience/issuer and a far-future expiry; override per case to drive
+// the offline-validation failure branches.
+function fakeIdToken(over: Record<string, unknown> = {}): string {
+  const payload = {
+    aud: 'test-google-client-id.apps.googleusercontent.com',
+    iss: 'accounts.google.com',
+    exp: Math.floor(Date.now() / 1000) + 3600,
+    email: 'someone@evertrust-germany.de',
+    email_verified: true,
+    name: 'Some One',
+    ...over,
+  };
+  const seg = (o: unknown) =>
+    Buffer.from(JSON.stringify(o)).toString('base64url');
+  return `${seg({ alg: 'RS256', typ: 'JWT' })}.${seg(payload)}.sig`;
+}
+
 describe('GoogleAuthService — loginWithGoogle', () => {
   it('(a) logs in an existing user matched by email; role + org preserved, no credential row created', async () => {
     const { service, jwt } = await make(
@@ -266,12 +286,13 @@ describe('GoogleAuthService — loginWithGoogleCode (authorization-code path)', 
     getToken.mockReset();
   });
 
-  it('exchanges the code, verifies the id_token, and provisions via the SHARED path (existing user)', async () => {
-    // The exchange returns an id_token; the FAKE verifier maps it to Alice.
-    getToken.mockResolvedValue({ tokens: { id_token: 'exchanged-id-token' } });
-    const { service, jwt } = await make(
-      fakeVerifier(verified({ email: 'alice@evertrust-germany.de' })),
-    );
+  it('exchanges the code, decodes the id_token, and provisions via the SHARED path (existing user)', async () => {
+    // The exchange returns an id_token carrying Alice's email; it is decoded OFFLINE
+    // (no verifier / no cert fetch) and mapped to the existing user.
+    getToken.mockResolvedValue({
+      tokens: { id_token: fakeIdToken({ email: 'alice@evertrust-germany.de' }) },
+    });
+    const { service, jwt } = await make(fakeVerifier(verified()));
 
     const res = await service.loginWithGoogleCode('auth-code');
 
@@ -297,10 +318,10 @@ describe('GoogleAuthService — loginWithGoogleCode (authorization-code path)', 
   });
 
   it('shares the public-domain 403 gate with the idToken path', async () => {
-    getToken.mockResolvedValue({ tokens: { id_token: 'exchanged-id-token' } });
-    const { service } = await make(
-      fakeVerifier(verified({ email: 'someone@gmail.com' })),
-    );
+    getToken.mockResolvedValue({
+      tokens: { id_token: fakeIdToken({ email: 'someone@gmail.com' }) },
+    });
+    const { service } = await make(fakeVerifier(verified()));
     await expect(service.loginWithGoogleCode('auth-code')).rejects.toBeInstanceOf(
       ForbiddenException,
     );
@@ -322,9 +343,29 @@ describe('GoogleAuthService — loginWithGoogleCode (authorization-code path)', 
     );
   });
 
-  it('maps an invalid exchanged id_token (verifier throws) to 401', async () => {
-    getToken.mockResolvedValue({ tokens: { id_token: 'exchanged-id-token' } });
-    const { service } = await make(fakeVerifier(new Error('bad signature')));
+  it('maps a malformed exchanged id_token to 401', async () => {
+    getToken.mockResolvedValue({ tokens: { id_token: 'not-a-valid-jwt' } });
+    const { service } = await make(fakeVerifier(verified()));
+    await expect(service.loginWithGoogleCode('auth-code')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('rejects an exchanged id_token whose audience is not our client id with 401', async () => {
+    getToken.mockResolvedValue({
+      tokens: { id_token: fakeIdToken({ aud: 'a-different-client-id' }) },
+    });
+    const { service } = await make(fakeVerifier(verified()));
+    await expect(service.loginWithGoogleCode('auth-code')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('rejects an exchanged id_token with email_verified=false with 401', async () => {
+    getToken.mockResolvedValue({
+      tokens: { id_token: fakeIdToken({ email_verified: false }) },
+    });
+    const { service } = await make(fakeVerifier(verified()));
     await expect(service.loginWithGoogleCode('auth-code')).rejects.toBeInstanceOf(
       UnauthorizedException,
     );
