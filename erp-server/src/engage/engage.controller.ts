@@ -58,19 +58,6 @@ export class EngageController {
     return this.campaignReplies.scanCampaign(orgId, aimId);
   }
 
-  // DEBUG (temporary): read-only scan tracer. Reports, per lead, what Gmail returned +
-  // whether an inbound was detected, then makes ONE timed reply_glock call so we can see
-  // if the agent succeeds/times-out from this server. No DB writes, no sends. Remove once
-  // the live scan is verified.
-  @RequirePermissions('campaigns:read')
-  @Get('campaigns/:aimId/scan-debug')
-  scanDebug(
-    @OrgId() orgId: string,
-    @Param('aimId', ParseUUIDPipe) aimId: string,
-  ) {
-    return this.campaignReplies.debugScan(orgId, aimId);
-  }
-
   // Manual "scan all now" — classify every campaign in the org. Same work the hourly
   // auto-scan does, on demand (the "manual scanning" button).
   @RequirePermissions('campaigns:write')
@@ -108,17 +95,6 @@ export class EngageController {
   @Get('gmail/watch/status')
   watchStatus() {
     return { configured: this.watch.isConfigured() };
-  }
-
-  // DEV/TEST (F2): seed synthetic outreach→reply Gmail threads into the campaign
-  // mailbox so a scan has real threads to classify. No real send (messages.insert).
-  @RequirePermissions('campaigns:write')
-  @Post('campaigns/:aimId/seed-threads')
-  seedThreads(
-    @OrgId() orgId: string,
-    @Param('aimId', ParseUUIDPipe) aimId: string,
-  ) {
-    return this.campaignReplies.seedSyntheticThreads(orgId, aimId);
   }
 
   // The persisted, classified replies for a campaign (the reply-sorter queue).

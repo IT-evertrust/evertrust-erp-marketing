@@ -48,11 +48,13 @@ services:
         value: none
       - key: CORS_ORIGINS       # set to the Vercel production URL after the web deploy
         sync: false
-      # ⚠ NO-LOGIN MODE on a PUBLIC API: anyone with the URL can use the ERP.
-      # Team decision 2026-06-11 (matches the old repo). AUTH_DISABLED_USER_EMAIL
-      # should point at a LOW-privilege account so anonymous access isn't super-admin.
+      # Authentication is REQUIRED in production — real users sign in with their
+      # company Google account (the live deploy already enforces this). Keep this
+      # "false" so a redeploy can never silently fall open to a public, no-login API.
+      # (For a throwaway demo only, AUTH_DISABLED=true + a LOW-privilege
+      # AUTH_DISABLED_USER_EMAIL serves a single impersonated user with no login.)
       - key: AUTH_DISABLED
-        value: "true"
+        value: "false"
       - key: AUTH_DISABLED_USER_EMAIL
         sync: false
       - key: UPLOAD_DIR
