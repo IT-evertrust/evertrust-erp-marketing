@@ -48,6 +48,7 @@ class RunOptions:
 
 def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetcher: UrlFetcher) -> dict:
     run_id = "wf3-" + datetime.now(ZoneInfo(TZ)).strftime("%Y%m%d%H%M%S")
+    t_run0 = time.time()   # for SCRAPE TIMEOUT (settings.max_runtime_sec) deadline
     mode = "live" if opts.live else "dry"
     result: dict = {"runId": run_id, "mode": mode, "campaignId": opts.campaign_id, "status": "ok"}
 
@@ -74,7 +75,12 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
     # keywords (local script + English). There are NO hardcoded country tables — discovery + the
     # niche gate work in the country's own language and find native-named firms. Needs a capable
     # model; with no LLM the run degrades to the country name as a single geo term.
-    profile = llm.profile_country(settings, cfg.country, cfg.niche, cfg.industry) if (opts.use_llm and settings.llm_base_url) else {}
+    # An AIM zone (North/South/.../Central or a near-border zone) restricts the profiler to that
+    # zone's regions; "Anywhere" / a specific city list pass zone="" (whole country / verbatim).
+    zone = cfg.region if geo.is_zone(cfg.region) else ""
+    profile = llm.profile_country(settings, cfg.country, cfg.niche, cfg.industry,
+                                  want_cities=settings.profile_max_cities,
+                                  zone=zone) if (opts.use_llm and settings.llm_base_url) else {}
     iso2 = (profile.get("iso2") or "").lower()
     market_tld = ("." + iso2) if iso2 else ""
     if profile:
@@ -116,8 +122,8 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
     #    country has: 16 / 28 / 63…), one batch at a time with a cooldown, so each region gets its own
     #    query budget and the search backend isn't overloaded. A specific region/city list = 1 batch.
     region_batches = []
-    if geo.is_nationwide(cfg.region):
-        if profile.get("regions"):     # model gave real regions -> use them
+    if geo.is_nationwide(cfg.region) or geo.is_zone(cfg.region):
+        if profile.get("regions"):     # model gave real regions (zone-filtered if a zone) -> use them
             region_batches = [(str(r.get("name") or f"region {i + 1}"), list(r.get("cities") or []))
                               for i, r in enumerate(profile["regions"]) if r.get("cities")]
         elif profile.get("cities"):    # flat city list -> chunk into batches (reliable + still looped)
@@ -186,8 +192,17 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
     hits_total = dropped_blocked = dropped_offniche = queries_run = regions_scanned = 0
     # Anywhere/nationwide + exhaust flag: keep sweeping ALL regions for full coverage instead of
     # stopping once lead_target is hit (a specific region/city list is one batch, unaffected).
-    exhaust = geo.is_nationwide(cfg.region) and settings.exhaust_anywhere_regions
+    exhaust = (geo.is_nationwide(cfg.region) or geo.is_zone(cfg.region)) and settings.exhaust_anywhere_regions
+    deadline = (t_run0 + settings.max_runtime_sec) if settings.max_runtime_sec else None
     for _rname, rcities in region_batches:
+        # SEARCH BUDGET (max_queries) + SCRAPE TIMEOUT (max_runtime_sec): hard global caps so the
+        # Config-page knobs actually bound the run. Checked at region boundaries (per-region budget
+        # may overshoot by at most one region's queries_per_region).
+        if settings.max_queries and queries_run >= settings.max_queries:
+            break
+        if deadline and time.time() >= deadline:
+            result["stoppedBy"] = "timeout"
+            break
         segs, lm, ht, blk, off, nq = _discover(rcities)
         all_segments.extend(segs)
         for k, v in lm.items():
@@ -198,6 +213,8 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
         queries_run += nq
         regions_scanned += 1
         if len(pool) >= settings.lead_target and not exhaust:
+            break
+        if settings.max_queries and queries_run >= settings.max_queries:
             break
         if len(region_batches) > 1 and regions_scanned < len(region_batches) and settings.region_cooldown > 0:
             time.sleep(settings.region_cooldown)

@@ -60,6 +60,10 @@ class Settings:
     max_regions: int = 24          # cap regions scanned per run (bounds time for big countries)
     region_cooldown: float = 3.0   # seconds to pause between region batches (keeps SearXNG stable)
     region_chunk: int = 6          # cities per batch when the profiler returns a flat city list
+    # How many cities the country profiler returns in total (the geo coverage ceiling). The profiler
+    # asks the model for the largest cities/business towns per region; this caps the flattened list.
+    # Raise for wider city coverage (more towns swept) at the cost of a longer run. Env: LEAD_PROFILE_MAX_CITIES.
+    profile_max_cities: int = 80
     # Search-source policy: SearXNG-first. DDG is kept only as an OPTIONAL fallback (OFF by
     # default) so a weak DDG result set can't quietly displace/contaminate SearXNG hits when
     # SearXNG is reachable. With no SearXNG configured, DDG is still used as the keyless engine.
@@ -76,6 +80,9 @@ class Settings:
     # Lead-quality floor: the B/C tier boundary. A lead scoring below this is tier C (noise) and is
     # DROPPED — only B and above are kept/returned/posted. Raise to be stricter, lower to keep more.
     min_keep_score: int = 40
+    # SCRAPE TIMEOUT (Config page, minutes -> seconds here): hard wall-clock cap on the discovery
+    # sweep so a run can't grind forever. 0 = no limit. Env: LEAD_MAX_RUNTIME_SEC.
+    max_runtime_sec: int = 0
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -118,11 +125,13 @@ def load_settings() -> Settings:
         max_regions=int(os.environ.get("LEAD_MAX_REGIONS", "24") or 24),
         region_cooldown=float(os.environ.get("LEAD_REGION_COOLDOWN", "3") or 3),
         region_chunk=int(os.environ.get("LEAD_REGION_CHUNK", "6") or 6),
+        profile_max_cities=int(os.environ.get("LEAD_PROFILE_MAX_CITIES", "80") or 80),
         enable_ddg_fallback=_env_bool("LEAD_ENABLE_DDG_FALLBACK", False),
         enable_web_email_recovery=_env_bool("LEAD_ENABLE_WEB_EMAIL_RECOVERY", True),
         allow_llm_email_recovery=_env_bool("LEAD_ALLOW_LLM_EMAIL_RECOVERY", False),
         exhaust_anywhere_regions=_env_bool("LEAD_EXHAUST_ANYWHERE_REGIONS", True),
         min_keep_score=int(os.environ.get("LEAD_MIN_KEEP_SCORE", "40") or 40),
+        max_runtime_sec=int(os.environ.get("LEAD_MAX_RUNTIME_SEC", "0") or 0),
     )
 
 
@@ -151,11 +160,13 @@ def with_scraper_override(
     lead_target: int | None = None,
     max_queries: int | None = None,
     min_score: int | None = None,
+    scrape_timeout_min: int | None = None,
 ) -> Settings:
     """Apply a per-request Lead Scraper override (from the ERP dispatch / Configuration
     page) over the agent's env-resolved tuning. Each field falls back to the env default
     when the request omits it (request value ?? env). lead_target = how many leads to
-    hunt; max_queries = search budget; min_score = the tier-floor."""
+    hunt; max_queries = search budget; min_score = the tier-floor; scrape_timeout_min =
+    wall-clock cap (minutes) on the discovery sweep."""
     changes: dict = {}
     if lead_target is not None:
         changes["lead_target"] = lead_target
@@ -163,4 +174,6 @@ def with_scraper_override(
         changes["max_queries"] = max_queries
     if min_score is not None:
         changes["min_keep_score"] = min_score
+    if scrape_timeout_min is not None:
+        changes["max_runtime_sec"] = max(0, int(scrape_timeout_min)) * 60
     return replace(s, **changes) if changes else s

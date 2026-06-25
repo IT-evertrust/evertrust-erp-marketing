@@ -184,12 +184,16 @@ def _simple_keywords(settings, country: str, niche: str, industry: str = "") -> 
             "keywordsEnglish": [str(x).strip() for x in (d.get("english") or []) if str(x).strip()]}
 
 
-def profile_country(settings, country: str, niche: str, industry: str = "", want_cities: int = 80) -> dict:
+def profile_country(settings, country: str, niche: str, industry: str = "", want_cities: int = 80,
+                    zone: str = "") -> dict:
     """Country profiler (port of the n8n 'Country Profiler' node). For ANY country + niche, ask the
     model for that country's real ADMINISTRATIVE REGIONS each with its cities (local spelling) +
     BILINGUAL niche keywords (local script + English). The regions drive the nationwide per-region
     sweep, so the satellite is fully country-agnostic with NO hardcoded geography. Returns {} on any
-    failure so callers fall back to the offline PL/DE fixtures + deterministic keywords."""
+    failure so callers fall back to the offline PL/DE fixtures + deterministic keywords.
+
+    `zone` (AIM region: North/South/East/West/Central or 'Near border (DE-PL)') restricts Round 3 to
+    the regions in that part of the country / along that border — still LLM-driven, no geo tables."""
     if not settings.llm_base_url:
         return {}
     # Profiling is split into small focused ROUNDS below (one giant call timed out / left geo blank
@@ -236,10 +240,19 @@ def profile_country(settings, country: str, niche: str, industry: str = "", want
     kw_en = _split(kw.get("keywordsEnglish") or kw.get("nicheKeywordsEnglish"))
 
     # Round 3 - the country's first-level administrative regions (NAMES only -> short output).
-    rg = _ask(f'List the COMPLETE set of FIRST-LEVEL administrative regions of "{country}" (states / '
-              'provinces / voivodeships / Bundeslaender / regions / oblasts - whatever THIS country '
-              'actually uses), local spelling, every one (most countries have 5-30). Return JSON: '
-              '{"regions":["name1","name2",...]}. Never invent one or use another country\'s.', 60)
+    # Zone-aware: an AIM zone restricts to that part of the country / that border instead of all.
+    if str(zone or "").strip():
+        rg = _ask(f'Country: "{country}". Zone requested: "{zone}". List ONLY the FIRST-LEVEL '
+                  'administrative regions (states / provinces / voivodeships / Bundeslaender / regions) '
+                  'that lie in that zone of the country — a compass word (North/South/East/West/Central) '
+                  'means that part of the country; a "near border (XX-YY)" zone means the regions running '
+                  'along that international border. Local spelling. Return JSON: '
+                  '{"regions":["name1","name2",...]}. Never invent one or use another country\'s.', 60)
+    else:
+        rg = _ask(f'List the COMPLETE set of FIRST-LEVEL administrative regions of "{country}" (states / '
+                  'provinces / voivodeships / Bundeslaender / regions / oblasts - whatever THIS country '
+                  'actually uses), local spelling, every one (most countries have 5-30). Return JSON: '
+                  '{"regions":["name1","name2",...]}. Never invent one or use another country\'s.', 60)
     region_names = _split(rg.get("regions"))[:30]
 
     # Round 4 - cities per region, in small concurrent BATCHES (short output each, can't time out).
@@ -248,11 +261,16 @@ def profile_country(settings, country: str, niche: str, industry: str = "", want
         from concurrent.futures import ThreadPoolExecutor
         batches = [region_names[i:i + 6] for i in range(0, len(region_names), 6)]
 
+        # cities to ask for PER REGION = the overall ceiling spread across the regions (min 8), so a
+        # high want_cities actually pulls in 2nd/3rd-tier towns instead of just the top few.
+        per_region = max(8, -(-want_cities // max(1, len(region_names))))
+
         def _cities(batch):
-            d = _ask(f'Country: {country}. For EACH region below list 3-8 of its largest cities / '
-                     'business towns (local spelling, largest first). Regions: ' + "; ".join(batch) +
+            d = _ask(f'Country: {country}. For EACH region below list up to {per_region} of its largest '
+                     'cities / business towns (local spelling, largest first, no duplicates). Regions: '
+                     + "; ".join(batch) +
                      '\nReturn JSON mapping each region name to its city list: '
-                     '{"<region>":["city1","city2",...]}.', 60)
+                     '{"<region>":["city1","city2",...]}.', 90)
             return [(name, _split(d.get(name))) for name in batch]
 
         with ThreadPoolExecutor(max_workers=3) as ex:

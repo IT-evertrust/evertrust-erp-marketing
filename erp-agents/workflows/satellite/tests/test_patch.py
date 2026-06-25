@@ -169,6 +169,45 @@ def test_profile_country_empty_without_gateway():
     assert llm.profile_country(Settings(llm_base_url=""), "Anyland", "widgets") == {}
 
 
+def test_profile_country_zone_restricts_regions(monkeypatch):
+    # An AIM zone (e.g. "North") must take the zone-restricted Round 3 prompt, NOT the all-regions
+    # one — so the sweep covers only that part of the country.
+    from satellite.clients import llm
+    from satellite.settings import Settings
+    seen = {}
+
+    def _for(prompt):
+        if "ISO 3166" in prompt:
+            return '{"iso2":"PL","language":"Polish","langCode":"pl"}'
+        if "keywordsLocal" in prompt:
+            return '{"keywordsLocal":["a"],"keywordsEnglish":["b"]}'
+        if "Zone requested" in prompt:
+            seen["zone"] = True
+            return '{"regions":["Pomorskie","Zachodniopomorskie"]}'
+        if "FIRST-LEVEL administrative regions" in prompt:
+            seen["all"] = True
+            return '{"regions":["EVERY-REGION"]}'
+        if "largest" in prompt:
+            return '{"Pomorskie":["Gdańsk"],"Zachodniopomorskie":["Szczecin"]}'
+        return "{}"
+
+    class _Completions:
+        def create(self, **k):
+            msg = type("M", (), {"content": _for(k["messages"][-1]["content"])})()
+            return type("R", (), {"choices": [type("C", (), {"message": msg})()]})()
+
+    class FakeOpenAI:
+        def __init__(self, **k):
+            self.chat = type("Chat", (), {"completions": _Completions()})()
+
+    monkeypatch.setattr("openai.OpenAI", FakeOpenAI)
+    out = llm.profile_country(Settings(llm_base_url="http://gw", profile_model="x"),
+                              "Poland", "Cloud Infrastructure", zone="North")
+    assert seen.get("zone") and not seen.get("all")                       # zone prompt, not all-regions
+    assert [r["name"] for r in out["regions"]] == ["Pomorskie", "Zachodniopomorskie"]
+    assert "Gdańsk" in out["cities"] and "Szczecin" in out["cities"]
+
+
 # --- (A) multilingual noise filter (news/courses/gov/edu/associations, any language) ----------
 
 def test_niche_block_multilingual_noise():

@@ -67,6 +67,7 @@ class RunRequest(BaseModel):
     leadTarget: int | None = None
     maxQueries: int | None = None
     minScore: int | None = None
+    scrapeTimeoutMin: int | None = None   # wall-clock cap on the discovery sweep (minutes)
     # False (default = the ERP fire-and-forget): dispatch in the background, return 2xx immediately,
     # post the run callback when done. True: run synchronously and return the full result (CLI/tests).
     wait: bool = False
@@ -109,7 +110,8 @@ def satellite_run(
 ) -> dict:
     persist = req.persist if req.persist is not None else req.live
     settings = with_llm_override(settings, req.llmBaseUrl, req.model, req.apiKey)
-    settings = with_scraper_override(settings, req.leadTarget, req.maxQueries, req.minScore)
+    settings = with_scraper_override(settings, req.leadTarget, req.maxQueries, req.minScore,
+                                     req.scrapeTimeoutMin)
     opts = RunOptions(
         campaign_id=req.campaignId, live=req.live, persist=persist,
         use_llm=req.useLlm, max_segments=req.maxSegments,

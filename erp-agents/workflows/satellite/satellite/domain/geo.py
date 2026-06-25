@@ -39,6 +39,21 @@ def is_nationwide(region: str) -> bool:
     return _norm_key(region) in _NATIONWIDE
 
 
+# AIM "zone" options (aim-launch-dialog REGION_OPTIONS): compass parts of the country + a
+# near-border zone. Not geography — UI keywords, like _NATIONWIDE. A zone is expanded into its
+# member regions/cities by the LLM profiler (zone-aware), never searched as the literal word.
+_ZONE_WORDS = {"north", "south", "east", "west", "central", "centre", "center",
+               "northeast", "northwest", "southeast", "southwest"}
+
+
+def is_zone(region: str) -> bool:
+    """True if the region is an AIM zone (North/South/.../Central or a 'near border ...' zone)
+    that must be expanded into cities by the profiler, not used as a literal geo term."""
+    if _norm_key(region) in _ZONE_WORDS:
+        return True
+    return "border" in str(region or "").lower()
+
+
 def _dedup_cities(cities) -> list[str]:
     out, seen = [], set()
     for c in cities or []:
