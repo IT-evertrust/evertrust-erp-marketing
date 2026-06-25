@@ -844,13 +844,16 @@ export const GOOGLE_CONNECT_SCOPES: readonly string[] = [
   'openid',
   'email',
   'profile',
-  // FULL Gmail access: send + metadata + readonly + insert. gmail.readonly grants the
-  // message body + free-text `q` search (it supersedes gmail.metadata; metadata is kept
-  // for clarity/compat). NOTE: gmail.readonly is a RESTRICTED scope — it requires
-  // Google's OAuth-app verification + the annual CASA security assessment before
-  // external orgs can use it (the cost of full-inbox read, accepted deliberately).
+  // Gmail send + read + insert. We deliberately do NOT request gmail.metadata: when a
+  // token carries the metadata scope, Gmail REJECTS messages.list `q` (free-text) searches
+  // with 403 "Metadata scope does not support 'q' parameter" — EVEN when gmail.readonly is
+  // also granted (metadata caps the token to metadata-only ops). The Engage reply scan IS a
+  // `q` search (from:<lead> OR to:<lead>), so leaving metadata in silently 403s every scan.
+  // finalized-erp hit this exact 403 and fixed it by dropping metadata; gmail.readonly alone
+  // already grants everything we need (full body + `q` search). NOTE: gmail.readonly is a
+  // RESTRICTED scope — it needs Google OAuth-app verification + the annual CASA assessment
+  // for EXTERNAL orgs; INTERNAL (same-Workspace) apps are exempt.
   'https://www.googleapis.com/auth/gmail.send',
-  'https://www.googleapis.com/auth/gmail.metadata',
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/gmail.insert',
   'https://www.googleapis.com/auth/calendar.events',

@@ -470,6 +470,134 @@ export class EngageRepliesService {
     return { configured: true, scanned, classified, byCategory, skipped, reason: null };
   }
 
+  // --- DEBUG (temporary diagnostic) ----------------------------------------
+  // Read-only scan tracer. Runs the SAME setup as runScan (resolve mailbox →
+  // fetchThread → inbound detection) but, instead of silently skipping, REPORTS
+  // per lead exactly what Gmail returned + whether an inbound was detected. Then
+  // makes ONE timed reply_glock call on the first lead with an inbound, so we can
+  // see whether the agent call succeeds or times out FROM THIS SERVER (vs a local
+  // curl). No DB writes, no email sends. Remove once the scan is verified live.
+  async debugScan(orgId: string, aimId: string): Promise<Record<string, unknown>> {
+    const resolved = await this.resolveCampaign(orgId, aimId);
+    if (!resolved) throw new BadRequestException('Unknown campaign');
+    const { aim, mailboxAccountId } = resolved;
+
+    const access = await this.googleAccounts.resolveMailboxForAccount(
+      orgId,
+      mailboxAccountId,
+      'gmail-read',
+    );
+    if (!access.ok) {
+      return {
+        ok: false,
+        aimId,
+        sender: aim.sender,
+        mailboxAccountId,
+        mailboxResolved: false,
+        reason: access.reason,
+      };
+    }
+    const token = access.accessToken;
+    const selfEmail = access.account.email.toLowerCase();
+
+    const leads = await this.db
+      .select({
+        id: schema.reachLeads.id,
+        company: schema.reachLeads.company,
+        email: schema.reachLeads.email,
+        contactName: schema.reachLeads.contactName,
+      })
+      .from(schema.reachLeads)
+      .where(and(tenantScope(orgId, schema.reachLeads), eq(schema.reachLeads.aimId, aimId)));
+
+    const contactedLeadIds = await this.reach.leadIdsWithSends(orgId, aimId);
+
+    const perLead: Record<string, unknown>[] = [];
+    let firstInbound: {
+      lead: { company: string; email: string | null; contactName: string | null };
+      inbound: ThreadMsg;
+      thread: ThreadMsg[];
+    } | null = null;
+
+    for (const lead of leads) {
+      const email = lead.email?.trim().toLowerCase();
+      const contacted = !!email && contactedLeadIds.has(lead.id);
+      if (!email || !contacted) {
+        perLead.push({
+          leadId: lead.id,
+          email: lead.email,
+          contacted,
+          skipped: !email ? 'no-email' : 'not-contacted',
+        });
+        continue;
+      }
+      try {
+        const thread = await this.fetchThread(token, selfEmail, email);
+        const inbound = [...thread].reverse().find((m) => m.direction === 'inbound') ?? null;
+        if (inbound && !firstInbound) firstInbound = { lead, inbound, thread };
+        perLead.push({
+          leadId: lead.id,
+          email,
+          contacted: true,
+          query: `from:${email} OR to:${email}`,
+          messageCount: thread.length,
+          messages: thread.map((m) => ({
+            from: m.fromEmail,
+            direction: m.direction,
+            subject: m.subject,
+          })),
+          inboundFound: !!inbound,
+        });
+      } catch (err) {
+        perLead.push({
+          leadId: lead.id,
+          email,
+          contacted: true,
+          fetchError: err instanceof Error ? err.message : 'unknown error',
+        });
+      }
+    }
+
+    // H2 probe: ONE timed agent call on the first lead with an inbound.
+    let agentProbe: Record<string, unknown> = { tried: false };
+    if (firstInbound) {
+      const startedAt = Date.now();
+      try {
+        const out = await this.classifyAndDraft(
+          aim,
+          firstInbound.lead,
+          firstInbound.inbound,
+          firstInbound.thread,
+        );
+        agentProbe = {
+          tried: true,
+          ok: true,
+          ms: Date.now() - startedAt,
+          status: out?.status ?? null,
+        };
+      } catch (err) {
+        agentProbe = {
+          tried: true,
+          ok: false,
+          ms: Date.now() - startedAt,
+          error: err instanceof Error ? err.message : 'unknown error',
+        };
+      }
+    }
+
+    return {
+      ok: true,
+      aimId,
+      sender: aim.sender,
+      mailbox: access.account.email,
+      mailboxAccountId,
+      leadCount: leads.length,
+      contactedCount: contactedLeadIds.size,
+      perLead,
+      agentProbe,
+    };
+  }
+
   // Propagate a successful classification into the Reach plane so the cached aim.stats
   // (Email Generator + Sequence Sender) and reach_leads.status (Lead Scraper) reflect
   // the reply. Two independent best-effort steps, each wrapped so a propagation failure
@@ -1795,7 +1923,8 @@ export class EngageRepliesService {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!listRes.ok) {
-      throw new Error(`Gmail list HTTP ${listRes.status}`);
+      const errBody = await listRes.text().catch(() => '');
+      throw new Error(`Gmail list HTTP ${listRes.status}: ${errBody.slice(0, 300)}`);
     }
     const list = (await listRes.json()) as { messages?: { id?: string }[] };
     const ids = (list.messages ?? []).map((m) => m.id).filter((id): id is string => !!id);
