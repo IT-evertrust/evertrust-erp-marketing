@@ -2,6 +2,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -51,12 +52,26 @@ import {
 // Google users have NO password, so we NEVER write an auth_credentials row.
 @Injectable()
 export class GoogleAuthService {
+  private readonly logger = new Logger(GoogleAuthService.name);
+
   constructor(
     @Inject(DB) private readonly db: DbClient,
     private readonly jwt: JwtService,
     private readonly config: AppConfigService,
     @Inject(TOKEN_VERIFIER) private readonly verifier: TokenVerifier,
   ) {}
+
+  // Extract a useful, log-only reason from a Google auth failure. The client still
+  // gets an opaque 401 (we never leak which check failed to the browser), but the
+  // server log must name the REAL cause so misconfig is diagnosable. google-auth-library
+  // (gaxios) puts the OAuth error body — e.g. { error: 'invalid_client' } (wrong
+  // id/secret) or { error: 'invalid_grant' } (bad/expired/reused code, redirect
+  // mismatch) — on err.response.data; surface that when present.
+  private describeGoogleError(err: unknown): string {
+    const base = err instanceof Error ? err.message : String(err);
+    const data = (err as { response?: { data?: unknown } })?.response?.data;
+    return data ? `${base} :: ${JSON.stringify(data)}` : base;
+  }
 
   // GIS ID-token path: the client posts the Google ID token (rendered button /
   // One Top). Verify it, then provision. The code-exchange flow is NOT needed
@@ -71,9 +86,10 @@ export class GoogleAuthService {
     let verified;
     try {
       verified = await this.verifier.verify(idToken);
-    } catch {
+    } catch (err) {
       // Invalid signature, expired, or wrong audience — all map to a single
-      // generic 401 so we don't leak which check failed.
+      // generic 401 so we don't leak which check failed. Log the real reason.
+      this.logger.warn(`Google ID-token verify failed: ${this.describeGoogleError(err)}`);
       throw new UnauthorizedException('Invalid Google token');
     }
 
@@ -107,9 +123,11 @@ export class GoogleAuthService {
       if (!idToken) throw new Error('No id_token in token response');
       // Verify the exchanged ID token exactly as the idToken path does.
       verified = await this.verifier.verify(idToken);
-    } catch {
+    } catch (err) {
       // Bad/expired code, exchange failure, or invalid id_token — all map to a
-      // single generic 401 so we don't leak which check failed.
+      // single generic 401 so we don't leak which check failed. Log the real reason
+      // (e.g. invalid_client = id/secret mismatch) so the misconfig is diagnosable.
+      this.logger.warn(`Google code exchange/verify failed: ${this.describeGoogleError(err)}`);
       throw new UnauthorizedException('Invalid Google token');
     }
 
