@@ -1,16 +1,18 @@
 'use client';
 
-// Meeting Booker (v2) — a faithful port of the Saloot demo's week time-grid
-// calendar (the `.calcard` markup). It is a NEW, self-contained component: it does
-// NOT touch or replace the existing full-featured `components/activate/calendar`
-// Calendar — that code stays intact. This one mirrors the HTML design exactly
-// (light grayscale palette, 58px gutter + 5 Mon–Fri columns, 24×56px hour rows,
-// events absolutely positioned by start time, ‹ week-range › nav, connected pill)
-// while being wired to the org's REAL Google Calendar via useCalendarUpcoming.
+// Meeting Booker (v2) — the Saloot week time-grid calendar, wired to the org's REAL
+// Google Calendar(s). It now reads EVERY connected mailbox (not just the default):
+// an account toggle row filters to "All" or one account; each account gets a color
+// (the one place the otherwise black-and-white UI uses color) shown as a numbered
+// circle in the toggle and as the LEFT BORDER of that account's meeting cards.
+// Clicking a meeting opens a detail/edit dialog that writes back to that mailbox's
+// Google Calendar event.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import type { CalendarEventDto } from '@evertrust/shared';
-import { useCalendarUpcoming } from '@/hooks/use-meetings';
+import { api } from '@/lib/api';
+import { useGoogleAccounts } from '@/hooks/use-arsenal';
 import {
   DEFAULT_TIME_ZONE,
   addDaysToDateKey,
@@ -25,65 +27,96 @@ import {
   zoneShortLabel,
   zonedTimeToUtcDate,
 } from '@/components/activate/calendar/time-grid';
+import {
+  MeetingDetailDialog,
+  type AccountEvent,
+} from './meeting-detail-dialog';
 
-// One pixel-per-hour scale lifted straight from the HTML (`.daycol .hrow{height:56px}`),
-// with the 7 AM auto-scroll the demo opens at (`scrollTop = 7*56 - 10`).
 const HOUR_PX = 56;
 const DAY_HOURS = 24;
 const WORK_DAYS = 5; // Mon–Fri
 const OPEN_SCROLL_TOP = 7 * HOUR_PX - 10;
 
-// 24 hour labels: "12 AM", "1 AM", …, "12 PM", "1 PM", …  (HTML's tlab logic).
 const HOUR_LABELS = Array.from({ length: DAY_HOURS }, (_, n) =>
   n === 0 ? '12 AM' : n < 12 ? `${n} AM` : n === 12 ? '12 PM' : `${n - 12} PM`,
 );
 
+// Fallback palette for accounts with no DB color yet (assigned by index). These are
+// the ONLY colors in the app — everything else stays black & white.
+const ACCOUNT_PALETTE = [
+  '#2563eb',
+  '#16a34a',
+  '#db2777',
+  '#d97706',
+  '#7c3aed',
+  '#0891b2',
+];
+
+type AccountMeta = {
+  id: string;
+  email: string;
+  color: string;
+  number: number;
+};
+
 type EventPosition = {
-  event: CalendarEventDto;
+  event: AccountEvent;
   top: number;
   time: string;
   detail: string;
+  color: string;
 };
 
-// Short weekday name for a YYYY-MM-DD key, rendered from a noon-UTC anchor so the
-// label can never slip a day across the zone boundary.
 function weekdayShort(dateKey: string): string {
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: 'UTC',
-    weekday: 'short',
-  })
+  return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short' })
     .format(dateKeyToUtcDate(dateKey))
     .toUpperCase();
 }
 
-// "16 – 20 Jun" (month shown once when the week stays in one month, else on both).
 function weekRangeLabel(mondayKey: string): string {
   const fridayKey = addDaysToDateKey(mondayKey, WORK_DAYS - 1);
   const start = parseDateKey(mondayKey);
   const end = parseDateKey(fridayKey);
-
   const monthOf = (key: string) =>
     new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short' }).format(
       dateKeyToUtcDate(key),
     );
-
   if (start.month === end.month) {
     return `${start.day} – ${end.day} ${monthOf(fridayKey)}`;
   }
-
   return `${start.day} ${monthOf(mondayKey)} – ${end.day} ${monthOf(fridayKey)}`;
 }
 
 export function MeetingBookerV2() {
-  // Anchor = Monday of the visible work week; defaults to the current week.
   const [mondayKey, setMondayKey] = useState(() =>
     startOfWorkWeekKey(new Date(), DEFAULT_TIME_ZONE),
   );
+  // '' = All accounts; otherwise a specific connected account id.
+  const [accountFilter, setAccountFilter] = useState('');
+  const [selectedEvent, setSelectedEvent] = useState<AccountEvent | null>(null);
 
   const bodyRef = useRef<HTMLDivElement | null>(null);
 
-  // Fetch the visible week buffered ±1 day so nothing clips at the zone edge. The
-  // fetch zone only tags the request; the org's resolved zone drives rendering.
+  // Connected mailboxes, each given a stable color + number for the toggle/border.
+  const accountsQuery = useGoogleAccounts();
+  const accounts = useMemo<AccountMeta[]>(() => {
+    const connected = (accountsQuery.data ?? []).filter(
+      (a) => a.status === 'CONNECTED',
+    );
+    return connected.map((a, i) => ({
+      id: a.id,
+      email: a.email,
+      color: a.color ?? ACCOUNT_PALETTE[i % ACCOUNT_PALETTE.length]!,
+      number: i + 1,
+    }));
+  }, [accountsQuery.data]);
+
+  const colorByAccount = useMemo(() => {
+    const map = new Map<string, string>();
+    accounts.forEach((a) => map.set(a.id, a.color));
+    return map;
+  }, [accounts]);
+
   const range = useMemo(() => {
     const timeMin = zonedTimeToUtcDate(
       addDaysToDateKey(mondayKey, -1),
@@ -97,7 +130,6 @@ export function MeetingBookerV2() {
       0,
       DEFAULT_TIME_ZONE,
     );
-
     return {
       timeMin: timeMin.toISOString(),
       timeMax: timeMax.toISOString(),
@@ -105,34 +137,62 @@ export function MeetingBookerV2() {
     };
   }, [mondayKey]);
 
-  const upcoming = useCalendarUpcoming(range);
+  // Fetch each connected mailbox's calendar in parallel and tag every event with
+  // its accountId, so we can color + filter by account. One query keyed on the
+  // visible range + the set of accounts.
+  const accountIds = accounts.map((a) => a.id);
+  const calQuery = useQuery({
+    queryKey: ['activate', 'calendar', 'multi', range, accountIds],
+    enabled: accounts.length > 0,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+    queryFn: async ({ signal }) => {
+      const perAccount = await Promise.all(
+        accounts.map(async (a) => {
+          const data = await api.meetings.calendarUpcoming(
+            { ...range, accountId: a.id },
+            signal,
+          );
+          const events: AccountEvent[] = (data.events ?? []).map((e) => ({
+            ...e,
+            accountId: a.id,
+          }));
+          return { timeZone: data.timeZone, configured: data.configured, events };
+        }),
+      );
+      return {
+        timeZone: perAccount[0]?.timeZone ?? DEFAULT_TIME_ZONE,
+        configured: perAccount.some((r) => r.configured),
+        events: perAccount.flatMap((r) => r.events),
+      };
+    },
+  });
 
-  const primaryTz = upcoming.data?.timeZone ?? DEFAULT_TIME_ZONE;
-  const configured = Boolean(upcoming.data?.configured);
+  const primaryTz = calQuery.data?.timeZone ?? DEFAULT_TIME_ZONE;
+  const configured = Boolean(calQuery.data?.configured);
   const weekNumber = getIsoWeekNumber(mondayKey);
   const rangeText = weekRangeLabel(mondayKey);
 
-  // The five Mon–Fri day keys for the visible week.
   const days = useMemo(
     () => Array.from({ length: WORK_DAYS }, (_, i) => addDaysToDateKey(mondayKey, i)),
     [mondayKey],
   );
 
-  // Real events parsed once; reused per-day below.
+  // Parsed, account-filtered events.
   const events = useMemo(
     () =>
-      (upcoming.data?.events ?? [])
+      (calQuery.data?.events ?? [])
         .filter((event) => !event.allDay)
+        .filter((event) => !accountFilter || event.accountId === accountFilter)
         .map((event) => ({
           event,
           startDate: new Date(event.start),
           endDate: new Date(event.end),
         }))
         .filter((row) => isValidDate(row.startDate) && isValidDate(row.endDate)),
-    [upcoming.data?.events],
+    [calQuery.data?.events, accountFilter],
   );
 
-  // For each day, the events that fall on it, positioned by their start minute.
   const eventsByDay = useMemo<EventPosition[][]>(() => {
     return days.map((dayKey) =>
       events
@@ -149,26 +209,22 @@ export function MeetingBookerV2() {
             attendees.length > 0
               ? attendees.join(', ')
               : (row.event.location ?? '').trim();
-
           return {
             event: row.event,
             top: (visual.startMinute / 60) * HOUR_PX,
             time: formatClockInTimeZone(row.startDate, primaryTz),
             detail,
+            color: colorByAccount.get(row.event.accountId) ?? '#15171c',
           };
         })
         .sort((a, b) => a.top - b.top),
     );
-  }, [days, events, primaryTz]);
+  }, [days, events, primaryTz, colorByAccount]);
 
-  // Open the grid scrolled to ~7 AM (working hours), re-applied whenever the week
-  // changes or the data finishes loading.
   useEffect(() => {
     const node = bodyRef.current;
-    if (node) {
-      node.scrollTop = OPEN_SCROLL_TOP;
-    }
-  }, [mondayKey, upcoming.data]);
+    if (node) node.scrollTop = OPEN_SCROLL_TOP;
+  }, [mondayKey, calQuery.data]);
 
   return (
     <div className="pt-[18px]">
@@ -219,10 +275,53 @@ export function MeetingBookerV2() {
           </div>
         </div>
 
+        {/* Account filter toggle row — "All" + one chip per connected account, each
+            with its numbered color circle. Only shown when 2+ accounts exist. */}
+        {accounts.length > 1 ? (
+          <div className="flex flex-wrap items-center gap-2 border-b border-[#e4e7eb] px-4 py-[10px]">
+            <button
+              type="button"
+              onClick={() => setAccountFilter('')}
+              className={[
+                'rounded-[7px] border px-[11px] py-[5px] text-[11px] font-bold transition-colors',
+                accountFilter === ''
+                  ? 'border-[#15171c] bg-[#15171c] text-white'
+                  : 'border-[#d6dade] bg-white text-[#5b626d] hover:border-[#15171c]',
+              ].join(' ')}
+            >
+              All meetings
+            </button>
+            {accounts.map((a) => {
+              const active = accountFilter === a.id;
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => setAccountFilter(a.id)}
+                  title={a.email}
+                  className={[
+                    'inline-flex items-center gap-[7px] rounded-[7px] border px-[10px] py-[5px] text-[11px] font-bold transition-colors',
+                    active
+                      ? 'border-[#15171c] text-[#15171c]'
+                      : 'border-[#d6dade] text-[#5b626d] hover:border-[#15171c]',
+                  ].join(' ')}
+                >
+                  <span
+                    className="grid h-[16px] w-[16px] place-items-center rounded-full text-[9px] font-bold text-white"
+                    style={{ backgroundColor: a.color }}
+                  >
+                    {a.number}
+                  </span>
+                  <span className="max-w-[160px] truncate">{a.email}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
         {/* Body: header row (gutter + day columns) + scrolling time grid */}
         <div className="flex p-0">
           <div className="flex h-[calc(100vh-300px)] min-h-[360px] w-full flex-col">
-            {/* Day header row */}
             <div className="flex flex-none border-b border-[#e4e7eb] pr-[9px]">
               <div className="flex w-[58px] flex-none items-end justify-end pb-[7px] pr-2 text-[9.5px] font-bold tracking-[0.06em] text-[#959ca7]">
                 {zoneShortLabel(primaryTz)}
@@ -248,12 +347,10 @@ export function MeetingBookerV2() {
               })}
             </div>
 
-            {/* Scrolling time grid */}
             <div
               ref={bodyRef}
               className="flex min-h-0 flex-1 items-start overflow-y-auto overflow-x-hidden py-[10px] [scrollbar-gutter:stable]"
             >
-              {/* Hour gutter */}
               <div className="relative w-[58px] flex-none" style={{ height: DAY_HOURS * HOUR_PX }}>
                 {HOUR_LABELS.map((label, n) => (
                   <div
@@ -266,7 +363,6 @@ export function MeetingBookerV2() {
                 ))}
               </div>
 
-              {/* Day columns */}
               {days.map((dayKey, i) => (
                 <div
                   key={dayKey}
@@ -277,10 +373,12 @@ export function MeetingBookerV2() {
                   ))}
 
                   {(eventsByDay[i] ?? []).map((pos) => (
-                    <div
+                    <button
                       key={pos.event.id}
-                      className="absolute left-[5px] right-[5px] z-[1] overflow-hidden rounded-[6px] border border-[#d6dade] border-l-2 border-l-[#15171c] bg-[#eceef1] px-[7px] py-[3px]"
-                      style={{ top: pos.top, height: HOUR_PX }}
+                      type="button"
+                      onClick={() => setSelectedEvent(pos.event)}
+                      className="absolute left-[5px] right-[5px] z-[1] cursor-pointer overflow-hidden rounded-[6px] border border-l-2 border-[#d6dade] bg-[#eceef1] px-[7px] py-[3px] text-left transition-opacity hover:opacity-80"
+                      style={{ top: pos.top, height: HOUR_PX, borderLeftColor: pos.color }}
                       title={`${pos.time} · ${pos.event.title}${pos.detail ? ` · ${pos.detail}` : ''}`}
                     >
                       <div className="text-[9px] font-bold leading-[1.25] text-[#959ca7]">
@@ -294,7 +392,7 @@ export function MeetingBookerV2() {
                           {pos.detail}
                         </div>
                       ) : null}
-                    </div>
+                    </button>
                   ))}
                 </div>
               ))}
@@ -302,6 +400,18 @@ export function MeetingBookerV2() {
           </div>
         </div>
       </div>
+
+      <MeetingDetailDialog
+        event={selectedEvent}
+        accountEmail={
+          accounts.find((a) => a.id === selectedEvent?.accountId)?.email ?? ''
+        }
+        accountColor={
+          selectedEvent ? colorByAccount.get(selectedEvent.accountId) ?? '#15171c' : '#15171c'
+        }
+        onClose={() => setSelectedEvent(null)}
+        onSaved={() => calQuery.refetch()}
+      />
     </div>
   );
 }

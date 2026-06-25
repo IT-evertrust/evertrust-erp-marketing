@@ -101,6 +101,8 @@ import {
   // Google / Calendar / Gmail.
   CalendarListResultDto,
   CalendarUpcomingDto,
+  UpdateCalendarEventDto,
+  CalendarMutationResultDto,
   CalendarFreeSlotsDto,
   EngageReplyListDto,
   EngageScanResultDto,
@@ -139,9 +141,14 @@ export type CalendarRangeParams = {
   durationMinutes?: number;
   // Allowed weekdays for free-slot generation (0=Sun..6=Sat). Omitted ⇒ Mon–Fri.
   businessDays?: number[];
+  // Read a SPECIFIC connected mailbox's calendar (per-account filter); omitted ⇒ org default.
+  accountId?: string;
 };
 
-export type CalendarUpcomingParams = Pick<CalendarRangeParams, 'timeMin' | 'timeMax' | 'timeZone'>;
+export type CalendarUpcomingParams = Pick<
+  CalendarRangeParams,
+  'timeMin' | 'timeMax' | 'timeZone' | 'accountId'
+>;
 
 export type CalendarFreeSlotsParams = CalendarRangeParams;
 
@@ -197,6 +204,7 @@ function calendarQuery(params?: CalendarRangeParams): string {
   if (params?.timeMin) q.set('timeMin', params.timeMin);
   if (params?.timeMax) q.set('timeMax', params.timeMax);
   if (params?.timeZone) q.set('timeZone', params.timeZone);
+  if (params?.accountId) q.set('accountId', params.accountId);
 
   if (params?.durationMinutes != null) {
     q.set('durationMinutes', String(params.durationMinutes));
@@ -998,6 +1006,24 @@ export const api = {
         schema: CalendarFreeSlotsDto,
         signal,
       }),
+
+    //   updateCalendarEvent(eventId, { title, start, end, location, description }, accountId)
+    //   Edits the real Google Calendar event on the given mailbox (per-account filter).
+    updateCalendarEvent: (
+      eventId: string,
+      body: UpdateCalendarEventDto,
+      accountId?: string,
+    ) =>
+      request<CalendarMutationResultDto>(
+        `/meetings/calendar/events/${encodeURIComponent(eventId)}${
+          accountId ? `?accountId=${encodeURIComponent(accountId)}` : ''
+        }`,
+        {
+          method: 'PATCH',
+          body: UpdateCalendarEventDto.parse(body),
+          schema: CalendarMutationResultDto,
+        },
+      ),
   },
 
   engage: {
