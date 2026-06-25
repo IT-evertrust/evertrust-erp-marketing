@@ -8,7 +8,7 @@
   "sector": "Sektor",
   "analytics": "Analysen",
   "reports": "Berichte",
-  "general": "Allgemein",
+  "general": "Einstellungen",
   "reachSettings": "Reichweite",
   "configuration": "Konfiguration",
   "userManagement": "Benutzer",
@@ -17,7 +17,7 @@
   "group": {
     "rean": "R.E.A.N. Sequenz",
     "insights": "Auswertung",
-    "settings": "Einstellungen"
+    "settings": "System"
   },
   "subtitle": {
     "dashboard": "Bericht · Alle Phasen · Letzte 30 Tage",
@@ -28,7 +28,7 @@
     "sector": "Segmentierung · Zielgruppen",
     "analytics": "Leistung · Kennzahlen",
     "reports": "Exporte · Zusammenfassungen",
-    "general": "Konto · Anzeige · Einstellungen",
+    "general": "Absender · Versand · Integrationen",
     "reachSettings": "Reichweiten-Versandregeln · Testversand",
     "configuration": "Versand · Integrationen · Branding",
     "userManagement": "Rollen · Zugriff",

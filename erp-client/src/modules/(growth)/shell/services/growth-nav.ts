@@ -3,6 +3,7 @@ import {
   Calendar,
   LayoutGrid,
   Mail,
+  Settings,
   Share2,
   SlidersHorizontal,
   Target,
@@ -84,9 +85,18 @@ export const GROWTH_NAV_ITEMS: GrowthNavItem[] = [
     step: '04',
   },
 
-  // Settings — only Configuration (admin-only). Insights (Sector / Analytics /
-  // Reports), the other Settings sub-pages (General / Reach / User management), and
-  // Automation are intentionally hidden from the rail for the stripped-down shell.
+  // System — Settings (the org Growth-Engine settings page, open to any user with
+  // campaigns:read) and Configuration (admin-only). Insights (Sector / Analytics /
+  // Reports), the other sub-pages (Reach / User management) and Automation are
+  // intentionally hidden from the rail for the stripped-down shell.
+  {
+    label: 'Settings',
+    i18nKey: 'general',
+    href: '/settings/general',
+    icon: Settings,
+    permission: 'campaigns:read',
+    group: 'settings',
+  },
   {
     label: 'Configuration',
     i18nKey: 'configuration',
@@ -135,7 +145,7 @@ export function getGrowthPageMeta(pathname: string) {
     sector: 'Segmentation · Targeting',
     analytics: 'Performance · Metrics',
     reports: 'Exports · Summaries',
-    general: 'Account · Display · Preferences',
+    general: 'Sender · Sending · Integrations',
     reachSettings: 'Reach send policy · Test send',
     configuration: 'Sending · Integrations · Branding',
     userManagement: 'Roles · Access',

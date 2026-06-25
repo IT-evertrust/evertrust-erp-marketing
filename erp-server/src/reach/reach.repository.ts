@@ -215,6 +215,7 @@ export class ReachRepository {
         campaignId,
         email: l.email!.trim(),
         companyName: l.company,
+        contactName: l.contactName ?? null,
         website: l.website ?? null,
         city: l.location ?? null,
         country: country ?? null,
@@ -229,6 +230,7 @@ export class ReachRepository {
         target: [schema.prospects.campaignId, schema.prospects.email],
         set: {
           companyName: sql`excluded.company_name`,
+          contactName: sql`excluded.contact_name`,
           website: sql`excluded.website`,
           city: sql`excluded.city`,
           country: sql`excluded.country`,

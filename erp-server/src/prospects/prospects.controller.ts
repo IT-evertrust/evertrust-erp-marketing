@@ -45,13 +45,17 @@ function parseDate(s?: string): Date | undefined {
   return Number.isNaN(d.getTime()) ? undefined : d;
 }
 
-// Map a prospect row to its HTTP DTO (timestamps → ISO strings).
-function toDto(r: ProspectRow): ProspectDto {
+// Map a prospect row to its HTTP DTO (timestamps → ISO strings). `nicheTargetName` is
+// the resolved niche display name (the board/detail pass it in; null when unresolved or
+// the prospect has no niche target).
+function toDto(r: ProspectRow, nicheTargetName: string | null = null): ProspectDto {
   return {
     id: r.id,
     organizationId: r.organizationId,
     campaignId: r.campaignId,
     nicheTargetId: r.nicheTargetId,
+    nicheTargetName,
+    contactName: r.contactName,
     email: r.email,
     companyName: r.companyName,
     website: r.website,
@@ -118,7 +122,9 @@ export class ProspectsController {
       offset: Number.isFinite(offset) ? offset : undefined,
     });
     return {
-      items: result.items.map(toDto),
+      items: result.items.map((r) =>
+        toDto(r, r.nicheTargetId ? result.nicheNames[r.nicheTargetId] ?? null : null),
+      ),
       total: result.total,
       statusCounts: result.statusCounts as ProspectListDto['statusCounts'],
       stageCounts: result.stageCounts as ProspectListDto['stageCounts'],
@@ -135,7 +141,7 @@ export class ProspectsController {
   ): Promise<ProspectDto & { campaignName: string | null; nicheTargetName: string | null }> {
     const row = await this.prospects.getForOrg(orgId, id);
     const names = await this.prospects.resolveNames(row);
-    return { ...toDto(row), ...names };
+    return { ...toDto(row, names.nicheTargetName), campaignName: names.campaignName };
   }
 
   // Manual status override from the UI (archive / re-open). org-scoped + audited
@@ -258,7 +264,7 @@ export class ProspectsController {
       snoozeDue: snoozeDue === 'true',
       limit: Number.isFinite(limit) ? limit : undefined,
     });
-    return rows.map(toDto);
+    return rows.map((r) => toDto(r));
   }
 
   // Partial update (status / snooze / followup / lastContacted / emailVerified /

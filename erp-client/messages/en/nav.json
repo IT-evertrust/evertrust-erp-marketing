@@ -8,7 +8,7 @@
   "sector": "Sector",
   "analytics": "Analytics",
   "reports": "Reports",
-  "general": "General",
+  "general": "Settings",
   "reachSettings": "Reach",
   "configuration": "Configuration",
   "userManagement": "User management",
@@ -17,7 +17,7 @@
   "group": {
     "rean": "R.E.A.N. Sequence",
     "insights": "Insights",
-    "settings": "Settings"
+    "settings": "System"
   },
   "subtitle": {
     "dashboard": "Report · All phases · Last 30 days",
@@ -28,7 +28,7 @@
     "sector": "Segmentation · Targeting",
     "analytics": "Performance · Metrics",
     "reports": "Exports · Summaries",
-    "general": "Account · Display · Preferences",
+    "general": "Sender · Sending · Integrations",
     "reachSettings": "Reach send policy · Test send",
     "configuration": "Sending · Integrations · Branding",
     "userManagement": "Roles · Access",

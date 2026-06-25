@@ -135,6 +135,7 @@ export async function createReachAim(
     niche: values.niche,
     country: values.country || undefined,
     region: values.region,
+    segment: values.segment || undefined,
     project: values.project || undefined,
     gmailLabel: values.gmailLabel || undefined,
     whatsappNumber: values.whatsappNumber || undefined,
@@ -275,17 +276,21 @@ function mapAimStatus(status: AimStatus): CampaignStatus {
 }
 
 function mapAim(a: BackendAim): ReachCampaignView {
+  const stats = a.stats ?? EMPTY_STATS;
+  const sent = stats.cold.sent + stats.followup.sent + stats.final.sent;
+
   return {
     id: a.id,
     name: a.name,
     niche: a.niche,
     region: a.region,
     companies: a.companies,
+    sent,
     status: mapAimStatus(a.status),
     aimStatus: a.status,
     templates: a.templates,
     newsBrief: a.newsBrief,
-    stats: a.stats ?? EMPTY_STATS,
+    stats,
     autoSend: a.autoSend,
     sender: a.sender,
     usingOrgDefault: a.usingOrgDefault ?? false,

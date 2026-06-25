@@ -1,61 +1,20 @@
 'use client';
 
+// Render on demand, never prerendered: the org's settings are fetched in the
+// browser (TanStack Query). General settings are open to any user with
+// campaigns:read; the component shows its own loading skeleton off useOrgSettings().
+// GrowthShell chrome comes from the (growth) route-group layout.
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useTheme } from 'next-themes';
-import { useLocale, useTranslations } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
-import { Building2, Languages, Monitor, Moon, Sun, Rows3, Rows4 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-import { useMe } from '@/hooks/use-auth';
+import type { UpdateOrgSettingsDto } from '@evertrust/shared';
+import { useOrgSettings, useUpdateOrgSettings } from '@/hooks/use-settings';
 import { GrowthCard } from '@/modules/(growth)/shared';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  getDensity,
-  getLandingPath,
-  LANDING_OPTIONS,
-  setDensity,
-  setLandingPath,
-  type Density,
-} from '@/lib/preferences';
-import { cn } from '@/lib/utils';
-
-// The theme choices next-themes understands. "system" follows the OS; the other
-// two force a palette (globals.css defines :root = light and .dark = dark).
-// labelKey indexes settings.general.appearance.* (resolved at render).
-const THEME_OPTIONS: { value: string; labelKey: string; icon: LucideIcon }[] = [
-  { value: 'system', labelKey: 'system', icon: Monitor },
-  { value: 'light', labelKey: 'light', icon: Sun },
-  { value: 'dark', labelKey: 'dark', icon: Moon },
-];
-
-// Density choices. "comfortable" is the app default (--spacing 0.25rem);
-// "compact" tightens the global spacing scale to 0.2rem (see globals.css).
-// labelKey indexes settings.general.display.* (resolved at render).
-const DENSITY_OPTIONS: { value: Density; labelKey: string; icon: LucideIcon }[] = [
-  { value: 'comfortable', labelKey: 'comfortable', icon: Rows3 },
-  { value: 'compact', labelKey: 'compact', icon: Rows4 },
-];
-
-// The two supported app locales. labelKey indexes settings.general.language.*.
-const LANGUAGE_OPTIONS: { value: 'en' | 'de'; labelKey: string }[] = [
-  { value: 'en', labelKey: 'english' },
-  { value: 'de', labelKey: 'german' },
-];
-
-const LANDING_LABELS: Record<string, string> = Object.fromEntries(
-  LANDING_OPTIONS.map((o) => [o.path, o.label]),
-);
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 
 // Shared eyebrow label — uppercase, tracked, muted. Matches the GrowthShell idiom.
 function Eyebrow({ children }: { children: React.ReactNode }) {
@@ -66,292 +25,393 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
   );
 }
 
-// A segmented radio group rendered in the GrowthShell pill idiom: a bordered,
-// muted track with the active option lifted onto the card surface.
-function SegmentedGroup({
-  ariaLabel,
-  ariaLabelledBy,
-  columns,
-  children,
+// The boolean fields surfaced as toggles (Integrations + Engine Mode cards).
+type ToggleField =
+  | 'gmailEnabled'
+  | 'calendarEnabled'
+  | 'readAiEnabled'
+  | 'sheetsEnabled'
+  | 'approvalBeforeSending'
+  | 'autoSend'
+  | 'weeklyReportEnabled';
+
+// A labelled Switch row: title + subtitle on the left, the toggle on the right.
+function ToggleRow({
+  id,
+  label,
+  hint,
+  checked,
+  disabled,
+  onCheckedChange,
 }: {
-  ariaLabel?: string;
-  ariaLabelledBy?: string;
-  columns: 2 | 3;
-  children: React.ReactNode;
+  id: string;
+  label: string;
+  hint: string;
+  checked: boolean;
+  disabled?: boolean;
+  onCheckedChange: (next: boolean) => void;
 }) {
   return (
-    <div
-      role="radiogroup"
-      aria-label={ariaLabel}
-      aria-labelledby={ariaLabelledBy}
-      className={cn(
-        'grid max-w-sm gap-1.5 rounded-[10px] border border-sidebar-border bg-muted p-1.5',
-        columns === 3 ? 'grid-cols-3' : 'grid-cols-2',
-      )}
-    >
-      {children}
+    <div className="flex items-start justify-between gap-4">
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <Label htmlFor={id} className="text-[13px] font-medium">
+          {label}
+        </Label>
+        <p className="text-xs text-muted-foreground">{hint}</p>
+      </div>
+      <Switch
+        id={id}
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={onCheckedChange}
+      />
     </div>
   );
 }
 
-function SegmentedOption({
-  active,
-  onClick,
-  icon: Icon,
-  label,
-  stacked = true,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: LucideIcon;
-  label: string;
-  stacked?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={active}
-      onClick={onClick}
-      className={cn(
-        'flex items-center gap-1.5 rounded-md px-3 py-2.5 text-xs font-medium transition-colors',
-        stacked ? 'flex-col' : 'justify-center',
-        active
-          ? 'bg-card text-foreground shadow-sm'
-          : 'text-muted-foreground hover:text-foreground',
-      )}
-    >
-      <Icon className="size-4" />
-      {label}
-    </button>
-  );
-}
-
-// General settings = app/website preferences for the signed-in user. NOT the user
-// profile (name/role/org/log-out) — that lives in the avatar menu → /users/[id].
-// Surfaces: Appearance (theme), Display (landing + density), and Language
-// (English / Deutsch, persisted in the NEXT_LOCALE cookie).
+// Growth-Engine settings: sender identity, sending parameters, integration +
+// engine-mode toggles. Loads via useOrgSettings(); switches PATCH on flip, text /
+// number inputs PATCH on blur when their value changed. Local state is seeded from
+// the query so typing stays smooth, re-seeded whenever the cache changes.
 export function GeneralSettings() {
   const t = useTranslations('settings');
-  const locale = useLocale();
-  const router = useRouter();
-  const me = useMe();
-  const { theme, setTheme } = useTheme();
-  // next-themes only resolves the active theme on the client, so the selected value
-  // is unknown during SSR / first paint. Gate the controls on `mounted` to avoid a
-  // hydration mismatch (render a skeleton until we know the real value). The same
-  // gate covers the localStorage-backed display preferences below.
-  const [mounted, setMounted] = useState(false);
-  // Display preferences live in localStorage (see @/lib/preferences). Seed them
-  // after mount so SSR and first paint render the defaults, then reconcile.
-  const [landing, setLanding] = useState(() => getLandingPath());
-  const [density, setDensityState] = useState<Density>('comfortable');
+  const settings = useOrgSettings();
+  const update = useUpdateOrgSettings();
+  const data = settings.data;
+
+  // Local, smooth-typing copies of the text/number fields. Booleans read straight
+  // from the query (they only change via an immediate PATCH, never local typing).
+  const [senderName, setSenderName] = useState('');
+  const [senderEmail, setSenderEmail] = useState('');
+  const [signature, setSignature] = useState('');
+  const [dailySendCap, setDailySendCap] = useState('');
+  const [sendingHoursStart, setSendingHoursStart] = useState('');
+  const [sendingHoursEnd, setSendingHoursEnd] = useState('');
+  const [followupRound2Days, setFollowupRound2Days] = useState('');
+  const [followupRound3Days, setFollowupRound3Days] = useState('');
+
+  // Re-seed the form whenever the query data changes (initial load + after a save,
+  // since the PATCH response is written back into the cache).
   useEffect(() => {
-    setMounted(true);
-    setLanding(getLandingPath());
-    setDensityState(getDensity());
-  }, []);
+    if (!data) return;
+    setSenderName(data.senderName ?? '');
+    setSenderEmail(data.senderEmail ?? '');
+    setSignature(data.signature ?? '');
+    setDailySendCap(String(data.dailySendCap));
+    setSendingHoursStart(data.sendingHoursStart);
+    setSendingHoursEnd(data.sendingHoursEnd);
+    setFollowupRound2Days(String(data.followupRound2Days));
+    setFollowupRound3Days(String(data.followupRound3Days));
+  }, [data]);
 
-  // Persist the chosen landing page; it takes effect on the next sign-in
-  // (useGoogleLogin redirects to getLandingPath()).
-  function handleLandingChange(path: string) {
-    setLanding(path);
-    setLandingPath(path);
-    toast.success(
-      t('general.display.landingToast', { label: LANDING_LABELS[path] ?? path }),
-    );
+  // Fire a one-field PATCH and toast the result. Returns nothing — callers ignore.
+  function patch(field: UpdateOrgSettingsDto) {
+    update.mutate(field, {
+      onSuccess: () => toast.success(t('system.toastSaved')),
+      onError: (err) => toast.error(err.message || t('system.toastError')),
+    });
   }
 
-  // Apply density immediately (so the spacing change is visible without a
-  // reload) and persist it. "comfortable" is the default → drop the attribute.
-  function handleDensityChange(value: Density) {
-    setDensityState(value);
-    setDensity(value);
-    if (value === 'comfortable') {
-      delete document.documentElement.dataset.density;
-    } else {
-      document.documentElement.dataset.density = value;
+  // A toggle flip: PATCH just that one boolean immediately.
+  function handleToggle(field: ToggleField, next: boolean) {
+    patch({ [field]: next });
+  }
+
+  // A nullable-text blur (senderName / senderEmail / signature): trim, send null
+  // when emptied, and only PATCH when the value actually changed.
+  function commitNullableText(
+    field: 'senderName' | 'senderEmail' | 'signature',
+    raw: string,
+  ) {
+    if (!data) return;
+    const trimmed = raw.trim();
+    const next = trimmed === '' ? null : trimmed;
+    if (next === data[field]) return;
+    patch({ [field]: next });
+  }
+
+  // A number blur: parse, ignore an unparseable/empty entry (re-seed from data),
+  // and only PATCH when the integer value changed.
+  function commitNumber(
+    field:
+      | 'dailySendCap'
+      | 'followupRound2Days'
+      | 'followupRound3Days',
+    raw: string,
+    reseed: (value: string) => void,
+  ) {
+    if (!data) return;
+    const n = Number.parseInt(raw.trim(), 10);
+    if (Number.isNaN(n)) {
+      reseed(String(data[field]));
+      return;
     }
-    toast.success(
-      t('general.display.densityToast', {
-        label: t(`general.display.${value}`),
-      }),
-    );
+    if (n === data[field]) return;
+    patch({ [field]: n });
   }
 
-  // Persist the chosen UI language in the NEXT_LOCALE cookie (cookie/preference
-  // mode — no locale URL segment; see src/i18n/request.ts). router.refresh()
-  // re-runs the server render so the new messages take effect immediately.
-  function handleLanguageChange(value: string) {
-    if (value === locale) return;
-    document.cookie = `NEXT_LOCALE=${value}; path=/; max-age=31536000; samesite=lax`;
-    router.refresh();
-    toast.success(
-      t('general.language.toast', {
-        label: t(`general.language.${value === 'de' ? 'german' : 'english'}`),
-      }),
+  // An HH:MM time blur: only PATCH when it changed and matches the HH:MM shape;
+  // otherwise re-seed from data so an invalid entry doesn't stick in the field.
+  function commitTime(
+    field: 'sendingHoursStart' | 'sendingHoursEnd',
+    raw: string,
+    reseed: (value: string) => void,
+  ) {
+    if (!data) return;
+    const trimmed = raw.trim();
+    if (trimmed === data[field]) return;
+    if (!/^\d{2}:\d{2}$/.test(trimmed)) {
+      reseed(data[field]);
+      return;
+    }
+    patch({ [field]: trimmed });
+  }
+
+  if (settings.isLoading || !data) {
+    return (
+      <main className="px-6 py-5 duration-300 animate-in fade-in">
+        <div className="grid gap-4 lg:grid-cols-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-64 w-full rounded-[10px]" />
+          ))}
+        </div>
+      </main>
     );
   }
 
   return (
     <main className="px-6 py-5 duration-300 animate-in fade-in">
-      <div className="flex flex-col gap-4">
-        {/* Organization profile — the org name is REAL (resolved from the signed-in
-            session via useMe). There is no org-update API yet, so the name is shown
-            read-only and the timezone is a placeholder default; both are flagged
-            "coming soon" rather than faking a save. */}
-        <GrowthCard
-          title={t('general.org.title')}
-          hint={
-            <span className="inline-flex items-center gap-1.5">
-              <Building2 className="size-3.5" />
-              {t('general.org.description')}
-            </span>
-          }
-        >
-          <div className="flex max-w-md flex-col gap-5">
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Card — Sender Identity */}
+        <GrowthCard title={t('system.sender.title')}>
+          <div className="flex flex-col gap-5">
+            <p className="text-xs text-muted-foreground">
+              {t('system.sender.description')}
+            </p>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="org-name">
-                <Eyebrow>{t('general.org.nameLabel')}</Eyebrow>
+              <Label htmlFor="sender-name">
+                <Eyebrow>{t('system.sender.nameLabel')}</Eyebrow>
               </Label>
-              {me.isLoading ? (
-                <Skeleton className="h-9 w-full rounded-md" />
-              ) : (
-                <Input
-                  id="org-name"
-                  value={me.data?.organizationName ?? ''}
-                  placeholder={t('general.org.namePlaceholder')}
-                  readOnly
-                  aria-readonly
-                />
-              )}
-              <p className="text-xs text-muted-foreground">
-                {t('general.org.nameHint')}
-              </p>
+              <Input
+                id="sender-name"
+                autoComplete="off"
+                placeholder={t('system.sender.namePlaceholder')}
+                value={senderName}
+                onChange={(e) => setSenderName(e.target.value)}
+                onBlur={() => commitNullableText('senderName', senderName)}
+              />
             </div>
-
             <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="org-timezone">
-                  <Eyebrow>{t('general.org.timezoneLabel')}</Eyebrow>
-                </Label>
-                <Badge variant="secondary" className="text-[10px]">
-                  {t('general.org.comingSoon')}
-                </Badge>
-              </div>
-              <Select value="Europe/Berlin" disabled>
-                <SelectTrigger id="org-timezone" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Europe/Berlin">Europe/Berlin</SelectItem>
-                  <SelectItem value="Europe/London">Europe/London</SelectItem>
-                  <SelectItem value="UTC">UTC</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                {t('general.org.timezoneHint')}
-              </p>
+              <Label htmlFor="sender-email">
+                <Eyebrow>{t('system.sender.emailLabel')}</Eyebrow>
+              </Label>
+              <Input
+                id="sender-email"
+                type="email"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder={t('system.sender.emailPlaceholder')}
+                value={senderEmail}
+                onChange={(e) => setSenderEmail(e.target.value)}
+                onBlur={() => commitNullableText('senderEmail', senderEmail)}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="sender-signature">
+                <Eyebrow>{t('system.sender.signatureLabel')}</Eyebrow>
+              </Label>
+              <Textarea
+                id="sender-signature"
+                rows={3}
+                placeholder={t('system.sender.signaturePlaceholder')}
+                value={signature}
+                onChange={(e) => setSignature(e.target.value)}
+                onBlur={() => commitNullableText('signature', signature)}
+              />
             </div>
           </div>
         </GrowthCard>
 
-        <GrowthCard title={t('general.appearance.title')}>
-          <p className="mb-4 text-xs text-muted-foreground">
-            {t('general.appearance.description')}
-          </p>
-          {!mounted ? (
-            <Skeleton className="h-[68px] w-full max-w-sm rounded-[10px]" />
-          ) : (
-            <SegmentedGroup
-              ariaLabel={t('general.appearance.ariaLabel')}
-              columns={3}
-            >
-              {THEME_OPTIONS.map((opt) => (
-                <SegmentedOption
-                  key={opt.value}
-                  // Default to "dark" when no explicit choice is stored yet.
-                  active={(theme ?? 'dark') === opt.value}
-                  onClick={() => setTheme(opt.value)}
-                  icon={opt.icon}
-                  label={t(`general.appearance.${opt.labelKey}`)}
+        {/* Card — Sending Parameters */}
+        <GrowthCard title={t('system.sending.title')}>
+          <div className="flex flex-col gap-5">
+            <p className="text-xs text-muted-foreground">
+              {t('system.sending.description')}
+            </p>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="daily-cap">
+                <Eyebrow>{t('system.sending.dailyCapLabel')}</Eyebrow>
+              </Label>
+              <Input
+                id="daily-cap"
+                type="number"
+                min={1}
+                max={100000}
+                inputMode="numeric"
+                autoComplete="off"
+                value={dailySendCap}
+                onChange={(e) => setDailySendCap(e.target.value)}
+                onBlur={() =>
+                  commitNumber('dailySendCap', dailySendCap, setDailySendCap)
+                }
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="hours-start">
+                  <Eyebrow>{t('system.sending.hoursStartLabel')}</Eyebrow>
+                </Label>
+                <Input
+                  id="hours-start"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="09:00"
+                  value={sendingHoursStart}
+                  onChange={(e) => setSendingHoursStart(e.target.value)}
+                  onBlur={() =>
+                    commitTime(
+                      'sendingHoursStart',
+                      sendingHoursStart,
+                      setSendingHoursStart,
+                    )
+                  }
                 />
-              ))}
-            </SegmentedGroup>
-          )}
-        </GrowthCard>
-
-        <GrowthCard title={t('general.display.title')}>
-          <p className="mb-4 text-xs text-muted-foreground">
-            {t('general.display.description')}
-          </p>
-          {!mounted ? (
-            <Skeleton className="h-[68px] w-full max-w-sm rounded-[10px]" />
-          ) : (
-            <div className="flex flex-col gap-6">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="landing-page">
-                  <Eyebrow>{t('general.display.landingLabel')}</Eyebrow>
-                </Label>
-                <Select value={landing} onValueChange={handleLandingChange}>
-                  <SelectTrigger id="landing-page" className="max-w-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LANDING_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.path} value={opt.path}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  {t('general.display.landingHint')}
-                </p>
               </div>
-
               <div className="flex flex-col gap-2">
-                <Label id="density-label">
-                  <Eyebrow>{t('general.display.densityLabel')}</Eyebrow>
+                <Label htmlFor="hours-end">
+                  <Eyebrow>{t('system.sending.hoursEndLabel')}</Eyebrow>
                 </Label>
-                <SegmentedGroup ariaLabelledBy="density-label" columns={2}>
-                  {DENSITY_OPTIONS.map((opt) => (
-                    <SegmentedOption
-                      key={opt.value}
-                      active={density === opt.value}
-                      onClick={() => handleDensityChange(opt.value)}
-                      icon={opt.icon}
-                      label={t(`general.display.${opt.labelKey}`)}
-                    />
-                  ))}
-                </SegmentedGroup>
-                <p className="text-xs text-muted-foreground">
-                  {t('general.display.densityHint')}
-                </p>
+                <Input
+                  id="hours-end"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="17:00"
+                  value={sendingHoursEnd}
+                  onChange={(e) => setSendingHoursEnd(e.target.value)}
+                  onBlur={() =>
+                    commitTime(
+                      'sendingHoursEnd',
+                      sendingHoursEnd,
+                      setSendingHoursEnd,
+                    )
+                  }
+                />
               </div>
             </div>
-          )}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="round2">
+                  <Eyebrow>{t('system.sending.round2Label')}</Eyebrow>
+                </Label>
+                <Input
+                  id="round2"
+                  type="number"
+                  min={0}
+                  max={365}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={followupRound2Days}
+                  onChange={(e) => setFollowupRound2Days(e.target.value)}
+                  onBlur={() =>
+                    commitNumber(
+                      'followupRound2Days',
+                      followupRound2Days,
+                      setFollowupRound2Days,
+                    )
+                  }
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="round3">
+                  <Eyebrow>{t('system.sending.round3Label')}</Eyebrow>
+                </Label>
+                <Input
+                  id="round3"
+                  type="number"
+                  min={0}
+                  max={365}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={followupRound3Days}
+                  onChange={(e) => setFollowupRound3Days(e.target.value)}
+                  onBlur={() =>
+                    commitNumber(
+                      'followupRound3Days',
+                      followupRound3Days,
+                      setFollowupRound3Days,
+                    )
+                  }
+                />
+              </div>
+            </div>
+          </div>
         </GrowthCard>
 
-        <GrowthCard title={t('general.language.title')}>
-          <p className="mb-4 text-xs text-muted-foreground">
-            {t('general.language.description')}
-          </p>
-          <SegmentedGroup
-            ariaLabel={t('general.language.ariaLabel')}
-            columns={2}
-          >
-            {LANGUAGE_OPTIONS.map((opt) => (
-              <SegmentedOption
-                key={opt.value}
-                active={locale === opt.value}
-                onClick={() => handleLanguageChange(opt.value)}
-                icon={Languages}
-                label={t(`general.language.${opt.labelKey}`)}
-                stacked={false}
-              />
-            ))}
-          </SegmentedGroup>
+        {/* Card — Integrations */}
+        <GrowthCard title={t('system.integrations.title')}>
+          <div className="flex flex-col gap-5">
+            <ToggleRow
+              id="gmail-enabled"
+              label={t('system.integrations.gmailLabel')}
+              hint={t('system.integrations.gmailHint')}
+              checked={data.gmailEnabled}
+              onCheckedChange={(next) => handleToggle('gmailEnabled', next)}
+            />
+            <ToggleRow
+              id="calendar-enabled"
+              label={t('system.integrations.calendarLabel')}
+              hint={t('system.integrations.calendarHint')}
+              checked={data.calendarEnabled}
+              onCheckedChange={(next) => handleToggle('calendarEnabled', next)}
+            />
+            <ToggleRow
+              id="read-ai-enabled"
+              label={t('system.integrations.readAiLabel')}
+              hint={t('system.integrations.readAiHint')}
+              checked={data.readAiEnabled}
+              onCheckedChange={(next) => handleToggle('readAiEnabled', next)}
+            />
+            <ToggleRow
+              id="sheets-enabled"
+              label={t('system.integrations.sheetsLabel')}
+              hint={t('system.integrations.sheetsHint')}
+              checked={data.sheetsEnabled}
+              onCheckedChange={(next) => handleToggle('sheetsEnabled', next)}
+            />
+          </div>
+        </GrowthCard>
+
+        {/* Card — Engine Mode */}
+        <GrowthCard title={t('system.engine.title')}>
+          <div className="flex flex-col gap-5">
+            <ToggleRow
+              id="approval-before-sending"
+              label={t('system.engine.approvalLabel')}
+              hint={t('system.engine.approvalHint')}
+              checked={data.approvalBeforeSending}
+              onCheckedChange={(next) =>
+                handleToggle('approvalBeforeSending', next)
+              }
+            />
+            <ToggleRow
+              id="auto-send"
+              label={t('system.engine.autoSendLabel')}
+              hint={t('system.engine.autoSendHint')}
+              checked={data.autoSend}
+              onCheckedChange={(next) => handleToggle('autoSend', next)}
+            />
+            <ToggleRow
+              id="weekly-report"
+              label={t('system.engine.weeklyReportLabel')}
+              hint={t('system.engine.weeklyReportHint')}
+              checked={data.weeklyReportEnabled}
+              onCheckedChange={(next) =>
+                handleToggle('weeklyReportEnabled', next)
+              }
+            />
+          </div>
         </GrowthCard>
       </div>
     </main>
