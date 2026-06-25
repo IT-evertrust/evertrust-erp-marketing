@@ -73,6 +73,50 @@ export class GoogleAuthService {
     return data ? `${base} :: ${JSON.stringify(data)}` : base;
   }
 
+  // Decode + validate (OFFLINE) the id_token returned by the authorization-code
+  // exchange. In the code flow the id_token is delivered DIRECTLY by Google's token
+  // endpoint over a TLS-authenticated server-to-server call, so it is already trusted —
+  // re-verifying its signature against Google's published certs is redundant (OpenID
+  // Connect Core §3.1.3.7). We deliberately do NOT fetch certs here: some hosts' egress
+  // IPs get a 403 from www.googleapis.com/oauth2/v1/certs, which would otherwise fail
+  // every login. Audience, issuer and expiry are still checked (all offline) as defence
+  // in depth. NOT used by the One-Tap path (loginWithGoogle), where the token arrives via
+  // the untrusted client and MUST be signature-verified against Google's certs.
+  private decodeVerifiedIdToken(idToken: string): VerifiedGoogleUser {
+    const parts = idToken.split('.');
+    if (parts.length !== 3) throw new Error('Malformed id_token');
+    const claims = JSON.parse(
+      Buffer.from(parts[1]!, 'base64url').toString('utf8'),
+    ) as {
+      email?: string;
+      email_verified?: boolean | string;
+      name?: string;
+      aud?: string;
+      iss?: string;
+      exp?: number;
+    };
+
+    if (claims.aud !== this.config.get('GOOGLE_CLIENT_ID')) {
+      throw new Error('id_token audience mismatch');
+    }
+    if (
+      claims.iss !== 'accounts.google.com' &&
+      claims.iss !== 'https://accounts.google.com'
+    ) {
+      throw new Error('id_token issuer mismatch');
+    }
+    if (typeof claims.exp === 'number' && claims.exp * 1000 <= Date.now()) {
+      throw new Error('id_token expired');
+    }
+
+    return {
+      email: claims.email ?? '',
+      emailVerified:
+        claims.email_verified === true || claims.email_verified === 'true',
+      name: claims.name ?? '',
+    };
+  }
+
   // GIS ID-token path: the client posts the Google ID token (rendered button /
   // One Top). Verify it, then provision. The code-exchange flow is NOT needed
   // here, so only GOOGLE_CLIENT_ID must be configured.
@@ -101,10 +145,10 @@ export class GoogleAuthService {
   // path this exchange needs the client SECRET, so BOTH GOOGLE_CLIENT_ID and
   // GOOGLE_CLIENT_SECRET must be configured (503 otherwise). The redirect_uri is
   // the literal 'postmessage' — the GIS popup convention; no Console redirect-URI
-  // registration is required for it. After exchange we verify the returned
-  // id_token with the SAME TokenVerifier (audience = GOOGLE_CLIENT_ID), then
-  // share provisionAndIssue with the ID-token path. Any exchange/verify failure
-  // maps to a single generic 401.
+  // registration is required for it. The id_token comes back DIRECTLY from Google's
+  // token endpoint over TLS, so we trust it and decode it OFFLINE (decodeVerifiedIdToken)
+  // rather than re-fetching Google's certs — then share provisionAndIssue with the
+  // ID-token path. Any exchange/decode failure maps to a single generic 401.
   async loginWithGoogleCode(code: string): Promise<LoginResponseDto> {
     const clientId = this.config.get('GOOGLE_CLIENT_ID');
     const clientSecret = this.config.get('GOOGLE_CLIENT_SECRET');
@@ -121,8 +165,10 @@ export class GoogleAuthService {
       });
       const idToken = tokens.id_token;
       if (!idToken) throw new Error('No id_token in token response');
-      // Verify the exchanged ID token exactly as the idToken path does.
-      verified = await this.verifier.verify(idToken);
+      // The id_token came DIRECTLY from Google's token endpoint over TLS, so it is
+      // trusted — decode + validate it OFFLINE (no signing-cert fetch, which some host
+      // egress IPs, e.g. Render, get a 403 on from www.googleapis.com/oauth2/v1/certs).
+      verified = this.decodeVerifiedIdToken(idToken);
     } catch (err) {
       // Bad/expired code, exchange failure, or invalid id_token — all map to a
       // single generic 401 so we don't leak which check failed. Log the real reason
