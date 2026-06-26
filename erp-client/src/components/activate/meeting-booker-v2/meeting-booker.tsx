@@ -20,6 +20,7 @@ import {
   formatClockInTimeZone,
   getIsoWeekNumber,
   getVisualRangeForDateKey,
+  getZonedParts,
   isValidDate,
   overlapsDateKey,
   parseDateKey,
@@ -36,6 +37,14 @@ const HOUR_PX = 56;
 const DAY_HOURS = 24;
 const WORK_DAYS = 5; // Mon–Fri
 const OPEN_SCROLL_TOP = 7 * HOUR_PX - 10;
+// Floor on a rendered event card so a very short meeting is still readable/clickable.
+const MIN_EVENT_PX = 24;
+
+// The fixed SECONDARY time scale shown beside the org's primary zone. `Etc/GMT-7` is
+// a DST-free UTC+7 (POSIX inverts the sign, so "GMT-7" === UTC+7 === "GMT+7" to the
+// user). Labels are still derived from the real instant per gridline, so the column
+// stays correct even when the primary zone crosses a DST boundary.
+const SECONDARY_TZ = 'Etc/GMT-7';
 
 const HOUR_LABELS = Array.from({ length: DAY_HOURS }, (_, n) =>
   n === 0 ? '12 AM' : n < 12 ? `${n} AM` : n === 12 ? '12 PM' : `${n - 12} PM`,
@@ -62,10 +71,52 @@ type AccountMeta = {
 type EventPosition = {
   event: AccountEvent;
   top: number;
+  height: number;
   time: string;
   detail: string;
   color: string;
 };
+
+type LaidEvent = EventPosition & { lane: number; lanes: number };
+
+// Side-by-side layout for overlapping events (a sweep line over [top, top+height]).
+// Events that share any vertical span are packed into adjacent lanes and split the
+// column width; a clean gap starts a fresh cluster so back-to-back meetings each get
+// the full width. Without this, concurrent events stack on top of one another and the
+// lower one is hidden (the 16:00/16:30 collision in the screenshot).
+function assignColumns<T extends { top: number; height: number }>(
+  items: T[],
+): Array<T & { lane: number; lanes: number }> {
+  const sorted = [...items].sort((a, b) => a.top - b.top || a.height - b.height);
+  const laid: Array<T & { lane: number; lanes: number }> = [];
+  let cluster: Array<T & { lane: number; lanes: number }> = [];
+  let clusterBottom = -Infinity;
+  let laneEnds: number[] = [];
+
+  const closeCluster = () => {
+    const lanes = laneEnds.length || 1;
+    for (const entry of cluster) entry.lanes = lanes;
+    cluster = [];
+    laneEnds = [];
+  };
+
+  for (const item of sorted) {
+    // No overlap with anything still open → freeze the current cluster's lane count.
+    if (cluster.length > 0 && item.top >= clusterBottom) {
+      closeCluster();
+      clusterBottom = -Infinity;
+    }
+    let lane = laneEnds.findIndex((end) => end <= item.top);
+    if (lane === -1) lane = laneEnds.length;
+    laneEnds[lane] = item.top + item.height;
+    const entry = { ...item, lane, lanes: 1 } as T & { lane: number; lanes: number };
+    cluster.push(entry);
+    laid.push(entry);
+    clusterBottom = Math.max(clusterBottom, item.top + item.height);
+  }
+  if (cluster.length > 0) closeCluster();
+  return laid;
+}
 
 function weekdayShort(dateKey: string): string {
   return new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', weekday: 'short' })
@@ -198,9 +249,9 @@ export function MeetingBookerV2() {
     [calQuery.data?.events, accountFilter],
   );
 
-  const eventsByDay = useMemo<EventPosition[][]>(() => {
-    return days.map((dayKey) =>
-      events
+  const eventsByDay = useMemo<LaidEvent[][]>(() => {
+    return days.map((dayKey) => {
+      const positions: EventPosition[] = events
         .filter((row) => overlapsDateKey(row.startDate, row.endDate, dayKey, primaryTz))
         .map((row) => {
           const visual = getVisualRangeForDateKey(
@@ -214,17 +265,35 @@ export function MeetingBookerV2() {
             attendees.length > 0
               ? attendees.join(', ')
               : (row.event.location ?? '').trim();
+          // Height tracks the meeting's real duration (clamped to a readable floor),
+          // so a 30-min call no longer looks like a 1-hour block.
+          const height = Math.max(
+            MIN_EVENT_PX,
+            ((visual.endMinute - visual.startMinute) / 60) * HOUR_PX,
+          );
           return {
             event: row.event,
             top: (visual.startMinute / 60) * HOUR_PX,
+            height,
             time: formatClockInTimeZone(row.startDate, primaryTz),
             detail,
             color: colorByAccount.get(row.event.accountId) ?? '#15171c',
           };
-        })
-        .sort((a, b) => a.top - b.top),
-    );
+        });
+      return assignColumns(positions);
+    });
   }, [days, events, primaryTz, colorByAccount]);
+
+  // GMT+7 scale labels, one per hour gridline, derived from the actual instant at
+  // each primary-zone hour this week → DST-correct alongside the primary rail.
+  const secondaryHourLabels = useMemo(
+    () =>
+      HOUR_LABELS.map((_, n) => {
+        const instant = zonedTimeToUtcDate(mondayKey, n, 0, primaryTz);
+        return HOUR_LABELS[getZonedParts(instant, SECONDARY_TZ).hour] ?? '';
+      }),
+    [mondayKey, primaryTz],
+  );
 
   useEffect(() => {
     const node = bodyRef.current;
@@ -344,8 +413,13 @@ export function MeetingBookerV2() {
         <div className="flex p-0">
           <div className="flex h-[calc(100vh-300px)] min-h-[360px] w-full flex-col">
             <div className="flex flex-none border-b border-[#e4e7eb] pr-[9px]">
-              <div className="flex w-[58px] flex-none items-end justify-end pb-[7px] pr-2 text-[9.5px] font-bold tracking-[0.06em] text-[#959ca7]">
-                {zoneShortLabel(primaryTz)}
+              <div className="flex w-[94px] flex-none items-end pb-[7px] text-[9.5px] font-bold tracking-[0.06em] text-[#959ca7]">
+                <div className="flex-1 pr-2 text-right">
+                  {zoneShortLabel(primaryTz)}
+                </div>
+                <div className="flex-1 border-l border-[#eceef1] pr-2 text-right">
+                  {zoneShortLabel(SECONDARY_TZ)}
+                </div>
               </div>
               {days.map((dayKey, i) => {
                 const count = eventsByDay[i]?.length ?? 0;
@@ -372,16 +446,29 @@ export function MeetingBookerV2() {
               ref={bodyRef}
               className="flex min-h-0 flex-1 items-start overflow-y-auto overflow-x-hidden py-[10px] [scrollbar-gutter:stable]"
             >
-              <div className="relative w-[58px] flex-none" style={{ height: DAY_HOURS * HOUR_PX }}>
-                {HOUR_LABELS.map((label, n) => (
-                  <div
-                    key={label}
-                    className="absolute right-2 -translate-y-1/2 whitespace-nowrap text-[9.5px] font-bold text-[#959ca7]"
-                    style={{ top: n * HOUR_PX }}
-                  >
-                    {label}
-                  </div>
-                ))}
+              <div className="flex w-[94px] flex-none" style={{ height: DAY_HOURS * HOUR_PX }}>
+                <div className="relative flex-1">
+                  {HOUR_LABELS.map((label, n) => (
+                    <div
+                      key={label}
+                      className="absolute right-2 -translate-y-1/2 whitespace-nowrap text-[9.5px] font-bold text-[#959ca7]"
+                      style={{ top: n * HOUR_PX }}
+                    >
+                      {label}
+                    </div>
+                  ))}
+                </div>
+                <div className="relative flex-1 border-l border-[#eceef1]">
+                  {secondaryHourLabels.map((label, n) => (
+                    <div
+                      key={n}
+                      className="absolute right-2 -translate-y-1/2 whitespace-nowrap text-[9.5px] font-bold text-[#b4bac3]"
+                      style={{ top: n * HOUR_PX }}
+                    >
+                      {label}
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {days.map((dayKey, i) => (
@@ -398,8 +485,14 @@ export function MeetingBookerV2() {
                       key={pos.event.id}
                       type="button"
                       onClick={() => setSelectedEvent(pos.event)}
-                      className="absolute left-[5px] right-[5px] z-[1] cursor-pointer overflow-hidden rounded-[6px] border border-l-2 border-[#d6dade] bg-[#eceef1] px-[7px] py-[3px] text-left transition-opacity hover:opacity-80"
-                      style={{ top: pos.top, height: HOUR_PX, borderLeftColor: pos.color }}
+                      className="absolute z-[1] flex cursor-pointer flex-col overflow-hidden rounded-[6px] border border-l-2 border-[#d6dade] bg-[#eceef1] px-[7px] py-[3px] text-left transition-opacity hover:opacity-80"
+                      style={{
+                        top: pos.top,
+                        height: pos.height,
+                        left: `calc(${(pos.lane / pos.lanes) * 100}% + 4px)`,
+                        width: `calc(${100 / pos.lanes}% - 8px)`,
+                        borderLeftColor: pos.color,
+                      }}
                       title={`${pos.time} · ${pos.event.title}${pos.detail ? ` · ${pos.detail}` : ''}`}
                     >
                       <div className="text-[9px] font-bold leading-[1.25] text-[#959ca7]">
@@ -408,7 +501,7 @@ export function MeetingBookerV2() {
                       <div className="truncate text-[10.5px] font-bold leading-[1.3] text-[#15171c]">
                         {pos.event.title}
                       </div>
-                      {pos.detail ? (
+                      {pos.detail && pos.height >= 44 ? (
                         <div className="truncate text-[9.5px] leading-[1.3] text-[#959ca7]">
                           {pos.detail}
                         </div>
