@@ -106,8 +106,7 @@
     "off": "Aus",
     "tomorrow": "Morgen 09:00",
     "chartTitle": "Gesendete E-Mails pro Tag",
-    "chartHint": "VERGANGEN & PROGNOSE · LIMIT 120 / TAG",
-    "limit": "LIMIT 120",
+    "chartHint": "VERGANGEN & PROGNOSE",
     "legend": {
       "sent": "Gesendet",
       "today": "Heute",

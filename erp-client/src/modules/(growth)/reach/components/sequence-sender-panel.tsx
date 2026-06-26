@@ -131,12 +131,6 @@ export function SequenceSenderPanel({
 
       <GrowthCard title={t('sender.chartTitle')} hint={t('sender.chartHint')}>
         <div className="relative h-[220px]">
-          <div className="absolute left-0 right-0 top-[28px] border-t border-dashed border-border">
-            <span className="absolute right-0 top-[-8px] bg-card px-2 text-[8px] font-bold text-muted-foreground">
-              {t('sender.limit')}
-            </span>
-          </div>
-
           <div className="flex h-[180px] items-end gap-3 overflow-x-auto pt-5">
             {dailySends.map((day) => {
               const height = Math.min(100, (day.value / 130) * 100);

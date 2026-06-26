@@ -106,8 +106,7 @@
     "off": "Off",
     "tomorrow": "Tomorrow 09:00",
     "chartTitle": "Emails sent per day",
-    "chartHint": "PAST & PROJECTED · LIMIT 120 / DAY",
-    "limit": "120 LIMIT",
+    "chartHint": "PAST & PROJECTED",
     "legend": {
       "sent": "Sent",
       "today": "Today",
