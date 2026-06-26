@@ -107,7 +107,6 @@ function NurtureView() {
           campaigns={campaigns}
           campaignId={campaignId}
           onCampaignChange={setCampaignId}
-          nicheId={campaigns.find((c) => c.id === campaignId)?.nicheId ?? null}
         />
       ) : (
         <div className="flex flex-col gap-4">
