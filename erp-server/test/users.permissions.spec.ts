@@ -6,9 +6,12 @@ import { AdminController } from '../src/users/admin.controller';
 import type { AuthUser } from '../src/auth/auth.types';
 
 // Binds the REAL user-management routes' @RequirePermissions to the role matrix.
-// Managing users — listing the directory + changing role/position/department — is
-// users:manage, the single most privileged permission, held by SUPER_ADMIN ONLY.
-// Even ADMIN (who holds every other permission) cannot manage users.
+// NOTE: per-feature RBAC is INTENTIONALLY DISABLED for this deployment (commit
+// c2a95a1 / ROLE_PERMISSIONS in @evertrust/shared) — every authenticated role now
+// holds the FULL permission set, INCLUDING users:manage, so any role may list and
+// update users. These assert that flat-access reality; the second block below keeps
+// the guard's explicit-per-user-override mechanism covered. Restoring the role
+// matrix reverts the first block to a SUPER_ADMIN-only split.
 const SUPER_ADMIN: AuthUser = {
   id: 'u-sa',
   role: 'SUPER_ADMIN',
@@ -46,14 +49,14 @@ const ctxUpdate = (u: AuthUser) =>
     u,
   );
 
-describe('user-management route permission gating (users:manage)', () => {
+describe('user-management route permission gating (RBAC disabled — flat access)', () => {
   const guard = new PermissionsGuard(new Reflector());
 
-  it('users:manage is held by SUPER_ADMIN only', () => {
+  it('every role now holds users:manage', () => {
     expect(hasPermission('SUPER_ADMIN', 'users:manage')).toBe(true);
-    expect(hasPermission('ADMIN', 'users:manage')).toBe(false);
-    expect(hasPermission('MANAGER', 'users:manage')).toBe(false);
-    expect(hasPermission('EMPLOYEE', 'users:manage')).toBe(false);
+    expect(hasPermission('ADMIN', 'users:manage')).toBe(true);
+    expect(hasPermission('MANAGER', 'users:manage')).toBe(true);
+    expect(hasPermission('EMPLOYEE', 'users:manage')).toBe(true);
   });
 
   it('allows SUPER_ADMIN to list and update users', () => {
@@ -61,15 +64,13 @@ describe('user-management route permission gating (users:manage)', () => {
     expect(guard.canActivate(ctxUpdate(SUPER_ADMIN))).toBe(true);
   });
 
-  it('forbids ADMIN from listing or updating users (lacks users:manage)', () => {
-    expect(() => guard.canActivate(ctxList(ADMIN))).toThrow(ForbiddenException);
-    expect(() => guard.canActivate(ctxUpdate(ADMIN))).toThrow(ForbiddenException);
+  it('allows ADMIN to list and update users (full access)', () => {
+    expect(guard.canActivate(ctxList(ADMIN))).toBe(true);
+    expect(guard.canActivate(ctxUpdate(ADMIN))).toBe(true);
   });
 
-  it('forbids EMPLOYEE from updating users', () => {
-    expect(() => guard.canActivate(ctxUpdate(EMPLOYEE))).toThrow(
-      ForbiddenException,
-    );
+  it('allows EMPLOYEE to update users (full access)', () => {
+    expect(guard.canActivate(ctxUpdate(EMPLOYEE))).toBe(true);
   });
 });
 
@@ -101,10 +102,9 @@ describe('PermissionsGuard honors per-user effective permissions', () => {
     );
   });
 
-  it('falls back to role defaults when no explicit set is attached', () => {
+  it('falls back to role defaults when no explicit set is attached (now full for every role)', () => {
     expect(guard.canActivate(ctxUpdate(SUPER_ADMIN))).toBe(true);
-    expect(() => guard.canActivate(ctxUpdate(EMPLOYEE))).toThrow(
-      ForbiddenException,
-    );
+    // RBAC disabled: EMPLOYEE's role defaults now include users:manage too.
+    expect(guard.canActivate(ctxUpdate(EMPLOYEE))).toBe(true);
   });
 });

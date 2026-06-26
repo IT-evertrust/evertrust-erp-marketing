@@ -1,13 +1,15 @@
-import { ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { hasPermission } from '@evertrust/shared';
 import { PermissionsGuard } from '../src/auth/guards/permissions.guard';
 import { ArsenalController } from '../src/arsenal/arsenal.controller';
 import type { AuthUser } from '../src/auth/auth.types';
 
-// Arsenal triggers reuse the campaigns RBAC: viewing runs is campaigns:read
-// (everyone operational), firing a stage is campaigns:write (MANAGER and up) — it
-// sends real outbound work, so EMPLOYEE can watch but not pull the trigger.
+// Arsenal triggers reuse the campaigns RBAC. NOTE: per-feature RBAC is
+// INTENTIONALLY DISABLED for this deployment (commit c2a95a1 / ROLE_PERMISSIONS in
+// @evertrust/shared) — every authenticated role holds the FULL permission set, so
+// an EMPLOYEE may fire a stage and edit settings just like a MANAGER. Restoring the
+// role matrix reverts this to a read-vs-write split.
 const EMPLOYEE: AuthUser = { id: 'u-emp', role: 'EMPLOYEE', organizationId: 'org1' };
 const MANAGER: AuthUser = { id: 'u-mgr', role: 'MANAGER', organizationId: 'org1' };
 
@@ -48,33 +50,31 @@ const ctxUpdateSettings = (u: AuthUser) =>
     u,
   );
 
-describe('arsenal route permission gating', () => {
+describe('arsenal route permission gating (RBAC disabled — flat access)', () => {
   const guard = new PermissionsGuard(new Reflector());
 
-  it('reuses the campaigns split (read=all, write=MANAGER and up)', () => {
+  it('every role now holds both campaigns:read and campaigns:write', () => {
     expect(hasPermission('EMPLOYEE', 'campaigns:read')).toBe(true);
-    expect(hasPermission('EMPLOYEE', 'campaigns:write')).toBe(false);
+    expect(hasPermission('EMPLOYEE', 'campaigns:write')).toBe(true);
     expect(hasPermission('MANAGER', 'campaigns:write')).toBe(true);
     expect(hasPermission('ADMIN', 'campaigns:write')).toBe(true);
   });
 
-  it('allows EMPLOYEE to view runs (campaigns:read)', () => {
+  it('allows EMPLOYEE to view runs', () => {
     expect(guard.canActivate(ctxListRuns(EMPLOYEE))).toBe(true);
   });
 
-  it('forbids EMPLOYEE from firing a stage (lacks campaigns:write)', () => {
-    expect(() => guard.canActivate(ctxRun(EMPLOYEE))).toThrow(ForbiddenException);
+  it('allows EMPLOYEE to fire a stage (full access)', () => {
+    expect(guard.canActivate(ctxRun(EMPLOYEE))).toBe(true);
   });
 
-  it('allows MANAGER to fire a stage (campaigns:write)', () => {
+  it('allows MANAGER to fire a stage', () => {
     expect(guard.canActivate(ctxRun(MANAGER))).toBe(true);
   });
 
-  it('lets EMPLOYEE read settings but not edit the daily time; MANAGER can edit', () => {
+  it('lets both EMPLOYEE and MANAGER read and edit settings', () => {
     expect(guard.canActivate(ctxGetSettings(EMPLOYEE))).toBe(true);
-    expect(() => guard.canActivate(ctxUpdateSettings(EMPLOYEE))).toThrow(
-      ForbiddenException,
-    );
+    expect(guard.canActivate(ctxUpdateSettings(EMPLOYEE))).toBe(true);
     expect(guard.canActivate(ctxUpdateSettings(MANAGER))).toBe(true);
   });
 });

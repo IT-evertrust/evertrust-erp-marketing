@@ -1,14 +1,16 @@
-import { ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { hasPermission } from '@evertrust/shared';
 import { PermissionsGuard } from '../src/auth/guards/permissions.guard';
 import { CampaignsController } from '../src/campaigns/campaigns.controller';
 import type { AuthUser } from '../src/auth/auth.types';
 
-// Binds the REAL Growth-Engine routes' @RequirePermissions to the SUPER_ADMIN–EMPLOYEE mapping.
-// Everyone operational can SEE campaigns (campaigns:read), but LAUNCHING one
-// (campaigns:write — it fires real outbound outreach) is a lead-level action held
-// by MANAGER and up (SUPER_ADMIN/ADMIN), not by EMPLOYEE.
+// Binds the REAL Growth-Engine routes' @RequirePermissions to the role mapping.
+// NOTE: per-feature RBAC is INTENTIONALLY DISABLED for this deployment (see commit
+// c2a95a1 / ROLE_PERMISSIONS in @evertrust/shared) — every authenticated role now
+// holds the FULL permission set, so an EMPLOYEE may launch and delete campaigns
+// just like a MANAGER. These assert that flat-access reality; restoring the role
+// matrix in @evertrust/shared reverts them to a read-vs-write split.
 const EMPLOYEE: AuthUser = { id: 'u-emp', role: 'EMPLOYEE', organizationId: 'org1' };
 const MANAGER: AuthUser = { id: 'u-mgr', role: 'MANAGER', organizationId: 'org1' };
 
@@ -43,30 +45,30 @@ const ctxRemove = (u: AuthUser) =>
     u,
   );
 
-describe('campaign route permission gating (SUPER_ADMIN–EMPLOYEE matrix)', () => {
+describe('campaign route permission gating (RBAC disabled — flat access)', () => {
   const guard = new PermissionsGuard(new Reflector());
 
-  it('the canonical campaigns permission split holds', () => {
+  it('every role now holds both campaigns:read and campaigns:write', () => {
     expect(hasPermission('EMPLOYEE', 'campaigns:read')).toBe(true);
-    expect(hasPermission('EMPLOYEE', 'campaigns:write')).toBe(false);
+    expect(hasPermission('EMPLOYEE', 'campaigns:write')).toBe(true);
     expect(hasPermission('MANAGER', 'campaigns:write')).toBe(true);
     expect(hasPermission('ADMIN', 'campaigns:write')).toBe(true);
   });
 
-  it('allows EMPLOYEE to list campaigns (has campaigns:read)', () => {
+  it('allows EMPLOYEE to list campaigns', () => {
     expect(guard.canActivate(ctxList(EMPLOYEE))).toBe(true);
   });
 
-  it('forbids EMPLOYEE from launching a campaign (lacks campaigns:write)', () => {
-    expect(() => guard.canActivate(ctxCreate(EMPLOYEE))).toThrow(ForbiddenException);
+  it('allows EMPLOYEE to launch a campaign (full access)', () => {
+    expect(guard.canActivate(ctxCreate(EMPLOYEE))).toBe(true);
   });
 
-  it('allows MANAGER to launch a campaign (has campaigns:write)', () => {
+  it('allows MANAGER to launch a campaign', () => {
     expect(guard.canActivate(ctxCreate(MANAGER))).toBe(true);
   });
 
-  it('gates delete by campaigns:write (EMPLOYEE forbidden, MANAGER allowed)', () => {
-    expect(() => guard.canActivate(ctxRemove(EMPLOYEE))).toThrow(ForbiddenException);
+  it('allows both EMPLOYEE and MANAGER to delete a campaign', () => {
+    expect(guard.canActivate(ctxRemove(EMPLOYEE))).toBe(true);
     expect(guard.canActivate(ctxRemove(MANAGER))).toBe(true);
   });
 });
