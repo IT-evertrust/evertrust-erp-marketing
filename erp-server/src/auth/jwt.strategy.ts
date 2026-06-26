@@ -46,20 +46,20 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('Session is no longer valid');
     }
 
-    const rows = await this.db
-      .select({
-        id: schema.users.id,
-        role: schema.users.role,
-        permissions: schema.users.permissions,
-        active: schema.users.active,
-        organizationId: schema.users.organizationId,
-      })
-      .from(schema.users)
-      .where(eq(schema.users.id, payload.sub))
-      .limit(1);
-
-    const u = rows[0];
+    const u = await this.loadUser(payload.sub);
     if (!u || !u.active) {
+      throw new UnauthorizedException('Session is no longer valid');
+    }
+
+    // Forced-logout watermark: if this token was issued (iat, seconds) BEFORE the
+    // user's token_invalid_before, it predates a forced logout (e.g. their connected
+    // Google account was removed) — reject so they must sign in again. A fresh login
+    // mints a token with a later iat, so re-login still works.
+    if (
+      u.tokenInvalidBefore &&
+      typeof payload.iat === 'number' &&
+      payload.iat * 1000 < u.tokenInvalidBefore.getTime()
+    ) {
       throw new UnauthorizedException('Session is no longer valid');
     }
 
@@ -69,5 +69,48 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       organizationId: u.organizationId,
       permissions: effectivePermissions(u.role, u.permissions),
     };
+  }
+
+  // Load the authenticated user row. Reads token_invalid_before for the forced-logout
+  // check; if that column doesn't exist yet (DB not migrated), fall back to a read
+  // without it so auth keeps working until the migration is applied — enforcement
+  // simply stays off until then.
+  private async loadUser(id: string): Promise<{
+    id: string;
+    role: AuthUser['role'];
+    permissions: string[] | null;
+    active: boolean;
+    organizationId: string;
+    tokenInvalidBefore: Date | null;
+  } | undefined> {
+    try {
+      const rows = await this.db
+        .select({
+          id: schema.users.id,
+          role: schema.users.role,
+          permissions: schema.users.permissions,
+          active: schema.users.active,
+          organizationId: schema.users.organizationId,
+          tokenInvalidBefore: schema.users.tokenInvalidBefore,
+        })
+        .from(schema.users)
+        .where(eq(schema.users.id, id))
+        .limit(1);
+      return rows[0];
+    } catch {
+      const rows = await this.db
+        .select({
+          id: schema.users.id,
+          role: schema.users.role,
+          permissions: schema.users.permissions,
+          active: schema.users.active,
+          organizationId: schema.users.organizationId,
+        })
+        .from(schema.users)
+        .where(eq(schema.users.id, id))
+        .limit(1);
+      const r = rows[0];
+      return r ? { ...r, tokenInvalidBefore: null } : undefined;
+    }
   }
 }

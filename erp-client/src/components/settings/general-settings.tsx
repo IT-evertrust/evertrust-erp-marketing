@@ -5,11 +5,22 @@
 // campaigns:read; the component shows its own loading skeleton off useOrgSettings().
 // GrowthShell chrome comes from the (growth) route-group layout.
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
-import type { UpdateOrgSettingsDto } from '@evertrust/shared';
+import { Loader2, Plus, Trash2 } from 'lucide-react';
+import type {
+  ConnectedGoogleAccountDto,
+  UpdateOrgSettingsDto,
+} from '@evertrust/shared';
 import { useOrgSettings, useUpdateOrgSettings } from '@/hooks/use-settings';
+import {
+  useDisconnectGoogleAccount,
+  useGoogleAccounts,
+} from '@/hooks/use-arsenal';
+import { ApiError, api } from '@/lib/api';
 import { GrowthCard } from '@/modules/(growth)/shared';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -66,6 +77,168 @@ function ToggleRow({
         onCheckedChange={onCheckedChange}
       />
     </div>
+  );
+}
+
+// Connected Google accounts — moved here from the (removed) Configuration page so
+// account management lives in one Settings surface. Lists every Google account
+// connected to the org (Gmail/Calendar), lets an admin connect another, and remove
+// one. Removing an account revokes its Google grant, deletes the connection, and
+// (server-side) invalidates that user's session so they must sign in again.
+function ConnectedAccountsCard() {
+  const router = useRouter();
+  const accounts = useGoogleAccounts();
+  const disconnect = useDisconnectGoogleAccount();
+
+  const [connectConfigured, setConnectConfigured] = useState(true);
+  const [connecting, setConnecting] = useState(false);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+
+  const list = accounts.data ?? [];
+
+  // On return from Google's consent screen the callback appends
+  // ?google=connected|error. Toast once, refetch, then strip the param so a refresh
+  // doesn't re-toast. Runs once on mount.
+  useEffect(() => {
+    const param = new URLSearchParams(window.location.search).get('google');
+    if (param !== 'connected' && param !== 'error') return;
+    if (param === 'connected') {
+      toast.success('Google account connected.');
+      void accounts.refetch();
+    } else {
+      toast.error('Could not connect that Google account.');
+    }
+    router.replace('/settings/general');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function handleConnect() {
+    setConnecting(true);
+    try {
+      const res = await api.google.start();
+      window.location.href = res.url;
+    } catch (err) {
+      setConnecting(false);
+      if (err instanceof ApiError && err.status === 503) {
+        setConnectConfigured(false);
+        return;
+      }
+      toast.error(
+        err instanceof Error ? err.message : 'Could not start Google connect.',
+      );
+    }
+  }
+
+  function handleRemove(a: ConnectedGoogleAccountDto) {
+    if (
+      !window.confirm(
+        `Remove ${a.email}? This signs that user out and they'll need to log in again to use the system.`,
+      )
+    ) {
+      return;
+    }
+    setPendingId(a.id);
+    disconnect.mutate(a.id, {
+      onSuccess: () => toast.success(`${a.email} removed.`),
+      onError: (err) => toast.error(err.message || 'Could not remove account.'),
+      onSettled: () => setPendingId(null),
+    });
+  }
+
+  const statusLabel: Record<ConnectedGoogleAccountDto['status'], string> = {
+    CONNECTED: 'Connected',
+    REVOKED: 'Revoked',
+    ERROR: 'Error',
+  };
+
+  return (
+    <GrowthCard
+      title="Connected accounts"
+      className="lg:col-span-2"
+      hint={
+        <div className="flex flex-col items-end gap-1">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleConnect}
+            disabled={connecting || !connectConfigured}
+          >
+            {connecting ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Plus className="size-4" />
+            )}
+            {connecting ? 'Connecting…' : 'Connect account'}
+          </Button>
+          {!connectConfigured ? (
+            <p className="text-right text-xs text-muted-foreground">
+              Google connect isn&apos;t configured on the server.
+            </p>
+          ) : null}
+        </div>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        <p className="text-xs text-muted-foreground">
+          Every Google account connected to this workspace. Removing one revokes its
+          access and signs that person out — they&apos;ll need to log in again.
+        </p>
+
+        {accounts.isLoading ? (
+          <Skeleton className="h-24 w-full rounded-[10px]" />
+        ) : list.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No Google accounts are connected yet.
+          </p>
+        ) : (
+          <ul className="flex flex-col divide-y divide-sidebar-border rounded-[10px] border border-sidebar-border">
+            {list.map((a) => {
+              const rowBusy = disconnect.isPending && pendingId === a.id;
+              return (
+                <li
+                  key={a.id}
+                  className="flex items-center justify-between gap-3 px-4 py-3"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span
+                      aria-hidden
+                      className="size-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: a.color ?? '#9ca3af' }}
+                    />
+                    <div className="flex min-w-0 flex-col">
+                      <span className="truncate text-[13px] font-medium text-foreground">
+                        {a.email}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {statusLabel[a.status]}
+                        {a.isDefault ? ' · Default mailbox' : ''}
+                      </span>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                    aria-label={`Remove ${a.email}`}
+                    title={`Remove ${a.email}`}
+                    onClick={() => handleRemove(a)}
+                    disabled={disconnect.isPending}
+                  >
+                    {rowBusy ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="size-4" />
+                    )}
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </GrowthCard>
   );
 }
 
@@ -413,6 +586,9 @@ export function GeneralSettings() {
             />
           </div>
         </GrowthCard>
+
+        {/* Card — Connected accounts (was the separate Configuration page). */}
+        <ConnectedAccountsCard />
       </div>
     </main>
   );

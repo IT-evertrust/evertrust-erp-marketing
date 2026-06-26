@@ -32,6 +32,11 @@ export const users = pgTable(
     // Contact phone — NULLABLE, descriptive only.
     phone: text('phone'),
     active: boolean('active').notNull().default(true),
+    // Forced-logout watermark: any session JWT issued (iat) BEFORE this instant is
+    // rejected by JwtStrategy, so the user must sign in again — while a fresh login
+    // still works (the new token's iat is later). NULL = never force-logged-out.
+    // Set when an admin removes the user's connected Google account from Settings.
+    tokenInvalidBefore: timestamp('token_invalid_before', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

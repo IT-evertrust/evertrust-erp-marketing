@@ -226,6 +226,33 @@ export function MeetingBookerV2() {
     if (node) node.scrollTop = OPEN_SCROLL_TOP;
   }, [mondayKey, calQuery.data]);
 
+  // Google-Calendar-style keyboard nav: `n` → next week, `p` → previous week.
+  // Ignored while typing in a field or when a modifier is held, so it never
+  // hijacks shortcuts or text entry.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      if (
+        el &&
+        (el.isContentEditable ||
+          ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName))
+      ) {
+        return;
+      }
+      const key = e.key.toLowerCase();
+      if (key === 'n') {
+        e.preventDefault();
+        setMondayKey((k) => addDaysToDateKey(k, 7));
+      } else if (key === 'p') {
+        e.preventDefault();
+        setMondayKey((k) => addDaysToDateKey(k, -7));
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   return (
     <div className="pt-[18px]">
       <div className="flex flex-col rounded-[10px] border border-[#e4e7eb] bg-white text-[#15171c]">
@@ -240,6 +267,7 @@ export function MeetingBookerV2() {
               <button
                 type="button"
                 aria-label="Previous week"
+                title="Previous week (P)"
                 onClick={() => setMondayKey((key) => addDaysToDateKey(key, -7))}
                 className="grid h-[26px] w-[26px] place-items-center rounded-[7px] border border-[#d6dade] bg-white text-[15px] font-bold leading-none text-[#15171c] hover:bg-[#f6f7f9]"
               >
@@ -251,6 +279,7 @@ export function MeetingBookerV2() {
               <button
                 type="button"
                 aria-label="Next week"
+                title="Next week (N)"
                 onClick={() => setMondayKey((key) => addDaysToDateKey(key, 7))}
                 className="grid h-[26px] w-[26px] place-items-center rounded-[7px] border border-[#d6dade] bg-white text-[15px] font-bold leading-none text-[#15171c] hover:bg-[#f6f7f9]"
               >
@@ -265,7 +294,7 @@ export function MeetingBookerV2() {
               </span>
             ) : (
               <Link
-                href="/settings/configuration"
+                href="/settings/general"
                 className="inline-flex items-center gap-[7px] rounded-[20px] border border-[#d6dade] px-[11px] py-[5px] text-[10.5px] font-bold text-[#5b626d] hover:bg-[#f6f7f9]"
               >
                 <span className="h-[7px] w-[7px] rounded-full bg-[#959ca7]" />

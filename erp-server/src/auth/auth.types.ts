@@ -6,6 +6,10 @@ export interface JwtPayload {
   sub: string; // user id (uuid)
   role: UserRole;
   org: string; // organization id (uuid) — the tenant boundary
+  // Issued-at (seconds since epoch), stamped by jsonwebtoken on sign and present on
+  // every decoded token. Compared against the user's token_invalid_before watermark
+  // to enforce forced logout. We never set it ourselves; it's read-only here.
+  iat?: number;
 }
 
 // What JwtStrategy.validate() returns and what gets attached to `req.user`.

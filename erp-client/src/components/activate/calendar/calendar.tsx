@@ -75,7 +75,7 @@ function ConnectHint({ reason }: { reason?: string | null }) {
       description={reason ?? t('book.notConnectedBody')}
       action={
         <Button asChild variant="outline" size="sm">
-          <Link href="/settings/configuration">{t('book.connectCta')}</Link>
+          <Link href="/settings/general">{t('book.connectCta')}</Link>
         </Button>
       }
     />

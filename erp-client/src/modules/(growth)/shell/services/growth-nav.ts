@@ -5,7 +5,6 @@ import {
   Mail,
   Settings,
   Share2,
-  SlidersHorizontal,
   Target,
 } from 'lucide-react';
 import type { Permission } from '@evertrust/shared';
@@ -86,23 +85,16 @@ export const GROWTH_NAV_ITEMS: GrowthNavItem[] = [
   },
 
   // System — Settings (the org Growth-Engine settings page, open to any user with
-  // campaigns:read) and Configuration (admin-only). Insights (Sector / Analytics /
-  // Reports), the other sub-pages (Reach / User management) and Automation are
-  // intentionally hidden from the rail for the stripped-down shell.
+  // campaigns:read), which now also carries the connected-accounts management that
+  // used to live under the separate (removed) Configuration page. Insights (Sector /
+  // Analytics / Reports), the other sub-pages (Reach / User management) and
+  // Automation are intentionally hidden from the rail for the stripped-down shell.
   {
     label: 'Settings',
     i18nKey: 'general',
     href: '/settings/general',
     icon: Settings,
     permission: 'campaigns:read',
-    group: 'settings',
-  },
-  {
-    label: 'Configuration',
-    i18nKey: 'configuration',
-    href: '/settings/configuration',
-    icon: SlidersHorizontal,
-    permission: 'admin:config',
     group: 'settings',
   },
 ];

@@ -331,9 +331,10 @@ export function NurturePipelineBoard({
               </StageColumn>
             ))}
           </div>
-          {/* The floating card follows the pointer and settles smoothly into its new
-              column (dnd-kit's default drop animation). */}
-          <DragOverlay>
+          {/* The floating card follows the pointer; on drop it disappears instantly
+              and the card is already in its new column (no settle animation), so the
+              move reads as immediate. */}
+          <DragOverlay dropAnimation={null}>
             {activeCard ? <CardView p={activeCard} dragging /> : null}
           </DragOverlay>
         </DndContext>

@@ -160,7 +160,7 @@ export class GoogleConnectController {
     return this.accounts.disconnect(orgId, id);
   }
 
-  // Redirect the browser back to the web app's Configuration page with a status query
+  // Redirect the browser back to the web app's Settings page with a status query
   // param. When APP_WEB_URL is blank (e.g. local-only API), fall back to a minimal
   // inline HTML page so the popup/tab still shows a clear outcome.
   private redirect(res: Response, ok: boolean): void {
@@ -168,7 +168,7 @@ export class GoogleConnectController {
     if (webUrl) {
       const base = webUrl.replace(/\/+$/, '');
       const status = ok ? 'connected' : 'error';
-      res.redirect(302, `${base}/settings/configuration?google=${status}`);
+      res.redirect(302, `${base}/settings/general?google=${status}`);
       return;
     }
     const message = ok

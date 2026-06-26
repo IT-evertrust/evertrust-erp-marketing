@@ -273,7 +273,30 @@ export class GoogleAccountsService {
         and(eq(schema.googleAccounts.organizationId, orgId), eq(schema.googleAccounts.id, id)),
       );
 
+    // Force the user who connected this account to sign in again: stamp their
+    // token_invalid_before so every session JWT issued before now is rejected by
+    // JwtStrategy. Re-login still works (the new token's iat is later).
+    await this.forceLogout(orgId, row.userId);
+
     return this.listForOrg(orgId);
+  }
+
+  // Stamp the user's forced-logout watermark to "now". Scoped to the org for safety.
+  // Best-effort: swallows a missing-column error so a not-yet-migrated DB still lets
+  // the disconnect succeed (the forced logout simply won't apply until migrated).
+  private async forceLogout(orgId: string, userId: string): Promise<void> {
+    try {
+      await this.db
+        .update(schema.users)
+        .set({ tokenInvalidBefore: new Date() })
+        .where(and(eq(schema.users.organizationId, orgId), eq(schema.users.id, userId)));
+    } catch (err) {
+      this.logger.warn(
+        `forceLogout skipped for user ${userId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   // Resolve a LIVE access token for the org's SINGLE default mailbox:

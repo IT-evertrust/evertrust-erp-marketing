@@ -190,7 +190,7 @@ export function ReplyDraftsView() {
           description={t('connect.description')}
           action={
             <Button asChild size="sm" variant="outline">
-              <a href="/settings/configuration">{t('connect.cta')}</a>
+              <a href="/settings/general">{t('connect.cta')}</a>
             </Button>
           }
         />
