@@ -44,22 +44,8 @@ const REGION_OPTIONS = [
   'Border-DE',
 ] as const;
 
-// Target country for the aim (drives the scraper's geo step). Germany-first, then
-// the DACH + neighbouring markets EverTrust works. Sent to create-aim as-is.
-const COUNTRY_OPTIONS = [
-  'Germany',
-  'Austria',
-  'Switzerland',
-  'Netherlands',
-  'Belgium',
-  'Luxembourg',
-  'France',
-  'Poland',
-  'Czechia',
-  'Denmark',
-] as const;
-
-// Default country for new aims.
+// Default country for new aims (free-text — the user types a specific country for
+// the scraper's geo step). Drives create-aim as-is.
 const DEFAULT_COUNTRY = 'Germany';
 
 const EMPTY_FORM: NewCampaignFormValues = {
@@ -272,18 +258,13 @@ export function NewCampaignModal({
 
             <div className="grid gap-2">
               <Label htmlFor={`${fieldId}-country`}>{t('modal.field.country')}</Label>
-              <Select value={form.country} onValueChange={(v) => set('country', v)}>
-                <SelectTrigger id={`${fieldId}-country`} className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {COUNTRY_OPTIONS.map((opt) => (
-                    <SelectItem key={opt} value={opt}>
-                      {opt}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Input
+                id={`${fieldId}-country`}
+                value={form.country}
+                placeholder={t('modal.field.countryPlaceholder')}
+                maxLength={120}
+                onChange={(e) => set('country', e.target.value)}
+              />
             </div>
 
             <div className="grid gap-2">

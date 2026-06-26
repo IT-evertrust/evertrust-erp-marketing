@@ -4,7 +4,7 @@
 // browser (TanStack Query). General settings are open to any user with
 // campaigns:read; the component shows its own loading skeleton off useOrgSettings().
 // GrowthShell chrome comes from the (growth) route-group layout.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
@@ -15,9 +15,12 @@ import type {
 } from '@evertrust/shared';
 import { useOrgSettings, useUpdateOrgSettings } from '@/hooks/use-settings';
 import {
+  useClearSignatureImage,
   useDisconnectGoogleAccount,
   useGoogleAccounts,
+  useUploadSignatureImage,
 } from '@/hooks/use-arsenal';
+import { getSignature } from '@/modules/(growth)/reach/services/reach.service';
 import { ApiError, api } from '@/lib/api';
 import { GrowthCard } from '@/modules/(growth)/shared';
 import { Button } from '@/components/ui/button';
@@ -254,6 +257,27 @@ export function GeneralSettings() {
 
   // Local, smooth-typing copies of the text/number fields. Booleans read straight
   // from the query (they only change via an immediate PATCH, never local typing).
+  // Signature image (org_config.signatureImageUrl) — separate from the signature
+  // TEXT above; the send path embeds it at the bottom of outgoing Reach/Engage mail.
+  // Held in local state: seeded once from getSignature(), then updated from each
+  // upload/clear mutation result.
+  const uploadSignatureImage = useUploadSignatureImage();
+  const clearSignatureImage = useClearSignatureImage();
+  const [signatureImageUrl, setSignatureImageUrl] = useState<string | null>(null);
+  const signatureFileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let active = true;
+    void getSignature()
+      .then((r) => {
+        if (active) setSignatureImageUrl(r.signatureImageUrl ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const [senderName, setSenderName] = useState('');
   const [senderEmail, setSenderEmail] = useState('');
   const [signature, setSignature] = useState('');
@@ -301,6 +325,30 @@ export function GeneralSettings() {
     const next = trimmed === '' ? null : trimmed;
     if (next === data[field]) return;
     patch({ [field]: next });
+  }
+
+  // Signature image: upload a picked file (multipart), or clear the current one.
+  function handleSignatureImageUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = ''; // allow re-picking the same file
+    if (!file) return;
+    uploadSignatureImage.mutate(file, {
+      onSuccess: (res) => {
+        setSignatureImageUrl(res.signatureImageUrl ?? null);
+        toast.success(t('system.toastSaved'));
+      },
+      onError: (err) => toast.error(err.message || t('system.toastError')),
+    });
+  }
+
+  function handleSignatureImageClear() {
+    clearSignatureImage.mutate(undefined, {
+      onSuccess: (res) => {
+        setSignatureImageUrl(res.signatureImageUrl ?? null);
+        toast.success(t('system.toastSaved'));
+      },
+      onError: (err) => toast.error(err.message || t('system.toastError')),
+    });
   }
 
   // A number blur: parse, ignore an unparseable/empty entry (re-seed from data),
@@ -401,6 +449,61 @@ export function GeneralSettings() {
                 onChange={(e) => setSignature(e.target.value)}
                 onBlur={() => commitNullableText('signature', signature)}
               />
+            </div>
+
+            {/* Signature image — uploaded picture embedded at the bottom of
+                outgoing mail. Separate from the signature text above. */}
+            <div className="flex flex-col gap-2">
+              <Label>
+                <Eyebrow>{t('system.sender.signatureImageLabel')}</Eyebrow>
+              </Label>
+              {signatureImageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={signatureImageUrl}
+                  alt={t('system.sender.signatureImageAlt')}
+                  className="max-h-20 max-w-[240px] rounded-md border border-border bg-white object-contain p-1"
+                />
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  {t('system.sender.signatureImageEmpty')}
+                </p>
+              )}
+              <input
+                ref={signatureFileRef}
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp"
+                className="hidden"
+                onChange={handleSignatureImageUpload}
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={uploadSignatureImage.isPending}
+                  onClick={() => signatureFileRef.current?.click()}
+                >
+                  {uploadSignatureImage.isPending ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : null}
+                  {t('system.sender.signatureImageUpload')}
+                </Button>
+                {signatureImageUrl ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={clearSignatureImage.isPending}
+                    onClick={handleSignatureImageClear}
+                  >
+                    {t('system.sender.signatureImageRemove')}
+                  </Button>
+                ) : null}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {t('system.sender.signatureImageHint')}
+              </p>
             </div>
           </div>
         </GrowthCard>
