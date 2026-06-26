@@ -163,6 +163,7 @@ export class ReachRepository {
     orgId: string,
     nicheId: string,
     aim: ReachAim,
+    activatedBy: string | null = null,
   ): Promise<string> {
     const [row] = await this.db
       .insert(schema.campaigns)
@@ -178,6 +179,9 @@ export class ReachRepository {
         salesCalendarId: aim.salesCalendarId ?? null,
         sender: aim.sender,
         lifecycle: 'ACTIVE',
+        // Stamp the creating user so the send path can resolve their PER-USER sender
+        // identity (no n8n activation path stamps this for Reach campaigns).
+        activatedBy,
       })
       .returning({ id: schema.campaigns.id });
     return row!.id;
@@ -747,6 +751,42 @@ export class ReachRepository {
       .where(eq(schema.orgConfig.organizationId, orgId))
       .limit(1);
     return row?.url ?? null;
+  }
+
+  // The SENDING user's per-user identity for an aim's campaign: join campaigns →
+  // users on campaigns.activated_by and return that user's name + sender name +
+  // signature image. Org-scoped (the campaign must belong to orgId) so it never reads
+  // another tenant's user. Returns null when there is no campaign, no activator, or the
+  // user is gone — the send path then falls back to the user's name / product default
+  // (NO org fallback). The campaign id comes from the aim's FK.
+  async getSendIdentityByCampaign(
+    orgId: string,
+    campaignId: string | null,
+  ): Promise<{
+    name: string;
+    senderName: string | null;
+    signatureImageUrl: string | null;
+  } | null> {
+    if (!campaignId) return null;
+    const [row] = await this.db
+      .select({
+        name: schema.users.name,
+        senderName: schema.users.senderName,
+        signatureImageUrl: schema.users.signatureImageUrl,
+      })
+      .from(schema.campaigns)
+      .innerJoin(
+        schema.users,
+        eq(schema.users.id, schema.campaigns.activatedBy),
+      )
+      .where(
+        and(
+          eq(schema.campaigns.id, campaignId),
+          tenantScope(orgId, schema.campaigns),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
   }
 
   // Set (or clear, with null) the org signature image URL (find-or-creates the row).

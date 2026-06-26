@@ -86,12 +86,111 @@ export class UsersService {
         name: schema.users.name,
         role: schema.users.role,
         organizationId: schema.users.organizationId,
+        senderName: schema.users.senderName,
+        signature: schema.users.signature,
+        signatureImageUrl: schema.users.signatureImageUrl,
       });
 
     const after = updated[0];
     if (!after) throw new NotFoundException('User not found');
 
     return { before: { name: prev.name }, after };
+  }
+
+  // The full public MeDto for a user id (org name join + effective permissions),
+  // mirroring AuthService.me — the shape the per-user sender-identity mutations
+  // return so the web re-seeds its `me` cache. 404 if the user is gone. NOT
+  // tenant-scoped on its own: callers pass the CURRENT authenticated user's id, so
+  // the user is always in the caller's org by construction.
+  private async meById(userId: string): Promise<MeDto> {
+    const rows = await this.db
+      .select({
+        id: schema.users.id,
+        email: schema.users.email,
+        name: schema.users.name,
+        role: schema.users.role,
+        department: schema.users.department,
+        position: schema.users.position,
+        permissions: schema.users.permissions,
+        organizationId: schema.users.organizationId,
+        organizationName: schema.organizations.name,
+        senderName: schema.users.senderName,
+        signature: schema.users.signature,
+        signatureImageUrl: schema.users.signatureImageUrl,
+      })
+      .from(schema.users)
+      .innerJoin(
+        schema.organizations,
+        eq(schema.organizations.id, schema.users.organizationId),
+      )
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+
+    const user = rows[0];
+    if (!user) throw new NotFoundException('User not found');
+    return {
+      ...user,
+      permissions: effectivePermissions(user.role, user.permissions),
+    };
+  }
+
+  // Update the CURRENT user's own sender identity (display name + signature text).
+  // Only the provided keys are written (an omitted key is unchanged, an explicit
+  // null clears it). Always targets the passed userId — the controller passes the
+  // authenticated user's id, so a user can only ever edit their OWN identity.
+  // Returns the freshly-resolved MeDto.
+  async updateSenderIdentity(
+    userId: string,
+    patch: { senderName?: string | null; signature?: string | null },
+  ): Promise<MeDto> {
+    const set: Partial<{ senderName: string | null; signature: string | null }> = {};
+    if (patch.senderName !== undefined) set.senderName = patch.senderName;
+    if (patch.signature !== undefined) set.signature = patch.signature;
+
+    if (Object.keys(set).length > 0) {
+      const updated = await this.db
+        .update(schema.users)
+        .set(set)
+        .where(eq(schema.users.id, userId))
+        .returning({ id: schema.users.id });
+      if (!updated[0]) throw new NotFoundException('User not found');
+    }
+    return this.meById(userId);
+  }
+
+  // Set (or clear, with null) the CURRENT user's signature image URL. Always targets
+  // the passed userId (the authenticated user) — never another user's row. Returns
+  // the freshly-resolved MeDto.
+  async setSignatureImageUrl(userId: string, url: string | null): Promise<MeDto> {
+    const updated = await this.db
+      .update(schema.users)
+      .set({ signatureImageUrl: url })
+      .where(eq(schema.users.id, userId))
+      .returning({ id: schema.users.id });
+    if (!updated[0]) throw new NotFoundException('User not found');
+    return this.meById(userId);
+  }
+
+  // The sending user's identity for the send path (name + per-user sender name +
+  // signature image), or null when the user is gone. The send path resolves the
+  // From display name + signature image from this — no org fallback.
+  async getSendIdentity(
+    userId: string,
+  ): Promise<{
+    name: string;
+    senderName: string | null;
+    signatureImageUrl: string | null;
+  } | null> {
+    const rows = await this.db
+      .select({
+        name: schema.users.name,
+        senderName: schema.users.senderName,
+        signatureImageUrl: schema.users.signatureImageUrl,
+      })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    return rows[0] ?? null;
   }
 
   // Full user directory for the management table (users:manage). Tenant-scoped

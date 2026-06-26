@@ -31,5 +31,8 @@ import { SignatureAssetsService } from './signature-assets.service';
     ArsenalTokenGuard,
     SignatureAssetsService,
   ],
+  // Exported so UsersModule can inject SignatureAssetsService for the per-user
+  // signature-image route (it reuses the asset-bytes storage without org_config).
+  exports: [SignatureAssetsService],
 })
 export class ArsenalModule {}

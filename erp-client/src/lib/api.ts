@@ -58,6 +58,7 @@ import {
   RotateIngestTokenResultDto,
   UpdateCustomerDto,
   UpdateMyNameDto,
+  UpdateMySenderIdentityDto,
   UpdateUserDto,
   UserListItemDto,
   CreateLeadDto,
@@ -353,6 +354,43 @@ export const api = {
       request<UserListItemDto[]>('/users', {
         schema: UserListDto,
         signal,
+      }),
+
+    // PER-USER sender identity. Edits the CURRENT user's own sender name + signature
+    // text; the API returns the freshly-resolved MeDto.
+    updateMySenderIdentity: (input: z.infer<typeof UpdateMySenderIdentityDto>) =>
+      request<MeDto>('/users/me/sender-identity', {
+        method: 'PATCH',
+        body: UpdateMySenderIdentityDto.parse(input),
+        schema: MeDto,
+      }),
+
+    // Upload the current user's signature image (multipart → POST). Mirrors the org
+    // arsenal upload; the server stores the bytes + records the URL on the user's row.
+    uploadMySignatureImage: (file: File) => {
+      const form = new FormData();
+      form.append('file', file);
+      return uploadRequest<z.infer<typeof SignatureImageResultDto>>(
+        '/users/me/signature-image',
+        form,
+        SignatureImageResultDto,
+      );
+    },
+
+    // Point the current user's signature image at a pasted URL / Drive share link
+    // (normalized server-side). Same endpoint as the upload, JSON body { url }.
+    setMySignatureImageUrl: (url: string) =>
+      request<z.infer<typeof SignatureImageResultDto>>('/users/me/signature-image', {
+        method: 'POST',
+        body: { url },
+        schema: SignatureImageResultDto,
+      }),
+
+    // Clear the current user's signature image (DELETE).
+    clearMySignatureImage: () =>
+      request<z.infer<typeof SignatureImageResultDto>>('/users/me/signature-image', {
+        method: 'DELETE',
+        schema: SignatureImageResultDto,
       }),
   },
 

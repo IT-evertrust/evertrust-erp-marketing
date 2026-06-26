@@ -14,6 +14,8 @@ import type {
 } from '@evertrust/shared';
 import { Delete, Patch } from '@nestjs/common';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { AuthUser } from '../auth/auth.types';
 import { OrgId } from '../common/tenant';
 import { EngageService } from './engage.service';
 import { EngageRepliesService } from './engage-replies.service';
@@ -125,6 +127,7 @@ export class EngageController {
   @Post('campaign-replies/:id/send')
   sendCampaignReply(
     @OrgId() orgId: string,
+    @CurrentUser() user: AuthUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() body: CampaignReplyBodyDto,
   ) {
@@ -135,6 +138,8 @@ export class EngageController {
       body.body,
       body.proposedSlot,
       body.proposedSlots,
+      // PER-USER sender identity: the operator's outgoing reply uses THEIR identity.
+      user.id,
     );
   }
 

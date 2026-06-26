@@ -1574,6 +1574,7 @@ export class EngageRepliesService {
     body: string,
     proposedSlot?: { start: string; end: string },
     proposedSlots?: { start: string; end: string }[],
+    userId?: string,
   ) {
     const row = await this.ownedReply(orgId, replyId);
     const lead = (
@@ -1607,11 +1608,34 @@ export class EngageRepliesService {
     const offeredSlots: Slot[] = proposedSlots ?? (proposedSlot ? [proposedSlot] : []);
     const finalBody = await this.stampMeetingTime(orgId, body, offeredSlots);
 
-    const signatureImageUrl = await this.reach.getSignatureImageUrl(orgId);
+    // PER-USER sender identity: resolve the operator who sent this reply and use THEIR
+    // sender name + signature image. No org fallback — the signature image is null when
+    // the user has none, and the From name degrades to the user's own account name, then
+    // the product default (REPLY_FROM_NAME). `userId` is the authenticated operator from
+    // the controller (optional only for back-compat — null resolves to the default).
+    const sender = userId
+      ? (
+          await this.db
+            .select({
+              name: schema.users.name,
+              senderName: schema.users.senderName,
+              signatureImageUrl: schema.users.signatureImageUrl,
+            })
+            .from(schema.users)
+            .where(
+              and(
+                tenantScope(orgId, schema.users),
+                eq(schema.users.id, userId),
+              ),
+            )
+            .limit(1)
+        )[0] ?? null
+      : null;
+    const signatureImageUrl = sender?.signatureImageUrl ?? null;
     const raw = buildRawReply({
       to: lead.email,
       from: access.account.email,
-      fromName: REPLY_FROM_NAME,
+      fromName: sender?.senderName || sender?.name || REPLY_FROM_NAME,
       subject: subject || row.inboundSubject || '(no subject)',
       body: finalBody,
       inReplyTo,
