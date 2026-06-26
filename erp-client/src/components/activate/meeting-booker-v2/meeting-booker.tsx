@@ -213,19 +213,37 @@ export function MeetingBookerV2() {
             ...e,
             accountId: a.id,
           }));
-          return { timeZone: data.timeZone, configured: data.configured, events };
+          return {
+            accountId: a.id,
+            email: a.email,
+            timeZone: data.timeZone,
+            configured: data.configured,
+            reason: data.reason ?? null,
+            events,
+          };
         }),
       );
       return {
         timeZone: perAccount[0]?.timeZone ?? DEFAULT_TIME_ZONE,
         configured: perAccount.some((r) => r.configured),
         events: perAccount.flatMap((r) => r.events),
+        // Mailboxes whose calendar could NOT be read this fetch, with the server's
+        // human reason (missing Calendar scope / token revoked / …) — surfaced so a
+        // broken mailbox is explained instead of silently showing an empty week.
+        issues: perAccount
+          .filter((r) => !r.configured)
+          .map((r) => ({ accountId: r.accountId, email: r.email, reason: r.reason })),
       };
     },
   });
 
   const primaryTz = calQuery.data?.timeZone ?? DEFAULT_TIME_ZONE;
   const configured = Boolean(calQuery.data?.configured);
+  // Calendar-read failures for the account(s) currently in view ('' = All accounts).
+  const calIssues = calQuery.data?.issues ?? [];
+  const visibleIssues = accountFilter
+    ? calIssues.filter((i) => i.accountId === accountFilter)
+    : calIssues;
   const weekNumber = getIsoWeekNumber(mondayKey);
   const rangeText = weekRangeLabel(mondayKey);
 
@@ -406,6 +424,23 @@ export function MeetingBookerV2() {
                 </option>
               ))}
             </select>
+          </div>
+        ) : null}
+
+        {/* A connected mailbox whose calendar couldn't be read (missing Calendar
+            scope / revoked token) — explain it instead of a silent empty week, with
+            a one-click path to reconnect. */}
+        {visibleIssues.length > 0 ? (
+          <div className="flex flex-col gap-[3px] border-b border-[#e4e7eb] bg-[#fff8ef] px-4 py-[10px]">
+            {visibleIssues.map((issue) => (
+              <p key={issue.accountId} className="text-[11px] leading-[1.4] text-[#8a5a00]">
+                <span className="font-bold">{issue.email}:</span>{' '}
+                {issue.reason ?? 'Calendar could not be read for this account.'}{' '}
+                <Link href="/settings/general" className="font-bold underline">
+                  Reconnect
+                </Link>
+              </p>
+            ))}
           </div>
         ) : null}
 

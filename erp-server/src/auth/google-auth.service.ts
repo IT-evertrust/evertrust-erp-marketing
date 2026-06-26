@@ -309,6 +309,19 @@ export class GoogleAuthService {
     grant?: LoginMailboxGrant,
   ): Promise<void> {
     if (!grant?.refreshToken || !grant.sub) return;
+    // NEVER downgrade an existing connection: only connect/refresh the mailbox when
+    // the grant actually carries a Gmail/Calendar scope. A basic-scope login
+    // ('openid email profile' — the default when GOOGLE_CONNECT_ON_LOGIN is off) can
+    // STILL return a refresh token, and upsertFromCallback overwrites the stored
+    // scopes — so without this guard a plain login would strip an already
+    // Calendar/Gmail-connected mailbox down to basic, breaking calendar + email reads.
+    const hasMailboxScope = grant.scopes.some(
+      (s) =>
+        s.startsWith('https://www.googleapis.com/auth/gmail') ||
+        s.startsWith('https://www.googleapis.com/auth/calendar') ||
+        s === 'https://mail.google.com/',
+    );
+    if (!hasMailboxScope) return;
     try {
       await this.googleAccounts.upsertFromCallback(orgId, userId, {
         sub: grant.sub,
