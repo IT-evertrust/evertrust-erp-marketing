@@ -1,5 +1,17 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, desc, eq, ilike, isNotNull, isNull, like, or, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  like,
+  or,
+  sql,
+} from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 
 import { DB, type DbClient } from '../db/db.tokens';
@@ -33,6 +45,30 @@ export interface CompanyContext {
 @Injectable()
 export class ActivateRepository {
   constructor(@Inject(DB) private readonly db: DbClient) {}
+
+  // ---- Read AI webhook org resolution ----
+  // A public Read AI webhook carries no tenant. Resolve the org from the meeting's
+  // participant/owner emails (match any to a users.email), falling back to the single
+  // organization — this is a one-org internal app. Returns null only when no email
+  // matches AND there is more than one org (ambiguous), so the caller can 400.
+  async resolveOrgIdForWebhook(emails: string[]): Promise<string | null> {
+    const cleaned = [...new Set(emails.map((e) => e.trim().toLowerCase()))].filter(
+      Boolean,
+    );
+    if (cleaned.length > 0) {
+      const rows = await this.db
+        .select({ orgId: schema.users.organizationId })
+        .from(schema.users)
+        .where(inArray(schema.users.email, cleaned))
+        .limit(1);
+      if (rows[0]) return rows[0].orgId;
+    }
+    const orgs = await this.db
+      .select({ id: schema.organizations.id })
+      .from(schema.organizations)
+      .limit(2);
+    return orgs.length === 1 ? orgs[0]!.id : null;
+  }
 
   // ---- personas (PG) ----
   // The org's coaching personas. Auto-provisions the default Alex Hormozi persona on first

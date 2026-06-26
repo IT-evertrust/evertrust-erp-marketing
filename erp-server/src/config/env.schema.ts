@@ -165,6 +165,13 @@ export const EnvSchema = z.object({
   // ONLY auth on that public (JWT-less) route — treat it like a password.
   ARSENAL_INGEST_TOKEN: z.string().default(''),
 
+  // Read AI → ERP webhook shared secret. Read AI posts a finished meeting's report
+  // (transcript + summary) to POST /growth/activate/read-ai/webhook with this token in
+  // the `x-read-ai-token` header OR a `?token=` query param. Blank = the webhook is
+  // DISABLED (returns 503), so the feature is safe to deploy before a secret is minted.
+  // This is the ONLY auth on that public (JWT-less) route — treat it like a password.
+  READ_AI_WEBHOOK_SECRET: z.string().default(''),
+
   // Key Account hot-leads webhooks. PROVISION creates a campaign's hot_leads sheet
   // (POST {folderId}); PIPELINE intakes Interested leads + graduates customers
   // (POST {folderId}). Blank = that ERP action is disabled. Hot-lead DATA is read

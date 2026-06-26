@@ -66,6 +66,11 @@ services:
         sync: false
       - key: ARSENAL_INGEST_TOKEN
         sync: false
+      # Read AI → ERP webhook secret. Set in the dashboard, then put the SAME value in
+      # the Read AI webhook URL as ?token=… (or the x-read-ai-token header). Blank =
+      # the webhook returns 503 (disabled), so it's safe to deploy before it's minted.
+      - key: READ_AI_WEBHOOK_SECRET
+        sync: false
       - key: N8N_AIM_WEBHOOK_URL
         value: https://evertrustgmbh.app.n8n.cloud/webhook/aim-deploy-campaign
       - key: N8N_CAMPAIGNS_LIST_WEBHOOK_URL

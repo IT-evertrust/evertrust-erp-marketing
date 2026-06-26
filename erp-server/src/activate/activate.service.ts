@@ -238,6 +238,58 @@ export class ActivateService {
     return { imported: count, analyzed, status: 'ok' };
   }
 
+  // PUSH path: a finished-meeting report posted by Read AI's webhook (no JWT — gated by
+  // the shared secret in ReadAiTokenGuard). Resolves the org from the payload's emails,
+  // maps the raw payload → an import item (transcript + summary), upserts it, then
+  // auto-analyzes in the BACKGROUND so the webhook acks fast (Read AI retries slow/failed
+  // responses, and the local LLM is memory-bound). Logs the raw top-level keys so the
+  // mapping can be tuned against the first real fire.
+  async ingestReadAiWebhook(payload: Record<string, unknown>): Promise<{
+    ok: boolean;
+    imported: number;
+    sessionId: string | null;
+    hasTranscript: boolean;
+    orgResolved: boolean;
+  }> {
+    const body = payload ?? {};
+    this.logger.log(`Read AI webhook keys: [${Object.keys(body).join(', ')}]`);
+
+    const { item, emails } = mapReadAiWebhook(body);
+    const sessionId = item.readAiId ?? null;
+    const hasTranscript = !!item.transcript?.trim();
+
+    const orgId = await this.repo.resolveOrgIdForWebhook(emails);
+    if (!orgId) {
+      this.logger.warn(
+        `Read AI webhook: could not resolve org (emails: [${emails.join(', ')}]).`,
+      );
+      return { ok: false, imported: 0, sessionId, hasTranscript, orgResolved: false };
+    }
+
+    // A bare verification ping (no id and no title) is acknowledged without a write.
+    const importable = !!(item.readAiId || item.title);
+    const { count } = importable
+      ? await this.repo.importReadAiMeetings(orgId, [item])
+      : { count: 0 };
+
+    this.logger.log(
+      `Read AI webhook: imported ${count} (transcript=${hasTranscript}) for org ${orgId}.`,
+    );
+
+    if (count > 0 && hasTranscript) {
+      // Fire-and-forget: don't make Read AI wait on the local LLM.
+      void this.autoAnalyzePending(orgId).catch((err) =>
+        this.logger.warn(
+          `Read AI webhook auto-analyze failed: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        ),
+      );
+    }
+
+    return { ok: true, imported: count, sessionId, hasTranscript, orgResolved: true };
+  }
+
   // Analyze every meeting that has a transcript but no analysis yet. Sequential on purpose
   // (the local LLM gateway is memory-bound); best-effort per meeting so one failure doesn't
   // abort the batch. Returns how many were analyzed.
@@ -381,4 +433,169 @@ export class ActivateService {
   private cacheKey(orgId: string, eventId: string): string {
     return `${orgId}:${eventId}`;
   }
+}
+
+// ---- Read AI webhook payload mapping (defensive) ----------------------------
+// Read AI's webhook body shape isn't a fixed contract, so every field is resolved
+// from several candidate paths and the raw keys are logged on each fire (see
+// ingestReadAiWebhook) for tuning. All outputs are optional — the import schema is
+// lenient and the upsert keys on readAiId (else title+date).
+
+type ReadAiParty = { name?: string; email?: string };
+
+// Resolve the first non-empty string at any of the dotted paths (e.g. 'owner.email').
+function digString(obj: unknown, ...paths: string[]): string | undefined {
+  for (const path of paths) {
+    let cur: unknown = obj;
+    for (const key of path.split('.')) {
+      if (cur && typeof cur === 'object' && key in (cur as Record<string, unknown>)) {
+        cur = (cur as Record<string, unknown>)[key];
+      } else {
+        cur = undefined;
+        break;
+      }
+    }
+    if (typeof cur === 'string' && cur.trim()) return cur.trim();
+    if (typeof cur === 'number') return String(cur);
+  }
+  return undefined;
+}
+
+function toIso(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
+}
+
+// Read a participant/attendee array, accepting {name,email} objects or bare strings.
+function readParties(
+  payload: Record<string, unknown>,
+  ...keys: string[]
+): ReadAiParty[] {
+  for (const k of keys) {
+    const v = payload[k];
+    if (Array.isArray(v)) {
+      return v.map((p): ReadAiParty => {
+        if (typeof p === 'string') {
+          return p.includes('@') ? { email: p } : { name: p };
+        }
+        const o = (p ?? {}) as Record<string, unknown>;
+        const name =
+          typeof o.name === 'string'
+            ? o.name
+            : typeof o.full_name === 'string'
+              ? o.full_name
+              : undefined;
+        const email = typeof o.email === 'string' ? o.email : undefined;
+        return { name, email };
+      });
+    }
+  }
+  return [];
+}
+
+// Flatten Read AI's transcript: a plain string, a {text}, or {speaker_blocks:[...]}.
+function transcriptText(payload: Record<string, unknown>): string | undefined {
+  const t = payload.transcript;
+  if (typeof t === 'string' && t.trim()) return t.trim();
+  if (t && typeof t === 'object') {
+    const to = t as Record<string, unknown>;
+    if (typeof to.text === 'string' && to.text.trim()) return to.text.trim();
+    const blocks = to.speaker_blocks ?? to.speakerBlocks ?? to.utterances;
+    if (Array.isArray(blocks)) {
+      const lines = blocks
+        .map((b) => {
+          const o = (b ?? {}) as Record<string, unknown>;
+          const sp = o.speaker;
+          const speaker =
+            typeof sp === 'string'
+              ? sp
+              : sp && typeof sp === 'object' && typeof (sp as Record<string, unknown>).name === 'string'
+                ? ((sp as Record<string, unknown>).name as string)
+                : typeof o.speaker_name === 'string'
+                  ? o.speaker_name
+                  : '';
+          const words =
+            typeof o.words === 'string'
+              ? o.words
+              : typeof o.text === 'string'
+                ? o.text
+                : '';
+          if (!words.trim()) return '';
+          return speaker ? `${speaker}: ${words}` : words;
+        })
+        .filter(Boolean);
+      if (lines.length) return lines.join('\n');
+    }
+  }
+  return undefined;
+}
+
+const PUBLIC_EMAIL_ROOTS = new Set([
+  'gmail',
+  'outlook',
+  'hotmail',
+  'yahoo',
+  'icloud',
+  'proton',
+  'protonmail',
+  'gmx',
+  'web',
+  'aol',
+  'live',
+  'me',
+]);
+
+// Best-effort company name from a business email domain (skips public providers).
+function companyFromEmail(email: string | undefined): string | undefined {
+  if (!email || !email.includes('@')) return undefined;
+  const domain = email.split('@')[1]?.toLowerCase() ?? '';
+  const root = domain.split('.')[0] ?? '';
+  if (!root || PUBLIC_EMAIL_ROOTS.has(root)) return undefined;
+  return root.charAt(0).toUpperCase() + root.slice(1);
+}
+
+function mapReadAiWebhook(payload: Record<string, unknown>): {
+  item: ReadAiImportItem;
+  emails: string[];
+} {
+  const ownerEmail = digString(
+    payload,
+    'owner.email',
+    'host.email',
+    'organizer.email',
+    'owner',
+  );
+  const parties = readParties(payload, 'participants', 'attendees', 'speakers');
+  const guest =
+    parties.find(
+      (p) => p.email && p.email.toLowerCase() !== (ownerEmail ?? '').toLowerCase(),
+    ) ?? parties[0];
+
+  const item: ReadAiImportItem = {
+    readAiId: digString(payload, 'session_id', 'sessionId', 'id', 'trigger_id'),
+    title: digString(payload, 'title', 'session_title', 'meeting_title', 'subject'),
+    company: companyFromEmail(guest?.email),
+    contact: guest?.name,
+    email: guest?.email,
+    owner: ownerEmail,
+    meetingDate: toIso(
+      digString(
+        payload,
+        'start_time',
+        'start',
+        'meeting_start_time',
+        'startTime',
+        'date',
+      ),
+    ),
+    transcript: transcriptText(payload),
+    summary: digString(payload, 'summary', 'report.summary', 'summary.text'),
+    docUrl: digString(payload, 'report_url', 'session_url', 'report.url', 'url'),
+  };
+
+  const emails = [ownerEmail, ...parties.map((p) => p.email)].filter(
+    (e): e is string => !!e,
+  );
+  return { item, emails };
 }
