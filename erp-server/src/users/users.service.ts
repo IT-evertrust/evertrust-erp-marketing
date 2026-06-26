@@ -87,6 +87,7 @@ export class UsersService {
         role: schema.users.role,
         organizationId: schema.users.organizationId,
         senderName: schema.users.senderName,
+        senderEmail: schema.users.senderEmail,
         signature: schema.users.signature,
         signatureImageUrl: schema.users.signatureImageUrl,
       });
@@ -115,6 +116,7 @@ export class UsersService {
         organizationId: schema.users.organizationId,
         organizationName: schema.organizations.name,
         senderName: schema.users.senderName,
+        senderEmail: schema.users.senderEmail,
         signature: schema.users.signature,
         signatureImageUrl: schema.users.signatureImageUrl,
       })
@@ -141,10 +143,19 @@ export class UsersService {
   // Returns the freshly-resolved MeDto.
   async updateSenderIdentity(
     userId: string,
-    patch: { senderName?: string | null; signature?: string | null },
+    patch: {
+      senderName?: string | null;
+      senderEmail?: string | null;
+      signature?: string | null;
+    },
   ): Promise<MeDto> {
-    const set: Partial<{ senderName: string | null; signature: string | null }> = {};
+    const set: Partial<{
+      senderName: string | null;
+      senderEmail: string | null;
+      signature: string | null;
+    }> = {};
     if (patch.senderName !== undefined) set.senderName = patch.senderName;
+    if (patch.senderEmail !== undefined) set.senderEmail = patch.senderEmail;
     if (patch.signature !== undefined) set.signature = patch.signature;
 
     if (Object.keys(set).length > 0) {

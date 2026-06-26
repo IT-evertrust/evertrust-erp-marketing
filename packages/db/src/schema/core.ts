@@ -37,10 +37,11 @@ export const users = pgTable(
     // still works (the new token's iat is later). NULL = never force-logged-out.
     // Set when an admin removes the user's connected Google account from Settings.
     tokenInvalidBefore: timestamp('token_invalid_before', { withTimezone: true }),
-    // Per-user sender identity — each user's own From display name, signature block,
-    // and signature image. These drive the send path per sending user (no org
-    // fallback). All NULLABLE: unset = the user simply sends with no custom value.
+    // Per-user sender identity — each user's own From display name, From address,
+    // signature block, and signature image. These drive the send path per sending
+    // user (no org fallback). All NULLABLE: unset = the user simply has no custom value.
     senderName: text('sender_name'),
+    senderEmail: text('sender_email'),
     signature: text('signature'),
     signatureImageUrl: text('signature_image_url'),
     createdAt: timestamp('created_at', { withTimezone: true })
