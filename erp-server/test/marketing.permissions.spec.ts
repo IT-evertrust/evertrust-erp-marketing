@@ -1,12 +1,14 @@
-import { ExecutionContext, ForbiddenException } from '@nestjs/common';
+import { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PermissionsGuard } from '../src/auth/guards/permissions.guard';
 import { MarketingController } from '../src/marketing/marketing.controller';
 import type { AuthUser } from '../src/auth/auth.types';
 
 // Binds the REAL Marketing Draft-Review routes' @RequirePermissions to the role
-// mapping end-to-end. The split: anyone who can READ campaigns can view the RAG
-// drafts; SENDING a reply (real client email) is campaigns:write — MANAGER and up.
+// mapping end-to-end. NOTE: per-feature RBAC is INTENTIONALLY DISABLED for this
+// deployment (commit c2a95a1 / ROLE_PERMISSIONS in @evertrust/shared) — every
+// authenticated role holds the FULL permission set, so an EMPLOYEE may both view
+// AND send drafts. Restoring the role matrix reverts this to a read-vs-send split.
 const EMPLOYEE: AuthUser = { id: 'u-emp', role: 'EMPLOYEE', organizationId: 'o1' };
 const MANAGER: AuthUser = { id: 'u-mgr', role: 'MANAGER', organizationId: 'o1' };
 
@@ -35,17 +37,15 @@ const ctxSend = (u: AuthUser) =>
     u,
   );
 
-describe('Marketing Draft-Review permissions', () => {
+describe('Marketing Draft-Review permissions (RBAC disabled — flat access)', () => {
   const guard = new PermissionsGuard(new Reflector());
 
-  it('EMPLOYEE can list drafts (campaigns:read)', () => {
+  it('EMPLOYEE can list drafts', () => {
     expect(guard.canActivate(ctxList(EMPLOYEE))).toBe(true);
   });
 
-  it('EMPLOYEE cannot send a draft (campaigns:write)', () => {
-    expect(() => guard.canActivate(ctxSend(EMPLOYEE))).toThrow(
-      ForbiddenException,
-    );
+  it('EMPLOYEE can send a draft (full access)', () => {
+    expect(guard.canActivate(ctxSend(EMPLOYEE))).toBe(true);
   });
 
   it('MANAGER can both list and send', () => {

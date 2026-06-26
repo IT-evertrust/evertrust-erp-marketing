@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
+import { effectivePermissions } from '@evertrust/shared';
 import { UsersService } from '../src/users/users.service';
 import { getDb, rowsOf, seed } from './real-db';
 
@@ -256,11 +257,19 @@ describe('UsersService — updateUser per-user permissions', () => {
     expect(after.permissions ?? null).toBeNull();
   });
 
-  it('blocks removing your own user-management access', async () => {
+  it('no longer self-locks: editing your own permissions is inert while RBAC is disabled', async () => {
     const { service } = await seed_();
-    await expect(
-      service.updateUser(ORG_A, BOB, BOB, { permissions: ['campaigns:read'] }),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    // Per-feature RBAC is intentionally disabled (effectivePermissions always
+    // returns the full set — commit c2a95a1), so narrowing your OWN stored
+    // permissions can never strip user-management access: the self-lockout guard
+    // is a no-op and the edit succeeds. The override is recorded but inert.
+    const { after } = await service.updateUser(ORG_A, BOB, BOB, {
+      permissions: ['campaigns:read'],
+    });
+    expect(after.permissions).toEqual(['campaigns:read']);
+    expect(effectivePermissions(after.role, after.permissions)).toContain(
+      'users:manage',
+    );
   });
 });
 

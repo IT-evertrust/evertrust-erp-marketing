@@ -27,28 +27,46 @@ function reflectorReturning(perms: Permission[] | undefined): Reflector {
 const SUPER_ADMIN: AuthUser = { id: 'u1', role: 'SUPER_ADMIN', organizationId: 'org1' };
 const EMPLOYEE: AuthUser = { id: 'u2', role: 'EMPLOYEE', organizationId: 'org1' };
 
-// WHY: permission-based RBAC is the single authorization control. A guard that
-// lets a role through without the required permission (or blocks one that has
-// it) is a real authz bug — these tests fail the instant that expansion/check
-// logic regresses.
+// A principal carrying an EXPLICIT (narrow) per-user permission set. The guard
+// prefers user.permissions over the role table (permissions.guard.ts), so this
+// still exercises the deny path even though per-feature RBAC is intentionally
+// disabled at the role-table level (commit c2a95a1).
+const NARROW: AuthUser = {
+  id: 'u3',
+  role: 'EMPLOYEE',
+  organizationId: 'org1',
+  permissions: ['campaigns:read'],
+};
+
+// WHY: the guard is the single authorization control. Per-feature RBAC is
+// intentionally flattened (every role holds every permission — see
+// ROLE_PERMISSIONS in @evertrust/shared), so role-table denials no longer apply;
+// these assert that flat reality AND keep the guard's MECHANISM covered — it must
+// still honor an explicit per-user set and the AND-semantics, and still deny an
+// unauthenticated request — so the scaffolding works the moment RBAC is restored.
 describe('PermissionsGuard', () => {
-  it('allows when the role holds the required permission (SUPER_ADMIN -> admin:config)', () => {
+  it('allows when the granted set holds the required permission (SUPER_ADMIN -> admin:config)', () => {
     const guard = new PermissionsGuard(reflectorReturning(['admin:config']));
     expect(guard.canActivate(contextWithUser(SUPER_ADMIN))).toBe(true);
   });
 
-  it('denies when the role lacks the required permission (EMPLOYEE -> admin:config)', () => {
+  it('allows EMPLOYEE through admin:config now that RBAC is flat (role grants every permission)', () => {
     const guard = new PermissionsGuard(reflectorReturning(['admin:config']));
-    expect(() => guard.canActivate(contextWithUser(EMPLOYEE))).toThrow(
+    expect(guard.canActivate(contextWithUser(EMPLOYEE))).toBe(true);
+  });
+
+  it('still denies when the granted set lacks the required permission (explicit narrow override)', () => {
+    const guard = new PermissionsGuard(reflectorReturning(['admin:config']));
+    expect(() => guard.canActivate(contextWithUser(NARROW))).toThrow(
       ForbiddenException,
     );
   });
 
-  it('requires ALL listed permissions (EMPLOYEE has campaigns:read but not performance:read)', () => {
+  it('requires ALL listed permissions (explicit set has campaigns:read but not performance:read)', () => {
     const guard = new PermissionsGuard(
       reflectorReturning(['campaigns:read', 'performance:read']),
     );
-    expect(() => guard.canActivate(contextWithUser(EMPLOYEE))).toThrow(
+    expect(() => guard.canActivate(contextWithUser(NARROW))).toThrow(
       ForbiddenException,
     );
   });
@@ -78,9 +96,10 @@ describe('permissionsForRole', () => {
     expect(l1Perms).toHaveLength(PERMISSIONS.length);
   });
 
-  it('returns a copy that cannot mutate the shared mapping', () => {
+  it('returns a fresh copy callers cannot mutate', () => {
     const a = permissionsForRole('EMPLOYEE');
-    a.push('admin:config');
-    expect(permissionsForRole('EMPLOYEE')).not.toContain('admin:config');
+    const len = a.length;
+    a.push('admin:config'); // mutating the returned array must not grow the source
+    expect(permissionsForRole('EMPLOYEE')).toHaveLength(len);
   });
 });
