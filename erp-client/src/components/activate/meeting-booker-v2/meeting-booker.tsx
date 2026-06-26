@@ -36,7 +36,7 @@ import {
 const HOUR_PX = 56;
 const DAY_HOURS = 24;
 const WORK_DAYS = 5; // Mon–Fri
-const OPEN_SCROLL_TOP = 7 * HOUR_PX - 10;
+const OPEN_SCROLL_TOP = 7 * HOUR_PX + 10;
 // Floor on a rendered event card so a very short meeting is still readable/clickable.
 const MIN_EVENT_PX = 24;
 
@@ -412,8 +412,15 @@ export function MeetingBookerV2() {
         {/* Body: header row (gutter + day columns) + scrolling time grid */}
         <div className="flex p-0">
           <div className="flex h-[calc(100vh-300px)] min-h-[360px] w-full flex-col">
-            <div className="flex flex-none border-b border-[#e4e7eb] pr-[9px]">
-              <div className="flex w-[94px] flex-none items-end pb-[7px] text-[9.5px] font-bold tracking-[0.06em] text-[#959ca7]">
+            {/* ONE scroll container so the sticky header row and the scrolling grid
+                share an identical width — otherwise the header (which reserved its own
+                gutter) drifts out of alignment with the columns under it. */}
+            <div
+              ref={bodyRef}
+              className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]"
+            >
+              <div className="sticky top-0 z-[3] flex flex-none border-b border-[#e4e7eb] bg-white">
+                <div className="flex w-[94px] flex-none items-end pb-[7px] text-[9.5px] font-bold tracking-[0.06em] text-[#959ca7]">
                 <div className="flex-1 pr-2 text-right">
                   {zoneShortLabel(primaryTz)}
                 </div>
@@ -440,13 +447,10 @@ export function MeetingBookerV2() {
                   </div>
                 );
               })}
-            </div>
+              </div>
 
-            <div
-              ref={bodyRef}
-              className="flex min-h-0 flex-1 items-start overflow-y-auto overflow-x-hidden py-[10px] [scrollbar-gutter:stable]"
-            >
-              <div className="flex w-[94px] flex-none" style={{ height: DAY_HOURS * HOUR_PX }}>
+              <div className="flex pb-[10px] pt-[10px]">
+                <div className="flex w-[94px] flex-none" style={{ height: DAY_HOURS * HOUR_PX }}>
                 <div className="relative flex-1">
                   {HOUR_LABELS.map((label, n) => (
                     <div
@@ -510,6 +514,7 @@ export function MeetingBookerV2() {
                   ))}
                 </div>
               ))}
+              </div>
             </div>
           </div>
         </div>
