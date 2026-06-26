@@ -289,6 +289,7 @@ export function GeneralSettings() {
   useEffect(() => {
     if (!myIdentity) return;
     setSenderName(myIdentity.senderName ?? '');
+    setSenderEmail(myIdentity.senderEmail ?? '');
     setSignature(myIdentity.signature ?? '');
     setSignatureImageUrl(myIdentity.signatureImageUrl ?? null);
   }, [myIdentity]);
@@ -297,7 +298,6 @@ export function GeneralSettings() {
   // a save, since the PATCH response is written back into the cache).
   useEffect(() => {
     if (!data) return;
-    setSenderEmail(data.senderEmail ?? '');
     setDailySendCap(String(data.dailySendCap));
     setSendingHoursStart(data.sendingHoursStart);
     setSendingHoursEnd(data.sendingHoursEnd);
@@ -318,19 +318,14 @@ export function GeneralSettings() {
     patch({ [field]: next });
   }
 
-  // The ORG senderEmail blur: trim, send null when emptied, and only PATCH when the
-  // value actually changed. (senderName + signature are PER-USER — see below.)
-  function commitSenderEmail(raw: string) {
-    if (!data) return;
-    const trimmed = raw.trim();
-    const next = trimmed === '' ? null : trimmed;
-    if (next === (data.senderEmail ?? null)) return;
-    patch({ senderEmail: next });
-  }
-
-  // A PER-USER nullable-text blur (senderName / signature): trim, send null when
-  // emptied, and only PATCH when the value actually changed against the current user.
-  function commitMyIdentity(field: 'senderName' | 'signature', raw: string) {
+  // A PER-USER nullable-text blur (senderName / senderEmail / signature): trim, send
+  // null when emptied, and only PATCH when the value actually changed against the
+  // current user. The whole Sender Identity (name + email + signature) is per-user —
+  // each user's own From shown on outgoing mail, not an org-shared value.
+  function commitMyIdentity(
+    field: 'senderName' | 'senderEmail' | 'signature',
+    raw: string,
+  ) {
     if (!myIdentity) return;
     const trimmed = raw.trim();
     const next = trimmed === '' ? null : trimmed;
@@ -468,7 +463,7 @@ export function GeneralSettings() {
                 placeholder={t('system.sender.emailPlaceholder')}
                 value={senderEmail}
                 onChange={(e) => setSenderEmail(e.target.value)}
-                onBlur={() => commitSenderEmail(senderEmail)}
+                onBlur={() => commitMyIdentity('senderEmail', senderEmail)}
               />
             </div>
             <div className="flex flex-col gap-2">

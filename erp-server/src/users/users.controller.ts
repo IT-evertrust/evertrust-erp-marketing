@@ -104,7 +104,11 @@ export class UsersController {
       entity: 'users',
       entityId: user.id,
       action: 'UPDATE',
-      after: { senderName: after.senderName, signature: after.signature },
+      after: {
+        senderName: after.senderName,
+        senderEmail: after.senderEmail,
+        signature: after.signature,
+      },
     });
 
     return after;

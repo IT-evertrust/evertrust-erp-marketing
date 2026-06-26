@@ -31,6 +31,7 @@ export class AuthService {
         organizationId: schema.users.organizationId,
         organizationName: schema.organizations.name,
         senderName: schema.users.senderName,
+        senderEmail: schema.users.senderEmail,
         signature: schema.users.signature,
         signatureImageUrl: schema.users.signatureImageUrl,
         active: schema.users.active,
@@ -65,6 +66,7 @@ export class AuthService {
       organizationId: row.organizationId,
       organizationName: row.organizationName,
       senderName: row.senderName,
+      senderEmail: row.senderEmail,
       signature: row.signature,
       signatureImageUrl: row.signatureImageUrl,
     };
@@ -93,6 +95,7 @@ export class AuthService {
         organizationId: schema.users.organizationId,
         organizationName: schema.organizations.name,
         senderName: schema.users.senderName,
+        senderEmail: schema.users.senderEmail,
         signature: schema.users.signature,
         signatureImageUrl: schema.users.signatureImageUrl,
       })

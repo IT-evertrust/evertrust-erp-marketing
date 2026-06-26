@@ -293,11 +293,12 @@ export const MeDto = z.object({
   // join. Keeping it optional means the currently-deployed api/web (which does
   // not yet send/expect it) keep validating before the coordinated redeploy.
   organizationName: z.string().optional(),
-  // PER-USER sender identity — each user's own From display name, signature block,
-  // and signature image, surfaced on /auth/me so the Settings card + send path read
-  // them. NULLABLE (a user may have none) + optional for rolling-deploy safety
-  // (an older api omits them; the web tolerates that).
+  // PER-USER sender identity — each user's own From display name, From address,
+  // signature block, and signature image, surfaced on /auth/me so the Settings card +
+  // send path read them. NULLABLE (a user may have none) + optional for rolling-deploy
+  // safety (an older api omits them; the web tolerates that).
   senderName: z.string().nullable().optional(),
+  senderEmail: z.string().nullable().optional(),
   signature: z.string().nullable().optional(),
   signatureImageUrl: z.string().nullable().optional(),
 });
@@ -314,11 +315,12 @@ export const UpdateMyNameDto = z.object({
 });
 export type UpdateMyNameDto = z.infer<typeof UpdateMyNameDto>;
 
-// The caller's own sender identity patch (senderName + signature text). Both
-// NULLABLE+optional: an omitted field is left unchanged, an explicit null clears
+// The caller's own sender identity patch (senderName + senderEmail + signature text).
+// All NULLABLE+optional: an omitted field is left unchanged, an explicit null clears
 // it. The signature IMAGE is set via its own multipart/JSON route, not here.
 export const UpdateMySenderIdentityDto = z.object({
   senderName: z.string().trim().max(120).nullable().optional(),
+  senderEmail: z.string().trim().max(200).nullable().optional(),
   signature: z.string().max(4000).nullable().optional(),
 });
 export type UpdateMySenderIdentityDto = z.infer<typeof UpdateMySenderIdentityDto>;
