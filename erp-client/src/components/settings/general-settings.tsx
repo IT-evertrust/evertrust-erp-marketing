@@ -18,6 +18,7 @@ import {
   useClearSignatureImage,
   useDisconnectGoogleAccount,
   useGoogleAccounts,
+  useSetSignatureImageUrl,
   useUploadSignatureImage,
 } from '@/hooks/use-arsenal';
 import { getSignature } from '@/modules/(growth)/reach/services/reach.service';
@@ -262,8 +263,10 @@ export function GeneralSettings() {
   // Held in local state: seeded once from getSignature(), then updated from each
   // upload/clear mutation result.
   const uploadSignatureImage = useUploadSignatureImage();
+  const setSignatureImageLink = useSetSignatureImageUrl();
   const clearSignatureImage = useClearSignatureImage();
   const [signatureImageUrl, setSignatureImageUrl] = useState<string | null>(null);
+  const [signatureLinkInput, setSignatureLinkInput] = useState('');
   const signatureFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -345,6 +348,23 @@ export function GeneralSettings() {
     clearSignatureImage.mutate(undefined, {
       onSuccess: (res) => {
         setSignatureImageUrl(res.signatureImageUrl ?? null);
+        setSignatureLinkInput('');
+        toast.success(t('system.toastSaved'));
+      },
+      onError: (err) => toast.error(err.message || t('system.toastError')),
+    });
+  }
+
+  // Signature image via link: point the image at a pasted URL (a Drive share link
+  // is normalized server-side, any other image URL is stored as-is). No-op on an
+  // empty input.
+  function handleSignatureImageLink() {
+    const url = signatureLinkInput.trim();
+    if (!url) return;
+    setSignatureImageLink.mutate(url, {
+      onSuccess: (res) => {
+        setSignatureImageUrl(res.signatureImageUrl ?? null);
+        setSignatureLinkInput('');
         toast.success(t('system.toastSaved'));
       },
       onError: (err) => toast.error(err.message || t('system.toastError')),
@@ -500,6 +520,40 @@ export function GeneralSettings() {
                     {t('system.sender.signatureImageRemove')}
                   </Button>
                 ) : null}
+              </div>
+              {/* …or point it at an image URL / Drive share link instead of a
+                  file upload. The link is normalized + stored server-side. */}
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  type="url"
+                  inputMode="url"
+                  value={signatureLinkInput}
+                  placeholder={t('system.sender.signatureImageUrlPlaceholder')}
+                  className="h-8 w-full max-w-[320px] text-xs sm:flex-1"
+                  disabled={setSignatureImageLink.isPending}
+                  onChange={(e) => setSignatureLinkInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSignatureImageLink();
+                    }
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={
+                    setSignatureImageLink.isPending ||
+                    signatureLinkInput.trim().length === 0
+                  }
+                  onClick={handleSignatureImageLink}
+                >
+                  {setSignatureImageLink.isPending ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : null}
+                  {t('system.sender.signatureImageUrlButton')}
+                </Button>
               </div>
               <p className="text-xs text-muted-foreground">
                 {t('system.sender.signatureImageHint')}
