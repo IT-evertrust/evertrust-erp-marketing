@@ -318,11 +318,13 @@ export class GoogleAccountsService {
   // scan, Calendar read) can surface WHY in the UI instead of a generic "not
   // connected" shell. The reason strings are end-user-facing.
   async resolveMailbox(orgId: string, kind: GoogleMailboxKind): Promise<MailboxAccess> {
+    // Hoisted so the catch can flip a dead-token account to REVOKED.
+    let row: GoogleAccountRow | undefined;
     try {
       const orgRow = await this.orgRow(orgId);
 
       // 1) Prefer the explicit default-mailbox pointer.
-      let row = orgRow.defaultMailboxAccountId
+      row = orgRow.defaultMailboxAccountId
         ? await this.ownedRow(orgId, orgRow.defaultMailboxAccountId)
         : undefined;
 
@@ -382,6 +384,12 @@ export class GoogleAccountsService {
 
       this.logger.warn(`resolveMailbox(${orgId}, ${kind}) token error: ${msg} — ${reason}`);
 
+      // A revoked/expired refresh token (invalid_grant) is permanent — flip the row to
+      // REVOKED so it stops masquerading as connected (callers + the booker skip it).
+      if (row && this.isInvalidGrant(err)) {
+        await this.markRevoked(orgId, row.id, reason);
+      }
+
       return { ok: false, reason };
     }
   }
@@ -408,6 +416,13 @@ export class GoogleAccountsService {
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'unknown error';
       this.logger.warn(`getAccessTokenForAccount(${orgId}, ${accountId}) token error: ${msg}`);
+      if (this.isInvalidGrant(err)) {
+        await this.markRevoked(
+          orgId,
+          accountId,
+          'Google refused the token refresh (the grant was revoked or expired). Reconnect the account.',
+        );
+      }
       return null;
     }
   }
@@ -455,7 +470,55 @@ export class GoogleAccountsService {
       this.logger.warn(
         `resolveMailboxForAccount(${orgId}, ${accountId}, ${kind}) token error: ${msg} — ${reason}`,
       );
+      if (this.isInvalidGrant(err)) {
+        await this.markRevoked(orgId, accountId, reason);
+      }
       return { ok: false, reason };
+    }
+  }
+
+  // True when a token-refresh failure is Google's definitive "this refresh token is
+  // dead" signal (invalid_grant: the grant was revoked — e.g. by our own disconnect —
+  // or it expired). google-auth-library surfaces the OAuth error body on
+  // err.response.data; we also sniff the message as a fallback. A transient/network
+  // error is NOT invalid_grant, so a healthy account is never flipped to REVOKED on a
+  // blip.
+  private isInvalidGrant(err: unknown): boolean {
+    const data = (err as { response?: { data?: { error?: string } } })?.response?.data;
+    if (data?.error === 'invalid_grant') return true;
+    const msg = err instanceof Error ? err.message : String(err);
+    return msg.includes('invalid_grant');
+  }
+
+  // Reconcile an account to REVOKED when its refresh token is dead, so the UI stops
+  // showing it as connected: Settings renders it "Revoked", the booker's CONNECTED
+  // filter + the token-resolve fallbacks skip it, and the user knows to reconnect.
+  // Best-effort + org-scoped — a write failure here must never change the resolve
+  // contract (the caller still gets its ok:false / null).
+  private async markRevoked(
+    orgId: string,
+    accountId: string,
+    reason: string,
+  ): Promise<void> {
+    try {
+      await this.db
+        .update(schema.googleAccounts)
+        .set({ status: 'REVOKED', lastError: reason, updatedAt: new Date() })
+        .where(
+          and(
+            eq(schema.googleAccounts.organizationId, orgId),
+            eq(schema.googleAccounts.id, accountId),
+          ),
+        );
+      this.logger.warn(
+        `Marked Google account ${accountId} REVOKED (org ${orgId}): ${reason}`,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `markRevoked(${orgId}, ${accountId}) skipped: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
     }
   }
 
