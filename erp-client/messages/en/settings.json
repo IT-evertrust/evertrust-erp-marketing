@@ -59,7 +59,9 @@
       "signatureImageEmpty": "No signature image set",
       "signatureImageUpload": "Upload image",
       "signatureImageRemove": "Remove",
-      "signatureImageHint": "PNG or JPG, embedded at the bottom of outgoing emails."
+      "signatureImageUrlPlaceholder": "…or paste an image URL / Drive link",
+      "signatureImageUrlButton": "Use link",
+      "signatureImageHint": "PNG or JPG, embedded at the bottom of outgoing emails. Upload a file or link to an image URL."
     },
     "sending": {
       "title": "Sending Parameters",

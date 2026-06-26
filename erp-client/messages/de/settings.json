@@ -59,7 +59,9 @@
       "signatureImageEmpty": "Kein Signaturbild festgelegt",
       "signatureImageUpload": "Bild hochladen",
       "signatureImageRemove": "Entfernen",
-      "signatureImageHint": "PNG oder JPG, wird unten in ausgehende E-Mails eingebettet."
+      "signatureImageUrlPlaceholder": "…oder Bild-URL / Drive-Link einfügen",
+      "signatureImageUrlButton": "Link verwenden",
+      "signatureImageHint": "PNG oder JPG, wird unten in ausgehende E-Mails eingebettet. Datei hochladen oder auf eine Bild-URL verlinken."
     },
     "sending": {
       "title": "Versandparameter",
