@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule, type JwtModuleOptions } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { AppConfigService } from '../config/app-config.service';
+import { GoogleModule } from '../google/google.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { GoogleAuthService } from './google-auth.service';
@@ -11,6 +12,10 @@ import { GoogleTokenVerifier, TOKEN_VERIFIER } from './token-verifier';
 @Module({
   imports: [
     PassportModule,
+    // For GoogleAccountsService — a code-flow Google login connects the user's
+    // mailbox in the same step (GoogleModule imports nothing feature-specific, so
+    // this introduces no cycle).
+    GoogleModule,
     // JWT signing config is sourced from the validated env (secret + expiry).
     JwtModule.registerAsync({
       inject: [AppConfigService],
