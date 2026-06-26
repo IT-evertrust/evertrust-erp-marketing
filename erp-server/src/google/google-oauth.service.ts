@@ -89,24 +89,63 @@ export class GoogleOAuthService {
       throw new Error('Google did not return an id_token');
     }
 
-    const ticket = await client.verifyIdToken({
-      idToken: tokens.id_token,
-      audience: this.config.get('GOOGLE_CLIENT_ID'),
-    });
-    const payload = ticket.getPayload();
-    if (!payload?.sub || !payload.email) {
-      throw new Error('Google id_token is missing sub/email');
-    }
+    // Decode the id_token OFFLINE — no cert fetch. In the code flow the id_token is
+    // delivered DIRECTLY by Google's token endpoint over a TLS server-to-server call,
+    // so it is already trusted; re-verifying its signature against Google's published
+    // certs is redundant (OIDC Core §3.1.3.7) AND some hosts' egress IPs get a 403
+    // from Google's cert endpoint, which would otherwise fail EVERY connect — exactly
+    // the bug the login flow already fixed by decoding offline. Audience/issuer/expiry
+    // are still validated offline as defence in depth.
+    const identity = this.decodeIdToken(tokens.id_token);
 
     return {
       refreshToken: tokens.refresh_token,
       accessToken: tokens.access_token ?? null,
       expiryDate: tokens.expiry_date ?? null,
-      sub: payload.sub,
-      email: payload.email,
-      name: payload.name ?? null,
+      sub: identity.sub,
+      email: identity.email,
+      name: identity.name,
       scopes: typeof tokens.scope === 'string' ? tokens.scope.split(' ').filter(Boolean) : [],
     };
+  }
+
+  // Offline id_token decode + claim validation (audience/issuer/expiry). Deliberately
+  // does NOT fetch Google's certs (see exchangeCode). Trusted because the token came
+  // straight from the TLS-authenticated token exchange.
+  private decodeIdToken(idToken: string): {
+    sub: string;
+    email: string;
+    name: string | null;
+  } {
+    const parts = idToken.split('.');
+    if (parts.length !== 3) throw new Error('Malformed id_token');
+    const claims = JSON.parse(
+      Buffer.from(parts[1]!, 'base64url').toString('utf8'),
+    ) as {
+      sub?: string;
+      email?: string;
+      name?: string;
+      aud?: string;
+      iss?: string;
+      exp?: number;
+    };
+
+    if (claims.aud !== this.config.get('GOOGLE_CLIENT_ID')) {
+      throw new Error('id_token audience mismatch');
+    }
+    if (
+      claims.iss !== 'accounts.google.com' &&
+      claims.iss !== 'https://accounts.google.com'
+    ) {
+      throw new Error('id_token issuer mismatch');
+    }
+    if (typeof claims.exp === 'number' && claims.exp * 1000 <= Date.now()) {
+      throw new Error('id_token expired');
+    }
+    if (!claims.sub || !claims.email) {
+      throw new Error('Google id_token is missing sub/email');
+    }
+    return { sub: claims.sub, email: claims.email, name: claims.name ?? null };
   }
 
   // Mint a fresh access token from a stored refresh token. Sets the refresh token as
