@@ -52,16 +52,18 @@ export class SignatureAssetsService {
     private readonly workflowConfig: WorkflowConfigService,
   ) {}
 
-  // Validate + store an uploaded image for the org, then set its signatureImageUrl to
-  // the ABSOLUTE public URL of the new asset. `baseUrl` is the absolute origin the
-  // controller resolved from the request (protocol + host); it is joined with the
-  // public serve path. Returns the resolved URL. Throws 400 on a bad MIME / oversize
-  // image so the caller surfaces a clear error.
-  async storeUpload(
+  // Validate + persist the uploaded image bytes as a signature_assets row and return
+  // its ABSOLUTE public serve URL. Pure asset storage — does NOT touch org_config, so
+  // it backs BOTH the org path (storeUpload below) and the per-user path (UsersService,
+  // which records the URL on the user's own row instead). `baseUrl` is the absolute
+  // origin the controller resolved from the request; it is joined with the public serve
+  // path. Throws 400 on a bad MIME / oversize / empty image. The asset row carries the
+  // org for ownership, but the URL itself is an unguessable public hotlink.
+  async storeAssetBytes(
     orgId: string,
     file: SignatureUpload,
     baseUrl: string,
-  ): Promise<{ signatureImageUrl: string }> {
+  ): Promise<string> {
     const mimeType = (file.mimetype ?? '').toLowerCase().trim();
     if (!ALLOWED_SIGNATURE_MIME_TYPES.has(mimeType)) {
       throw new BadRequestException(
@@ -94,7 +96,20 @@ export class SignatureAssetsService {
     const asset = inserted[0]!;
 
     // Absolute so the URL is hotlinkable straight from an email (no relative base).
-    const signatureImageUrl = `${baseUrl.replace(/\/+$/, '')}/public/signature-image/${asset.id}`;
+    return `${baseUrl.replace(/\/+$/, '')}/public/signature-image/${asset.id}`;
+  }
+
+  // Validate + store an uploaded image for the org, then set its signatureImageUrl to
+  // the ABSOLUTE public URL of the new asset. `baseUrl` is the absolute origin the
+  // controller resolved from the request (protocol + host); it is joined with the
+  // public serve path. Returns the resolved URL. Throws 400 on a bad MIME / oversize
+  // image so the caller surfaces a clear error.
+  async storeUpload(
+    orgId: string,
+    file: SignatureUpload,
+    baseUrl: string,
+  ): Promise<{ signatureImageUrl: string }> {
+    const signatureImageUrl = await this.storeAssetBytes(orgId, file, baseUrl);
     await this.workflowConfig.setSignatureImageUrl(orgId, signatureImageUrl);
     return { signatureImageUrl };
   }

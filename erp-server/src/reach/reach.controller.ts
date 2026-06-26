@@ -14,6 +14,8 @@ import {
 
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
 import { Public } from '../auth/decorators/public.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import type { AuthUser } from '../auth/auth.types';
 import { OrgId } from '../common/tenant';
 import { CreateAimBodyDto, SetAutoSendBodyDto } from './dto/create-aim.dto';
 import {
@@ -87,8 +89,14 @@ export class ReachController {
   // body is validated by the global ZodValidationPipe against CreateAimBodyDto.
   @RequirePermissions('campaigns:write')
   @Post('aims')
-  createAim(@OrgId() orgId: string, @Body() body: CreateAimBodyDto) {
-    return this.reachService.createAim(orgId, body);
+  createAim(
+    @OrgId() orgId: string,
+    @CurrentUser() user: AuthUser,
+    @Body() body: CreateAimBodyDto,
+  ) {
+    // Pass the creating user so the linked campaign records who owns it
+    // (campaigns.activatedBy) — that drives the PER-USER sender identity on send.
+    return this.reachService.createAim(orgId, body, user.id);
   }
 
   // Activate Lead Satellite for this aim's config. The scrape runs in the BACKGROUND

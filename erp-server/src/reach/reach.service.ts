@@ -144,7 +144,11 @@ export class ReachService {
   // AIM: create the campaign row (config.json = the input fields), then run Ammo
   // Forge to generate the three templates + the news brief and store them. If the
   // agent is unreachable the aim is still created (DRAFT) so it can be regenerated.
-  async createAim(orgId: string, dto: CreateAimDto): Promise<ReachAim> {
+  async createAim(
+    orgId: string,
+    dto: CreateAimDto,
+    userId?: string,
+  ): Promise<ReachAim> {
     // Derive the outreach-template placeholders from the niche's Sector instead of raw
     // input: {{Type}} <- first enabled target, {{IndustryFocus}} <- parent industry,
     // {{TenderFocus}} <- niche name. findOrCreate resolves (or seeds) the niche row, which
@@ -176,7 +180,12 @@ export class ReachService {
     let linked = aim;
     if (nicheRow) {
       try {
-        const campaignId = await this.repo.createLinkedCampaign(orgId, nicheRow.id, aim);
+        const campaignId = await this.repo.createLinkedCampaign(
+          orgId,
+          nicheRow.id,
+          aim,
+          userId ?? null,
+        );
         await this.repo.setAimCampaign(orgId, aim.id, campaignId);
         linked = { ...aim, campaignId };
       } catch (err) {
@@ -410,7 +419,16 @@ export class ReachService {
     const orgDefault = await this.repo.getDefaultTemplate(orgId);
     const tmpl = this.templateFor(aim, round, orgDefault);
     if (!tmpl || leads.length === 0) return 0;
-    const signatureImageUrl = await this.repo.getSignatureImageUrl(orgId);
+    // PER-USER sender identity: resolve the user who activated the aim's campaign and
+    // use THEIR signature image + From display name. No org fallback — the signature
+    // image is null when the user has none, and the From name degrades to the user's
+    // own account name, then the product default.
+    const sender = await this.repo.getSendIdentityByCampaign(
+      orgId,
+      aim.campaignId ?? null,
+    );
+    const signatureImageUrl = sender?.signatureImageUrl ?? null;
+    const fromName = sender?.senderName || sender?.name || 'EVERTRUST GmbH';
 
     const { mode, testRecipient, cap } = await this.resolveSendConfig(orgId);
     const targets = mode === 'live' ? leads : leads.slice(0, cap);
@@ -437,7 +455,7 @@ export class ReachService {
           to: recipient,
           subject,
           body,
-          fromName: 'EVERTRUST GmbH',
+          fromName,
           signatureImageUrl,
         });
         delivered++;

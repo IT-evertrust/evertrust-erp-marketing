@@ -15,13 +15,16 @@ import type {
 } from '@evertrust/shared';
 import { useOrgSettings, useUpdateOrgSettings } from '@/hooks/use-settings';
 import {
-  useClearSignatureImage,
   useDisconnectGoogleAccount,
   useGoogleAccounts,
-  useSetSignatureImageUrl,
-  useUploadSignatureImage,
 } from '@/hooks/use-arsenal';
-import { getSignature } from '@/modules/(growth)/reach/services/reach.service';
+import {
+  useClearMySignatureImage,
+  useMe,
+  useSetMySignatureImageUrl,
+  useUpdateMySenderIdentity,
+  useUploadMySignatureImage,
+} from '@/hooks/use-auth';
 import { ApiError, api } from '@/lib/api';
 import { GrowthCard } from '@/modules/(growth)/shared';
 import { Button } from '@/components/ui/button';
@@ -256,30 +259,21 @@ export function GeneralSettings() {
   const update = useUpdateOrgSettings();
   const data = settings.data;
 
-  // Local, smooth-typing copies of the text/number fields. Booleans read straight
-  // from the query (they only change via an immediate PATCH, never local typing).
-  // Signature image (org_config.signatureImageUrl) — separate from the signature
-  // TEXT above; the send path embeds it at the bottom of outgoing Reach/Engage mail.
-  // Held in local state: seeded once from getSignature(), then updated from each
-  // upload/clear mutation result.
-  const uploadSignatureImage = useUploadSignatureImage();
-  const setSignatureImageLink = useSetSignatureImageUrl();
-  const clearSignatureImage = useClearSignatureImage();
+  // PER-USER sender identity. senderName + signature text + signature image belong to
+  // the CURRENT user (not the org): they seed from the `me` query and write via the
+  // per-user mutations. senderEmail stays ORG (still on useOrgSettings). The signature
+  // image (users.signatureImageUrl) — separate from the signature TEXT — is embedded at
+  // the bottom of that user's outgoing Reach/Engage mail. Held in local state: seeded
+  // from `me`, then updated from each upload/clear mutation result.
+  const me = useMe();
+  const myIdentity = me.data;
+  const updateSenderIdentity = useUpdateMySenderIdentity();
+  const uploadSignatureImage = useUploadMySignatureImage();
+  const setSignatureImageLink = useSetMySignatureImageUrl();
+  const clearSignatureImage = useClearMySignatureImage();
   const [signatureImageUrl, setSignatureImageUrl] = useState<string | null>(null);
   const [signatureLinkInput, setSignatureLinkInput] = useState('');
   const signatureFileRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    let active = true;
-    void getSignature()
-      .then((r) => {
-        if (active) setSignatureImageUrl(r.signatureImageUrl ?? null);
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
 
   const [senderName, setSenderName] = useState('');
   const [senderEmail, setSenderEmail] = useState('');
@@ -290,13 +284,20 @@ export function GeneralSettings() {
   const [followupRound2Days, setFollowupRound2Days] = useState('');
   const [followupRound3Days, setFollowupRound3Days] = useState('');
 
-  // Re-seed the form whenever the query data changes (initial load + after a save,
-  // since the PATCH response is written back into the cache).
+  // Re-seed the PER-USER identity fields whenever the `me` query changes (initial load
+  // + after a save, since the mutations write the fresh user back into the cache).
+  useEffect(() => {
+    if (!myIdentity) return;
+    setSenderName(myIdentity.senderName ?? '');
+    setSignature(myIdentity.signature ?? '');
+    setSignatureImageUrl(myIdentity.signatureImageUrl ?? null);
+  }, [myIdentity]);
+
+  // Re-seed the ORG fields whenever the org-settings query changes (initial load + after
+  // a save, since the PATCH response is written back into the cache).
   useEffect(() => {
     if (!data) return;
-    setSenderName(data.senderName ?? '');
     setSenderEmail(data.senderEmail ?? '');
-    setSignature(data.signature ?? '');
     setDailySendCap(String(data.dailySendCap));
     setSendingHoursStart(data.sendingHoursStart);
     setSendingHoursEnd(data.sendingHoursEnd);
@@ -317,17 +318,30 @@ export function GeneralSettings() {
     patch({ [field]: next });
   }
 
-  // A nullable-text blur (senderName / senderEmail / signature): trim, send null
-  // when emptied, and only PATCH when the value actually changed.
-  function commitNullableText(
-    field: 'senderName' | 'senderEmail' | 'signature',
-    raw: string,
-  ) {
+  // The ORG senderEmail blur: trim, send null when emptied, and only PATCH when the
+  // value actually changed. (senderName + signature are PER-USER — see below.)
+  function commitSenderEmail(raw: string) {
     if (!data) return;
     const trimmed = raw.trim();
     const next = trimmed === '' ? null : trimmed;
-    if (next === data[field]) return;
-    patch({ [field]: next });
+    if (next === (data.senderEmail ?? null)) return;
+    patch({ senderEmail: next });
+  }
+
+  // A PER-USER nullable-text blur (senderName / signature): trim, send null when
+  // emptied, and only PATCH when the value actually changed against the current user.
+  function commitMyIdentity(field: 'senderName' | 'signature', raw: string) {
+    if (!myIdentity) return;
+    const trimmed = raw.trim();
+    const next = trimmed === '' ? null : trimmed;
+    if (next === (myIdentity[field] ?? null)) return;
+    updateSenderIdentity.mutate(
+      { [field]: next },
+      {
+        onSuccess: () => toast.success(t('system.toastSaved')),
+        onError: (err) => toast.error(err.message || t('system.toastError')),
+      },
+    );
   }
 
   // Signature image: upload a picked file (multipart), or clear the current one.
@@ -439,7 +453,7 @@ export function GeneralSettings() {
                 placeholder={t('system.sender.namePlaceholder')}
                 value={senderName}
                 onChange={(e) => setSenderName(e.target.value)}
-                onBlur={() => commitNullableText('senderName', senderName)}
+                onBlur={() => commitMyIdentity('senderName', senderName)}
               />
             </div>
             <div className="flex flex-col gap-2">
@@ -454,7 +468,7 @@ export function GeneralSettings() {
                 placeholder={t('system.sender.emailPlaceholder')}
                 value={senderEmail}
                 onChange={(e) => setSenderEmail(e.target.value)}
-                onBlur={() => commitNullableText('senderEmail', senderEmail)}
+                onBlur={() => commitSenderEmail(senderEmail)}
               />
             </div>
             <div className="flex flex-col gap-2">
@@ -467,7 +481,7 @@ export function GeneralSettings() {
                 placeholder={t('system.sender.signaturePlaceholder')}
                 value={signature}
                 onChange={(e) => setSignature(e.target.value)}
-                onBlur={() => commitNullableText('signature', signature)}
+                onBlur={() => commitMyIdentity('signature', signature)}
               />
             </div>
 
