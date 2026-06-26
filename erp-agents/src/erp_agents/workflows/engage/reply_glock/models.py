@@ -40,6 +40,13 @@ class CampaignContext(BaseModel):
     sender_signature: str | None = None
 
 
+class KnowledgeSnippet(BaseModel):
+    # A relevant fragment retrieved from the org's uploaded company documents (the Engage
+    # knowledge base), with its source filename so the draft can cite it.
+    source: str
+    text: str
+
+
 class ReplyGlockInput(BaseModel):
     reply_id: str
     campaign_id: str
@@ -69,6 +76,11 @@ class ReplyGlockInput(BaseModel):
     current_draft: dict[str, str] | None = None
     # On an interactive re-draft we already know the bucket — skip re-classifying.
     prior_status: ReplyGlockStatus | None = None
+
+    # RAG: snippets retrieved from the org's uploaded company documents, relevant to this
+    # inbound message. The drafter grounds factual answers on these (esp. UNSURE replies)
+    # and cites the source filename. Empty = no knowledge base / no match.
+    knowledge: list[KnowledgeSnippet] = Field(default_factory=list)
 
     # The slots we already offered this lead, so the agent can match an acceptance.
     proposed_slots: list[dict] = Field(default_factory=list)  # [{"start","end"}]

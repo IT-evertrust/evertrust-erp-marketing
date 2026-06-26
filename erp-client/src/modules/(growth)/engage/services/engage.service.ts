@@ -490,3 +490,50 @@ function relativeTime(iso: string | null): string {
   if (hours < 24) return `${hours}h`;
   return `${Math.floor(hours / 24)}d`;
 }
+
+// ---- Engage knowledge base (company resources for RAG) ----
+export interface KnowledgeDoc {
+  id: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  status: string; // READY | NO_TEXT | FAILED
+  chars: number;
+  createdAt: string;
+}
+
+export function listKnowledge(): Promise<KnowledgeDoc[]> {
+  return getJson<KnowledgeDoc[]>('/engage/knowledge');
+}
+
+// Multipart upload — a dedicated fetch (the shared mutate() is JSON-only). The browser
+// sets the multipart boundary, so we DON'T set Content-Type here.
+export async function uploadKnowledge(file: File): Promise<KnowledgeDoc> {
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`${API_URL}/engage/knowledge`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+    body: form,
+  });
+  if (!res.ok) {
+    let message = `Upload failed (${res.status})`;
+    try {
+      const json = (await res.json()) as { message?: string | string[] };
+      if (json?.message) {
+        message = Array.isArray(json.message)
+          ? json.message.join(', ')
+          : json.message;
+      }
+    } catch {
+      /* non-JSON error body — keep the status message */
+    }
+    throw new Error(message);
+  }
+  return (await res.json()) as KnowledgeDoc;
+}
+
+export function deleteKnowledge(id: string): Promise<{ ok: true }> {
+  return mutate<{ ok: true }>('DELETE', `/engage/knowledge/${encodeURIComponent(id)}`);
+}

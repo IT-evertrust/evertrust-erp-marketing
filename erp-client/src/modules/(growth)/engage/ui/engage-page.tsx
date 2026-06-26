@@ -6,6 +6,7 @@ import { RefreshCw } from 'lucide-react';
 import { useGoogleAccounts } from '@/hooks/use-arsenal';
 import { GrowthCard, Spinner } from '@/modules/(growth)/shared';
 
+import { CompanyResources } from '../components/company-resources';
 import { EngageCampaignTable } from '../components/engage-campaign-table';
 import { PersonaDialog } from '../components/persona-create-dialog';
 import { ReplyDetail } from '../components/reply-detail';
@@ -82,23 +83,26 @@ export function EngagePage() {
         <GrowthCard
           title="Reply Sorter"
           hint={
-            <button
-              type="button"
-              onClick={engage.scanNow}
-              disabled={
-                (!engage.selectedCampaignId && !engage.inboxFilter) ||
-                engage.scanning
-              }
-              title="Scan this inbox for new replies (auto-scan also runs hourly)"
-              className="inline-flex items-center gap-1.5 rounded-[7px] border border-border bg-card px-[11px] py-[7px] text-[10px] font-bold uppercase tracking-[0.08em] text-foreground transition-colors hover:border-foreground disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {engage.scanning ? (
-                <Spinner inline size={14} />
-              ) : (
-                <RefreshCw className="size-3.5" />
-              )}
-              {engage.scanning ? 'Scanning…' : 'Scan'}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <CompanyResources />
+              <button
+                type="button"
+                onClick={engage.scanNow}
+                disabled={
+                  (!engage.selectedCampaignId && !engage.inboxFilter) ||
+                  engage.scanning
+                }
+                title="Scan this inbox for new replies (auto-scan also runs hourly)"
+                className="inline-flex items-center gap-1.5 rounded-[7px] border border-border bg-card px-[11px] py-[7px] text-[10px] font-bold uppercase tracking-[0.08em] text-foreground transition-colors hover:border-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {engage.scanning ? (
+                  <Spinner inline size={14} />
+                ) : (
+                  <RefreshCw className="size-3.5" />
+                )}
+                {engage.scanning ? 'Scanning…' : 'Scan'}
+              </button>
+            </div>
           }
         >
           <div className="grid min-h-[560px] grid-cols-[320px_1fr] overflow-hidden rounded-[10px] border border-border">

@@ -3,8 +3,10 @@ import { AiModule } from '../ai/ai.module';
 import { GoogleModule } from '../google/google.module';
 import { ReachModule } from '../reach/reach.module';
 import { EngageController } from './engage.controller';
+import { KnowledgeController } from './knowledge.controller';
 import { EngageService } from './engage.service';
 import { EngageRepliesService } from './engage-replies.service';
+import { KnowledgeService } from './knowledge.service';
 import { EngageAgentClient } from './engage.agent';
 import { EngageScanService } from './engage-scan.service';
 import { GmailWatchService } from './gmail-watch.service';
@@ -24,10 +26,11 @@ import { GmailPushController } from './gmail-push.controller';
 // campaign free-slots + tentative meeting-create on send.
 @Module({
   imports: [GoogleModule, AiModule, ReachModule],
-  controllers: [EngageController, GmailPushController],
+  controllers: [EngageController, KnowledgeController, GmailPushController],
   providers: [
     EngageService,
     EngageRepliesService,
+    KnowledgeService,
     EngageAgentClient,
     EngageScanService,
     GmailWatchService,

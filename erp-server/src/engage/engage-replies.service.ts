@@ -14,6 +14,7 @@ import { GoogleCalendarReadService } from '../google/google-calendar-read.servic
 import { ReachRepository } from '../reach/reach.repository';
 import { tenantScope } from '../common/tenant';
 import { EngageAgentClient } from './engage.agent';
+import { KnowledgeService } from './knowledge.service';
 import { buildRawReply, extractPlainBody, parseFromAddress } from './engage.service';
 import {
   resolveScheduling,
@@ -306,6 +307,7 @@ export class EngageRepliesService {
     private readonly agent: EngageAgentClient,
     private readonly reach: ReachRepository,
     private readonly calendar: GoogleCalendarReadService,
+    private readonly knowledge: KnowledgeService,
   ) {}
 
   // Resolve the campaign + the mailbox account it sends from (sender local-part ==
@@ -816,6 +818,7 @@ export class EngageRepliesService {
     draftSubject: string;
     draftBody: string;
     followUpWindow: string | null;
+    citations: string[];
     scheduling: SchedulingVerdict;
   } | null> {
     // Ground the agent's time parsing: the actual current instant + the org's timezone,
@@ -823,6 +826,17 @@ export class EngageRepliesService {
     // timestamp). Resolved per-scan-lead — a single indexed org_config read, dwarfed by
     // the LLM call.
     const { primary: orgTimeZone } = await this.calendar.getOrgTimeZones(aim.organizationId);
+
+    // RAG: pull the company-knowledge snippets most relevant to this inbound message so
+    // the drafter can ground (and cite) an UNSURE reply. Best-effort — retrieval never
+    // blocks drafting. The retrieved sources become the reply's citations.
+    const knowledge = await this.knowledge.retrieve(
+      aim.organizationId,
+      `${inbound.subject ?? ''}\n${inbound.body}`,
+      4,
+    );
+    const citations = [...new Set(knowledge.map((k) => k.source))];
+
     const input = {
       reply_id: `${aim.id}:${inbound.id}`,
       campaign_id: aim.id,
@@ -857,6 +871,7 @@ export class EngageRepliesService {
       },
       persona: drafting.persona,
       guidance: drafting.guidance,
+      knowledge: knowledge.map((k) => ({ source: k.source, text: k.text })),
     };
 
     const result = await this.agent.run('engage.reply_glock', input);
@@ -873,6 +888,9 @@ export class EngageRepliesService {
       draftBody: enforceSignature(String(draft.body ?? '')),
       followUpWindow:
         typeof o.follow_up_date_or_window === 'string' ? o.follow_up_date_or_window : null,
+      // The KB sources we grounded this draft on (only when the model actually drafted
+      // from them — UNSURE replies). Surfaced in the UI as citations.
+      citations: status === 'UNSURE' ? citations : [],
       scheduling: {
         accepted_index:
           typeof sched.accepted_index === 'number' ? sched.accepted_index : null,
@@ -898,6 +916,7 @@ export class EngageRepliesService {
       draftSubject: string;
       draftBody: string;
       followUpWindow: string | null;
+      citations?: string[];
     },
   ): Promise<void> {
     const uiThread = thread.map((m) => ({
@@ -926,6 +945,7 @@ export class EngageRepliesService {
       draftSubject: out.draftSubject,
       draftBody: out.draftBody,
       draftSource: 'reply_glock',
+      citations: (out.citations ?? []) as never,
       thread: uiThread as never,
       followUpWindow: out.followUpWindow,
       classifiedAt: new Date(),
@@ -948,6 +968,7 @@ export class EngageRepliesService {
           draftSubject: values.draftSubject,
           draftBody: values.draftBody,
           draftSource: values.draftSource,
+          citations: values.citations,
           thread: values.thread,
           followUpWindow: values.followUpWindow,
           classifiedAt: values.classifiedAt,

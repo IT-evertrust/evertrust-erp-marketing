@@ -260,6 +260,27 @@ class ReplyGlockWorkflow(Workflow):
         # a one-off interactive revision of the current draft ("Write & Fix").
         # Scrub coaching-rubric scaffolding out of the persona/guidance BEFORE they reach
         # the prompt — a coaching persona must not prime the drafter to emit a rubric.
+        # COMPANY KNOWLEDGE (RAG): factual snippets retrieved from the org's uploaded
+        # documents, relevant to this reply. The drafter answers questions from these and
+        # cites the source so an UNSURE reply is grounded, not guessed.
+        if workflow_input.knowledge:
+            blocks = []
+            for snippet in workflow_input.knowledge:
+                src = (snippet.source or "company document").strip()
+                txt = (snippet.text or "").strip()
+                if txt:
+                    blocks.append(f"[{src}]\n{txt}")
+            if blocks:
+                joined = "\n\n".join(blocks)
+                user_prompt += (
+                    "\n\nCOMPANY KNOWLEDGE — verified facts from our own uploaded company "
+                    "documents. Use ONLY these to answer factual questions (pricing, specs, "
+                    "policy, capabilities); when you state such a fact, cite its source "
+                    "inline in brackets like [filename]. Do NOT invent facts beyond these; "
+                    "if the answer isn't here, offer to follow up rather than guessing.\n"
+                    f"{joined}"
+                )
+
         persona = strip_coaching_scaffolding(workflow_input.persona)
         if persona:
             user_prompt += (
