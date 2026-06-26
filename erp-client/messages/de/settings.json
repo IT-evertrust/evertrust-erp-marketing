@@ -53,7 +53,13 @@
       "emailLabel": "Absender-E-Mail",
       "emailPlaceholder": "info@example.com",
       "signatureLabel": "Signatur",
-      "signaturePlaceholder": "Mit freundlichen Grüßen, …"
+      "signaturePlaceholder": "Mit freundlichen Grüßen, …",
+      "signatureImageLabel": "Signaturbild",
+      "signatureImageAlt": "Signaturbild",
+      "signatureImageEmpty": "Kein Signaturbild festgelegt",
+      "signatureImageUpload": "Bild hochladen",
+      "signatureImageRemove": "Entfernen",
+      "signatureImageHint": "PNG oder JPG, wird unten in ausgehende E-Mails eingebettet."
     },
     "sending": {
       "title": "Versandparameter",

@@ -117,6 +117,11 @@ export function MeetingBookerV2() {
     return map;
   }, [accounts]);
 
+  // The account currently selected in the filter dropdown ('' = All accounts → null).
+  const selectedAccount = accountFilter
+    ? (accounts.find((a) => a.id === accountFilter) ?? null)
+    : null;
+
   const range = useMemo(() => {
     const timeMin = zonedTimeToUtcDate(
       addDaysToDateKey(mondayKey, -1),
@@ -304,47 +309,34 @@ export function MeetingBookerV2() {
           </div>
         </div>
 
-        {/* Account filter toggle row — "All" + one chip per connected account, each
-            with its numbered color circle. Only shown when 2+ accounts exist. */}
+        {/* Account filter — a dropdown of "All accounts" + each connected workspace
+            account, picking whose calendar the grid shows. The colour swatch mirrors
+            the selected account's per-event colour (each event keeps its own colour
+            via its left border). Only shown when 2+ accounts are connected. */}
         {accounts.length > 1 ? (
-          <div className="flex flex-wrap items-center gap-2 border-b border-[#e4e7eb] px-4 py-[10px]">
-            <button
-              type="button"
-              onClick={() => setAccountFilter('')}
-              className={[
-                'rounded-[7px] border px-[11px] py-[5px] text-[11px] font-bold transition-colors',
-                accountFilter === ''
-                  ? 'border-[#15171c] bg-[#15171c] text-white'
-                  : 'border-[#d6dade] bg-white text-[#5b626d] hover:border-[#15171c]',
-              ].join(' ')}
+          <div className="flex items-center gap-[10px] border-b border-[#e4e7eb] px-4 py-[10px]">
+            <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-[#959ca7]">
+              Calendar
+            </span>
+            {selectedAccount ? (
+              <span
+                className="h-[12px] w-[12px] shrink-0 rounded-full"
+                style={{ backgroundColor: selectedAccount.color }}
+                aria-hidden
+              />
+            ) : null}
+            <select
+              value={accountFilter}
+              onChange={(e) => setAccountFilter(e.target.value)}
+              className="rounded-[7px] border border-[#d6dade] bg-white px-[10px] py-[5px] text-[11px] font-bold text-[#15171c] hover:border-[#15171c] focus:outline-none focus:ring-2 focus:ring-[#d6dade]"
             >
-              All meetings
-            </button>
-            {accounts.map((a) => {
-              const active = accountFilter === a.id;
-              return (
-                <button
-                  key={a.id}
-                  type="button"
-                  onClick={() => setAccountFilter(a.id)}
-                  title={a.email}
-                  className={[
-                    'inline-flex items-center gap-[7px] rounded-[7px] border px-[10px] py-[5px] text-[11px] font-bold transition-colors',
-                    active
-                      ? 'border-[#15171c] text-[#15171c]'
-                      : 'border-[#d6dade] text-[#5b626d] hover:border-[#15171c]',
-                  ].join(' ')}
-                >
-                  <span
-                    className="grid h-[16px] w-[16px] place-items-center rounded-full text-[9px] font-bold text-white"
-                    style={{ backgroundColor: a.color }}
-                  >
-                    {a.number}
-                  </span>
-                  <span className="max-w-[160px] truncate">{a.email}</span>
-                </button>
-              );
-            })}
+              <option value="">All accounts</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.number}. {a.email}
+                </option>
+              ))}
+            </select>
           </div>
         ) : null}
 

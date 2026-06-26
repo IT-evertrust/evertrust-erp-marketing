@@ -44,8 +44,8 @@ const REGION_OPTIONS = [
   'Border-DE',
 ] as const;
 
-// Default country for new aims — kept off the trimmed form but still submitted so
-// the scraper's geo step keeps working.
+// Default country for new aims (free-text — the user types a specific country for
+// the scraper's geo step). Drives create-aim as-is.
 const DEFAULT_COUNTRY = 'Germany';
 
 const EMPTY_FORM: NewCampaignFormValues = {
@@ -254,6 +254,17 @@ export function NewCampaignModal({
                   onChange={(e) => set('niche', e.target.value)}
                 />
               )}
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor={`${fieldId}-country`}>{t('modal.field.country')}</Label>
+              <Input
+                id={`${fieldId}-country`}
+                value={form.country}
+                placeholder={t('modal.field.countryPlaceholder')}
+                maxLength={120}
+                onChange={(e) => set('country', e.target.value)}
+              />
             </div>
 
             <div className="grid gap-2">

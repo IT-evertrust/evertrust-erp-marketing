@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Logger,
   Param,
   Post,
   Query,
@@ -47,6 +48,8 @@ interface ConnectState {
 // @Public — Google calls it with no cookie).
 @Controller('google')
 export class GoogleConnectController {
+  private readonly logger = new Logger(GoogleConnectController.name);
+
   constructor(
     private readonly oauth: GoogleOAuthService,
     private readonly accounts: GoogleAccountsService,
@@ -92,7 +95,10 @@ export class GoogleConnectController {
       let claims: ConnectState;
       try {
         claims = await this.jwt.verifyAsync<ConnectState>(state);
-      } catch {
+      } catch (err) {
+        this.logger.warn(
+          `Google connect: invalid/expired state JWT — ${err instanceof Error ? err.message : String(err)}`,
+        );
         return this.redirect(res, false);
       }
       if (claims.typ !== 'gconnect' || !claims.org || !claims.sub) {
@@ -113,8 +119,14 @@ export class GoogleConnectController {
       });
 
       return this.redirect(res, true);
-    } catch {
-      // Any unexpected failure still degrades to a friendly redirect/HTML.
+    } catch (err) {
+      // Any unexpected failure (code exchange, id_token decode, upsert) still
+      // degrades to a friendly redirect/HTML — but LOG the real cause so connect
+      // failures aren't silent in prod.
+      this.logger.error(
+        `Google connect callback failed — ${err instanceof Error ? err.message : String(err)}`,
+        err instanceof Error ? err.stack : undefined,
+      );
       return this.redirect(res, false);
     }
   }

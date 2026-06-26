@@ -53,7 +53,13 @@
       "emailLabel": "Sender email",
       "emailPlaceholder": "info@example.com",
       "signatureLabel": "Signature",
-      "signaturePlaceholder": "Best regards, …"
+      "signaturePlaceholder": "Best regards, …",
+      "signatureImageLabel": "Signature image",
+      "signatureImageAlt": "Signature image",
+      "signatureImageEmpty": "No signature image set",
+      "signatureImageUpload": "Upload image",
+      "signatureImageRemove": "Remove",
+      "signatureImageHint": "PNG or JPG, embedded at the bottom of outgoing emails."
     },
     "sending": {
       "title": "Sending Parameters",
