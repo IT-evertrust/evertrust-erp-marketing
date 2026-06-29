@@ -61,6 +61,16 @@ type RoundStats = {
   meetings: number;
 };
 type ReachStats = { cold: RoundStats; followup: RoundStats; final: RoundStats };
+// Live per-phase scrape progress, pushed by the Lead Satellite agent during a run
+// (search → scrape → qualify → load) so the UI can show a REAL countdown per process
+// instead of a single opaque timer. Null when not scraping.
+type ScrapeProgress = {
+  phase: 'search' | 'scrape' | 'qualify' | 'load';
+  current: number; // e.g. region 4 (of total), or companies qualified so far
+  total: number; // e.g. 16 regions, or candidates to qualify
+  label: string; // human one-liner, e.g. "Region 4/16" or "Qualifying 30/64"
+  updatedAt: string; // ISO timestamp of this progress tick
+};
 
 export const reachAims = pgTable(
   'reach_aims',
@@ -129,6 +139,9 @@ export const reachAims = pgTable(
     // Why the last scrape FAILED (the agent's error / reason), surfaced in the UI so
     // the operator sees the cause instead of a generic "failed". Null when not failed.
     scrapeError: text('scrape_error'),
+    // Live per-phase progress pushed by the agent during a scrape (see ScrapeProgress).
+    // Null when idle; set/advanced via the machine PATCH .../scrape-progress route.
+    scrapeProgress: jsonb('scrape_progress').$type<ScrapeProgress>(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

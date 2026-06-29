@@ -144,4 +144,16 @@ export type ReachCampaignView = Campaign & {
   scrapeEtaSeconds: number | null;
   // Reason the last scrape failed (shown when aimStatus === 'FAILED'); null otherwise.
   scrapeError: string | null;
+  // Live per-phase progress pushed by the agent mid-scrape; null when idle.
+  scrapeProgress: ScrapeProgress | null;
+};
+
+// Live per-phase scrape progress (mirrors the API). Drives the per-process countdown.
+export type ScrapePhase = 'search' | 'scrape' | 'qualify' | 'load';
+export type ScrapeProgress = {
+  phase: ScrapePhase;
+  current: number;
+  total: number;
+  label: string;
+  updatedAt: string;
 };

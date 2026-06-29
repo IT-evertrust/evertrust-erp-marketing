@@ -25,6 +25,7 @@ import {
   type ReachRound,
   type ReachStats,
   type ReachTemplates,
+  type ScrapeProgress,
   type TrackKind,
 } from './reach.model';
 
@@ -83,6 +84,7 @@ function rowToAim(row: AimRow): ReachAim {
     scrapeEtaSeconds: row.scrapeEtaSeconds ?? null,
     scrapeLastSeconds: row.scrapeLastSeconds ?? null,
     scrapeError: row.scrapeError ?? null,
+    scrapeProgress: (row.scrapeProgress as ScrapeProgress | null) ?? null,
     sender: row.sender,
     templates: (row.templates as ReachTemplates | null) ?? null,
     newsBrief: (row.newsBrief as ReachNewsBrief | null) ?? null,
@@ -300,6 +302,7 @@ export class ReachRepository {
         scrapeStartedAt: new Date(),
         scrapeEtaSeconds: etaSeconds,
         scrapeError: null, // clear any prior failure reason on a fresh run
+        scrapeProgress: null, // reset live progress; the agent populates it as it runs
         updatedAt: new Date(),
       })
       .where(
@@ -324,6 +327,27 @@ export class ReachRepository {
       )
       .returning();
     return row ? rowToAim(row) : undefined;
+  }
+
+  // Machine route: the agent pushes live per-phase progress mid-scrape. Scoped by
+  // aimId only (the arsenal token is the trust boundary, like the campaign machine
+  // routes) and gated to RUNNING aims so a late/stray tick can't resurrect progress
+  // on a finished run. Returns false when no RUNNING aim matched.
+  async updateScrapeProgress(
+    aimId: string,
+    progress: ScrapeProgress,
+  ): Promise<boolean> {
+    const rows = await this.db
+      .update(schema.reachAims)
+      .set({ scrapeProgress: progress, updatedAt: new Date() })
+      .where(
+        and(
+          eq(schema.reachAims.id, aimId),
+          eq(schema.reachAims.status, 'RUNNING'),
+        ),
+      )
+      .returning({ id: schema.reachAims.id });
+    return rows.length > 0;
   }
 
   async findAims(orgId: string): Promise<ReachAim[]> {
@@ -406,6 +430,7 @@ export class ReachRepository {
           companies: inserted.length,
           status: 'COMPLETED',
           scrapeError: null, // success clears any prior failure reason
+          scrapeProgress: null, // run finished — clear the live progress
           ...(lastSeconds != null ? { scrapeLastSeconds: lastSeconds } : {}),
           updatedAt: new Date(),
         })

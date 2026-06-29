@@ -42,3 +42,16 @@ export const setAutoSendSchema = z.object({
 export type SetAutoSendDto = z.infer<typeof setAutoSendSchema>;
 
 export class SetAutoSendBodyDto extends createZodDto(setAutoSendSchema) {}
+
+// Body for the MACHINE route PATCH /aims/:aimId/scrape-progress — the Lead Satellite
+// agent pushes live per-phase progress here as it sweeps. Auth is the arsenal token.
+export const scrapeProgressSchema = z.object({
+  phase: z.enum(['search', 'scrape', 'qualify', 'load']),
+  current: z.number().int().min(0),
+  total: z.number().int().min(0),
+  label: z.string().min(1).max(120),
+});
+
+export type ScrapeProgressDto = z.infer<typeof scrapeProgressSchema>;
+
+export class ScrapeProgressBodyDto extends createZodDto(scrapeProgressSchema) {}
