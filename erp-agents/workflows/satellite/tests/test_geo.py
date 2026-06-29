@@ -2,7 +2,7 @@
 LLM profiler, explicit lists are kept verbatim, a single region/city name passes through."""
 from __future__ import annotations
 
-from satellite.domain.geo import cities_for, is_nationwide
+from satellite.domain.geo import cities_for, is_nationwide, is_zone
 
 
 def test_nationwide_defers_to_profiler():
@@ -11,6 +11,16 @@ def test_nationwide_defers_to_profiler():
     assert cities_for("Germany", "nationwide") == []
     assert is_nationwide("Anywhere") and is_nationwide("Wszystkie")
     assert not is_nationwide("Mazowieckie")
+
+
+def test_aim_zones_detected():
+    # AIM REGION_OPTIONS: compass parts + near-border -> zones (profiler expands them, not literal).
+    for z in ("North", "South", "East", "West", "Central", "Near border (DE-PL)", "Border-DE"):
+        assert is_zone(z), z
+    # not zones: nationwide, a real region name, an explicit city
+    assert not is_zone("Anywhere")
+    assert not is_zone("Mazowieckie")
+    assert not is_zone("Warszawa")
 
 
 def test_explicit_city_list_is_strict():

@@ -151,6 +151,10 @@ def score_lead(*, name: str, snippet: str, url: str, country: str, niche: str,
     hay = " ".join((name or "", snippet or "")).lower()
     host = (url or "").lower().split("//")[-1].split("/")[0]
     score = 20
+    # NOTE (audit 2026-06-26): email currently swings the score by up to +22, which can demote a
+    # real no-email company a full tier (B instead of A). Decoupling email from the tier needs a
+    # proper threshold rebalance (a one-line tweak either deflates good firms or inflates junk —
+    # the qualify/tier-C tests catch both), so it's parked as a focused follow-up. Left as-is.
     if verified:
         score += 22
     elif has_email:
