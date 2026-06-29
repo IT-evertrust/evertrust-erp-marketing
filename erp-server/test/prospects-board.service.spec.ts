@@ -137,6 +137,39 @@ describe('ProspectsService.boardList — pipeline stage + scope filters', () => 
   });
 });
 
+describe('ProspectsService.boardList — engagedOnly (Nurture pipeline)', () => {
+  const PENG = 'aaaa0009-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+
+  it('shows ONLY engaged prospects (replied+); hides cold NEW/EMAILED leads', async () => {
+    const { service } = await makeService(); // PA1 NEW, PA2 EMAILED, PA3 NEW (all cold)
+    await seed(schema.prospects, [
+      {
+        id: PENG,
+        organizationId: ORG_A,
+        campaignId: CAMP_A,
+        email: 'engaged@aco.com',
+        companyName: 'Engaged Co',
+        status: 'INTERESTED',
+        followupCount: 0,
+      },
+    ]);
+
+    const res = await service.boardList(ORG_A, { engagedOnly: true });
+    // Only the INTERESTED prospect — the 3 cold (NEW/EMAILED) leads stay out.
+    expect(res.items.map((r) => r.id)).toEqual([PENG]);
+    expect(res.total).toBe(1);
+    // tallies are restricted to the engaged set too (so columns match the cards).
+    expect(res.statusCounts).toEqual({ INTERESTED: 1 });
+    expect(res.stageCounts).toEqual({ INTEREST: 1 });
+  });
+
+  it('without engagedOnly the same board still shows the cold leads (Engage view)', async () => {
+    const { service } = await makeService();
+    const res = await service.boardList(ORG_A, {});
+    expect(res.total).toBe(3); // the 3 cold leads are visible to Engage
+  });
+});
+
 describe('ProspectsService.updateStageForOrg', () => {
   it('moves a card in-org, leaves the outreach status untouched, 404s cross-org', async () => {
     const { service } = await makeService();

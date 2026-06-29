@@ -577,6 +577,7 @@ export const api = {
         nicheTargetId?: string;
         createdFrom?: string;
         createdTo?: string;
+        engagedOnly?: boolean;
         limit?: number;
         offset?: number;
       } = {},
@@ -590,6 +591,7 @@ export const api = {
       if (filters.nicheTargetId) q.set('nicheTargetId', filters.nicheTargetId);
       if (filters.createdFrom) q.set('createdFrom', filters.createdFrom);
       if (filters.createdTo) q.set('createdTo', filters.createdTo);
+      if (filters.engagedOnly) q.set('engaged', 'true');
       if (filters.limit != null) q.set('limit', String(filters.limit));
       if (filters.offset != null) q.set('offset', String(filters.offset));
 

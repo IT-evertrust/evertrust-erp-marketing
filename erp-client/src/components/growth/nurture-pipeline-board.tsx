@@ -101,6 +101,9 @@ export function NurturePipelineBoard({
     q: search || undefined,
     createdFrom: from ? `${from}T00:00:00.000Z` : undefined,
     createdTo: to ? `${to}T23:59:59.999Z` : undefined,
+    // The Nurture pipeline only holds prospects who replied (engaged) — cold scraped
+    // leads stay out until the client responds.
+    engagedOnly: true,
     limit: 500,
   });
 
