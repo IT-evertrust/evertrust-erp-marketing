@@ -130,7 +130,8 @@ def test_nationwide_loops_all_regions(monkeypatch):
             return self.query(q)
 
     server.app.dependency_overrides[server.get_settings] = lambda: Settings(
-        llm_base_url="http://fake-llm", searxng_url="", region_cooldown=0.0, lead_target=10_000)
+        llm_base_url="http://fake-llm", searxng_url="", region_cooldown=0.0, lead_target=10_000,
+        max_regions=2)
     server.app.dependency_overrides[server.get_erp] = lambda: FakeErpBG()
     server.app.dependency_overrides[server.get_search] = lambda: FakeSearch()
     server.app.dependency_overrides[server.get_fetcher] = lambda: OfflineFetcher()
@@ -138,7 +139,10 @@ def test_nationwide_loops_all_regions(monkeypatch):
         "/satellite/run", json={"campaignId": "bg", "useLlm": True, "wait": True}).json()
 
     assert data["status"] == "ok"
-    assert data["regionsScanned"] == 2          # looped BOTH regions of the country
+    # Bulgaria is in the local GeoNames dataset -> real regions drive the nationwide sweep, looped
+    # one batch at a time, capped here to max_regions=2 so the count stays deterministic.
+    assert data.get("geoSource") == "geonames"
+    assert data["regionsScanned"] == 2          # looped 2 regions (per-region batched sweep)
     assert data["leadsFound"] >= 1              # native-named .bg lead kept (bilingual gate + .bg market)
 
 

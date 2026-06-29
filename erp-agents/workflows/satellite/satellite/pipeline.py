@@ -22,7 +22,7 @@ from zoneinfo import ZoneInfo
 from .clients import llm
 from .clients.erp import ErpGateway
 from .clients.search import SearchGateway, UrlFetcher
-from .domain import filters, geo, tender
+from .domain import filters, geo, geodata, tender
 from .domain.models import Segment, build_segments, dedup_leads, leads_to_prospects
 from .domain.scrape import hit_to_lead, queries_for_segment, registrable_domain, scrape_emails
 
@@ -122,7 +122,15 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
     #    country has: 16 / 28 / 63…), one batch at a time with a cooldown, so each region gets its own
     #    query budget and the search backend isn't overloaded. A specific region/city list = 1 batch.
     region_batches = []
-    if geo.is_nationwide(cfg.region) or geo.is_zone(cfg.region):
+    # NATIONWIDE geography: prefer the LOCAL GeoNames dataset (real, complete, population-ranked
+    # cities per region) over the LLM profiler's guessed/capped list. Zones (North/South/…) stay on
+    # the profiler — it's zone-aware and geodata has no zone map. Country not in the dataset -> profiler.
+    if geo.is_nationwide(cfg.region) and geodata.has_country(cfg.country):
+        region_batches = geodata.region_batches(
+            cfg.country, min_pop=settings.geo_min_pop, per_region_limit=settings.profile_max_cities)
+        if region_batches:
+            result["geoSource"] = "geonames"
+    if not region_batches and (geo.is_nationwide(cfg.region) or geo.is_zone(cfg.region)):
         if profile.get("regions"):     # model gave real regions (zone-filtered if a zone) -> use them
             region_batches = [(str(r.get("name") or f"region {i + 1}"), list(r.get("cities") or []))
                               for i, r in enumerate(profile["regions"]) if r.get("cities")]
@@ -234,10 +242,23 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
 
     # FALLBACK when discovery found nothing (offline tests, or a dead backend).
     if hits_total == 0:
+        # A CONFIGURED SearXNG that returned nothing = rate-limited / unreachable. Do NOT fabricate
+        # leads via the LLM (the whole V2 point is real search -> real sites) — surface it honestly
+        # so the caller retries later (or restarts SearXNG). This also avoids a storm of slow 32B
+        # research_leads calls (one per segment) that could time out and kill the run.
+        if settings.searxng_url and not getattr(search, "offline", False):
+            return {**result, "status": "search_unavailable", "leadsFound": 0, "rawCandidates": 0,
+                    "prospects": 0, "verified": 0, "posted": False,
+                    "buzzwords": result.get("buzzwords", 0),
+                    "error": "SearXNG returned no results (the search engine is likely rate-limited "
+                             "or down); retry later, restart SearXNG, or widen SEARXNG_ENGINES"}
         if opts.use_llm and settings.llm_base_url:
             leads = []
             for seg in all_segments:
-                leads.extend(llm.research_leads(settings, seg, search))
+                try:                                  # a single segment's LLM timeout must not kill the run
+                    leads.extend(llm.research_leads(settings, seg, search))
+                except Exception:
+                    continue
         elif getattr(search, "offline", False):
             leads = []
             for seg in all_segments:
