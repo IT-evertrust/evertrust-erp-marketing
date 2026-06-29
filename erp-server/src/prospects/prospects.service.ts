@@ -52,6 +52,11 @@ export interface ProspectBoardFilters {
   nicheTargetId?: string;
   createdFrom?: Date;
   createdTo?: Date;
+  // The NURTURE pipeline view passes this: restrict the whole result (items + stage
+  // tallies) to prospects who have ENGAGED — replied / interested / meeting / re-engaged
+  // — so cold scraped leads (NEW) and emailed-but-silent leads (EMAILED) stay out of the
+  // sales pipeline until the client replies. The Engage board omits it (sees all statuses).
+  engagedOnly?: boolean;
   // WITHIN-SCOPE narrowing (page only; tallies show the full scope).
   status?: ProspectStatus;
   q?: string;
@@ -104,6 +109,18 @@ function toLeadDto(r: LeadRow): LeadDto {
 // Satellite (bulk upsert), read by Reach Bazooka (send list), patched by the send +
 // reply stages. All machine routes — gated by the ingest token, org derived from the
 // campaign. Every write is audited (actorType N8N).
+// The prospect statuses that count as "engaged" (the client replied / is in
+// conversation). The Nurture pipeline shows only these — cold NEW + silent EMAILED
+// leads are excluded until they reply. NOT_INTERESTED / DO_NOT_CONTACT are replies but
+// not active deals, so they stay out of the working pipeline too. Manual "+ Add deal"
+// cards are created as REPLIED so they show.
+const ENGAGED_PROSPECT_STATUSES: ProspectStatus[] = [
+  'REPLIED',
+  'INTERESTED',
+  'MEETING_SCHEDULED',
+  'RE_ENGAGED',
+];
+
 @Injectable()
 export class ProspectsService {
   constructor(
@@ -238,6 +255,11 @@ export class ProspectsService {
     }
     if (filters.createdTo) {
       conds.push(lte(schema.prospects.createdAt, filters.createdTo));
+    }
+    // Nurture pipeline view: only prospects who have engaged (replied). Applied to the
+    // base scope so the items AND the stage tallies both reflect engaged-only.
+    if (filters.engagedOnly) {
+      conds.push(inArray(schema.prospects.status, ENGAGED_PROSPECT_STATUSES));
     }
     const scoped = await this.db
       .select()
@@ -434,9 +456,10 @@ export class ProspectsService {
   // Create a BLANK deal card from the Nurture board ("+ Add deal"). ORG-SCOPED:
   // the campaign must belong to `orgId` (404 otherwise — never seed a deal into
   // another tenant's campaign). The email column is NOT NULL and unique per
-  // (campaignId, email), so we stamp a collision-free placeholder; status defaults
-  // to NEW and dealValue to 0. Everything else is filled in via the inline-edit
-  // card PATCH. The JWT audit row is written by the controller.
+  // (campaignId, email), so we stamp a collision-free placeholder; status is REPLIED
+  // (so the manual deal shows under the Nurture engaged-only filter) and dealValue 0.
+  // Everything else is filled in via the inline-edit card PATCH. The JWT audit row is
+  // written by the controller.
   async createCardForOrg(
     orgId: string,
     body: CreateProspectCardDto,
@@ -453,7 +476,10 @@ export class ProspectsService {
         email: `manual-${randomUUID()}@deal.local`,
         companyName: body.companyName ?? null,
         pipelineStage: body.pipelineStage ?? 'INTEREST',
-        status: 'NEW',
+        // A user manually adding a deal is putting it IN the working pipeline, so it
+        // must be visible under the Nurture engaged-only filter (cold NEW leads are
+        // hidden). REPLIED = "in conversation", the neutral engaged status.
+        status: 'REPLIED',
         dealValue: 0,
       })
       .returning();
