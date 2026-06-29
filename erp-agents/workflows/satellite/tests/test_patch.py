@@ -35,6 +35,41 @@ def test_ddg_optional_when_explicitly_enabled():
     assert ws._ddg is not None
 
 
+# --- SearXNG engines pinned (fixes the disabled-google / junk-default-mix discovery) ---
+
+class _RecordingHttp:
+    def __init__(self): self.params = None
+
+    def get(self, url, params=None):
+        self.params = params
+        return type("R", (), {"raise_for_status": lambda self: None,
+                              "json": lambda self: {"results": []}})()
+
+    def close(self): pass
+
+
+def test_searxng_pins_engines_in_request():
+    from satellite.clients.search import SearxngClient
+    c = SearxngClient("http://searx", engines="google,bing,brave")
+    c._http = _RecordingHttp()
+    c.query("widgets", language="pl")
+    assert c._http.params["engines"] == "google,bing,brave"   # pinned engines sent
+    assert c._http.params["q"] == "widgets" and c._http.params["language"] == "pl"
+
+
+def test_searxng_omits_engines_when_unset():
+    from satellite.clients.search import SearxngClient
+    c = SearxngClient("http://searx")          # default: no engines -> instance default
+    c._http = _RecordingHttp()
+    c.query("widgets")
+    assert "engines" not in c._http.params
+
+
+def test_websearch_threads_engines_to_searxng():
+    ws = WebSearch(searxng_url="http://searx", engines="google,bing")
+    assert ws._searx._engines == "google,bing"
+
+
 # --- crawler: source_url first + email provenance ------------------------------
 
 class _Fetcher:
@@ -96,45 +131,81 @@ def test_profile_country_parses_regions_for_any_country(monkeypatch):
     from satellite.clients import llm
     from satellite.settings import Settings
 
-    # A FICTIONAL country: proves nothing is hardcoded — the regions come straight from the model.
-    canned = (
-        '{"countryName":"Narnia","iso2":"NA","language":"Narnian","langCode":"na",'
-        '"regions":[{"name":"Északföld","cities":["Aslan City","Cair Paravel"]},'
-        '{"name":"Délvidék","cities":["Archenland"]}],'
-        '"nicheKeywordsLocal":"alfa, béta","nicheKeywordsEnglish":"widgets, gadgets"}'
-    )
-
-    class _Msg:
-        content = canned
-
-    class _Choice:
-        message = _Msg()
-
-    class _Resp:
-        choices = [_Choice()]
+    # A FICTIONAL country (Narnia) proves nothing is hardcoded — every field comes from the model.
+    # profile_country now asks in small ROUNDS, so the fake answers the right shape per round.
+    def _for(prompt):
+        if "ISO 3166" in prompt:
+            return '{"iso2":"NA","language":"Narnian","langCode":"na"}'
+        if "keywordsLocal" in prompt:
+            return '{"keywordsLocal":["alfa","beta"],"keywordsEnglish":["widgets","gadgets"]}'
+        if "FIRST-LEVEL administrative regions" in prompt:
+            return '{"regions":["Northshire","Southshire"]}'
+        if "largest cities" in prompt:
+            return '{"Northshire":["Aslan City","Cair Paravel"],"Southshire":["Archenland"]}'
+        return "{}"
 
     class _Completions:
         def create(self, **k):
-            self.kwargs = k
-            return _Resp()
+            content = _for(k["messages"][-1]["content"])
+            msg = type("M", (), {"content": content})()
+            return type("R", (), {"choices": [type("C", (), {"message": msg})()]})()
 
     class FakeOpenAI:
         def __init__(self, **k):
-            self.chat = type("C", (), {"completions": _Completions()})()
+            self.chat = type("Chat", (), {"completions": _Completions()})()
 
     monkeypatch.setattr("openai.OpenAI", FakeOpenAI)
     out = llm.profile_country(Settings(llm_base_url="http://gw", profile_model="qwen3"), "Narnia", "widgets")
 
-    assert out["iso2"] == "NA"
-    assert [r["name"] for r in out["regions"]] == ["Északföld", "Délvidék"]   # regions, local spelling
-    assert "Aslan City" in out["cities"] and "Archenland" in out["cities"]    # flattened cities
-    assert "alfa" in out["keywordsLocal"] and "widgets" in out["keywordsEnglish"]
+    assert out["iso2"] == "NA" and out["langCode"] == "na"                       # round 1
+    assert [r["name"] for r in out["regions"]] == ["Northshire", "Southshire"]   # round 3 (model-driven)
+    assert "Aslan City" in out["cities"] and "Archenland" in out["cities"]       # round 4 cities
+    assert "alfa" in out["keywordsLocal"] and "widgets" in out["keywordsEnglish"]  # round 2
 
 
 def test_profile_country_empty_without_gateway():
     from satellite.clients import llm
     from satellite.settings import Settings
     assert llm.profile_country(Settings(llm_base_url=""), "Anyland", "widgets") == {}
+
+
+def test_profile_country_zone_restricts_regions(monkeypatch):
+    # An AIM zone (e.g. "North") must take the zone-restricted Round 3 prompt, NOT the all-regions
+    # one — so the sweep covers only that part of the country.
+    from satellite.clients import llm
+    from satellite.settings import Settings
+    seen = {}
+
+    def _for(prompt):
+        if "ISO 3166" in prompt:
+            return '{"iso2":"PL","language":"Polish","langCode":"pl"}'
+        if "keywordsLocal" in prompt:
+            return '{"keywordsLocal":["a"],"keywordsEnglish":["b"]}'
+        if "Zone requested" in prompt:
+            seen["zone"] = True
+            return '{"regions":["Pomorskie","Zachodniopomorskie"]}'
+        if "FIRST-LEVEL administrative regions" in prompt:
+            seen["all"] = True
+            return '{"regions":["EVERY-REGION"]}'
+        if "largest" in prompt:
+            return '{"Pomorskie":["Gdańsk"],"Zachodniopomorskie":["Szczecin"]}'
+        return "{}"
+
+    class _Completions:
+        def create(self, **k):
+            msg = type("M", (), {"content": _for(k["messages"][-1]["content"])})()
+            return type("R", (), {"choices": [type("C", (), {"message": msg})()]})()
+
+    class FakeOpenAI:
+        def __init__(self, **k):
+            self.chat = type("Chat", (), {"completions": _Completions()})()
+
+    monkeypatch.setattr("openai.OpenAI", FakeOpenAI)
+    out = llm.profile_country(Settings(llm_base_url="http://gw", profile_model="x"),
+                              "Poland", "Cloud Infrastructure", zone="North")
+    assert seen.get("zone") and not seen.get("all")                       # zone prompt, not all-regions
+    assert [r["name"] for r in out["regions"]] == ["Pomorskie", "Zachodniopomorskie"]
+    assert "Gdańsk" in out["cities"] and "Szczecin" in out["cities"]
 
 
 # --- (A) multilingual noise filter (news/courses/gov/edu/associations, any language) ----------

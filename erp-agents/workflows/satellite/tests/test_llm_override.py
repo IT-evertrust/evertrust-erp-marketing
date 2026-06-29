@@ -20,6 +20,14 @@ def test_scraper_override_applies_and_falls_back():
     assert with_scraper_override(s, min_score=0).min_keep_score == 0
 
 
+def test_scraper_override_scrape_timeout_minutes_to_seconds():
+    s = Settings()
+    # SCRAPE TIMEOUT knob is in MINUTES on the Config page; stored as seconds internally.
+    assert with_scraper_override(s, scrape_timeout_min=30).max_runtime_sec == 1800
+    assert with_scraper_override(s, scrape_timeout_min=0).max_runtime_sec == 0   # 0 = no cap
+    assert with_scraper_override(s).max_runtime_sec == s.max_runtime_sec          # omitted = env default
+
+
 def test_override_applies_all_fields():
     s = Settings()  # env defaults (hermes, sk-anything)
     out = with_llm_override(

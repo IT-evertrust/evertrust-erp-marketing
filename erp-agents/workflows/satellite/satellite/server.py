@@ -43,7 +43,8 @@ def get_erp(settings: Settings = Depends(get_settings)) -> ErpGateway:
 def get_search(settings: Settings = Depends(get_settings)) -> SearchGateway:
     # SearXNG-first (auth via X-Search-Key = SEARXNG_API_KEY); DDG only as an opt-in fallback.
     return WebSearch(settings.searxng_url, settings.searxng_api_key,
-                     pages=settings.ddg_pages, enable_ddg=settings.enable_ddg_fallback)
+                     pages=settings.ddg_pages, enable_ddg=settings.enable_ddg_fallback,
+                     engines=settings.searxng_engines)
 
 
 def get_fetcher() -> UrlFetcher:
@@ -66,6 +67,7 @@ class RunRequest(BaseModel):
     leadTarget: int | None = None
     maxQueries: int | None = None
     minScore: int | None = None
+    scrapeTimeoutMin: int | None = None   # wall-clock cap on the discovery sweep (minutes)
     # False (default = the ERP fire-and-forget): dispatch in the background, return 2xx immediately,
     # post the run callback when done. True: run synchronously and return the full result (CLI/tests).
     wait: bool = False
@@ -108,7 +110,8 @@ def satellite_run(
 ) -> dict:
     persist = req.persist if req.persist is not None else req.live
     settings = with_llm_override(settings, req.llmBaseUrl, req.model, req.apiKey)
-    settings = with_scraper_override(settings, req.leadTarget, req.maxQueries, req.minScore)
+    settings = with_scraper_override(settings, req.leadTarget, req.maxQueries, req.minScore,
+                                     req.scrapeTimeoutMin)
     opts = RunOptions(
         campaign_id=req.campaignId, live=req.live, persist=persist,
         use_llm=req.useLlm, max_segments=req.maxSegments,

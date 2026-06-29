@@ -82,12 +82,15 @@ def _tier_from_llm_fit(fit: str | None, evidence_ok: bool):
     if fit == "peripheral":
         return I.A, "llm:peripheral"
     if fit == "none":
-        return (I.EXCLUDE, "llm:off-niche") if evidence_ok else (I.B, "no-evidence-yet")
+        # Trust the LLM that READ the page: off-niche is DROPPED (this is the language-agnostic
+        # focus that replaces per-language keyword blocklists), regardless of keyword evidence.
+        return I.EXCLUDE, "llm:off-niche"
     return None
 
 
 def qualify(prospects: list[dict], fetcher, icp: I.ICP, *, country: str = "", niche: str = "",
-            market_tld: str = "", workers: int = 10, classifier=None, use_revenue: bool = False) -> dict:
+            market_tld: str = "", workers: int = 10, classifier=None, use_revenue: bool = False,
+            min_keep_score: int = 40) -> dict:
     """Crawl + classify + tier + bucket.
 
     Entity + niche-fit are decided LANGUAGE-AGNOSTICALLY: universal structural signals (gov/edu TLDs,
@@ -103,8 +106,27 @@ def qualify(prospects: list[dict], fetcher, icp: I.ICP, *, country: str = "", ni
     texts = list(ThreadPoolExecutor(max_workers=max(1, workers)).map(_crawl, prospects)) \
         if prospects else []
 
+    # The LLM entity/niche classify is the slow per-company step. Run it CONCURRENTLY (only for the
+    # companies a free structural signal didn't already decide) so a big sweep of hundreds of
+    # candidates qualifies in minutes, not an hour serially. The cheap scoring/tiering stays
+    # sequential below. LLM concurrency is capped separately from crawl workers so we don't flood
+    # the model gateway.
+    clf_by_idx: dict[int, dict] = {}
+    if classifier is not None and prospects:
+        pending = [(i, p.get("companyName", ""), p.get("website", ""), texts[i])
+                   for i, p in enumerate(prospects)
+                   if I.structural_entity(p.get("website", "")) is None]
+        if pending:
+            def _clf(item):
+                i, name, website, text = item
+                return i, (classifier(name, website, text) or {})
+            llm_workers = max(1, min(workers, 8))
+            with ThreadPoolExecutor(max_workers=llm_workers) as ex:
+                for i, res in ex.map(_clf, pending):
+                    clf_by_idx[i] = res
+
     out = {k: [] for k in BUCKETS}
-    for p, text in zip(prospects, texts):
+    for idx, (p, text) in enumerate(zip(prospects, texts)):
         name = p.get("companyName", "")
         website = p.get("website", "")
         evidence_ok = bool(text)
@@ -114,9 +136,9 @@ def qualify(prospects: list[dict], fetcher, icp: I.ICP, *, country: str = "", ni
         # 1) universal structural signal (TLD/global platform) — definitive, no language needed
         entity = I.structural_entity(website)
         fit = None
-        # 2) else let the LLM judge entity + niche-fit on the crawled page (any language)
+        # 2) else use the LLM verdict (computed concurrently above) for entity + niche-fit
         if entity is None and classifier is not None:
-            res = classifier(name, website, text) or {}
+            res = clf_by_idx.get(idx, {})
             entity = I.normalize_entity(res.get("entityType"))
             fit = I.normalize_fit(res.get("nicheFit"))
         # 3) else fall back to the rule-based (language-limited) classifier
@@ -141,7 +163,7 @@ def qualify(prospects: list[dict], fetcher, icp: I.ICP, *, country: str = "", ni
                     name=name, snippet=(text[:800] or name), url=website, country=country,
                     niche=niche or icp.name, has_email=bool(email), verified=bool(email),
                     cities=[], market_tld=market_tld)
-                tier, reason = tender.rank_label(score, 40), f"score={score}"
+                tier, reason = tender.rank_label(score, min_keep_score), f"score={score}"
                 p["score"] = score
                 # C-TIER firmographic gate (interim): for the weakest tier only, read age + headcount
                 # off the crawled page — too young (<AGE_MIN) or too small (<EMP_MIN) is REJECTED, a
