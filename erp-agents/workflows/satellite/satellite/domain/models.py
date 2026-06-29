@@ -91,14 +91,28 @@ _BAD_FRAGMENTS = ("example.", "sentry", "wixpress", "no-reply", "noreply", ".png
                   "@2x", "domain.com", "protected", "cloudflare", "[email",
                   # placeholder / dummy addresses seen in scraped pages
                   "email.com", "adres@", "your@", "yourname", "twoj@", "@example",
-                  "name@domain", "test@test", "abc@", "user@example")
+                  "name@domain", "test@test", "abc@", "user@example",
+                  # placeholders flagged in lead audits (DE + EN): mustermann@…, ihre@email.de, …
+                  "mustermann", "muster@", "beispiel", "ihre@email", "@email.de",
+                  "vorname", "nachname", "max.muster", "maxmuster",
+                  # third-party / platform addresses that are never the company's own contact
+                  "@google.com", "@facebook.com", "@googlemail.com", "@sentry.")
+
+# Scraping artifacts: URL-encoding (%20), JS unicode escapes (u003e), HTML entities (&gt;) and
+# template/markup leftovers — these matched the email regex but are not real addresses.
+_EMAIL_ARTIFACTS = ("%", "\\", "u003e", "u003c", "u0026", "&gt", "&lt", "&amp", "&#", "<", ">", "{{", "}}")
+# Asset extensions that slip through the email regex as a fake host (e.g. app.bundle.js, sprite.svg).
+_ASSET_EXT = {"js", "css", "svg", "webp", "woff", "woff2", "ico", "gif", "json", "map"}
 
 
 def is_bad_email(email: str) -> bool:
     s = str(email or "").strip().lower()
     if not s or "@" not in s:
         return True
-    return any(b in s for b in _BAD_FRAGMENTS)
+    if any(b in s for b in _BAD_FRAGMENTS) or any(a in s for a in _EMAIL_ARTIFACTS):
+        return True
+    host = s.rsplit("@", 1)[-1]
+    return host.rsplit(".", 1)[-1] in _ASSET_EXT
 
 
 def email_status(raw: str) -> tuple[str, str]:

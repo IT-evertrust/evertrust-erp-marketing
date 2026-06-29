@@ -82,7 +82,9 @@ def _tier_from_llm_fit(fit: str | None, evidence_ok: bool):
     if fit == "peripheral":
         return I.A, "llm:peripheral"
     if fit == "none":
-        return (I.EXCLUDE, "llm:off-niche") if evidence_ok else (I.B, "no-evidence-yet")
+        # Trust the LLM that READ the page: off-niche is DROPPED (this is the language-agnostic
+        # focus that replaces per-language keyword blocklists), regardless of keyword evidence.
+        return I.EXCLUDE, "llm:off-niche"
     return None
 
 
