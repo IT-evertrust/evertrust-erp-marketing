@@ -1,0 +1,9 @@
+{
+  "source": "GeoNames (CC BY 4.0) — https://www.geonames.org/",
+  "download": "https://download.geonames.org/export/dump/cities5000.zip",
+  "tier": "cities5000",
+  "cities_last_modified": "Fri, 26 Jun 2026 01:31:48 GMT",
+  "built_at": "2026-06-26T10:24:31.668821+00:00",
+  "countries": 245,
+  "cities": 69237
+}
