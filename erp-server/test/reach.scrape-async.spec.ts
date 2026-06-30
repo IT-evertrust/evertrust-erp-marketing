@@ -109,8 +109,9 @@ describe('ReachService — async scrape', () => {
 
     expect(result.status).toBe('RUNNING');
     expect(result.scrapeStartedAt).toBeTruthy();
-    // leadTarget null → estimate = 60 + 100*4 = 460s.
-    expect(result.scrapeEtaSeconds).toBe(460);
+    // Region-aware estimate: region 'Anywhere' = nationwide (×6), leadTarget null → 100.
+    // estimate = (120 + 100*2) * 6 = 1920s.
+    expect(result.scrapeEtaSeconds).toBe(1920);
 
     d.resolve(agentResult([])); // let the in-flight run drain
     await waitForStatus(service, aim.id, 'COMPLETED');
