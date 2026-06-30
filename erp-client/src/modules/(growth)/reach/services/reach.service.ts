@@ -316,8 +316,14 @@ const LEAD_STATUS: Record<BackendLead['status'], LeadStatus> = {
 };
 
 function mapLead(l: BackendLead): Lead {
+  // The Lead Satellite scrapes an EMAIL (and sometimes a phone), not a person's name —
+  // so the Contact column falls back to the email/phone when there's no contact name.
+  // Without this the scraped email is invisible (the table has no email column).
   const contact =
-    [l.contactName, l.contactTitle].filter(Boolean).join(' · ') || '—';
+    [l.contactName, l.contactTitle].filter(Boolean).join(' · ') ||
+    l.email ||
+    l.phone ||
+    '—';
   return {
     id: l.id,
     company: l.company,
