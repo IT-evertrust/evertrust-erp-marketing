@@ -268,6 +268,8 @@ def test_route_dispatch_is_async_by_default():
 
 def test_pipeline_drops_tier_c(monkeypatch):
     # A low-score lead is tier C and must NOT appear in the returned prospects.
+    # Pin the tier floor so the test is independent of the (MAX-tuned) production default.
+    monkeypatch.setenv("LEAD_MIN_KEEP_SCORE", "40")
     from satellite import server
     from satellite.clients.search import OfflineFetcher
     from satellite.domain.models import CampaignConfig, Lead
