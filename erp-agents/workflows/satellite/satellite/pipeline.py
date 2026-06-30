@@ -46,11 +46,23 @@ class RunOptions:
     max_segments: int | None = None  # cap segments this run (testing / training wheels)
 
 
-def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetcher: UrlFetcher) -> dict:
+def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetcher: UrlFetcher,
+        on_progress=None) -> dict:
     run_id = "wf3-" + datetime.now(ZoneInfo(TZ)).strftime("%Y%m%d%H%M%S")
     t_run0 = time.time()   # for SCRAPE TIMEOUT (settings.max_runtime_sec) deadline
     mode = "live" if opts.live else "dry"
     result: dict = {"runId": run_id, "mode": mode, "campaignId": opts.campaign_id, "status": "ok"}
+
+    # Live per-phase progress hook (search -> scrape -> qualify -> load). The caller (the
+    # Reach adapter) wires this to POST progress to the ERP so the UI shows a REAL countdown
+    # per process. ALWAYS best-effort: a progress failure must never break or slow a scrape.
+    def _progress(phase: str, current: int, total: int, label: str) -> None:
+        if on_progress is None:
+            return
+        try:
+            on_progress(phase, int(current), int(total), str(label))
+        except Exception:
+            pass
 
     if not opts.campaign_id:
         return {**result, "status": "error", "error": "campaignId is required"}
@@ -202,7 +214,8 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
     # stopping once lead_target is hit (a specific region/city list is one batch, unaffected).
     exhaust = (geo.is_nationwide(cfg.region) or geo.is_zone(cfg.region)) and settings.exhaust_anywhere_regions
     deadline = (t_run0 + settings.max_runtime_sec) if settings.max_runtime_sec else None
-    for _rname, rcities in region_batches:
+    n_regions = len(region_batches)
+    for _ri, (_rname, rcities) in enumerate(region_batches):
         # SEARCH BUDGET (max_queries) + SCRAPE TIMEOUT (max_runtime_sec): hard global caps so the
         # Config-page knobs actually bound the run. Checked at region boundaries (per-region budget
         # may overshoot by at most one region's queries_per_region).
@@ -211,6 +224,9 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
         if deadline and time.time() >= deadline:
             result["stoppedBy"] = "timeout"
             break
+        # Live progress: which region we're sweeping (the long phase for nationwide runs).
+        _label = (str(_rname) if n_regions > 1 else "Searching & scraping")
+        _progress("search", _ri, n_regions, f"{_label} ({_ri + 1}/{n_regions})" if n_regions > 1 else _label)
         segs, lm, ht, blk, off, nq = _discover(rcities)
         all_segments.extend(segs)
         for k, v in lm.items():
@@ -331,6 +347,9 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
     if opts.use_llm and settings.llm_base_url:
         from .clients.render import PlaywrightRenderer
         from .refine import refine_prospects
+        # The LLM niche-gate over every candidate — the second-longest phase. Total is the
+        # raw candidate count we're about to qualify.
+        _progress("qualify", 0, len(prospects), f"Qualifying {len(prospects)} companies")
         renderer = PlaywrightRenderer()
         try:
             ref = refine_prospects(
@@ -364,6 +383,8 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
     # email, and the prospects table is the outreach queue. The full ranked list (incl. no-email)
     # is still returned to the UI via result["leads"].
     if opts.persist:
+        # Final phase: saving the qualified leads (+ mirroring to prospects on the ERP side).
+        _progress("load", 0, len(prospects), f"Saving {len(prospects)} leads")
         postable = [{k: p[k] for k in _PROSPECT_FIELDS if k in p and p[k] not in (None, "")}
                     for p in prospects if p.get("email")]
         result["postable"] = len(postable)

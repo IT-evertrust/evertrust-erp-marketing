@@ -12,6 +12,7 @@ import type {
   ReachRound,
   ReachStats,
   ReachTemplates,
+  ScrapeProgress,
   SenderSchedule,
 } from '../types';
 
@@ -45,6 +46,7 @@ interface BackendAim {
   scrapeStartedAt?: string | null;
   scrapeEtaSeconds?: number | null;
   scrapeError?: string | null;
+  scrapeProgress?: ScrapeProgress | null;
   templates: ReachTemplates | null;
   newsBrief: { title: string; body: string } | null;
   generatedBy: string | null;
@@ -300,6 +302,7 @@ function mapAim(a: BackendAim): ReachCampaignView {
     scrapeStartedAt: a.scrapeStartedAt ?? null,
     scrapeEtaSeconds: a.scrapeEtaSeconds ?? null,
     scrapeError: a.scrapeError ?? null,
+    scrapeProgress: a.scrapeProgress ?? null,
   };
 }
 

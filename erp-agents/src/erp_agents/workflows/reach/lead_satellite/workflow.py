@@ -157,9 +157,17 @@ class LeadSatelliteWorkflow(Workflow):
         # zone-aware profiler (geo.is_zone) expands it into that part of the country's cities — so
         # there is nothing extra to pass here.
         real_erp = ErpClient(settings.erp_base_url, settings.arsenal_token)
+        # Live per-phase progress -> the Reach UI countdown. Only the Reach flow has a
+        # reach_aim to address (campaign_id == aim id here); the campaigns flow has none,
+        # so it stays None. Uses the REAL ErpClient (not the no-op ConfigInjectingErp wrapper)
+        # and is best-effort end-to-end (pipeline wraps it in try/except).
+        on_progress = None
         if injected:
             cfg = satellite_config(cfg_in)
             erp = ConfigInjectingErp(cfg, real=real_erp)
+
+            def on_progress(phase, current, total, label, _erp=real_erp, _aim=campaign_id):
+                _erp.post_scrape_progress(_aim, phase, current, total, label)
         else:
             erp = real_erp
         search = WebSearch(
@@ -178,7 +186,7 @@ class LeadSatelliteWorkflow(Workflow):
             max_segments=max_segments,
         )
         try:
-            result = satellite_run(settings, opts, erp, search, fetcher)
+            result = satellite_run(settings, opts, erp, search, fetcher, on_progress=on_progress)
         except Exception as exc:
             return AgentResult(
                 job_id=job.job_id,

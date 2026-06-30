@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ArsenalTokenGuard } from '../common/guards/arsenal-token.guard';
 import { GoogleModule } from '../google/google.module';
 import { NichesModule } from '../niches/niches.module';
 import { ReachController } from './reach.controller';
@@ -13,7 +14,14 @@ import { GmailSenderService } from './gmail-sender.service';
 @Module({
   imports: [GoogleModule, NichesModule],
   controllers: [ReachController],
-  providers: [ReachService, ReachRepository, ReachAgentClient, GmailSenderService],
+  providers: [
+    ReachService,
+    ReachRepository,
+    ReachAgentClient,
+    GmailSenderService,
+    // Gates the @Public() machine route PATCH aims/:id/scrape-progress (agent → ERP).
+    ArsenalTokenGuard,
+  ],
   // ReachRepository is exported so EngageModule can propagate a classified reply back
   // into the Reach stats cache + lead status (markLeadReplied).
   exports: [ReachRepository],

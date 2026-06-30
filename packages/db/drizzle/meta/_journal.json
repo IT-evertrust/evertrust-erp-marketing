@@ -414,6 +414,13 @@
 			"when": 1780608000000,
 			"tag": "0058_users_sender_email",
 			"breakpoints": true
+		},
+		{
+			"idx": 59,
+			"version": "7",
+			"when": 1780610000000,
+			"tag": "0059_reach_scrape_progress",
+			"breakpoints": true
 		}
 	]
 }
