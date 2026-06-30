@@ -44,25 +44,25 @@ class Settings:
     profile_model: str = "hermes"
     report_dir: str = str(PACKAGE_ROOT / "runs")
     # Scraper tuning (all I/O-bound, safe to parallelize on a laptop).
-    search_workers: int = 4     # concurrent discovery queries (DDG throttles aggressive bursts)
-    scrape_workers: int = 14    # concurrent site fetches for email recovery
-    max_scrape: int = 2000      # cap sites scraped per run (MAX)
+    search_workers: int = 6     # concurrent discovery queries (DDG throttles aggressive bursts)
+    scrape_workers: int = 24    # concurrent site fetches for email recovery
+    max_scrape: int = 50000     # cap sites scraped per run (MAX)
     ddg_pages: int = 1          # DuckDuckGo result pages per query
     # Tender-hunter exhaustive discovery (MAX config: caps lifted so a run sweeps the whole country).
     lead_target: int = 100000   # keep searching until this many candidates (MAX: effectively uncapped)
-    search_pages: int = 3       # SearXNG result pages per query (pageno 1..n)
+    search_pages: int = 5       # SearXNG result pages per query (pageno 1..n)
     max_queries: int = 100000   # hard cap on discovery queries per run (MAX: uncapped budget)
     # Region-by-region nationwide sweep (port of n8n round-9: loop EVERY region of the AIM country,
     # one batch at a time, so each region gets its own query budget and the search backend isn't
     # overloaded). Region count is whatever the country has — not a fixed number.
-    queries_per_region: int = 30   # query budget per region batch
-    max_regions: int = 24          # cap regions scanned per run (24 ≥ all 16 German Bundesländer)
+    queries_per_region: int = 50   # query budget per region batch
+    max_regions: int = 0           # 0 = NO cap — sweep EVERY region of the country (MAX coverage)
     region_cooldown: float = 3.0   # seconds to pause between region batches (keeps SearXNG stable)
-    region_chunk: int = 6          # cities per batch when the profiler returns a flat city list
+    region_chunk: int = 8          # cities per batch when the profiler returns a flat city list
     # How many cities the country profiler returns in total (the geo coverage ceiling). The profiler
     # asks the model for the largest cities/business towns per region; this caps the flattened list.
     # Raise for wider city coverage (more towns swept) at the cost of a longer run. Env: LEAD_PROFILE_MAX_CITIES.
-    profile_max_cities: int = 250
+    profile_max_cities: int = 800
     # Nationwide geography source: the LOCAL GeoNames dataset (satellite/data/geodata.json, built by
     # build_geodata.py) supplies REAL population-ranked cities per region — beats the LLM profiler's
     # guessed/capped list. geo_min_pop = drop towns below this population (0 = keep all in the dataset,
@@ -83,7 +83,7 @@ class Settings:
     exhaust_anywhere_regions: bool = True
     # Lead-quality floor: the B/C tier boundary. A lead scoring below this is tier C (noise) and is
     # DROPPED — only B and above are kept/returned/posted. Raise to be stricter, lower to keep more.
-    min_keep_score: int = 40
+    min_keep_score: int = 20
     # SCRAPE TIMEOUT (Config page, minutes -> seconds here): hard wall-clock cap on the discovery
     # sweep so a run can't grind forever. 0 = no limit. Env: LEAD_MAX_RUNTIME_SEC.
     max_runtime_sec: int = 0
@@ -118,24 +118,28 @@ def load_settings() -> Settings:
         email_model=_extract,
         buzzword_model=_forge,
         profile_model=os.environ.get("PROFILE_MODEL", _forge),
-        search_workers=int(os.environ.get("LEAD_SEARCH_WORKERS", "4") or 4),
-        scrape_workers=int(os.environ.get("LEAD_SCRAPE_WORKERS", "14") or 14),
-        max_scrape=int(os.environ.get("LEAD_MAX_SCRAPE", "2000") or 2000),
+        # MAXED defaults (2026-06-30): widest possible nationwide coverage — every region,
+        # many cities, deep query budget. Bounded only by SearXNG stability (region_cooldown
+        # paces the batches so upstream engines don't rate-limit). Any of these is still
+        # overridable per-deploy via its LEAD_* env var; per-org via the Config page.
+        search_workers=int(os.environ.get("LEAD_SEARCH_WORKERS", "6") or 6),
+        scrape_workers=int(os.environ.get("LEAD_SCRAPE_WORKERS", "24") or 24),
+        max_scrape=int(os.environ.get("LEAD_MAX_SCRAPE", "50000") or 50000),
         ddg_pages=int(os.environ.get("LEAD_DDG_PAGES", "1") or 1),
         lead_target=int(os.environ.get("LEAD_TARGET", "100000") or 100000),
-        search_pages=int(os.environ.get("LEAD_SEARCH_PAGES", "3") or 3),
+        search_pages=int(os.environ.get("LEAD_SEARCH_PAGES", "5") or 5),
         max_queries=int(os.environ.get("LEAD_MAX_QUERIES", "100000") or 100000),
-        queries_per_region=int(os.environ.get("LEAD_QUERIES_PER_REGION", "30") or 30),
-        max_regions=int(os.environ.get("LEAD_MAX_REGIONS", "24") or 24),
+        queries_per_region=int(os.environ.get("LEAD_QUERIES_PER_REGION", "50") or 50),
+        max_regions=int(os.environ.get("LEAD_MAX_REGIONS", "0") or 0),  # 0 = sweep EVERY region
         region_cooldown=float(os.environ.get("LEAD_REGION_COOLDOWN", "3") or 3),
-        region_chunk=int(os.environ.get("LEAD_REGION_CHUNK", "6") or 6),
-        profile_max_cities=int(os.environ.get("LEAD_PROFILE_MAX_CITIES", "250") or 250),
+        region_chunk=int(os.environ.get("LEAD_REGION_CHUNK", "8") or 8),
+        profile_max_cities=int(os.environ.get("LEAD_PROFILE_MAX_CITIES", "800") or 800),
         geo_min_pop=int(os.environ.get("LEAD_GEO_MIN_POP", "0") or 0),
         enable_ddg_fallback=_env_bool("LEAD_ENABLE_DDG_FALLBACK", False),
         enable_web_email_recovery=_env_bool("LEAD_ENABLE_WEB_EMAIL_RECOVERY", True),
         allow_llm_email_recovery=_env_bool("LEAD_ALLOW_LLM_EMAIL_RECOVERY", False),
         exhaust_anywhere_regions=_env_bool("LEAD_EXHAUST_ANYWHERE_REGIONS", True),
-        min_keep_score=int(os.environ.get("LEAD_MIN_KEEP_SCORE", "40") or 40),
+        min_keep_score=int(os.environ.get("LEAD_MIN_KEEP_SCORE", "20") or 20),
         max_runtime_sec=int(os.environ.get("LEAD_MAX_RUNTIME_SEC", "0") or 0),
     )
 
