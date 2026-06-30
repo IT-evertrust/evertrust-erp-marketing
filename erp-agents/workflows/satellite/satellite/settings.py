@@ -83,7 +83,7 @@ class Settings:
     exhaust_anywhere_regions: bool = True
     # Lead-quality floor: the B/C tier boundary. A lead scoring below this is tier C (noise) and is
     # DROPPED — only B and above are kept/returned/posted. Raise to be stricter, lower to keep more.
-    min_keep_score: int = 20
+    min_keep_score: int = 35
     # SCRAPE TIMEOUT (Config page, minutes -> seconds here): hard wall-clock cap on the discovery
     # sweep so a run can't grind forever. 0 = no limit. Env: LEAD_MAX_RUNTIME_SEC.
     max_runtime_sec: int = 0
@@ -139,7 +139,7 @@ def load_settings() -> Settings:
         enable_web_email_recovery=_env_bool("LEAD_ENABLE_WEB_EMAIL_RECOVERY", True),
         allow_llm_email_recovery=_env_bool("LEAD_ALLOW_LLM_EMAIL_RECOVERY", False),
         exhaust_anywhere_regions=_env_bool("LEAD_EXHAUST_ANYWHERE_REGIONS", True),
-        min_keep_score=int(os.environ.get("LEAD_MIN_KEEP_SCORE", "20") or 20),
+        min_keep_score=int(os.environ.get("LEAD_MIN_KEEP_SCORE", "35") or 35),
         max_runtime_sec=int(os.environ.get("LEAD_MAX_RUNTIME_SEC", "0") or 0),
     )
 
