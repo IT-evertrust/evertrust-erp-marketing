@@ -44,6 +44,22 @@ def test_pipeline_emits_search_progress():
         assert phase in ("search", "scrape", "qualify", "load")
 
 
+def test_structural_company_filter_drops_noncompanies():
+    # Safety net for a failed LLM quality stage: keep real companies, drop the
+    # host-identifiable junk (social/directory/gov/edu/jobboard) — no per-language keywords.
+    from satellite.pipeline import _structural_company_filter
+
+    prospects = [
+        {"companyName": "Acme Cloud GmbH", "website": "https://acme-cloud.de"},  # company → keep
+        {"companyName": "Jan Profile", "website": "https://linkedin.com/in/jan"},  # directory → drop
+        {"companyName": "Some Article", "website": "https://en.wikipedia.org/wiki/Cloud"},  # news → drop
+        {"companyName": "City Office", "website": "https://stadt.gov.pl"},  # gov → drop
+        {"companyName": "Job Listing", "website": "https://indeed.com/job/123"},  # jobboard → drop
+    ]
+    kept = _structural_company_filter(prospects)
+    assert [p["companyName"] for p in kept] == ["Acme Cloud GmbH"]
+
+
 def test_progress_sink_failure_never_breaks_run():
     def boom(*_a):
         raise RuntimeError("progress sink down")
