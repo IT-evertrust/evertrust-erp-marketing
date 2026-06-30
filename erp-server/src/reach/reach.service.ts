@@ -576,7 +576,7 @@ export class ReachService {
     }
   }
 
-  // The org's Reach send timeline: real per-day counts over the last 10 days
+  // The org's Reach send timeline: real per-day counts over the past 7 days
   // (oldest first), zero-filled, with "Today" labelled — drives the Reach dashboard
   // chart.
   async dailySends(orgId: string): Promise<DailySendPoint[]> {
@@ -590,8 +590,8 @@ export class ReachService {
 
     const today = new Date();
     const points: DailySendPoint[] = [];
-    // 9 days ago -> today (10 days total), chronological (oldest first).
-    for (let i = 9; i >= 0; i--) {
+    // 6 days ago -> today (7 days total), chronological (oldest first).
+    for (let i = 6; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(today.getDate() - i);
       const isToday = i === 0;

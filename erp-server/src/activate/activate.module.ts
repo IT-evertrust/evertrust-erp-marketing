@@ -8,12 +8,12 @@ import { ActivateAgentClient } from './activate.agent';
 import { GmailReaderService } from './gmail-reader.service';
 import { CalendarReaderService } from './calendar-reader.service';
 import { ReadAiEmailService } from './read-ai-email.service';
-import { ReadAiTokenGuard } from '../common/guards/read-ai-token.guard';
+import { ReadAiSignatureGuard } from '../common/guards/read-ai-signature.guard';
 
 // The Activate plane (Growth Engine). GoogleModule is imported so the Gmail/Calendar/Read AI
 // readers can resolve live per-account access tokens through GoogleAccountsService — every
-// Google call funnels through that one service. ReadAiTokenGuard gates the @Public()
-// read-ai/webhook machine route.
+// Google call funnels through that one service. ReadAiSignatureGuard gates the @Public()
+// read-ai/webhook machine route (HMAC signature verification).
 @Module({
   imports: [GoogleModule],
   controllers: [ActivateController],
@@ -25,7 +25,7 @@ import { ReadAiTokenGuard } from '../common/guards/read-ai-token.guard';
     GmailReaderService,
     CalendarReaderService,
     ReadAiEmailService,
-    ReadAiTokenGuard,
+    ReadAiSignatureGuard,
   ],
 })
 export class ActivateModule {}

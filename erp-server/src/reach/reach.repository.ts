@@ -808,7 +808,7 @@ export class ReachRepository {
       });
   }
 
-  // Daily Reach send counts over the last 10 days (grouped by sent_at::date). The
+  // Daily Reach send counts over the past 7 days (grouped by sent_at::date). The
   // service zero-fills the gaps + labels "Today". Org-scoped.
   async dailySends(orgId: string): Promise<Array<{ day: Date; count: number }>> {
     const day = sql<Date>`${schema.reachSends.sentAt}::date`;
@@ -818,7 +818,7 @@ export class ReachRepository {
       .where(
         and(
           tenantScope(orgId, schema.reachSends),
-          gte(schema.reachSends.sentAt, sql`now() - interval '9 days'`),
+          gte(schema.reachSends.sentAt, sql`now() - interval '6 days'`),
         ),
       )
       .groupBy(day);

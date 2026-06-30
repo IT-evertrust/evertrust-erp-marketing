@@ -68,7 +68,7 @@ export type SenderSchedule = {
   autoSend: boolean;
 };
 
-// One point in the Sequence Sender's 10-day send-volume chart (oldest first).
+// One point in the Sequence Sender's past-7-days send-volume chart (oldest first).
 // `date` is a pre-formatted label (e.g. "12/6" or "Today"); `type` marks the bar
 // style — past (filled), today (highlighted), future (projected, dashed).
 export type DailySend = {

@@ -12,7 +12,7 @@ import {
 
 import { Public } from '../auth/decorators/public.decorator';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
-import { ReadAiTokenGuard } from '../common/guards/read-ai-token.guard';
+import { ReadAiSignatureGuard } from '../common/guards/read-ai-signature.guard';
 import { OrgId } from '../common/tenant';
 import { ActivateService } from './activate.service';
 import {
@@ -145,14 +145,15 @@ export class ActivateController {
 
   // PUSH ingress: Read AI posts a finished meeting's report (transcript + summary) here
   // when a meeting ends — the webhook alternative to the pull. PUBLIC (no JWT — Read AI
-  // has no session); the ONLY gate is the shared secret in the `x-read-ai-token` header
-  // OR a `?token=` query param, enforced by ReadAiTokenGuard (503 if the secret is
-  // unset, 401 on a bad token). The org is resolved from the payload's participant
-  // emails. Always 200 on a handled payload (even when nothing was imported) so Read AI
-  // doesn't retry a non-actionable ping; unexpected errors surface as 5xx (Read AI
-  // retries). Body is Read AI's raw shape — mapped defensively in the service.
+  // has no session); the ONLY gate is the HMAC-SHA256 signature in the `X-Read-Signature`
+  // header, verified against READ_AI_WEBHOOK_SIGNING_KEY by ReadAiSignatureGuard (503 if
+  // the key is unset, 401 on a bad/missing signature). The org is resolved from the
+  // payload's participant emails. Always 200 on a handled payload (even when nothing was
+  // imported) so Read AI doesn't retry a non-actionable ping; unexpected errors surface
+  // as 5xx (Read AI retries). Body is Read AI's raw shape — mapped defensively in the
+  // service.
   @Public()
-  @UseGuards(ReadAiTokenGuard)
+  @UseGuards(ReadAiSignatureGuard)
   @HttpCode(HttpStatus.OK)
   @Post('read-ai/webhook')
   readAiWebhook(@Body() body: Record<string, unknown>) {
