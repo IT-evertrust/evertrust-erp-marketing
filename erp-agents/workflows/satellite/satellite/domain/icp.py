@@ -122,6 +122,11 @@ _GLOBAL_PLATFORMS = {
     "twitter.": DIRECTORY, "x.com": DIRECTORY, "xing.": DIRECTORY, "wikipedia.": NEWS,
     "crunchbase.": DIRECTORY, "yelp.": DIRECTORY, "tripadvisor.": DIRECTORY, "trustpilot.": DIRECTORY,
     "indeed.": JOBBOARD, "stepstone.": JOBBOARD, "glassdoor.": JOBBOARD, "monster.": JOBBOARD,
+    # Q&A / forum / blog / social platforms — never a company to cold-email (caught by HOST so a
+    # weak LLM can't misjudge them, e.g. a Zhihu engineering thread surfacing in an LED sweep).
+    "zhihu.": NEWS, "quora.": NEWS, "reddit.": NEWS, "medium.": NEWS, "blogspot.": NEWS,
+    "wordpress.com": NEWS, "pinterest.": DIRECTORY, "tiktok.": DIRECTORY, "telegram.": DIRECTORY,
+    "amazon.": DIRECTORY, "aliexpress.": DIRECTORY, "ebay.": DIRECTORY, "allegro.": DIRECTORY,
 }
 
 # Map an LLM's entityType word (any phrasing) to our buckets; anything unrecognized -> a company
