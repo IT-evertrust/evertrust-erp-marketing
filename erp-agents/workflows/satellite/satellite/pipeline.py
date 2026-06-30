@@ -22,7 +22,7 @@ from zoneinfo import ZoneInfo
 from .clients import llm
 from .clients.erp import ErpGateway
 from .clients.search import SearchGateway, UrlFetcher
-from .domain import filters, geo, geodata, tender
+from .domain import filters, geo, geodata, icp, tender
 from .domain.models import Segment, build_segments, dedup_leads, leads_to_prospects
 from .domain.scrape import hit_to_lead, queries_for_segment, registrable_domain, scrape_emails
 
@@ -44,6 +44,22 @@ class RunOptions:
     persist: bool = False
     use_llm: bool = True
     max_segments: int | None = None  # cap segments this run (testing / training wheels)
+
+
+def _structural_company_filter(prospects: list[dict]) -> list[dict]:
+    """Cheap, language-AGNOSTIC safety net: keep only prospects that look like a COMPANY by
+    host + name signals (NO per-language keyword lists). Drops gov/edu TLDs, well-known global
+    platforms (LinkedIn/Wikipedia/Indeed/…) and structural non-companies. Used when the LLM
+    quality stage fails, so a flaky LLM/renderer can never dump the raw, ungated candidate list
+    to the leads sidebar. NOTE: language-specific junk (a local city portal, a person profile on
+    a generic domain) still needs the LLM gate — this is a backstop, not a replacement."""
+    def _is_company(p: dict) -> bool:
+        url = p.get("website", "")
+        if icp.structural_entity(url) is not None:  # gov/edu TLD or a global platform host
+            return False
+        return icp.classify_entity(p.get("companyName", ""), "", url, "") == icp.COMPANY
+
+    return [p for p in prospects if _is_company(p)]
 
 
 def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetcher: UrlFetcher,
@@ -362,6 +378,12 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
             result["excludedByQualify"] = ref["excluded"]
         except Exception as e:  # noqa: BLE001 — never let the quality stage abort a run
             result["qualifyError"] = str(e)[:200]
+            # SAFETY NET: the LLM/render quality stage failed — but do NOT fall back to the
+            # raw, ungated candidate list (that's how article / city-portal / directory /
+            # person junk leaks through, e.g. "chmura"=cloud matching people named Chmura).
+            kept = _structural_company_filter(prospects)
+            result["qualifyFallbackDropped"] = len(prospects) - len(kept)
+            prospects = kept
         finally:
             renderer.close()
 
