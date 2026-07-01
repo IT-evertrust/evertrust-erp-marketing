@@ -173,7 +173,8 @@ export function LeadScraperPanel({
             {t('scraper.empty')}
           </div>
         ) : (
-          <table className="w-full border-collapse">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[720px] border-collapse">
             <thead>
               <tr>
                 <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
@@ -266,6 +267,7 @@ export function LeadScraperPanel({
               </tfoot>
             )}
           </table>
+          </div>
         )}
       </GrowthCard>
 

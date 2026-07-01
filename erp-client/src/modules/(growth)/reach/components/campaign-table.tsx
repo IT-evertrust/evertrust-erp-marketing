@@ -93,7 +93,7 @@ export function CampaignTable({
         </div>
       ) : (
       <div className="max-h-[280px] overflow-auto">
-        <table className="w-full border-collapse">
+        <table className="w-full min-w-[640px] border-collapse">
           <thead>
             <tr>
               <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
