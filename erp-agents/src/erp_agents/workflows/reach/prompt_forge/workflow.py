@@ -4,8 +4,10 @@ Reach's MANUAL scraping path repurposes the local model (hermes/qwen via the Lit
 gateway) as a *prompt author*. Rather than let the model invent the whole prompt from
 scratch (which produced inconsistent results — sometimes far fewer than 25 leads), this
 workflow starts from a STORED TEMPLATE (``SCRAPE_PROMPT_TEMPLATE``) that hard-codes the
-non-negotiables — a minimum of 25 leads per batch, exhausting public sources, the revenue
-tiers + USD 1M floor, the strict no-hallucination rules, and the exact JSON schema. The
+non-negotiables — a minimum of 25 leads per batch with per-state coverage (aim N per state),
+exhausting public sources, the AAA/A/B revenue tiers + USD 5M floor, the contact policy (keep
+only companies with at least one verified email or phone, prefer a senior Sales contact), the
+per-lead `state` tag, the strict no-hallucination rules, and the exact JSON schema. The
 template has ``{{placeholders}}`` that are filled from the AIM config (reach.aims fields),
 then the filled template is sent to the local model for REFINEMENT (sharpen the niche /
 search-strategy wording only). The refined prompt is validated to confirm it still carries
@@ -77,6 +79,44 @@ def _targets_line(niche: dict) -> str:
     return ", ".join(names)
 
 
+# German federal states (Bundesländer). Drives per-state coverage when the campaign
+# country is Germany; other countries fall back to a generic "every state/region" line.
+_GERMAN_STATES = [
+    "Baden-Württemberg", "Bayern", "Berlin", "Brandenburg", "Bremen", "Hamburg",
+    "Hessen", "Mecklenburg-Vorpommern", "Niedersachsen", "Nordrhein-Westfalen",
+    "Rheinland-Pfalz", "Saarland", "Sachsen", "Sachsen-Anhalt",
+    "Schleswig-Holstein", "Thüringen",
+]
+
+
+def _states_for_country(country: str) -> str:
+    c = country.strip().lower()
+    if c in ("germany", "deutschland", "de", "ger", "deu"):
+        return ", ".join(_GERMAN_STATES)
+    return f"every state / region / province of {country or 'the country'}"
+
+
+def _keywords_block(niche: dict, niche_name: str, country: str) -> str:
+    """Render the seed search queries from the niche targets (reused as keywords — no new
+    field). Falls back to a few queries derived from the niche + country when none are set."""
+    lines: list[str] = []
+    for t in niche.get("targets") or []:
+        if not isinstance(t, dict):
+            continue
+        q = _clean(t.get("searchHint")) or _clean(t.get("name"))
+        if q:
+            lines.append(f"- {q}")
+    if not lines:
+        base = niche_name or "the target"
+        loc = country or ""
+        lines = [
+            f"- {base} Firma {loc}".strip(),
+            f"- {base} Unternehmen {loc}".strip(),
+            f"- {base} GmbH {loc}".strip(),
+        ]
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
 # The stored lead-scraping prompt TEMPLATE. {{placeholders}} are filled from the AIM
 # config; everything else is fixed so every batch carries the same hard requirements.
@@ -90,50 +130,58 @@ CAMPAIGN
 - Industry focus: {{industry_focus}}
 - Tender focus: {{tender_focus}}
 - Target type: {{target_type}}
-- Region: {{region}}
 - Country: {{country}}
+- Region / zone: {{region}}
 - Segment: {{segment}}
-- Priority sector targets: {{sector_targets}}
 
-WHAT TO FIND
-Find {{target_type}} in {{niche}} operating in {{region}}, {{country}} that fit the focus above. For EVERY company you list you must actually open its own website and read its real contact details — do not leave email/phone empty just because you didn't look.
+SEED SEARCH QUERIES — start here, then expand
+{{keywords}}
+Run each query above, then broaden with synonyms, adjacent sub-niches, trade terms and more cities. Localise queries to the country's language (e.g. German) where that surfaces more local companies. These are starting points, not limits — keep going until the volume target below is met.
 
-FINDING THE EMAIL AND PHONE — DO THIS FOR EVERY COMPANY (this is the whole point)
-Open the company's own site and actively hunt for a public email and phone in ALL of these places:
-- The "Impressum" / "Impressumspflicht" / legal-notice page. German companies are LEGALLY REQUIRED to publish a contact email and phone here, so this is your single best source — ALWAYS open the Impressum.
-- The "Kontakt" / "Contact" page, the page footer, and the "Über uns" / "About" page.
-Emails are written in many forms — recognise and NORMALISE every one of them to a plain address:
+GEOGRAPHIC COVERAGE — WORK STATE BY STATE (this drives both quality and de-duplication)
+- {{country}} is divided into these states/regions: {{states}}.
+- Go through them ONE AT A TIME. Aim for at least {{leads_per_state}} qualified companies in EACH state before moving to the next.
+- Tag every company with the state it is headquartered / primarily operating in via the `state` field, using the exact state name from the list above.
+- Spread coverage — do NOT return everything from one big state and nothing from the smaller ones.
+
+FINDING THE CONTACT — DO THIS FOR EVERY COMPANY (this is the whole point)
+Open the company's own site and actively hunt for a public email AND phone in ALL of these places:
+- The "Impressum" / legal-notice page. German companies are LEGALLY REQUIRED to publish a contact email and phone here, so ALWAYS open the Impressum — it is your single best source.
+- The "Kontakt" / "Contact" page, the page footer, and the "Über uns" / "About" / team page.
+Prefer a NAMED SENIOR contact in Sales where one is publicly listed — Head of Sales, Vertriebsleiter, Sales Director, Geschäftsführer / Managing Director, Business Development — and put their role in `contact_title`. If no named person is public, use the company's public role address (info@, vertrieb@, sales@, kontakt@).
+Emails are written in many forms — recognise and NORMALISE every one to a plain address:
 - Plain text: info@company.de
 - mailto links: href="mailto:info@company.de"
 - Anti-scraper obfuscation: "info [at] company [dot] de", "info(at)company.de", "info AT company DOT de", "info @ company . de", or with unicode/zero-width spaces — reconstruct these to info@company.de.
 - HTML-entity encoded (e.g. &#105;nfo@…) or JavaScript-assembled addresses — decode/assemble them.
-- Role addresses are valid and common: info@, kontakt@, office@, vertrieb@, sales@, mail@, hello@.
-- If ONLY a contact form exists and no readable email, leave email null (never invent one) but still capture the phone.
 Phone: read it from the same Impressum/Kontakt/footer; accept German formats (+49 …, 0…, with spaces, /, - or ()) and keep it as printed.
 
-VOLUME — HARD REQUIREMENT
-- Return a MINIMUM of 25 companies. This is achievable. Do NOT stop early, do NOT trim, do NOT summarise.
-- If you have fewer than 25, broaden your queries (synonyms, adjacent sub-niches, more cities in the region) and KEEP SEARCHING until you have at least 25.
-- EXHAUST every publicly available source before finishing: company websites, business directories, public/company registries, industry associations, trade-fair and membership lists, chambers of commerce, news, job boards, and public professional-network pages.
+CONTACT POLICY — at least ONE verified channel per company
+- Only keep a company for which you found AT LEAST ONE real, public channel: an email OR a phone (BOTH preferred). Aggressively try to get both.
+- If a company has NEITHER a findable public email NOR a public phone, DROP it — do not pad the list with contactless rows, and NEVER invent an email or phone.
 
-REVENUE TIERS — only companies with at least USD 1,000,000 annual revenue
+VOLUME — HARD REQUIREMENT
+- Return a MINIMUM of 25 companies overall, working toward {{leads_per_state}} per state across the states listed above. Do NOT stop early, do NOT trim, do NOT summarise.
+- If you are short, broaden your queries (synonyms, adjacent sub-niches, more cities/states) and KEEP SEARCHING until the target is met.
+- EXHAUST every publicly available source before finishing: company websites, business directories, public/company registries, industry associations, trade-fair and membership lists, chambers of commerce, public tender portals, news, job boards, and public professional-network pages.
+
+REVENUE TIERS — only companies with at least USD 5,000,000 annual revenue
 Classify each company into `revenue_tier`:
-- AA = USD 20M per year or above
-- A  = USD 10-15M per year
-- B  = USD 5-10M per year
-- C  = below that, down to the USD 1M per year minimum
-Exclude any company under USD 1M. Judge revenue from public signals (filings, press, funding/company profiles, headcount, industry estimates); when revenue falls between bands, pick the closest tier.
+- AAA = USD 20M per year or above
+- A   = USD 10-20M per year
+- B   = USD 5-10M per year
+Exclude any company under USD 5M. Judge revenue from public signals (filings, press, funding/company profiles, headcount, industry estimates); when revenue falls between bands, pick the closest tier.
 
 NO HALLUCINATION — CRITICAL
 - Only return companies you ACTUALLY found on real, live web pages via search. Do NOT invent or guess companies.
-- Do NOT fabricate emails, phone numbers, websites, locations, revenue, or sources. If you did not open the page and see the value, it is null.
+- Do NOT fabricate emails, phone numbers, websites, locations, state, revenue, or sources. If you did not open the page and see the value, it is null.
 - Every company must be a real, verifiable organisation; if you cannot verify it exists, do not include it.
 - Never cite or rely on a source you did not actually open. No placeholder or example data.
 - PROVENANCE: every lead MUST include `source_url` — the exact page URL you actually opened to get this company and its details (e.g. the Impressum URL where you read the email). If you cannot give a real source_url you opened, DO NOT include the company. A lead with no source_url is not acceptable.
 
 OUTPUT — STRICT JSON ONLY (no prose, no explanation, no markdown, no code fences), exactly this shape:
-{"leads": [{"company": "string", "contact_name": "string|null", "email": "string|null", "phone": "string|null", "website": "string|null", "location": "string|null", "revenue_tier": "AA|A|B|C", "source_url": "string", "qualification_reason": "string|null", "confidence": 0.0, "status": "NEW"}]}
-Rules: `company` and `source_url` are REQUIRED (source_url is the real page you opened); `revenue_tier` is exactly one of AA/A/B/C; `contact_name`, `email`, `phone`, `website`, `location` are null when not confidently found (never fabricated) — but you must genuinely have looked in the Impressum/Kontakt/footer first; `confidence` is 0.0-1.0 for niche fit; `status` is always "NEW". The JSON must be valid and directly parseable."""
+{"leads": [{"company": "string", "contact_name": "string|null", "contact_title": "string|null", "email": "string|null", "phone": "string|null", "website": "string|null", "location": "string|null", "state": "string|null", "revenue_tier": "AAA|A|B", "source_url": "string", "qualification_reason": "string|null", "confidence": 0.0, "status": "NEW"}]}
+Rules: `company` and `source_url` are REQUIRED (source_url is the real page you opened); `revenue_tier` is exactly one of AAA/A/B; `state` is the state/region from the coverage list the company operates in; AT LEAST ONE of `email`/`phone` must be non-null for every company (a row with neither is dropped, never fabricated); `contact_title` is the senior contact's role when a named person was found; `contact_name`, `website`, `location` are null when not confidently found (never fabricated) — but you must genuinely have looked in the Impressum/Kontakt/footer first; `confidence` is 0.0-1.0 for niche fit; `status` is always "NEW". The JSON must be valid and directly parseable."""
 
 
 # System instruction for the REFINEMENT call: polish only, preserve every hard rule.
@@ -143,10 +191,13 @@ REFINE_SYSTEM = (
     "CAMPAIGN framing and the search-strategy wording so it is sharper and more specific to this "
     "niche, region and target type (e.g. concrete example queries, the right sub-segments and "
     "cities). You MUST keep the following UNCHANGED in meaning and strength: the requirement to "
-    "return a MINIMUM of 25 companies; the instruction to exhaust every public source; the revenue "
-    "tiers and the USD 1M floor; the NO-HALLUCINATION / do-not-fabricate rules; and the exact JSON "
-    "output schema (same keys, same shape). Do not weaken, drop, or reword away any of those. "
-    "Return ONLY the final prompt text — no preamble, no explanation, no code fences."
+    "return a MINIMUM of 25 companies with per-state coverage (aim for the stated number in each "
+    "state); the instruction to exhaust every public source; the AAA/A/B revenue tiers and the USD "
+    "5M floor; the contact policy (keep only companies with at least one verified public email or "
+    "phone, prefer a named senior Sales contact, never fabricate a channel); the per-company `state` "
+    "tagging; the NO-HALLUCINATION / do-not-fabricate rules; and the exact JSON output schema (same "
+    "keys incl. state and contact_title, same shape). Do not weaken, drop, or reword away any of "
+    "those. Return ONLY the final prompt text — no preamble, no explanation, no code fences."
 )
 
 
@@ -156,6 +207,9 @@ def _fill_template(config: dict) -> str:
     niche_name = _clean(niche.get("name")) or _clean(config.get("nicheName")) or "the target niche"
     industry = niche.get("industry")
     industry = industry.get("name") if isinstance(industry, dict) else _clean(industry)
+    country_val = _clean(config.get("country")) or "Germany"
+    lps = config.get("leadsPerState")
+    leads_per_state = str(int(lps)) if isinstance(lps, (int, float)) and lps > 0 else "10"
     values = {
         "campaign": _clean(config.get("name")) or "(unnamed campaign)",
         "niche": niche_name,
@@ -163,9 +217,11 @@ def _fill_template(config: dict) -> str:
         "tender_focus": _clean(config.get("tenderFocus")) or niche_name,
         "target_type": _clean(config.get("targetType")) or "companies",
         "region": _clean(config.get("region")) or "Anywhere",
-        "country": _clean(config.get("country")) or "Germany",
+        "country": country_val,
         "segment": _clean(config.get("segment")) or "(no specific segment)",
-        "sector_targets": _targets_line(niche) or "(none specified)",
+        "keywords": _keywords_block(niche, niche_name, country_val),
+        "states": _states_for_country(country_val),
+        "leads_per_state": leads_per_state,
     }
     out = SCRAPE_PROMPT_TEMPLATE
     for key, val in values.items():
@@ -179,13 +235,19 @@ def _preserves_hard_requirements(text: str) -> bool:
     if not text:
         return False
     low = text.lower()
-    has_schema = '"leads"' in text and "revenue_tier" in text and "source_url" in text
+    has_schema = (
+        '"leads"' in text
+        and "revenue_tier" in text
+        and "source_url" in text
+        and '"state"' in text
+    )
     has_minimum = "25" in text
+    has_tiers = "AAA" in text
     has_anti_hallucination = any(
         marker in low
-        for marker in ("hallucinat", "do not invent", "never fabricate", "do not fabricate", "not fabricated")
+        for marker in ("hallucinat", "do not invent", "never fabricate", "do not fabricate", "never invent")
     )
-    return has_schema and has_minimum and has_anti_hallucination
+    return has_schema and has_minimum and has_tiers and has_anti_hallucination
 
 
 class PromptForgeWorkflow(Workflow):

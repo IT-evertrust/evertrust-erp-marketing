@@ -73,6 +73,7 @@ interface BackendLead {
   email?: string;
   phone?: string;
   location?: string;
+  state?: string;
   source?: string;
   qualificationReason?: string;
   confidence?: number;
@@ -359,6 +360,7 @@ function mapLead(l: BackendLead): Lead {
     contact,
     email: l.email || '—',
     location: l.location || '—',
+    state: l.state || '—',
     source: l.source || '—',
     status: LEAD_STATUS[l.status] ?? 'New',
   };

@@ -54,7 +54,12 @@
       "location": "Location",
       "source": "Source",
       "status": "Status",
-      "email": "Email"
+      "email": "Email",
+      "state": "State"
+    },
+    "stateTab": {
+      "all": "All states",
+      "none": "No state"
     },
     "leadStatus": {
       "New": "New",

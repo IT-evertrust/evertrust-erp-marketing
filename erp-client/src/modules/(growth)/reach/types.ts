@@ -29,6 +29,9 @@ export type Lead = {
   // The company/contact email, shown in its own column (separate from `contact`).
   email: string;
   location: string;
+  // The state / Bundesland the company operates in — drives the leads table's state
+  // filter tabs. '—' when the scrape didn't tag one.
+  state: string;
   source: string;
   status: LeadStatus;
 };

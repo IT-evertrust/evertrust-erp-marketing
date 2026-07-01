@@ -54,7 +54,12 @@
       "location": "Ort",
       "source": "Quelle",
       "status": "Status",
-      "email": "E-Mail"
+      "email": "E-Mail",
+      "state": "Bundesland"
+    },
+    "stateTab": {
+      "all": "Alle Länder",
+      "none": "Ohne Land"
     },
     "leadStatus": {
       "New": "Neu",

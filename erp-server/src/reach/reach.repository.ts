@@ -40,6 +40,7 @@ export type LeadInsert = {
   email?: string | null;
   phone?: string | null;
   location?: string | null;
+  state?: string | null;
   revenueTier?: string | null;
   source?: string | null;
   qualificationReason?: string | null;
@@ -119,6 +120,7 @@ function rowToLead(row: LeadRow): ReachLead {
     email: row.email ?? undefined,
     phone: row.phone ?? undefined,
     location: row.location ?? undefined,
+    state: row.state ?? undefined,
     revenueTier: row.revenueTier ?? undefined,
     source: row.source ?? undefined,
     qualificationReason: row.qualificationReason ?? undefined,
@@ -343,6 +345,7 @@ export class ReachRepository {
             email: l.email ?? null,
             phone: l.phone ?? null,
             location: l.location ?? null,
+            state: l.state ?? null,
             revenueTier: l.revenueTier ?? null,
             source: l.source ?? null,
             qualificationReason: l.qualificationReason ?? null,
@@ -529,6 +532,7 @@ export class ReachRepository {
               email: l.email ?? null,
               phone: l.phone ?? null,
               location: l.location ?? null,
+              state: l.state ?? null,
               revenueTier: l.revenueTier ?? null,
               source: l.source ?? null,
               qualificationReason: l.qualificationReason ?? null,

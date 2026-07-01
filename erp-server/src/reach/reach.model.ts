@@ -150,6 +150,7 @@ export type ReachLead = {
   email?: string;
   phone?: string;
   location?: string;
+  state?: string;
   revenueTier?: string;
   source?: string;
   qualificationReason?: string;

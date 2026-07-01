@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 
 import { Button } from '@/components/ui/button';
@@ -65,16 +65,45 @@ export function LeadScraperPanel({
 
   const [batchOpen, setBatchOpen] = useState(false);
   const [page, setPage] = useState(0);
-  const totalPages = Math.max(1, Math.ceil(leads.length / PAGE_SIZE));
-  // Jump back to the first page when the operator switches campaigns.
+  // Active state/Bundesland filter tab ('all' shows every state).
+  const [stateFilter, setStateFilter] = useState('all');
+
+  // Distinct states present in the current lead set — real states sorted A→Z, the
+  // "no state" bucket ('—') pushed to the end.
+  const statesPresent = useMemo(() => {
+    const set = new Set<string>();
+    for (const l of leads) set.add(l.state || '—');
+    return Array.from(set).sort((a, b) =>
+      a === '—' ? 1 : b === '—' ? -1 : a.localeCompare(b),
+    );
+  }, [leads]);
+
+  const filteredLeads = useMemo(
+    () =>
+      stateFilter === 'all'
+        ? leads
+        : leads.filter((l) => (l.state || '—') === stateFilter),
+    [leads, stateFilter],
+  );
+
+  const totalPages = Math.max(1, Math.ceil(filteredLeads.length / PAGE_SIZE));
+  // Reset paging + clear the state filter when the operator switches campaigns.
   useEffect(() => {
     setPage(0);
+    setStateFilter('all');
   }, [selectedCampaignId]);
-  // Clamp the page if the lead set shrinks (e.g. a rescan returns fewer rows).
+  // Jump to the first page whenever the active state tab changes.
+  useEffect(() => {
+    setPage(0);
+  }, [stateFilter]);
+  // Clamp the page if the visible set shrinks (rescan or filter change).
   useEffect(() => {
     setPage((p) => Math.min(p, totalPages - 1));
   }, [totalPages]);
-  const pageLeads = leads.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+  const pageLeads = filteredLeads.slice(
+    page * PAGE_SIZE,
+    page * PAGE_SIZE + PAGE_SIZE,
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -173,8 +202,37 @@ export function LeadScraperPanel({
             {t('scraper.empty')}
           </div>
         ) : (
+          <>
+          {/* State / Bundesland filter tabs — appear once the leads span >1 state. */}
+          {statesPresent.length > 1 ? (
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {[
+                { key: 'all', label: t('scraper.stateTab.all'), count: leads.length },
+                ...statesPresent.map((s) => ({
+                  key: s,
+                  label: s === '—' ? t('scraper.stateTab.none') : s,
+                  count: leads.filter((l) => (l.state || '—') === s).length,
+                })),
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setStateFilter(tab.key)}
+                  className={[
+                    'rounded-md border px-2.5 py-1 text-[11px] font-bold transition-colors',
+                    stateFilter === tab.key
+                      ? 'border-foreground bg-foreground text-background'
+                      : 'border-border text-muted-foreground hover:text-foreground',
+                  ].join(' ')}
+                >
+                  {tab.label}
+                  <span className="ml-1.5 opacity-70">{tab.count}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
           <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] border-collapse">
+          <table className="w-full min-w-[820px] border-collapse">
             <thead>
               <tr>
                 <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
@@ -188,6 +246,9 @@ export function LeadScraperPanel({
                 </th>
                 <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                   {t('scraper.col.location')}
+                </th>
+                <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+                  {t('scraper.col.state')}
                 </th>
                 <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                   {t('scraper.col.source')}
@@ -217,6 +278,9 @@ export function LeadScraperPanel({
                     {lead.location}
                   </td>
                   <td className="px-3 py-3 text-[12.5px] text-muted-foreground">
+                    {lead.state}
+                  </td>
+                  <td className="px-3 py-3 text-[12.5px] text-muted-foreground">
                     {lead.source}
                   </td>
                   <td className="px-3 py-3">
@@ -231,7 +295,7 @@ export function LeadScraperPanel({
             {totalPages > 1 && (
               <tfoot>
                 <tr>
-                  <td colSpan={6} className="px-3 pt-4">
+                  <td colSpan={7} className="px-3 pt-4">
                     <div className="flex items-center justify-between">
                       <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                         {t('scraper.pagination', {
@@ -268,6 +332,7 @@ export function LeadScraperPanel({
             )}
           </table>
           </div>
+          </>
         )}
       </GrowthCard>
 

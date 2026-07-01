@@ -53,10 +53,15 @@ function asBlock(v: unknown): EmailBlock {
   return { subject: asString(o.subject), body: asString(o.body) };
 }
 
-// Coerce a scraped revenue tier to one of AA/A/B/C (or null when absent/invalid).
+// Coerce a scraped revenue tier to one of AAA/A/B (or null when absent/invalid).
+// Legacy values are folded forward: AA→AAA (both mean the top ≥$20M band) and the old
+// sub-$5M C band collapses into B, since the floor is now USD 5M.
 function asTier(v: unknown): string | null {
   const t = typeof v === 'string' ? v.trim().toUpperCase() : '';
-  return t === 'AA' || t === 'A' || t === 'B' || t === 'C' ? t : null;
+  if (t === 'AAA' || t === 'AA') return 'AAA';
+  if (t === 'A') return 'A';
+  if (t === 'B' || t === 'C') return 'B';
+  return null;
 }
 
 function sanitizeTemplates(output: Record<string, unknown>): ReachTemplates {
@@ -82,15 +87,22 @@ function sanitizeLeads(output: Record<string, unknown>): LeadInsert[] {
     const o = (item ?? {}) as Record<string, unknown>;
     const company = asString(o.company);
     if (!company) continue; // company is required — skip junk rows
+    const email = asString(o.email) || null;
+    const phone = asString(o.phone) || null;
+    // Contact policy: keep only companies with at least ONE verified channel (email OR
+    // phone). A row with neither is dropped rather than padded — mirrors the prompt rule.
+    if (!email && !phone) continue;
     const conf = typeof o.confidence === 'number' ? o.confidence : null;
     leads.push({
       company,
       website: asString(o.website) || null,
       contactName: asString(o.contact_name) || null,
       contactTitle: asString(o.contact_title) || null,
-      email: asString(o.email) || null,
-      phone: asString(o.phone) || null,
+      email,
+      phone,
       location: asString(o.location) || null,
+      // The state / Bundesland the company operates in (accept `state` or `bundesland`).
+      state: asString(o.state) || asString(o.bundesland) || null,
       revenueTier: asTier(o.revenue_tier),
       // Provenance: the real page URL the model opened (source_url). Falls back to a
       // legacy `source` field. This is what the leads table's Source column shows.
