@@ -26,6 +26,8 @@ export type Lead = {
   id: string;
   company: string;
   contact: string;
+  // The company/contact email, shown in its own column (separate from `contact`).
+  email: string;
   location: string;
   source: string;
   status: LeadStatus;
@@ -108,6 +110,22 @@ export type ReachNewsBrief = { title: string; body: string };
 export type AimStatus = 'DRAFT' | 'READY' | 'RUNNING' | 'COMPLETED' | 'FAILED';
 
 export type ReachRound = 'cold' | 'followup' | 'final';
+
+// AIM generation stages surfaced in the New Reach Aim modal: authoring the scraping
+// prompt, then building the email templates (Ammo Forge) in the background after.
+export type GenStage = 'idle' | 'prompt' | 'ammoforge';
+
+// State of a campaign's 4-batch dedup sweep (mirrors the backend ReachBatchState).
+export type ReachBatchState = {
+  batch: number;
+  totalBatches: number;
+  batchSize: number;
+  // The current batch's prompt (base + accumulated exclusion list); null when no base
+  // prompt exists yet or the sweep is done.
+  prompt: string | null;
+  collectedCount: number;
+  done: boolean;
+};
 export type RoundStats = {
   sent: number;
   opened: number;
@@ -144,4 +162,7 @@ export type ReachCampaignView = Campaign & {
   scrapeEtaSeconds: number | null;
   // Reason the last scrape failed (shown when aimStatus === 'FAILED'); null otherwise.
   scrapeError: string | null;
+  // The lead-scraping prompt authored from this aim's config (Generate Prompt). Shown
+  // in the AIM modal's copyable text area; null until generated.
+  scrapePrompt: string | null;
 };

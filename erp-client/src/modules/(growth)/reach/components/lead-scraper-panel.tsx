@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { GrowthCard, StatusPill } from '../../shared';
 
 import type { Campaign, Lead } from '../types';
+import { BatchDialog } from './batch-dialog';
 import { CampaignTable } from './campaign-table';
 import { ScrapeCountdown } from './scrape-countdown';
 import { Spinner } from './spinner';
@@ -24,6 +25,16 @@ type LeadScraperPanelProps = {
   scrape?: { startedAt: string; etaSeconds: number } | null;
   // The reason the selected campaign's last scrape failed, or null.
   scrapeError?: string | null;
+  // The selected campaign's generated base prompt (null until generated) — gates the
+  // "Run scrape" batch action.
+  selectedScrapePrompt?: string | null;
+  // Refresh the leads table + campaign list after a batch's leads are saved.
+  onLeadsSaved?: () => void;
+  // Scraping mode: 'manual' = copy/paste batch prompts, 'auto' = Lead Satellite pipeline.
+  scrapeMode?: 'manual' | 'auto';
+  onSetScrapeMode?: (mode: 'manual' | 'auto') => void;
+  // Automatic mode: kick off the Lead Satellite scrape for the selected campaign.
+  onRunLeadSatellite?: (aimId: string) => void;
 };
 
 // Client-side pagination: the leads list is already fully loaded, so we page through
@@ -41,9 +52,15 @@ export function LeadScraperPanel({
   loadingLeads = false,
   scrape = null,
   scrapeError = null,
+  selectedScrapePrompt = null,
+  onLeadsSaved,
+  scrapeMode = 'manual',
+  onSetScrapeMode,
+  onRunLeadSatellite,
 }: LeadScraperPanelProps) {
   const t = useTranslations('reach');
 
+  const [batchOpen, setBatchOpen] = useState(false);
   const [page, setPage] = useState(0);
   const totalPages = Math.max(1, Math.ceil(leads.length / PAGE_SIZE));
   // Jump back to the first page when the operator switches campaigns.
@@ -58,6 +75,30 @@ export function LeadScraperPanel({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Scraping mode: manual (copy/paste batch prompts) vs automatic (Lead Satellite). */}
+      <div className="flex items-center gap-2">
+        <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+          {t('scraper.mode.label')}
+        </span>
+        <div className="inline-flex rounded-md border border-border p-0.5">
+          {(['manual', 'auto'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => onSetScrapeMode?.(m)}
+              className={[
+                'rounded px-3 py-1 text-[11px] font-bold uppercase tracking-[0.06em] transition-colors',
+                scrapeMode === m
+                  ? 'bg-foreground text-background'
+                  : 'text-muted-foreground hover:text-foreground',
+              ].join(' ')}
+            >
+              {t(`scraper.mode.${m}`)}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <CampaignTable
         campaigns={campaigns}
         selectedCampaignId={selectedCampaignId}
@@ -72,9 +113,39 @@ export function LeadScraperPanel({
           campaign: selectedCampaignName ?? t('scraper.selectedCampaign'),
         })}
         hint={
-          scrape
-            ? t('scraper.scrapingHint')
-            : t('scraper.companiesHint', { count: leads.length })
+          <div className="flex items-center gap-3">
+            <span>
+              {scrape
+                ? t('scraper.scrapingHint')
+                : t('scraper.companiesHint', { count: leads.length })}
+            </span>
+            {scrapeMode === 'manual' ? (
+              selectedScrapePrompt ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2.5 text-xs"
+                  onClick={() => setBatchOpen(true)}
+                >
+                  {t('scraper.runScrape')}
+                </Button>
+              ) : null
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 px-2.5 text-xs"
+                disabled={!selectedCampaignId || !!scrape}
+                onClick={() =>
+                  selectedCampaignId && onRunLeadSatellite?.(selectedCampaignId)
+                }
+              >
+                {t('scraper.runSatellite')}
+              </Button>
+            )}
+          </div>
         }
       >
         {scrape ? (
@@ -108,6 +179,9 @@ export function LeadScraperPanel({
                   {t('scraper.col.contact')}
                 </th>
                 <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+                  {t('scraper.col.email')}
+                </th>
+                <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                   {t('scraper.col.location')}
                 </th>
                 <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
@@ -132,6 +206,9 @@ export function LeadScraperPanel({
                     {lead.contact}
                   </td>
                   <td className="px-3 py-3 text-[12.5px] text-muted-foreground">
+                    {lead.email}
+                  </td>
+                  <td className="px-3 py-3 text-[12.5px] text-muted-foreground">
                     {lead.location}
                   </td>
                   <td className="px-3 py-3 text-[12.5px] text-muted-foreground">
@@ -149,7 +226,7 @@ export function LeadScraperPanel({
             {totalPages > 1 && (
               <tfoot>
                 <tr>
-                  <td colSpan={5} className="px-3 pt-4">
+                  <td colSpan={6} className="px-3 pt-4">
                     <div className="flex items-center justify-between">
                       <span className="text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                         {t('scraper.pagination', {
@@ -187,6 +264,14 @@ export function LeadScraperPanel({
           </table>
         )}
       </GrowthCard>
+
+      <BatchDialog
+        open={batchOpen}
+        onOpenChange={setBatchOpen}
+        aimId={selectedCampaignId || null}
+        campaignName={selectedCampaignName}
+        onLeadsSaved={onLeadsSaved}
+      />
     </div>
   );
 }

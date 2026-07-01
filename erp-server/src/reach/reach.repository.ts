@@ -40,6 +40,7 @@ export type LeadInsert = {
   email?: string | null;
   phone?: string | null;
   location?: string | null;
+  revenueTier?: string | null;
   source?: string | null;
   qualificationReason?: string | null;
   confidence?: number | null;
@@ -83,6 +84,8 @@ function rowToAim(row: AimRow): ReachAim {
     scrapeEtaSeconds: row.scrapeEtaSeconds ?? null,
     scrapeLastSeconds: row.scrapeLastSeconds ?? null,
     scrapeError: row.scrapeError ?? null,
+    scrapePrompt: row.scrapePrompt ?? null,
+    scrapeBatch: row.scrapeBatch ?? 1,
     sender: row.sender,
     templates: (row.templates as ReachTemplates | null) ?? null,
     newsBrief: (row.newsBrief as ReachNewsBrief | null) ?? null,
@@ -116,6 +119,7 @@ function rowToLead(row: LeadRow): ReachLead {
     email: row.email ?? undefined,
     phone: row.phone ?? undefined,
     location: row.location ?? undefined,
+    revenueTier: row.revenueTier ?? undefined,
     source: row.source ?? undefined,
     qualificationReason: row.qualificationReason ?? undefined,
     confidence: row.confidence ?? undefined,
@@ -267,6 +271,113 @@ export class ReachRepository {
     return row ? rowToAim(row) : undefined;
   }
 
+  // Persist the authored lead-scraping prompt on the aim (Generate Prompt). Leaves the
+  // aim's status alone — producing a prompt is not a scrape.
+  async setScrapePrompt(
+    orgId: string,
+    aimId: string,
+    prompt: string,
+  ): Promise<ReachAim | undefined> {
+    const [row] = await this.db
+      .update(schema.reachAims)
+      .set({ scrapePrompt: prompt, updatedAt: new Date() })
+      .where(
+        and(eq(schema.reachAims.id, aimId), tenantScope(orgId, schema.reachAims)),
+      )
+      .returning();
+    return row ? rowToAim(row) : undefined;
+  }
+
+  // The distinct company names already collected for an aim (drives the batch exclusion
+  // list). Deduped on insert, ordered by arrival so the exclusion list is stable.
+  async getCollectedCompanies(orgId: string, aimId: string): Promise<string[]> {
+    const rows = await this.db
+      .select({ company: schema.reachLeads.company })
+      .from(schema.reachLeads)
+      .where(
+        and(
+          eq(schema.reachLeads.aimId, aimId),
+          tenantScope(orgId, schema.reachLeads),
+        ),
+      )
+      .orderBy(schema.reachLeads.createdAt);
+    return rows.map((r) => r.company);
+  }
+
+  // Append a batch's leads WITHOUT deleting the prior batches (unlike replaceLeads).
+  // Skips any company already collected for this aim (case-insensitive) so the sweep
+  // stays deduped even if the model slips. Updates the denormalized companies count.
+  // Returns how many were newly saved and the running total.
+  async appendLeads(
+    orgId: string,
+    aimId: string,
+    leads: LeadInsert[],
+  ): Promise<{ saved: number; totalCollected: number }> {
+    return this.db.transaction(async (tx) => {
+      const existing = await tx
+        .select({ company: schema.reachLeads.company })
+        .from(schema.reachLeads)
+        .where(
+          and(
+            eq(schema.reachLeads.aimId, aimId),
+            tenantScope(orgId, schema.reachLeads),
+          ),
+        );
+      const seen = new Set(existing.map((r) => r.company.trim().toLowerCase()));
+      const fresh: LeadInsert[] = [];
+      for (const l of leads) {
+        const key = (l.company ?? '').trim().toLowerCase();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        fresh.push(l);
+      }
+      if (fresh.length > 0) {
+        await tx.insert(schema.reachLeads).values(
+          fresh.map((l) => ({
+            organizationId: orgId,
+            aimId,
+            company: l.company,
+            website: l.website ?? null,
+            contactName: l.contactName ?? null,
+            contactTitle: l.contactTitle ?? null,
+            email: l.email ?? null,
+            phone: l.phone ?? null,
+            location: l.location ?? null,
+            revenueTier: l.revenueTier ?? null,
+            source: l.source ?? null,
+            qualificationReason: l.qualificationReason ?? null,
+            confidence: l.confidence ?? null,
+          })),
+        );
+      }
+      const totalCollected = seen.size;
+      await tx
+        .update(schema.reachAims)
+        .set({ companies: totalCollected, updatedAt: new Date() })
+        .where(
+          and(
+            eq(schema.reachAims.id, aimId),
+            tenantScope(orgId, schema.reachAims),
+          ),
+        );
+      return { saved: fresh.length, totalCollected };
+    });
+  }
+
+  // Set the current batch number for a campaign's sweep (org-scoped).
+  async setScrapeBatch(
+    orgId: string,
+    aimId: string,
+    batch: number,
+  ): Promise<void> {
+    await this.db
+      .update(schema.reachAims)
+      .set({ scrapeBatch: batch, updatedAt: new Date() })
+      .where(
+        and(eq(schema.reachAims.id, aimId), tenantScope(orgId, schema.reachAims)),
+      );
+  }
+
   async setStatus(
     orgId: string,
     aimId: string,
@@ -387,6 +498,7 @@ export class ReachRepository {
               email: l.email ?? null,
               phone: l.phone ?? null,
               location: l.location ?? null,
+              revenueTier: l.revenueTier ?? null,
               source: l.source ?? null,
               qualificationReason: l.qualificationReason ?? null,
               confidence: l.confidence ?? null,

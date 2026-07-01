@@ -26,6 +26,11 @@ export function ReachPage() {
           loadingLeads={reach.loadingLeads}
           scrape={reach.selectedScrape}
           scrapeError={reach.selectedScrapeError}
+          selectedScrapePrompt={reach.selectedCampaign?.scrapePrompt ?? null}
+          onLeadsSaved={reach.reloadAfterBatch}
+          scrapeMode={reach.scrapeMode}
+          onSetScrapeMode={reach.setScrapeMode}
+          onRunLeadSatellite={reach.runLeadSatellite}
         />
       ) : null}
 
@@ -57,6 +62,8 @@ export function ReachPage() {
         onClose={reach.closeCampaignForm}
         onSubmit={reach.createCampaign}
         submitting={reach.creatingAim}
+        generatedPrompt={reach.generatedPrompt}
+        genStage={reach.genStage}
       />
     </main>
   );

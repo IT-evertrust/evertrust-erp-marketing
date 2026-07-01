@@ -11,6 +11,7 @@ from erp_agents.workflows.engage.reply_glock import ReplyGlockWorkflow
 from erp_agents.workflows.nurture.sleeper_grenade import SleeperGrenadeWorkflow
 from erp_agents.workflows.reach.ammo_forge import AmmoForgeWorkflow
 from erp_agents.workflows.reach.lead_satellite import LeadSatelliteWorkflow
+from erp_agents.workflows.reach.prompt_forge import PromptForgeWorkflow
 from erp_agents.workflows.reach.reach_bazooka import ReachBazookaWorkflow
 
 # Maps workflow names to workflow classes. Add nurture entries as they are built.
@@ -20,6 +21,7 @@ WORKFLOW_REGISTRY: dict[str, type[Workflow]] = {
     "engage.refine_training": RefineTrainingWorkflow,
     "reach.ammo_forge": AmmoForgeWorkflow,
     "reach.lead_satellite": LeadSatelliteWorkflow,
+    "reach.prompt_forge": PromptForgeWorkflow,
     "reach.reach_bazooka": ReachBazookaWorkflow,
     "activate.sales_agent": SalesAgentWorkflow,
     "activate.company_research": CompanyResearchWorkflow,

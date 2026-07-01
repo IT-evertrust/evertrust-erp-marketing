@@ -8,6 +8,7 @@ import type {
   Lead,
   LeadStatus,
   NewCampaignFormValues,
+  ReachBatchState,
   ReachCampaignView,
   ReachRound,
   ReachStats,
@@ -45,6 +46,7 @@ interface BackendAim {
   scrapeStartedAt?: string | null;
   scrapeEtaSeconds?: number | null;
   scrapeError?: string | null;
+  scrapePrompt?: string | null;
   templates: ReachTemplates | null;
   newsBrief: { title: string; body: string } | null;
   generatedBy: string | null;
@@ -156,6 +158,36 @@ export async function scrapeReachAim(aimId: string): Promise<ReachCampaignView> 
     `/growth/reach/aims/${aimId}/scrape`,
   );
   return mapAim(aim);
+}
+
+// Generate Prompt: the local model authors an OpenAI lead-scraping prompt scoped to the
+// aim's config. Returns the updated campaign view (its `scrapePrompt` holds the result).
+export async function generateReachPrompt(
+  aimId: string,
+): Promise<ReachCampaignView> {
+  const aim = await mutate<BackendAim>(
+    'POST',
+    `/growth/reach/aims/${aimId}/prompt`,
+  );
+  return mapAim(aim);
+}
+
+// The current batch state for a campaign's 4-batch dedup sweep.
+export async function getReachBatch(aimId: string): Promise<ReachBatchState> {
+  return getJson<ReachBatchState>(`/growth/reach/aims/${aimId}/batch`);
+}
+
+// Paste a batch's ChatGPT JSON back: saves the leads (deduped) and returns the NEXT
+// batch's state (its prompt now carries the enlarged exclusion list).
+export async function saveReachBatchResults(
+  aimId: string,
+  raw: string,
+): Promise<ReachBatchState> {
+  return mutate<ReachBatchState>(
+    'POST',
+    `/growth/reach/aims/${aimId}/batch/results`,
+    { raw },
+  );
 }
 
 export async function getCampaignLeads(aimId: string): Promise<Lead[]> {
@@ -300,6 +332,7 @@ function mapAim(a: BackendAim): ReachCampaignView {
     scrapeStartedAt: a.scrapeStartedAt ?? null,
     scrapeEtaSeconds: a.scrapeEtaSeconds ?? null,
     scrapeError: a.scrapeError ?? null,
+    scrapePrompt: a.scrapePrompt ?? null,
   };
 }
 
@@ -319,6 +352,7 @@ function mapLead(l: BackendLead): Lead {
     id: l.id,
     company: l.company,
     contact,
+    email: l.email || '—',
     location: l.location || '—',
     source: l.source || '—',
     status: LEAD_STATUS[l.status] ?? 'New',

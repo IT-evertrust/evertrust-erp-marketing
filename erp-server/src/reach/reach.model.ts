@@ -76,6 +76,12 @@ export type ReachAim = {
   // Reason the last scrape failed (agent error / timeout), shown in the UI. Null when
   // the aim hasn't failed (cleared on a new run + on success).
   scrapeError: string | null;
+  // The BASE lead-scraping prompt authored by the local model from this aim's config, to
+  // be pasted into OpenAI to run the scrape. Null until Generate Prompt has been run.
+  // Batches 2-4 append a "Previously Collected Companies" exclusion block to this base.
+  scrapePrompt: string | null;
+  // Which batch of the 4-batch dedup sweep this campaign is on (1..4).
+  scrapeBatch: number;
   // Which mailbox the campaign sends from (info | hanna).
   sender: string;
   // Ammo Forge output (null until generated). getAims overrides this with the org
@@ -108,6 +114,24 @@ export type BazookaRunSummary = {
 // Which tracking signal a tracking endpoint records.
 export type TrackKind = 'open' | 'click' | 'reply';
 
+// ---- 4-batch dedup sweep ----
+// The sweep runs TOTAL_BATCHES rounds of ~BATCH_SIZE companies; each round after the
+// first excludes every company already collected, so the ~100 leads are unique.
+export const REACH_TOTAL_BATCHES = 4;
+export const REACH_BATCH_SIZE = 25;
+
+// The state of a campaign's batch sweep, returned to the UI and after each ingest.
+export type ReachBatchState = {
+  batch: number; // current batch (1..TOTAL_BATCHES); === TOTAL_BATCHES+1 when finished
+  totalBatches: number;
+  batchSize: number;
+  // The current batch's full prompt (base + accumulated exclusion block), or null when
+  // no base prompt has been generated yet, or when the sweep is done.
+  prompt: string | null;
+  collectedCount: number; // distinct companies collected so far for this aim
+  done: boolean; // true once all batches are complete
+};
+
 export type ReachLeadStatus =
   | 'NEW'
   | 'COLD_OUTREACHED'
@@ -126,6 +150,7 @@ export type ReachLead = {
   email?: string;
   phone?: string;
   location?: string;
+  revenueTier?: string;
   source?: string;
   qualificationReason?: string;
   confidence?: number;

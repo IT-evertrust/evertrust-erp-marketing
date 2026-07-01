@@ -3,6 +3,7 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
+import { Check, Copy } from 'lucide-react';
 
 import { useOrgCalendars, useOrgSenders } from '@/hooks/use-arsenal';
 import { useNiches } from '@/hooks/use-niches';
@@ -16,6 +17,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -24,13 +26,19 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-import type { NewCampaignFormValues } from '../types';
+import type { GenStage, NewCampaignFormValues } from '../types';
+import { GeneratingStage } from './generating-stage';
 
 type NewCampaignModalProps = {
   open: boolean;
   onClose: () => void;
   onSubmit: (values: NewCampaignFormValues) => void;
   submitting?: boolean;
+  // The authored lead-scraping prompt to reveal after generation (null = not yet).
+  generatedPrompt?: string | null;
+  // Which generation stage to reflect: 'prompt' (authoring), 'ammoforge' (templates
+  // building in the background after the prompt), or 'idle'.
+  genStage?: GenStage;
 };
 
 // AIM Region zones (strict dropdown). Sent to the create-aim endpoint as-is and
@@ -93,10 +101,29 @@ export function NewCampaignModal({
   onClose,
   onSubmit,
   submitting = false,
+  generatedPrompt = null,
+  genStage = 'idle',
 }: NewCampaignModalProps) {
   const t = useTranslations('reach');
   const fieldId = useId();
   const [form, setForm] = useState<NewCampaignFormValues>(EMPTY_FORM);
+  const [copied, setCopied] = useState(false);
+
+  // Reset the copied-tick whenever a new prompt arrives (or the dialog reopens).
+  useEffect(() => {
+    setCopied(false);
+  }, [generatedPrompt, open]);
+
+  async function copyPrompt() {
+    if (!generatedPrompt) return;
+    try {
+      await navigator.clipboard.writeText(generatedPrompt);
+      setCopied(true);
+      toast.success(t('modal.prompt.copied'));
+    } catch {
+      toast.error(t('modal.prompt.copyFailed'));
+    }
+  }
   // These edited-flags gate the invisible org-default seeding below — once seeded
   // they stay put (the user can't edit them in the trimmed UI).
   const [senderSeeded, setSenderSeeded] = useState(false);
@@ -206,6 +233,7 @@ export function NewCampaignModal({
           <DialogTitle>{t('modal.title')}</DialogTitle>
         </DialogHeader>
 
+        {genStage === 'idle' && !generatedPrompt ? (
         <div className="grid gap-5 py-1">
           {/* Campaign name — full width. */}
           <div className="grid gap-2">
@@ -296,11 +324,69 @@ export function NewCampaignModal({
             />
           </div>
         </div>
+        ) : null}
+
+        {/* Stage 1: authoring the scraping prompt. */}
+        {genStage === 'prompt' ? (
+          <div className="py-2">
+            <GeneratingStage label={t('modal.stage.prompt')} estSeconds={15} />
+          </div>
+        ) : null}
+
+        {/* Generated lead-scraping prompt — revealed after generation, read-only + copy. */}
+        {generatedPrompt ? (
+          <div className="grid gap-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor={`${fieldId}-prompt`}>{t('modal.prompt.label')}</Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1.5 px-2 text-xs"
+                onClick={copyPrompt}
+              >
+                {copied ? (
+                  <Check className="size-3.5" />
+                ) : (
+                  <Copy className="size-3.5" />
+                )}
+                {copied ? t('modal.prompt.copiedShort') : t('modal.prompt.copy')}
+              </Button>
+            </div>
+            <Textarea
+              id={`${fieldId}-prompt`}
+              value={generatedPrompt}
+              readOnly
+              rows={10}
+              className="max-h-72 resize-none font-mono text-xs leading-relaxed"
+            />
+            <p className="text-xs text-muted-foreground">
+              {t('modal.prompt.hint')}
+            </p>
+            {/* Stage 2: email templates building in the background after the prompt. */}
+            {genStage === 'ammoforge' ? (
+              <GeneratingStage
+                label={t('modal.stage.ammoforge')}
+                estSeconds={80}
+              />
+            ) : null}
+          </div>
+        ) : null}
 
         <DialogFooter>
-          <Button type="button" onClick={submit} disabled={submitting}>
-            {submitting ? t('modal.submitting') : t('modal.submit')}
-          </Button>
+          {generatedPrompt ? (
+            <Button type="button" onClick={onClose}>
+              {t('modal.close')}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              onClick={submit}
+              disabled={submitting || genStage !== 'idle'}
+            >
+              {genStage !== 'idle' ? t('modal.submitting') : t('modal.submit')}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

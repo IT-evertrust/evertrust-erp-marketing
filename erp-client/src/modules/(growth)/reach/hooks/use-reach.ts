@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import {
   createReachAim,
   EMPTY_STATS,
+  generateReachPrompt,
   getCampaignLeads,
   getDailySends,
   getReachCampaigns,
@@ -19,6 +20,7 @@ import {
 } from '../services/reach.service';
 import type {
   DailySend,
+  GenStage,
   Lead,
   NewCampaignFormValues,
   ReachCampaignView,
@@ -38,6 +40,18 @@ export function useReach() {
   const [loadingCampaigns, setLoadingCampaigns] = useState(true);
   const [loadingLeads, setLoadingLeads] = useState(false);
   const [creatingAim, setCreatingAim] = useState(false);
+  // The lead-scraping prompt authored for the just-created aim (Generate Prompt). Shown
+  // in the AIM modal's copyable text area; null until a prompt is generated / on reopen.
+  const [generatedPrompt, setGeneratedPrompt] = useState<string | null>(null);
+  // Scraping mode toggle: 'manual' = the copy/paste batch-prompt flow (default);
+  // 'auto' = the Lead Satellite agent pipeline. Lets us flip between the two while Lead
+  // Satellite is being refined. UI-level (not persisted) — resets to manual on reload.
+  const [scrapeMode, setScrapeMode] = useState<'manual' | 'auto'>('manual');
+  // Which generation stage the modal is showing: 'prompt' while the prompt is authored,
+  // 'ammoforge' while the email templates build in the background after, 'idle' otherwise.
+  const [genStage, setGenStage] = useState<GenStage>('idle');
+  // The aim whose background Ammo Forge we're polling for during the 'ammoforge' stage.
+  const [genAimId, setGenAimId] = useState<string | null>(null);
   const [bazookaRunning, setBazookaRunning] = useState(false);
 
   // When a freshly-created campaign is auto-scraped, we manage its leads directly
@@ -193,39 +207,116 @@ export function useReach() {
     [campaigns],
   );
 
+  // 'ammoforge' stage: after the prompt is shown, templates build server-side. Poll the
+  // aim until it flips to READY (or FAILED), refreshing the campaign list so the templates
+  // land, then end the stage. A hard cap ends it even if the background job never reports.
+  useEffect(() => {
+    if (genStage !== 'ammoforge' || !genAimId) return;
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const fresh = await getReachCampaigns();
+        if (cancelled) return;
+        setCampaigns(fresh);
+        const c = fresh.find((x) => x.id === genAimId);
+        if (!c || c.aimStatus === 'READY' || c.aimStatus === 'FAILED') {
+          setGenStage('idle');
+        }
+      } catch {
+        // transient — keep polling
+      }
+    };
+    const iv = setInterval(check, 4000);
+    const cap = setTimeout(() => {
+      if (!cancelled) setGenStage('idle');
+    }, 140_000);
+    return () => {
+      cancelled = true;
+      clearInterval(iv);
+      clearTimeout(cap);
+    };
+  }, [genStage, genAimId]);
+
+  // After a batch's leads are saved, refresh the campaign list (companies count) and the
+  // selected campaign's leads table so the newly-collected companies appear.
+  async function reloadAfterBatch() {
+    try {
+      const [fresh, ls] = await Promise.all([
+        getReachCampaigns(),
+        selectedCampaignId
+          ? getCampaignLeads(selectedCampaignId)
+          : Promise.resolve([] as Lead[]),
+      ]);
+      setCampaigns(fresh);
+      if (selectedCampaignId) setLeads(ls);
+    } catch {
+      // best-effort refresh
+    }
+  }
+
   function openCampaignForm() {
+    setGeneratedPrompt(null); // fresh form — clear any prior prompt
+    setGenStage('idle');
+    setGenAimId(null);
     setIsCampaignFormOpen(true);
   }
 
   function closeCampaignForm() {
     setIsCampaignFormOpen(false);
+    setGeneratedPrompt(null);
+    // Note: we DON'T reset genStage here — if templates are still building, the poll
+    // effect keeps running so the campaign list updates even after the modal closes.
   }
 
-  // AIM: create the campaign (config + templates + news via Ammo Forge), then
-  // immediately activate Lead Satellite to scrape leads. Two loading phases.
+  // AIM: create the campaign (config + templates + news via Ammo Forge), then have the
+  // local model AUTHOR a lead-scraping prompt from the aim's config (Generate Prompt).
+  // The modal stays open and reveals the prompt in a copyable text area — Reach no longer
+  // runs the (local-model) Lead Satellite scrape itself.
   async function createCampaign(values: NewCampaignFormValues) {
     setCreatingAim(true);
+    setGeneratedPrompt(null);
+    setGenAimId(null);
+    setGenStage('prompt'); // stage 1: authoring the scraping prompt
     try {
       const view = await createReachAim(values);
       setCampaigns((current) => [view, ...current]);
       skipNextLeadsFetch.current = true;
       setSelectedCampaignId(view.id);
       setActiveTab('scraper');
-      setIsCampaignFormOpen(false);
       setLeads([]);
 
-      // Lead Satellite runs in the BACKGROUND: this returns the campaign marked
-      // RUNNING (with the server-seeded ETA) immediately. The polling effect below
-      // picks up the leads + flips the status when the scrape finishes.
-      const running = await scrapeReachAim(view.id);
+      // Author the prompt (local model, synchronous). On success the aim carries the
+      // prompt; surface it in the modal for the operator to copy into OpenAI.
+      const withPrompt = await generateReachPrompt(view.id);
       setCampaigns((current) =>
-        current.map((c) => (c.id === view.id ? running : c)),
+        current.map((c) => (c.id === view.id ? withPrompt : c)),
       );
+      setGeneratedPrompt(withPrompt.scrapePrompt ?? '');
+      // Stage 2: the prompt is done; the server has now kicked off Ammo Forge (email
+      // templates) in the background. Poll until the aim flips to READY (see effect).
+      setGenAimId(view.id);
+      setGenStage('ammoforge');
     } catch (err) {
       const msg = err instanceof Error ? err.message : t('toast.launchFailed');
       toast.error(msg);
+      setGenStage('idle');
     } finally {
       setCreatingAim(false);
+    }
+  }
+
+  // Automatic mode: run the Lead Satellite agent pipeline for a campaign. Marks the aim
+  // RUNNING (server-seeded ETA) immediately; the RUNNING poll effect above picks up the
+  // leads + flips the status when the scrape finishes, and selectedScrape drives the
+  // countdown — same machinery the batch flow leaves untouched.
+  async function runLeadSatellite(aimId: string) {
+    try {
+      const running = await scrapeReachAim(aimId);
+      setCampaigns((cs) => cs.map((c) => (c.id === aimId ? running : c)));
+      skipNextLeadsFetch.current = true;
+      setLeads([]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('toast.scrapeFailed'));
     }
   }
 
@@ -314,6 +405,12 @@ export function useReach() {
     openCampaignForm,
     closeCampaignForm,
     createCampaign,
+    generatedPrompt,
+    genStage,
+    reloadAfterBatch,
+    scrapeMode,
+    setScrapeMode,
+    runLeadSatellite,
     sendRound,
   };
 }

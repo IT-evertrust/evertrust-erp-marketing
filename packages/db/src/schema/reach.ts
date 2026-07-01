@@ -129,6 +129,17 @@ export const reachAims = pgTable(
     // Why the last scrape FAILED (the agent's error / reason), surfaced in the UI so
     // the operator sees the cause instead of a generic "failed". Null when not failed.
     scrapeError: text('scrape_error'),
+    // The BASE lead-scraping prompt authored by the local model (reach.prompt_forge)
+    // from this aim's config — an in-depth instruction, scoped to the AIM fields, to be
+    // pasted into OpenAI to perform the scrape. Reach now PRODUCES this prompt instead
+    // of running the (local-model) Lead Satellite scrape itself. Null until generated.
+    // Batches 2-4 append a deterministic "Previously Collected Companies" exclusion block
+    // to this base (see the Reach batch flow) to dedupe across the sweep.
+    scrapePrompt: text('scrape_prompt'),
+    // Which batch of the 4-batch dedup sweep this campaign is on (1..4). Advances each
+    // time a batch's results are pasted back; the exclusion list accumulates from the
+    // reach_leads already saved for the aim.
+    scrapeBatch: integer('scrape_batch').notNull().default(1),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -159,6 +170,9 @@ export const reachLeads = pgTable(
     email: text('email'),
     phone: text('phone'),
     location: text('location'),
+    // Revenue tier from the scrape: AA (≥$20M/yr) · A ($10-15M) · B ($5-10M) · C (≥$1M).
+    // Null when the model couldn't determine it.
+    revenueTier: text('revenue_tier'),
     source: text('source'),
     qualificationReason: text('qualification_reason'),
     // 0.0-1.0 fit score from the agent.

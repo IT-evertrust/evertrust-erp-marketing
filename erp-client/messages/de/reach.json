@@ -44,7 +44,8 @@
       "contact": "Kontakt",
       "location": "Ort",
       "source": "Quelle",
-      "status": "Status"
+      "status": "Status",
+      "email": "E-Mail"
     },
     "leadStatus": {
       "New": "Neu",
@@ -53,7 +54,16 @@
       "Interested": "Interessiert",
       "Unsure": "Unsicher",
       "Not Interested": "Kein Interesse"
-    }
+    },
+    "viewPrompt": "Prompt ansehen",
+    "promptDialogTitle": "Lead-Scraping-Prompt — {campaign}",
+    "runScrape": "Scrape starten",
+    "mode": {
+      "label": "Scraping-Modus",
+      "manual": "Manuell",
+      "auto": "Automatisch"
+    },
+    "runSatellite": "Lead Satellite starten"
   },
   "generator": {
     "emailsTitle": "E-Mails · {campaign}",
@@ -118,8 +128,8 @@
     "description": "Definieren Sie das Kampagnenziel, bevor Leads gescrapt werden.",
     "close": "Schließen",
     "cancel": "Abbrechen",
-    "submit": "Ziel starten",
-    "submitting": "Wird gezielt…",
+    "submit": "Prompt generieren",
+    "submitting": "Wird generiert…",
     "validation": "Kampagnenname, Nische und Region sind erforderlich.",
     "field": {
       "name": "Kampagnenname",
@@ -148,6 +158,20 @@
       "tenderFocus": "Ausschreibungsfokus",
       "tenderFocusPlaceholder": "z. B. Cloud-Infrastruktur, KI-Plattform",
       "focusHint": "Wird von der Standard-E-Mail-Vorlage verwendet ({{Type}} / {{IndustryFocus}} / {{TenderFocus}})."
+    },
+    "prompt": {
+      "label": "Lead-Scraping-Prompt",
+      "copy": "Kopieren",
+      "copiedShort": "Kopiert",
+      "copied": "Prompt in die Zwischenablage kopiert",
+      "copyFailed": "Kopieren fehlgeschlagen — Text markieren und manuell kopieren.",
+      "hint": "Füge dies in OpenAI ein, um das Lead-Scraping auszuführen. Er ist auf die Eingaben dieser Kampagne zugeschnitten."
+    },
+    "stage": {
+      "prompt": "Prompt wird generiert",
+      "ammoforge": "Ammo Forge wird bereitgestellt",
+      "est": "ca. ~{seconds}s",
+      "almostDone": "fast fertig"
     }
   },
   "toast": {
@@ -216,5 +240,35 @@
       "saved": "Gespeichert",
       "saveFailed": "Speichern fehlgeschlagen."
     }
+  },
+  "batch": {
+    "title": "Lead-Scraping — {campaign}",
+    "titleGeneric": "Lead-Scraping",
+    "loading": "Batch wird geladen…",
+    "loadError": "Batch konnte nicht geladen werden.",
+    "retry": "Erneut versuchen",
+    "batchOf": "Batch {batch} von {total}",
+    "collected": "{count} gesammelt",
+    "step1": "Kopiere diesen Prompt in ChatGPT (mit aktiviertem Web-Browsing).",
+    "step2": "Füge das zurückgegebene JSON unten ein.",
+    "step3": "Verifizieren, um die Leads zu speichern und den nächsten Batch-Prompt zu erhalten.",
+    "promptLabel": "Batch-{batch}-Prompt",
+    "pasteLabel": "ChatGPT-JSON-Ausgabe",
+    "pastePlaceholder": "ChatGPT-JSON-Ausgabe hier einfügen…",
+    "save": "Speichern & Batch {next} holen",
+    "saveLast": "Speichern & abschließen",
+    "saving": "Wird gespeichert…",
+    "savedToast": "Batch {batch} gespeichert — {total} Firmen gesammelt",
+    "saveError": "Batch konnte nicht gespeichert werden.",
+    "doneTitle": "Durchlauf abgeschlossen",
+    "doneBody": "{count} Firmen über {total} Batches gesammelt.",
+    "fileLabel": "ChatGPT-Datei hochladen",
+    "chooseFile": "Wähle die von ChatGPT erzeugte Datei…",
+    "verify": "Verifizieren",
+    "verifyLast": "Verifizieren & abschließen",
+    "verifying": "Wird verifiziert…",
+    "verifiedToast": "Batch {batch} verifiziert — {total} Firmen gesammelt",
+    "verifyError": "Datei konnte nicht verifiziert werden — stelle sicher, dass es das von ChatGPT erzeugte JSON ist.",
+    "doneButton": "Fertig"
   }
 }
