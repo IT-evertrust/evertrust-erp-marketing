@@ -92,7 +92,9 @@ function sanitizeLeads(output: Record<string, unknown>): LeadInsert[] {
       phone: asString(o.phone) || null,
       location: asString(o.location) || null,
       revenueTier: asTier(o.revenue_tier),
-      source: asString(o.source) || null,
+      // Provenance: the real page URL the model opened (source_url). Falls back to a
+      // legacy `source` field. This is what the leads table's Source column shows.
+      source: asString(o.source_url) || asString(o.source) || null,
       qualificationReason: asString(o.qualification_reason) || null,
       confidence: conf === null ? null : Math.min(1, Math.max(0, conf)),
     });

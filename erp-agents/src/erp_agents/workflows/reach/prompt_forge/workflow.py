@@ -96,7 +96,20 @@ CAMPAIGN
 - Priority sector targets: {{sector_targets}}
 
 WHAT TO FIND
-Find {{target_type}} in {{niche}} operating in {{region}}, {{country}} that fit the focus above. For each company, open its OWN website (imprint / contact / about page) and read off a public contact email and phone number.
+Find {{target_type}} in {{niche}} operating in {{region}}, {{country}} that fit the focus above. For EVERY company you list you must actually open its own website and read its real contact details — do not leave email/phone empty just because you didn't look.
+
+FINDING THE EMAIL AND PHONE — DO THIS FOR EVERY COMPANY (this is the whole point)
+Open the company's own site and actively hunt for a public email and phone in ALL of these places:
+- The "Impressum" / "Impressumspflicht" / legal-notice page. German companies are LEGALLY REQUIRED to publish a contact email and phone here, so this is your single best source — ALWAYS open the Impressum.
+- The "Kontakt" / "Contact" page, the page footer, and the "Über uns" / "About" page.
+Emails are written in many forms — recognise and NORMALISE every one of them to a plain address:
+- Plain text: info@company.de
+- mailto links: href="mailto:info@company.de"
+- Anti-scraper obfuscation: "info [at] company [dot] de", "info(at)company.de", "info AT company DOT de", "info @ company . de", or with unicode/zero-width spaces — reconstruct these to info@company.de.
+- HTML-entity encoded (e.g. &#105;nfo@…) or JavaScript-assembled addresses — decode/assemble them.
+- Role addresses are valid and common: info@, kontakt@, office@, vertrieb@, sales@, mail@, hello@.
+- If ONLY a contact form exists and no readable email, leave email null (never invent one) but still capture the phone.
+Phone: read it from the same Impressum/Kontakt/footer; accept German formats (+49 …, 0…, with spaces, /, - or ()) and keep it as printed.
 
 VOLUME — HARD REQUIREMENT
 - Return a MINIMUM of 25 companies. This is achievable. Do NOT stop early, do NOT trim, do NOT summarise.
@@ -116,10 +129,11 @@ NO HALLUCINATION — CRITICAL
 - Do NOT fabricate emails, phone numbers, websites, locations, revenue, or sources. If you did not open the page and see the value, it is null.
 - Every company must be a real, verifiable organisation; if you cannot verify it exists, do not include it.
 - Never cite or rely on a source you did not actually open. No placeholder or example data.
+- PROVENANCE: every lead MUST include `source_url` — the exact page URL you actually opened to get this company and its details (e.g. the Impressum URL where you read the email). If you cannot give a real source_url you opened, DO NOT include the company. A lead with no source_url is not acceptable.
 
 OUTPUT — STRICT JSON ONLY (no prose, no explanation, no markdown, no code fences), exactly this shape:
-{"leads": [{"company": "string", "contact_name": "string|null", "email": "string|null", "phone": "string|null", "website": "string|null", "location": "string|null", "revenue_tier": "AA|A|B|C", "qualification_reason": "string|null", "confidence": 0.0, "status": "NEW"}]}
-Rules: `company` is required; `revenue_tier` is exactly one of AA/A/B/C; `contact_name`, `email`, `phone`, `website`, `location` are null when not confidently found (never fabricated); `confidence` is 0.0-1.0 for niche fit; `status` is always "NEW". The JSON must be valid and directly parseable."""
+{"leads": [{"company": "string", "contact_name": "string|null", "email": "string|null", "phone": "string|null", "website": "string|null", "location": "string|null", "revenue_tier": "AA|A|B|C", "source_url": "string", "qualification_reason": "string|null", "confidence": 0.0, "status": "NEW"}]}
+Rules: `company` and `source_url` are REQUIRED (source_url is the real page you opened); `revenue_tier` is exactly one of AA/A/B/C; `contact_name`, `email`, `phone`, `website`, `location` are null when not confidently found (never fabricated) — but you must genuinely have looked in the Impressum/Kontakt/footer first; `confidence` is 0.0-1.0 for niche fit; `status` is always "NEW". The JSON must be valid and directly parseable."""
 
 
 # System instruction for the REFINEMENT call: polish only, preserve every hard rule.
@@ -165,7 +179,7 @@ def _preserves_hard_requirements(text: str) -> bool:
     if not text:
         return False
     low = text.lower()
-    has_schema = '"leads"' in text and "revenue_tier" in text
+    has_schema = '"leads"' in text and "revenue_tier" in text and "source_url" in text
     has_minimum = "25" in text
     has_anti_hallucination = any(
         marker in low
