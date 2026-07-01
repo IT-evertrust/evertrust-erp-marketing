@@ -3,6 +3,14 @@ module.exports = {
   moduleFileExtensions: ['js', 'json', 'ts'],
   rootDir: '.',
   testRegex: '.*\\.spec\\.ts$',
+  // Resolve the workspace packages to their TS SOURCE (not the built dist). Their
+  // package.json "main" points at dist/index.js, which isn't built when tests run
+  // (CI runs `test` before `build`), so without this jest fails with
+  // "Cannot find module '@evertrust/db'". ts-jest transpiles the mapped source.
+  moduleNameMapper: {
+    '^@evertrust/db$': '<rootDir>/../packages/db/src/index.ts',
+    '^@evertrust/shared$': '<rootDir>/../packages/shared/src/index.ts',
+  },
   transform: {
     '^.+\\.ts$': [
       'ts-jest',

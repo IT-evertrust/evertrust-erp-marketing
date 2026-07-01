@@ -30,7 +30,7 @@ TZ = "Europe/Berlin"
 
 # The ERP ProspectInputDto fields (email required; rest optional). Our richer fields
 # (companyType / status / score / ranking) are UI-only and not sent to the ERP.
-_PROSPECT_FIELDS = ("email", "companyName", "website", "city", "country",
+_PROSPECT_FIELDS = ("email", "companyName", "contactName", "phone", "website", "city", "country",
                     "sourceUrl", "nicheTargetId", "emailVerified")
 
 

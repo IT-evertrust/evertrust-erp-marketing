@@ -52,6 +52,10 @@ class Lead:
     website: str = ""
     city: str = ""
     country: str = ""
+    # Contact firmographics scraped from the Impressum/Kontakt page (domain/contact.py): a named
+    # decision-maker and a phone. Empty when not found (non-DACH sites, or no imprint published).
+    contact_name: str = ""
+    phone: str = ""
     source_url: str = ""
     niche_target_id: str | None = None
     status: str = ""  # '' (ok) | PROTECTED | NO_EMAIL  (email contactability)
@@ -271,6 +275,8 @@ def leads_to_prospects(leads: list[Lead], min_b_score: int = 40) -> list[dict]:
         prospects.append({
             "email": email if has_email else "",
             "companyName": name,
+            "contactName": (ld.contact_name or "").strip(),
+            "phone": (ld.phone or "").strip(),
             "companyType": (ld.company_type or ld.type or "").strip(),
             "status": status,
             "score": int(ld.score or 0),

@@ -421,6 +421,34 @@
 			"when": 1780610000000,
 			"tag": "0059_reach_scrape_progress",
 			"breakpoints": true
+		},
+		{
+			"idx": 60,
+			"version": "7",
+			"when": 1780611000000,
+			"tag": "0060_reach_scrape_prompt",
+			"breakpoints": true
+		},
+		{
+			"idx": 61,
+			"version": "7",
+			"when": 1780612000000,
+			"tag": "0061_reach_scrape_batch",
+			"breakpoints": true
+		},
+		{
+			"idx": 62,
+			"version": "7",
+			"when": 1780613000000,
+			"tag": "0062_reach_lead_revenue_tier",
+			"breakpoints": true
+		},
+		{
+			"idx": 63,
+			"version": "7",
+			"when": 1780614000000,
+			"tag": "0063_reach_lead_state",
+			"breakpoints": true
 		}
 	]
 }

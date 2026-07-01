@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Header,
   Param,
@@ -106,6 +107,13 @@ export class ReachController {
     return this.reachService.getAim(orgId, aimId);
   }
 
+  // Permanently delete a campaign (aim) + its leads. Used by the trash button.
+  @RequirePermissions('campaigns:write')
+  @Delete('aims/:aimId')
+  deleteAim(@OrgId() orgId: string, @Param('aimId') aimId: string) {
+    return this.reachService.deleteAim(orgId, aimId);
+  }
+
   // AIM: create the campaign (config.json) + generate templates + news brief. The
   // body is validated by the global ZodValidationPipe against CreateAimBodyDto.
   @RequirePermissions('campaigns:write')
@@ -127,6 +135,37 @@ export class ReachController {
   @Post('aims/:aimId/scrape')
   scrapeAim(@OrgId() orgId: string, @Param('aimId') aimId: string) {
     return this.reachService.scrapeAim(orgId, aimId);
+  }
+
+  // Generate Prompt: the local model authors an OpenAI lead-scraping prompt scoped to
+  // this aim's config, persists it on the aim, and returns the updated aim. This is what
+  // the AIM form's "Generate Prompt" button calls — Reach now produces a prompt instead
+  // of running the (local-model) Lead Satellite scrape.
+  @RequirePermissions('campaigns:write')
+  @Post('aims/:aimId/prompt')
+  generatePrompt(@OrgId() orgId: string, @Param('aimId') aimId: string) {
+    return this.reachService.generateScrapePrompt(orgId, aimId);
+  }
+
+  // The current batch state for the 4-batch dedup sweep: which batch, its prompt (base +
+  // accumulated exclusion list), companies collected so far, and whether it's done.
+  @RequirePermissions('campaigns:read')
+  @Get('aims/:aimId/batch')
+  getBatch(@OrgId() orgId: string, @Param('aimId') aimId: string) {
+    return this.reachService.getBatchState(orgId, aimId);
+  }
+
+  // Ingest a batch's pasted ChatGPT JSON: save the leads (deduped) and advance to the next
+  // batch, returning the next batch's state. Body accepts { raw: "<pasted text>" } or the
+  // JSON directly ({ leads: [...] } / a bare array).
+  @RequirePermissions('campaigns:write')
+  @Post('aims/:aimId/batch/results')
+  ingestBatch(
+    @OrgId() orgId: string,
+    @Param('aimId') aimId: string,
+    @Body() body: unknown,
+  ) {
+    return this.reachService.ingestBatchResults(orgId, aimId, body);
   }
 
   @RequirePermissions('campaigns:read')

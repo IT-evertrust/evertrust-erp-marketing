@@ -239,7 +239,7 @@ export class ActivateService {
   }
 
   // PUSH path: a finished-meeting report posted by Read AI's webhook (no JWT — gated by
-  // the shared secret in ReadAiTokenGuard). Resolves the org from the payload's emails,
+  // the HMAC signature in ReadAiSignatureGuard). Resolves the org from the payload's emails,
   // maps the raw payload → an import item (transcript + summary), upserts it, then
   // auto-analyzes in the BACKGROUND so the webhook acks fast (Read AI retries slow/failed
   // responses, and the local LLM is memory-bound). Logs the raw top-level keys so the

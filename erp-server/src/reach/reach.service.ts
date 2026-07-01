@@ -15,11 +15,13 @@ import { GmailSenderService } from './gmail-sender.service';
 import { ReachRepository, type LeadInsert } from './reach.repository';
 import { NichesService } from '../niches/niches.service';
 import { WorkflowConfigService } from '../arsenal/workflow-config.service';
+import { REACH_BATCH_SIZE, REACH_TOTAL_BATCHES } from './reach.model';
 import type {
   BazookaRunSummary,
   DailySendPoint,
   EmailBlock,
   ReachAim,
+  ReachBatchState,
   ReachNewsBrief,
   ReachRound,
   ReachTemplates,
@@ -52,6 +54,17 @@ function asBlock(v: unknown): EmailBlock {
   return { subject: asString(o.subject), body: asString(o.body) };
 }
 
+// Coerce a scraped revenue tier to one of AAA/A/B (or null when absent/invalid).
+// Legacy values are folded forward: AA→AAA (both mean the top ≥$20M band) and the old
+// sub-$5M C band collapses into B, since the floor is now USD 5M.
+function asTier(v: unknown): string | null {
+  const t = typeof v === 'string' ? v.trim().toUpperCase() : '';
+  if (t === 'AAA' || t === 'AA') return 'AAA';
+  if (t === 'A') return 'A';
+  if (t === 'B' || t === 'C') return 'B';
+  return null;
+}
+
 function sanitizeTemplates(output: Record<string, unknown>): ReachTemplates {
   const t = (output.templates ?? {}) as Record<string, unknown>;
   return {
@@ -75,21 +88,99 @@ function sanitizeLeads(output: Record<string, unknown>): LeadInsert[] {
     const o = (item ?? {}) as Record<string, unknown>;
     const company = asString(o.company);
     if (!company) continue; // company is required — skip junk rows
+    const email = asString(o.email) || null;
+    const phone = asString(o.phone) || null;
+    // Contact policy: keep only companies with at least ONE verified channel (email OR
+    // phone). A row with neither is dropped rather than padded — mirrors the prompt rule.
+    if (!email && !phone) continue;
     const conf = typeof o.confidence === 'number' ? o.confidence : null;
     leads.push({
       company,
       website: asString(o.website) || null,
       contactName: asString(o.contact_name) || null,
       contactTitle: asString(o.contact_title) || null,
-      email: asString(o.email) || null,
-      phone: asString(o.phone) || null,
+      email,
+      phone,
       location: asString(o.location) || null,
-      source: asString(o.source) || null,
+      // The state / Bundesland the company operates in (accept `state` or `bundesland`).
+      state: asString(o.state) || asString(o.bundesland) || null,
+      revenueTier: asTier(o.revenue_tier),
+      // Provenance: the real page URL the model opened (source_url). Falls back to a
+      // legacy `source` field. This is what the leads table's Source column shows.
+      source: asString(o.source_url) || asString(o.source) || null,
       qualificationReason: asString(o.qualification_reason) || null,
       confidence: conf === null ? null : Math.min(1, Math.max(0, conf)),
     });
   }
   return leads;
+}
+
+// ---- 4-batch dedup sweep helpers ----
+
+// The deterministic "Previously Collected Companies" exclusion block appended to the
+// base prompt for batches 2-4. Names are wrapped in <...> (one per line) so the model
+// can't confuse them with surrounding instructions.
+function buildExclusionBlock(companies: string[]): string {
+  const list = companies.map((c) => `<${c}>`).join('\n');
+  return [
+    'Previously Collected Companies',
+    '',
+    'The following companies have already been collected.',
+    '',
+    'Do NOT return these companies.',
+    'Do NOT return subsidiaries.',
+    'Do NOT return alternate legal names.',
+    'Do NOT return rebrands.',
+    '',
+    list,
+  ].join('\n');
+}
+
+// The current batch's full prompt: the base prompt, plus the exclusion block once any
+// companies have been collected. Batch 1 (no companies yet) is just the base.
+function buildBatchPrompt(basePrompt: string, companies: string[]): string {
+  if (companies.length === 0) return basePrompt;
+  return `${basePrompt}\n\n---\n\n${buildExclusionBlock(companies)}`;
+}
+
+// Best-effort JSON parse for pasted model output: strips ``` fences and any prose
+// around the outermost {...} / [...]. Returns null when nothing parseable is found.
+function parseLooseJson(text: string): unknown {
+  let t = text.trim();
+  t = t.replace(/^```(?:json)?/i, '').replace(/```\s*$/, '').trim();
+  const firstObj = t.indexOf('{');
+  const firstArr = t.indexOf('[');
+  const start =
+    firstObj === -1 ? firstArr : firstArr === -1 ? firstObj : Math.min(firstObj, firstArr);
+  if (start > 0) t = t.slice(start);
+  const end = Math.max(t.lastIndexOf('}'), t.lastIndexOf(']'));
+  if (end >= 0) t = t.slice(0, end + 1);
+  try {
+    return JSON.parse(t);
+  } catch {
+    return null;
+  }
+}
+
+// Coerce whatever the operator pasted (a { raw: "<text>" } wrapper, a { leads: [...] }
+// object, a bare array, or a JSON string) into the { leads: [...] } shape sanitizeLeads
+// reads. Tolerant so a paste with code fences or stray prose still works.
+function extractLeadsPayload(body: unknown): Record<string, unknown> {
+  let val: unknown = body;
+  if (
+    val &&
+    typeof val === 'object' &&
+    !Array.isArray(val) &&
+    typeof (val as { raw?: unknown }).raw === 'string'
+  ) {
+    val = (val as { raw: string }).raw;
+  }
+  if (typeof val === 'string') val = parseLooseJson(val);
+  if (Array.isArray(val)) return { leads: val };
+  if (val && typeof val === 'object' && Array.isArray((val as { leads?: unknown }).leads)) {
+    return { leads: (val as { leads: unknown[] }).leads };
+  }
+  return { leads: [] };
 }
 
 // Reach orchestration: persist the AIM config, generate templates + news via
@@ -127,6 +218,13 @@ export class ReachService {
       // it to real cities via its LLM country profiler.
       region: aim.region,
       country: aim.country ?? 'Germany',
+      // AIM targeting fields — ignored by the satellite/ammo_forge injectors (they read
+      // only known keys) but consumed by reach.prompt_forge to scope the scraping prompt.
+      segment: aim.segment ?? null,
+      source: aim.source ?? null,
+      targetType: aim.targetType ?? null,
+      industryFocus: aim.industryFocus ?? null,
+      tenderFocus: aim.tenderFocus ?? null,
       niche: {
         id: niche.id,
         name: niche.name,
@@ -142,9 +240,13 @@ export class ReachService {
     };
   }
 
-  // AIM: create the campaign row (config.json = the input fields), then run Ammo
-  // Forge to generate the three templates + the news brief and store them. If the
-  // agent is unreachable the aim is still created (DRAFT) so it can be regenerated.
+  // AIM: create the campaign row (config.json = the input fields) and return FAST.
+  // We DON'T run Ammo Forge here: the local model is serial, so generating the three
+  // email templates + news brief up front (≈77s) would block the operator's real goal —
+  // the scraping prompt. Ammo Forge is kicked off in the BACKGROUND after the prompt is
+  // authored (see generateScrapePrompt → runAmmoForgeInBackground), so the prompt shows
+  // immediately and templates fill in after via polling. `userId` is threaded into the
+  // linked campaign as its creator.
   async createAim(
     orgId: string,
     dto: CreateAimDto,
@@ -195,24 +297,36 @@ export class ReachService {
         );
       }
     }
+    // Return the DRAFT aim immediately — templates are generated in the background later
+    // (after the prompt), so nothing here blocks on the local model.
+    return linked;
+  }
+
+  // Ammo Forge, run OFF the request thread: generate the three email templates + news
+  // brief for an aim and store them (status → READY). Fire-and-forget from
+  // generateScrapePrompt so the prompt is never held up by template generation (the local
+  // model is serial). Never throws — a failure just leaves the aim without templates,
+  // which the org-default template covers for sending.
+  private async runAmmoForgeInBackground(
+    orgId: string,
+    aim: ReachAim,
+  ): Promise<void> {
     try {
-      const config = await this.buildAgentConfig(orgId, linked);
+      const config = await this.buildAgentConfig(orgId, aim);
       const result = await this.agent.run('reach.ammo_forge', {
         campaign_id: aim.id,
         returnOnly: true,
         config,
       });
-      const updated = await this.repo.setGenerated(orgId, aim.id, {
+      await this.repo.setGenerated(orgId, aim.id, {
         templates: sanitizeTemplates(result.output),
         newsBrief: sanitizeNews(result.output),
         generatedBy: asString(result.output.generated_by) || 'unknown',
         status: 'READY',
       });
-      return updated ?? linked;
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'ammo_forge failed';
-      this.logger.warn(`Ammo Forge failed for aim ${aim.id}: ${msg}`);
-      return linked; // keep the DRAFT aim; templates can be regenerated later
+      this.logger.warn(`Ammo Forge (background) failed for aim ${aim.id}: ${msg}`);
     }
   }
 
@@ -255,6 +369,116 @@ export class ReachService {
     const aim = await this.repo.findAimById(orgId, aimId);
     if (!aim) throw new NotFoundException('Aim not found');
     return aim;
+  }
+
+  // Permanently delete a campaign (aim): removes the aim + its leads/sends (cascade), and
+  // best-effort the linked bridge campaign + its prospects. 404 if the aim doesn't exist.
+  async deleteAim(orgId: string, aimId: string): Promise<{ ok: true }> {
+    await this.getAim(orgId, aimId); // 404 if missing / not this org
+    const campaignId = await this.repo.deleteAim(orgId, aimId);
+    if (campaignId) {
+      await this.repo.deleteLinkedCampaign(orgId, campaignId).catch((err) =>
+        this.logger.warn(
+          `Deleted aim ${aimId} but could not remove its linked campaign ${campaignId}: ${err instanceof Error ? err.message : 'error'}`,
+        ),
+      );
+    }
+    return { ok: true };
+  }
+
+  // Generate Prompt (replaces the old scrape trigger): the local model (hermes/qwen via
+  // reach.prompt_forge) takes this aim's config and AUTHORS an in-depth OpenAI lead-
+  // scraping prompt, scoped to the AIM fields. The only output is the prompt string,
+  // which we persist on the aim and return. No web search / scraping / lead writes happen
+  // — the operator copies the prompt into OpenAI to run the scrape.
+  async generateScrapePrompt(orgId: string, aimId: string): Promise<ReachAim> {
+    const aim = await this.getAim(orgId, aimId);
+    const config = await this.buildAgentConfig(orgId, aim);
+    const result = await this.agent.run('reach.prompt_forge', {
+      campaign_id: aim.id,
+      config,
+    });
+    const prompt = asString(result.output.prompt);
+    if (!prompt) {
+      throw new UnprocessableEntityException(
+        'The model did not return a prompt — check the local model gateway and try again.',
+      );
+    }
+    const updated = await this.repo.setScrapePrompt(orgId, aim.id, prompt);
+    const finalAim = updated ?? { ...aim, scrapePrompt: prompt };
+    // Prompt is done and about to be returned — NOW kick off template generation in the
+    // background (the local model is serial, so this runs after the prompt, not before).
+    // Only on the first prompt (no templates yet) so re-generating a prompt won't redo it.
+    if (!finalAim.templates && finalAim.status !== 'READY') {
+      void this.runAmmoForgeInBackground(orgId, finalAim);
+    }
+    return finalAim;
+  }
+
+  // ---- 4-batch dedup sweep ----
+
+  // The current batch state for a campaign: which batch (1..4), the prompt to run for it
+  // (base + the accumulated "Previously Collected Companies" exclusion block), how many
+  // companies have been collected, and whether the sweep is finished.
+  async getBatchState(orgId: string, aimId: string): Promise<ReachBatchState> {
+    const aim = await this.getAim(orgId, aimId);
+    const companies = await this.repo.getCollectedCompanies(orgId, aimId);
+    const done = aim.scrapeBatch > REACH_TOTAL_BATCHES;
+    const base = aim.scrapePrompt;
+    return {
+      batch: aim.scrapeBatch,
+      totalBatches: REACH_TOTAL_BATCHES,
+      batchSize: REACH_BATCH_SIZE,
+      prompt: done || !base ? null : buildBatchPrompt(base, companies),
+      collectedCount: companies.length,
+      done,
+    };
+  }
+
+  // Ingest one batch's pasted JSON: sanitize → append (deduped) to reach_leads → mirror
+  // the email-bearing leads into the campaign's prospects → advance the batch, and return
+  // the NEXT batch's state (its prompt now carries the enlarged exclusion list). This is
+  // the round-trip step that both saves the leads and drives dedup across the sweep.
+  async ingestBatchResults(
+    orgId: string,
+    aimId: string,
+    body: unknown,
+  ): Promise<ReachBatchState> {
+    const aim = await this.getAim(orgId, aimId);
+    if (aim.scrapeBatch > REACH_TOTAL_BATCHES) {
+      throw new UnprocessableEntityException(
+        'All batches for this campaign are already complete.',
+      );
+    }
+    const leads = sanitizeLeads(extractLeadsPayload(body));
+    if (leads.length === 0) {
+      throw new UnprocessableEntityException(
+        'No leads found in the pasted output — expected JSON like {"leads": [ { "company": … } ]}.',
+      );
+    }
+    const { saved } = await this.repo.appendLeads(orgId, aimId, leads);
+    if (aim.campaignId) {
+      await this.repo
+        .mirrorLeadsToProspects(orgId, aim.campaignId, leads, aim.country ?? null)
+        .catch((err) =>
+          this.logger.warn(
+            `Mirror batch leads→prospects failed for aim ${aimId}: ${err instanceof Error ? err.message : 'error'}`,
+          ),
+        );
+    }
+    const nextBatch = aim.scrapeBatch + 1;
+    await this.repo.setScrapeBatch(orgId, aimId, nextBatch);
+    // Ammo Forge runs ALONGSIDE the lead scraping: if the email templates aren't ready
+    // yet, kick off generation in the background now (fire-and-forget) so it proceeds in
+    // parallel with the operator's batch round-trip. Guarded so it never re-runs once the
+    // templates exist (the aim flips to READY when Ammo Forge finishes).
+    if (!aim.templates && aim.status !== 'READY') {
+      void this.runAmmoForgeInBackground(orgId, aim);
+    }
+    this.logger.log(
+      `Reach batch ${aim.scrapeBatch}/${REACH_TOTAL_BATCHES} ingested for aim ${aimId}: ${saved} new lead(s), advancing to batch ${nextBatch}`,
+    );
+    return this.getBatchState(orgId, aimId);
   }
 
   // Machine callback: the Lead Satellite agent pushes live per-phase progress as it
@@ -641,7 +865,7 @@ export class ReachService {
     }
   }
 
-  // The org's Reach send timeline: real per-day counts over the last 10 days
+  // The org's Reach send timeline: real per-day counts over the past 7 days
   // (oldest first), zero-filled, with "Today" labelled — drives the Reach dashboard
   // chart.
   async dailySends(orgId: string): Promise<DailySendPoint[]> {
@@ -655,8 +879,8 @@ export class ReachService {
 
     const today = new Date();
     const points: DailySendPoint[] = [];
-    // 9 days ago -> today (10 days total), chronological (oldest first).
-    for (let i = 9; i >= 0; i--) {
+    // 6 days ago -> today (7 days total), chronological (oldest first).
+    for (let i = 6; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(today.getDate() - i);
       const isToday = i === 0;
