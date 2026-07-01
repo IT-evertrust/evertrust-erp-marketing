@@ -105,7 +105,7 @@ export type ReachAim = {
   updatedAt: string;
 };
 
-// One day on the Reach daily-sends timeline (10-day window, oldest first).
+// One day on the Reach daily-sends timeline (past-7-days window, oldest first).
 export type DailySendPoint = {
   date: string;
   value: number;
@@ -120,6 +120,24 @@ export type BazookaRunSummary = {
 
 // Which tracking signal a tracking endpoint records.
 export type TrackKind = 'open' | 'click' | 'reply';
+
+// ---- 4-batch dedup sweep ----
+// The sweep runs TOTAL_BATCHES rounds of ~BATCH_SIZE companies; each round after the
+// first excludes every company already collected, so the ~100 leads are unique.
+export const REACH_TOTAL_BATCHES = 4;
+export const REACH_BATCH_SIZE = 25;
+
+// The state of a campaign's batch sweep, returned to the UI and after each ingest.
+export type ReachBatchState = {
+  batch: number; // current batch (1..TOTAL_BATCHES); === TOTAL_BATCHES+1 when finished
+  totalBatches: number;
+  batchSize: number;
+  // The current batch's full prompt (base + accumulated exclusion block), or null when
+  // no base prompt has been generated yet, or when the sweep is done.
+  prompt: string | null;
+  collectedCount: number; // distinct companies collected so far for this aim
+  done: boolean; // true once all batches are complete
+};
 
 export type ReachLeadStatus =
   | 'NEW'
@@ -139,6 +157,8 @@ export type ReachLead = {
   email?: string;
   phone?: string;
   location?: string;
+  state?: string;
+  revenueTier?: string;
   source?: string;
   qualificationReason?: string;
   confidence?: number;

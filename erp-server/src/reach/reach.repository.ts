@@ -41,6 +41,8 @@ export type LeadInsert = {
   email?: string | null;
   phone?: string | null;
   location?: string | null;
+  state?: string | null;
+  revenueTier?: string | null;
   source?: string | null;
   qualificationReason?: string | null;
   confidence?: number | null;
@@ -118,6 +120,8 @@ function rowToLead(row: LeadRow): ReachLead {
     email: row.email ?? undefined,
     phone: row.phone ?? undefined,
     location: row.location ?? undefined,
+    state: row.state ?? undefined,
+    revenueTier: row.revenueTier ?? undefined,
     source: row.source ?? undefined,
     qualificationReason: row.qualificationReason ?? undefined,
     confidence: row.confidence ?? undefined,
@@ -273,6 +277,145 @@ export class ReachRepository {
     return row ? rowToAim(row) : undefined;
   }
 
+  // Persist the authored lead-scraping prompt on the aim (Generate Prompt). Leaves the
+  // aim's status alone — producing a prompt is not a scrape.
+  async setScrapePrompt(
+    orgId: string,
+    aimId: string,
+    prompt: string,
+  ): Promise<ReachAim | undefined> {
+    const [row] = await this.db
+      .update(schema.reachAims)
+      .set({ scrapePrompt: prompt, updatedAt: new Date() })
+      .where(
+        and(eq(schema.reachAims.id, aimId), tenantScope(orgId, schema.reachAims)),
+      )
+      .returning();
+    return row ? rowToAim(row) : undefined;
+  }
+
+  // The distinct company names already collected for an aim (drives the batch exclusion
+  // list). Deduped on insert, ordered by arrival so the exclusion list is stable.
+  async getCollectedCompanies(orgId: string, aimId: string): Promise<string[]> {
+    const rows = await this.db
+      .select({ company: schema.reachLeads.company })
+      .from(schema.reachLeads)
+      .where(
+        and(
+          eq(schema.reachLeads.aimId, aimId),
+          tenantScope(orgId, schema.reachLeads),
+        ),
+      )
+      .orderBy(schema.reachLeads.createdAt);
+    return rows.map((r) => r.company);
+  }
+
+  // Append a batch's leads WITHOUT deleting the prior batches (unlike replaceLeads).
+  // Skips any company already collected for this aim (case-insensitive) so the sweep
+  // stays deduped even if the model slips. Updates the denormalized companies count.
+  // Returns how many were newly saved and the running total.
+  async appendLeads(
+    orgId: string,
+    aimId: string,
+    leads: LeadInsert[],
+  ): Promise<{ saved: number; totalCollected: number }> {
+    return this.db.transaction(async (tx) => {
+      const existing = await tx
+        .select({ company: schema.reachLeads.company })
+        .from(schema.reachLeads)
+        .where(
+          and(
+            eq(schema.reachLeads.aimId, aimId),
+            tenantScope(orgId, schema.reachLeads),
+          ),
+        );
+      const seen = new Set(existing.map((r) => r.company.trim().toLowerCase()));
+      const fresh: LeadInsert[] = [];
+      for (const l of leads) {
+        const key = (l.company ?? '').trim().toLowerCase();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        fresh.push(l);
+      }
+      if (fresh.length > 0) {
+        await tx.insert(schema.reachLeads).values(
+          fresh.map((l) => ({
+            organizationId: orgId,
+            aimId,
+            company: l.company,
+            website: l.website ?? null,
+            contactName: l.contactName ?? null,
+            contactTitle: l.contactTitle ?? null,
+            email: l.email ?? null,
+            phone: l.phone ?? null,
+            location: l.location ?? null,
+            state: l.state ?? null,
+            revenueTier: l.revenueTier ?? null,
+            source: l.source ?? null,
+            qualificationReason: l.qualificationReason ?? null,
+            confidence: l.confidence ?? null,
+          })),
+        );
+      }
+      const totalCollected = seen.size;
+      await tx
+        .update(schema.reachAims)
+        .set({ companies: totalCollected, updatedAt: new Date() })
+        .where(
+          and(
+            eq(schema.reachAims.id, aimId),
+            tenantScope(orgId, schema.reachAims),
+          ),
+        );
+      return { saved: fresh.length, totalCollected };
+    });
+  }
+
+  // Permanently delete an aim (org-scoped). Cascades reach_leads + reach_sends (FK
+  // onDelete cascade). Returns the linked campaign id (if any) so the caller can clean
+  // up the bridge campaign too.
+  async deleteAim(orgId: string, aimId: string): Promise<string | null> {
+    const [row] = await this.db
+      .delete(schema.reachAims)
+      .where(
+        and(eq(schema.reachAims.id, aimId), tenantScope(orgId, schema.reachAims)),
+      )
+      .returning({ campaignId: schema.reachAims.campaignId });
+    return row?.campaignId ?? null;
+  }
+
+  // Delete an aim's linked bridge campaign + its mirrored prospects (org-scoped). Called
+  // best-effort after the aim is gone; leaves the campaign if other rows still reference it.
+  async deleteLinkedCampaign(orgId: string, campaignId: string): Promise<void> {
+    await this.db
+      .delete(schema.prospects)
+      .where(
+        and(
+          eq(schema.prospects.campaignId, campaignId),
+          tenantScope(orgId, schema.prospects),
+        ),
+      );
+    await this.db
+      .delete(schema.campaigns)
+      .where(
+        and(eq(schema.campaigns.id, campaignId), tenantScope(orgId, schema.campaigns)),
+      );
+  }
+
+  // Set the current batch number for a campaign's sweep (org-scoped).
+  async setScrapeBatch(
+    orgId: string,
+    aimId: string,
+    batch: number,
+  ): Promise<void> {
+    await this.db
+      .update(schema.reachAims)
+      .set({ scrapeBatch: batch, updatedAt: new Date() })
+      .where(
+        and(eq(schema.reachAims.id, aimId), tenantScope(orgId, schema.reachAims)),
+      );
+  }
+
   async setStatus(
     orgId: string,
     aimId: string,
@@ -415,6 +558,8 @@ export class ReachRepository {
               email: l.email ?? null,
               phone: l.phone ?? null,
               location: l.location ?? null,
+              state: l.state ?? null,
+              revenueTier: l.revenueTier ?? null,
               source: l.source ?? null,
               qualificationReason: l.qualificationReason ?? null,
               confidence: l.confidence ?? null,
@@ -873,7 +1018,7 @@ export class ReachRepository {
       });
   }
 
-  // Daily Reach send counts over the last 10 days (grouped by sent_at::date). The
+  // Daily Reach send counts over the past 7 days (grouped by sent_at::date). The
   // service zero-fills the gaps + labels "Today". Org-scoped.
   async dailySends(orgId: string): Promise<Array<{ day: Date; count: number }>> {
     const day = sql<Date>`${schema.reachSends.sentAt}::date`;
@@ -883,7 +1028,7 @@ export class ReachRepository {
       .where(
         and(
           tenantScope(orgId, schema.reachSends),
-          gte(schema.reachSends.sentAt, sql`now() - interval '9 days'`),
+          gte(schema.reachSends.sentAt, sql`now() - interval '6 days'`),
         ),
       )
       .groupBy(day);

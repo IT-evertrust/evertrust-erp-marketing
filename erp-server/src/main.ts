@@ -8,7 +8,12 @@ import { AppConfigService } from './config/app-config.service';
 
 async function bootstrap(): Promise<void> {
   // bufferLogs so early boot logs go through pino once it's resolved.
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  // rawBody so the Read AI webhook guard can HMAC-verify the EXACT bytes Read AI
+  // signed (req.rawBody) — parsed/re-serialized JSON would not match the signature.
+  const app = await NestFactory.create(AppModule, {
+    bufferLogs: true,
+    rawBody: true,
+  });
 
   // Route Nest's own logs through nestjs-pino (structured + requestId).
   app.useLogger(app.get(Logger));

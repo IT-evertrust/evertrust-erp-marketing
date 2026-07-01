@@ -8,6 +8,7 @@ import type {
   Lead,
   LeadStatus,
   NewCampaignFormValues,
+  ReachBatchState,
   ReachCampaignView,
   ReachRound,
   ReachStats,
@@ -73,6 +74,7 @@ interface BackendLead {
   email?: string;
   phone?: string;
   location?: string;
+  state?: string;
   source?: string;
   qualificationReason?: string;
   confidence?: number;
@@ -95,7 +97,7 @@ async function getJson<T>(path: string): Promise<T> {
 }
 
 async function mutate<T>(
-  method: 'POST' | 'PATCH' | 'PUT',
+  method: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
   path: string,
   body?: unknown,
 ): Promise<T> {
@@ -149,6 +151,11 @@ export async function createReachAim(
   return mapAim(aim);
 }
 
+// Permanently delete a campaign (aim) + its leads from the database.
+export async function deleteReachAim(aimId: string): Promise<void> {
+  await mutate<{ ok: boolean }>('DELETE', `/growth/reach/aims/${aimId}`);
+}
+
 // Trigger Lead Satellite for an aim. The scrape now runs in the BACKGROUND, so this
 // returns the campaign marked RUNNING (with the server-seeded ETA) immediately — the
 // leads arrive later and are picked up by the campaign-status polling in useReach.
@@ -158,6 +165,36 @@ export async function scrapeReachAim(aimId: string): Promise<ReachCampaignView> 
     `/growth/reach/aims/${aimId}/scrape`,
   );
   return mapAim(aim);
+}
+
+// Generate Prompt: the local model authors an OpenAI lead-scraping prompt scoped to the
+// aim's config. Returns the updated campaign view (its `scrapePrompt` holds the result).
+export async function generateReachPrompt(
+  aimId: string,
+): Promise<ReachCampaignView> {
+  const aim = await mutate<BackendAim>(
+    'POST',
+    `/growth/reach/aims/${aimId}/prompt`,
+  );
+  return mapAim(aim);
+}
+
+// The current batch state for a campaign's 4-batch dedup sweep.
+export async function getReachBatch(aimId: string): Promise<ReachBatchState> {
+  return getJson<ReachBatchState>(`/growth/reach/aims/${aimId}/batch`);
+}
+
+// Paste a batch's ChatGPT JSON back: saves the leads (deduped) and returns the NEXT
+// batch's state (its prompt now carries the enlarged exclusion list).
+export async function saveReachBatchResults(
+  aimId: string,
+  raw: string,
+): Promise<ReachBatchState> {
+  return mutate<ReachBatchState>(
+    'POST',
+    `/growth/reach/aims/${aimId}/batch/results`,
+    { raw },
+  );
 }
 
 export async function getCampaignLeads(aimId: string): Promise<Lead[]> {
@@ -328,7 +365,9 @@ function mapLead(l: BackendLead): Lead {
     id: l.id,
     company: l.company,
     contact,
+    email: l.email || '—',
     location: l.location || '—',
+    state: l.state || '—',
     source: l.source || '—',
     status: LEAD_STATUS[l.status] ?? 'New',
   };

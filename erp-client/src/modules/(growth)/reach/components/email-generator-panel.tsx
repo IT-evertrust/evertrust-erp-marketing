@@ -18,6 +18,8 @@ type EmailGeneratorPanelProps = {
   // True when the selected campaign's templates are the org-wide default. The
   // bodies become read-only and an info banner explains where to edit them.
   usingOrgDefault?: boolean;
+  // Permanently delete a campaign (after the confirm popup).
+  onDeleteCampaign?: (aimId: string) => void;
 };
 
 export function EmailGeneratorPanel({
@@ -29,6 +31,7 @@ export function EmailGeneratorPanel({
   loadingCampaigns = false,
   onSend,
   usingOrgDefault = false,
+  onDeleteCampaign,
 }: EmailGeneratorPanelProps) {
   const t = useTranslations('reach');
 
@@ -41,6 +44,7 @@ export function EmailGeneratorPanel({
         loading={loadingCampaigns}
         metricLabel={t('campaignTable.col.sent')}
         metricValue={(campaign) => campaign.sent}
+        onDeleteCampaign={onDeleteCampaign}
       />
 
       <GrowthCard

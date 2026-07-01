@@ -172,6 +172,12 @@ export const reachLeads = pgTable(
     email: text('email'),
     phone: text('phone'),
     location: text('location'),
+    // The state / region (for Germany, the Bundesland) the company operates in — drives
+    // the per-state coverage sweep and the lead table's state tabs. Null when unknown.
+    state: text('state'),
+    // Revenue tier from the scrape: AAA (≥$20M/yr) · A ($10-20M) · B ($5-10M), $5M floor.
+    // Null when the model couldn't determine it.
+    revenueTier: text('revenue_tier'),
     source: text('source'),
     qualificationReason: text('qualification_reason'),
     // 0.0-1.0 fit score from the agent.

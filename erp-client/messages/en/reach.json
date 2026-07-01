@@ -22,6 +22,15 @@
       "SCRAPING": "Scraping",
       "IN CAMPAIGN": "In campaign",
       "OVER": "Over"
+    },
+    "delete": {
+      "aria": "Delete {name}",
+      "title": "Delete campaign",
+      "confirmTitle": "Delete campaign?",
+      "confirmBody": "This permanently deletes “{name}” and all of its leads from the database. This cannot be undone.",
+      "cancel": "Cancel",
+      "confirm": "Delete",
+      "deleting": "Deleting campaign…"
     }
   },
   "scraper": {
@@ -44,7 +53,13 @@
       "contact": "Contact",
       "location": "Location",
       "source": "Source",
-      "status": "Status"
+      "status": "Status",
+      "email": "Email",
+      "state": "State"
+    },
+    "stateTab": {
+      "all": "All states",
+      "none": "No state"
     },
     "leadStatus": {
       "New": "New",
@@ -53,7 +68,16 @@
       "Interested": "Interested",
       "Unsure": "Unsure",
       "Not Interested": "Not Interested"
-    }
+    },
+    "viewPrompt": "View prompt",
+    "promptDialogTitle": "Lead-scraping prompt — {campaign}",
+    "runScrape": "Run scrape",
+    "mode": {
+      "label": "Scraping mode",
+      "manual": "Manual",
+      "auto": "Automatic"
+    },
+    "runSatellite": "Run Lead Satellite"
   },
   "generator": {
     "emailsTitle": "Emails · {campaign}",
@@ -118,8 +142,8 @@
     "description": "Define the campaign target before scraping leads.",
     "close": "Close",
     "cancel": "Cancel",
-    "submit": "Start Aim",
-    "submitting": "Aiming…",
+    "submit": "Generate Prompt",
+    "submitting": "Generating…",
     "validation": "Campaign name, niche and region are required.",
     "field": {
       "name": "Campaign Name",
@@ -148,6 +172,20 @@
       "tenderFocus": "Tender focus",
       "tenderFocusPlaceholder": "e.g. Cloud Infrastructure, AI Platform",
       "focusHint": "Used by the default email template ({{Type}} / {{IndustryFocus}} / {{TenderFocus}})."
+    },
+    "prompt": {
+      "label": "Lead-scraping prompt",
+      "copy": "Copy",
+      "copiedShort": "Copied",
+      "copied": "Prompt copied to clipboard",
+      "copyFailed": "Could not copy — select the text and copy manually.",
+      "hint": "Paste this into OpenAI to run the lead scrape. It is scoped to this campaign’s inputs."
+    },
+    "stage": {
+      "prompt": "Generating prompt",
+      "ammoforge": "Deploying Ammo Forge",
+      "est": "est ~{seconds}s",
+      "almostDone": "almost done"
     }
   },
   "toast": {
@@ -159,7 +197,9 @@
     "roundRecorded": "Recorded {count} {round} send(s). Gmail delivery pending OAuth.",
     "sendFailed": "Send failed",
     "scrapeDone": "Scrape complete — {count} companies found.",
-    "scrapeFailed": "Lead scrape failed."
+    "scrapeFailed": "Lead scrape failed.",
+    "campaignDeleted": "Campaign deleted",
+    "deleteFailed": "Couldn’t delete the campaign"
   },
   "templates": {
     "orgWide": "Org-wide",
@@ -216,5 +256,38 @@
       "saved": "Saved",
       "saveFailed": "Could not save."
     }
+  },
+  "batch": {
+    "title": "Lead scraping — {campaign}",
+    "titleGeneric": "Lead scraping",
+    "loading": "Loading batch…",
+    "loadError": "Couldn’t load the batch.",
+    "retry": "Retry",
+    "batchOf": "Batch {batch} of up to {total}",
+    "optionalNote": "One pass already scrapes as much as possible. Running the next batch is optional — it only finds additional (deduplicated) companies. Click Finish anytime to stop and keep everything collected so far.",
+    "finish": "Finish",
+    "verifyNext": "Verify & next batch",
+    "collected": "{count} collected",
+    "step1": "Copy this prompt into ChatGPT (with web browsing enabled).",
+    "step2": "Paste the JSON it returns in the box below.",
+    "step3": "Verify to save the leads and get the next batch’s prompt.",
+    "promptLabel": "Batch {batch} prompt",
+    "pasteLabel": "ChatGPT JSON output",
+    "pastePlaceholder": "Paste ChatGPT’s JSON output here…",
+    "save": "Save & get batch {next}",
+    "saveLast": "Save & finish",
+    "saving": "Saving…",
+    "savedToast": "Batch {batch} saved — {total} companies collected",
+    "saveError": "Couldn’t save the batch.",
+    "doneTitle": "Sweep complete",
+    "doneBody": "{count} companies collected across {total} batches.",
+    "fileLabel": "Upload ChatGPT’s file",
+    "chooseFile": "Choose the file ChatGPT produced…",
+    "verify": "Verify",
+    "verifyLast": "Verify & finish",
+    "verifying": "Verifying…",
+    "verifiedToast": "Batch {batch} verified — {total} companies collected",
+    "verifyError": "Couldn’t verify the file — make sure it’s the JSON ChatGPT produced.",
+    "doneButton": "Done"
   }
 }

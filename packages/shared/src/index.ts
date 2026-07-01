@@ -2013,6 +2013,10 @@ export type ProspectDto = z.infer<typeof ProspectDto>;
 export const ProspectInputDto = z.object({
   email: z.string().email().max(320),
   companyName: z.string().max(300).optional(),
+  // Scraped from the prospect's Impressum/Kontakt page (Lead Satellite contact parser): a named
+  // contact person and a phone. Optional for rolling-deploy safety (older scrapers omit them).
+  contactName: z.string().max(200).optional(),
+  phone: z.string().max(60).optional(),
   website: z.string().max(500).optional(),
   city: z.string().max(200).optional(),
   country: z.string().max(120).optional(),
