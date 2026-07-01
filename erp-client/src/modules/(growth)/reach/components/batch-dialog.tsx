@@ -167,6 +167,12 @@ export function BatchDialog({
               <span>{t('batch.collected', { count: state.collectedCount })}</span>
             </div>
 
+            {/* Batches beyond the first are optional — one pass already scrapes as much
+                as possible; more rounds just find additional deduped companies. */}
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              {t('batch.optionalNote')}
+            </p>
+
             {/* Steps */}
             <ol className="grid gap-1 text-xs text-muted-foreground">
               <li>1. {t('batch.step1')}</li>
@@ -223,17 +229,29 @@ export function BatchDialog({
               ) : null}
             </div>
 
-            <Button
-              type="button"
-              onClick={verify}
-              disabled={verifying || !paste.trim()}
-            >
-              {verifying
-                ? t('batch.verifying')
-                : isLast
-                  ? t('batch.verifyLast')
-                  : t('batch.verify')}
-            </Button>
+            {/* Finishing is optional at ANY batch — Finish stops here and keeps every
+                lead collected so far; Verify saves this batch and offers another round. */}
+            <div className="flex items-center justify-between gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={finish}
+                disabled={verifying}
+              >
+                {t('batch.finish')}
+              </Button>
+              <Button
+                type="button"
+                onClick={verify}
+                disabled={verifying || !paste.trim()}
+              >
+                {verifying
+                  ? t('batch.verifying')
+                  : isLast
+                    ? t('batch.verifyLast')
+                    : t('batch.verifyNext')}
+              </Button>
+            </div>
           </div>
         ) : null}
       </DialogContent>

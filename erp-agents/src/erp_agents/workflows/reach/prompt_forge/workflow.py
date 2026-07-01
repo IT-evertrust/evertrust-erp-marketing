@@ -4,15 +4,21 @@ Reach's MANUAL scraping path repurposes the local model (hermes/qwen via the Lit
 gateway) as a *prompt author*. Rather than let the model invent the whole prompt from
 scratch (which produced inconsistent results — sometimes far fewer than 25 leads), this
 workflow starts from a STORED TEMPLATE (``SCRAPE_PROMPT_TEMPLATE``) that hard-codes the
-non-negotiables — a minimum of 25 leads per batch with per-state coverage (aim N per state),
-exhausting public sources, the AAA/A/B revenue tiers + USD 5M floor, the contact policy (keep
+non-negotiables — return as many leads as possible per batch (25+/N-per-state as a floor, no
+upper cap) with per-state coverage, exhausting public sources, the AAA/A/B revenue tiers + USD
+5M floor, the contact policy (keep
 only companies with at least one verified email or phone, prefer a senior Sales contact), the
 per-lead `state` tag, the strict no-hallucination rules, and the exact JSON schema. The
-template has ``{{placeholders}}`` that are filled from the AIM config (reach.aims fields),
-then the filled template is sent to the local model for REFINEMENT (sharpen the niche /
-search-strategy wording only). The refined prompt is validated to confirm it still carries
-every hard requirement; if the model is unavailable or drops one, we fall back to the
-filled template — which is itself a complete, valid prompt. So we never return a weak one.
+template has ``{{placeholders}}`` that are filled from the AIM config (reach.aims fields).
+
+The filled template IS the output by default — it is already complete and valid. Optional
+LLM REFINEMENT (sharpen the niche / search-strategy wording only) is OPT-IN via
+``input.refine=true`` or ``PROMPT_FORGE_REFINE=1``, because the small local models available
+here repeatedly degraded the prompt (dropping the VOLUME section, translating it to German,
+or timing out). When refinement is on, the result is validated by
+``_preserves_hard_requirements`` — schema, 25+/AAA tiers, maximize-volume + exhaust wording,
+anti-hallucination, and English integrity — and anything weaker falls back to the template.
+So we never return a weak prompt.
 
 The ONLY output here is that prompt string — no web search, no scraping, no DB writes.
 
@@ -160,10 +166,11 @@ CONTACT POLICY — at least ONE verified channel per company
 - Only keep a company for which you found AT LEAST ONE real, public channel: an email OR a phone (BOTH preferred). Aggressively try to get both.
 - If a company has NEITHER a findable public email NOR a public phone, DROP it — do not pad the list with contactless rows, and NEVER invent an email or phone.
 
-VOLUME — HARD REQUIREMENT
-- Return a MINIMUM of 25 companies overall, working toward {{leads_per_state}} per state across the states listed above. Do NOT stop early, do NOT trim, do NOT summarise.
-- If you are short, broaden your queries (synonyms, adjacent sub-niches, more cities/states) and KEEP SEARCHING until the target is met.
-- EXHAUST every publicly available source before finishing: company websites, business directories, public/company registries, industry associations, trade-fair and membership lists, chambers of commerce, public tender portals, news, job boards, and public professional-network pages.
+VOLUME — RETURN AS MANY AS POSSIBLE (no upper limit)
+- Return AS MANY qualified companies as you can possibly find in ONE pass — maximise the count. There is NO upper cap and no round number to stop at. Do NOT stop early, do NOT trim, do NOT summarise.
+- Treat {{leads_per_state}} per state (25+ overall) as a FLOOR, not a target — go well beyond it in every state wherever the public sources allow.
+- Keep broadening your queries (synonyms, adjacent sub-niches, more cities/states) and KEEP SEARCHING until you have genuinely EXHAUSTED the public sources — stop only when there are no new qualifying companies left to find, not when you hit a count.
+- EXHAUST every publicly available source: company websites, business directories, public/company registries, industry associations, trade-fair and membership lists, chambers of commerce, public tender portals, news, job boards, and public professional-network pages.
 
 REVENUE TIERS — only companies with at least USD 5,000,000 annual revenue
 Classify each company into `revenue_tier`:
@@ -243,11 +250,27 @@ def _preserves_hard_requirements(text: str) -> bool:
     )
     has_minimum = "25" in text
     has_tiers = "AAA" in text
+    # The maximize-volume intent must survive refinement — a small local model tends to
+    # collapse the VOLUME section into a flat per-state target, silently dropping the
+    # "as many as possible / exhaust every source" rule. Require both so any weakened
+    # refinement is rejected and we fall back to the complete template.
+    has_volume_max = "as many" in low and "exhaust" in low
     has_anti_hallucination = any(
         marker in low
         for marker in ("hallucinat", "do not invent", "never fabricate", "do not fabricate", "never invent")
     )
-    return has_schema and has_minimum and has_tiers and has_anti_hallucination
+    # Language integrity: a small local model sometimes TRANSLATES the whole prompt (e.g.
+    # into German). Require these English anchor phrases so a translated/mangled rewrite is
+    # rejected and we keep the clean English template.
+    has_english = "strict json only" in low and "no upper limit" in low
+    return (
+        has_schema
+        and has_minimum
+        and has_tiers
+        and has_volume_max
+        and has_anti_hallucination
+        and has_english
+    )
 
 
 class PromptForgeWorkflow(Workflow):
@@ -273,6 +296,19 @@ class PromptForgeWorkflow(Workflow):
         base_url = _clean(llm.get("baseUrl")) or os.environ.get("LLM_BASE_URL", "").strip()
         api_key = _clean(llm.get("apiKey")) or os.environ.get("LLM_API_KEY", "").strip() or "sk-anything"
 
+        # Refinement is OPT-IN. The stored template is already a complete, English,
+        # maximize-volume prompt; the local models available here (small hermes/qwen) have
+        # repeatedly mangled it — dropping the VOLUME section, translating it to German, or
+        # timing out — so every refined output was worse than the template. We therefore
+        # return the deterministic template by default and only send it through the model
+        # when explicitly asked (input.refine=true or PROMPT_FORGE_REFINE=1), still guarded
+        # by _preserves_hard_requirements so a bad rewrite falls back to the template.
+        refine_enabled = (
+            inp.get("refine") is True
+            or os.environ.get("PROMPT_FORGE_REFINE", "").strip().lower()
+            in ("1", "true", "yes")
+        )
+
         candidates: list[str] = []
         for m in (
             _clean(llm.get("model")),
@@ -296,7 +332,9 @@ class PromptForgeWorkflow(Workflow):
         prompt = ""
         used_model = ""
         errors: list[str] = []
-        if base_url:
+        if not refine_enabled:
+            errors.append("refinement disabled — returning the deterministic template")
+        elif base_url:
             from openai import OpenAI
 
             client = OpenAI(base_url=base_url, api_key=api_key, timeout=90.0, max_retries=0)
