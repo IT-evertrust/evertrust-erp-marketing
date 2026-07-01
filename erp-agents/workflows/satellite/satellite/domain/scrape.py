@@ -14,6 +14,7 @@ import re
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import unquote, urlparse
 
+from .contact import parse_contact
 from .models import Lead, Segment, extract_emails_from_html
 
 # Hosts that are never a company website — social, search engines, marketplaces, aggregators,
@@ -169,13 +170,41 @@ def _contact_links(html: str, base: str) -> list[str]:
     return out[:5]
 
 
+def _name_is_placeholder(name: str, dom: str) -> bool:
+    """True if the lead's current name is just its domain (the hit_to_lead host fallback) or empty —
+    i.e. safe to replace with a real legal name scraped from the Impressum."""
+    if not name:
+        return True
+    n = re.sub(r"[^a-z0-9]", "", name.lower())
+    full = re.sub(r"[^a-z0-9]", "", (dom or "").lower())
+    core = re.sub(r"[^a-z0-9]", "", (dom or "").split(".")[0].lower())
+    return bool(n) and (n == full or (bool(core) and n == core))
+
+
+def _absorb_contact(lead: Lead, html: str, dom: str) -> None:
+    """Read company name / contact person / phone off a fetched page and fill any still-empty field.
+    Never overwrites data we already have; only upgrades a domain-placeholder company name."""
+    info = parse_contact(html)
+    if info.phone and not lead.phone:
+        lead.phone = info.phone
+    if info.contact_name and not lead.contact_name:
+        lead.contact_name = info.contact_name
+    if info.company_name and _name_is_placeholder(lead.name, dom):
+        lead.name = info.company_name
+
+
 def scrape_one(fetcher, lead: Lead) -> bool:
-    """Fetch a lead's site and fill .email + its provenance. Crawl order: the EXACT page the search
+    """Fetch a lead's site and fill .email (+ provenance) AND its contact firmographics (real company
+    name / named contact / phone, via the Impressum parser). Crawl order: the EXACT page the search
     engine returned (source_url — often already /kontakt or /impressum) -> homepage -> contact links
-    discovered on the homepage -> guessed contact paths. Crawling source_url FIRST means an email
-    that SearXNG handed us directly on a deep page isn't missed by going to the homepage first.
-    Returns True if an email was recovered."""
-    if lead.email or not lead.website:
+    discovered on the homepage -> guessed contact paths (Impressum/Kontakt first). Crawling
+    source_url FIRST means an email handed to us directly on a deep page isn't missed.
+
+    Each fetched page is mined for BOTH an email and contact firmographics, so the Geschäftsführer +
+    phone on the Impressum (the same page the email usually lives on) are no longer discarded. The
+    crawl stops once it has an email AND a contact person, or runs out of candidate pages. Returns
+    True if an email was recovered."""
+    if not lead.website:
         return False
     base = lead.website.rstrip("/")
     dom = registrable_domain(base)
@@ -186,33 +215,34 @@ def scrape_one(fetcher, lead: Lead) -> bool:
 
     tried: set = set()
     home_html = ""
-    for url, kind in primary:
+
+    def _visit(url: str, kind: str) -> None:
+        nonlocal home_html
         if url in tried:
-            continue
+            return
         tried.add(url)
         html = fetcher.get(url)
         if url == base:
             home_html = html
         if not html:
-            continue
-        email = extract_emails_from_html(html, dom)
-        if email:
-            _set_email(lead, email, url, kind, dom)
+            return
+        _absorb_contact(lead, html, dom)
+        if not lead.email:
+            email = extract_emails_from_html(html, dom)
+            if email:
+                _set_email(lead, email, url, kind, dom)
+
+    for url, kind in primary:
+        _visit(url, kind)
+        if lead.email and lead.contact_name:
             return True
 
     pages = _contact_links(home_html, base) + [base + p for p in _GUESS_PATHS]
     for url in pages:
-        if url in tried:
-            continue
-        tried.add(url)
-        html = fetcher.get(url)
-        if not html:
-            continue
-        email = extract_emails_from_html(html, dom)
-        if email:
-            _set_email(lead, email, url, "contact-page", dom)
-            return True
-    return False
+        _visit(url, "contact-page")
+        if lead.email and lead.contact_name:
+            break
+    return bool(lead.email)
 
 
 def scrape_emails(leads: list[Lead], fetcher, workers: int = 14, cap: int = 180) -> int:

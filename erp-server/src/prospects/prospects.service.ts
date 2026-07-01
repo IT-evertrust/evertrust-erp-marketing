@@ -24,6 +24,8 @@ type LeadRow = typeof schema.leads.$inferSelect;
 export interface ProspectInput {
   email: string;
   companyName?: string;
+  contactName?: string;
+  phone?: string;
   website?: string;
   city?: string;
   country?: string;
@@ -143,6 +145,8 @@ export class ProspectsService {
           .update(schema.prospects)
           .set({
             companyName: p.companyName ?? existing[0].companyName,
+            contactName: p.contactName ?? existing[0].contactName,
+            phone: p.phone ?? existing[0].phone,
             website: p.website ?? existing[0].website,
             city: p.city ?? existing[0].city,
             country: p.country ?? existing[0].country,
@@ -159,6 +163,8 @@ export class ProspectsService {
           campaignId,
           email,
           companyName: p.companyName ?? null,
+          contactName: p.contactName ?? null,
+          phone: p.phone ?? null,
           website: p.website ?? null,
           city: p.city ?? null,
           country: p.country ?? null,
