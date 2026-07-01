@@ -25,6 +25,7 @@ import type {
   ReachNewsBrief,
   ReachRound,
   ReachTemplates,
+  ScrapePhase,
   TrackKind,
 } from './reach.model';
 
@@ -240,12 +241,17 @@ export class ReachService {
   }
 
   // AIM: create the campaign row (config.json = the input fields) and return FAST.
-  // We DON'T run Ammo Forge here anymore: the local model is serial, so generating the
-  // three email templates + news brief up front (≈77s) would block the operator's real
-  // goal — the scraping prompt. Ammo Forge is instead kicked off in the BACKGROUND after
-  // the prompt is authored (see generateScrapePrompt → runAmmoForgeInBackground), so the
-  // prompt shows immediately and templates fill in after via polling.
-  async createAim(orgId: string, dto: CreateAimDto): Promise<ReachAim> {
+  // We DON'T run Ammo Forge here: the local model is serial, so generating the three
+  // email templates + news brief up front (≈77s) would block the operator's real goal —
+  // the scraping prompt. Ammo Forge is kicked off in the BACKGROUND after the prompt is
+  // authored (see generateScrapePrompt → runAmmoForgeInBackground), so the prompt shows
+  // immediately and templates fill in after via polling. `userId` is threaded into the
+  // linked campaign as its creator.
+  async createAim(
+    orgId: string,
+    dto: CreateAimDto,
+    userId?: string,
+  ): Promise<ReachAim> {
     // Derive the outreach-template placeholders from the niche's Sector instead of raw
     // input: {{Type}} <- first enabled target, {{IndustryFocus}} <- parent industry,
     // {{TenderFocus}} <- niche name. findOrCreate resolves (or seeds) the niche row, which
@@ -277,7 +283,12 @@ export class ReachService {
     let linked = aim;
     if (nicheRow) {
       try {
-        const campaignId = await this.repo.createLinkedCampaign(orgId, nicheRow.id, aim);
+        const campaignId = await this.repo.createLinkedCampaign(
+          orgId,
+          nicheRow.id,
+          aim,
+          userId ?? null,
+        );
         await this.repo.setAimCampaign(orgId, aim.id, campaignId);
         linked = { ...aim, campaignId };
       } catch (err) {
@@ -470,6 +481,25 @@ export class ReachService {
     return this.getBatchState(orgId, aimId);
   }
 
+  // Machine callback: the Lead Satellite agent pushes live per-phase progress as it
+  // sweeps (search → scrape → qualify → load). Best-effort — the repo only writes it
+  // onto a RUNNING aim, so a stray/late tick after the run finished is a no-op. Not
+  // org-scoped: the arsenal token is the trust boundary (mirrors the campaign machine
+  // routes); the aimId is the addressing key.
+  async recordScrapeProgress(
+    aimId: string,
+    progress: { phase: ScrapePhase; current: number; total: number; label: string },
+  ): Promise<{ applied: boolean }> {
+    const applied = await this.repo.updateScrapeProgress(aimId, {
+      phase: progress.phase,
+      current: Math.max(0, Math.floor(progress.current)),
+      total: Math.max(0, Math.floor(progress.total)),
+      label: progress.label.slice(0, 120),
+      updatedAt: new Date().toISOString(),
+    });
+    return { applied };
+  }
+
   // Lead Satellite (ASYNC): a Reach scrape can take many minutes, so we DON'T hold
   // the HTTP request open for it (that's what caused the 5-min "Agent abort"). This
   // returns immediately with the aim marked RUNNING + a server-seeded ETA; the
@@ -484,7 +514,8 @@ export class ReachService {
     // double-click / re-aim never launches a second concurrent run for the same aim.
     if (aim.status === 'RUNNING' && !this.isScrapeStale(aim, timeoutMs)) return aim;
 
-    const etaSeconds = aim.scrapeLastSeconds ?? this.estimateScrapeSeconds(scraper);
+    const etaSeconds =
+      aim.scrapeLastSeconds ?? this.estimateScrapeSeconds(scraper, aim.region);
     const running = (await this.repo.markScrapeStarted(orgId, aimId, etaSeconds)) ?? {
       ...aim,
       status: 'RUNNING' as const,
@@ -548,11 +579,37 @@ export class ReachService {
     }
   }
 
-  // Estimate a scrape's duration (seconds) from the org's Lead Scraper config — a
-  // rough seed for the FIRST run's countdown; later runs use the real last duration.
-  private estimateScrapeSeconds(scraper: { leadTarget: number | null }): number {
+  // Estimate a scrape's duration (seconds) — a seed for the FIRST run's countdown;
+  // later runs use the real last duration. REGION is the dominant factor: "Anywhere"
+  // loops every region of the country (~16+ batches, each its own search+scrape+LLM
+  // qualify pass), a zone (North/South/…) covers a slice, a specific region/city is a
+  // single batch. Ignoring it (the old `60 + target*4`) is why nationwide ETAs were
+  // wildly low. leadTarget scales within a region.
+  private estimateScrapeSeconds(
+    scraper: { leadTarget: number | null },
+    region: string | null | undefined,
+  ): number {
     const target = scraper.leadTarget ?? 100; // matches the satellite's env default
-    return Math.min(7200, Math.max(120, 60 + target * 4));
+    const r = (region ?? '').trim().toLowerCase();
+    const ZONES = [
+      'north',
+      'south',
+      'east',
+      'west',
+      'central',
+      'centre',
+      'center',
+      'northeast',
+      'northwest',
+      'southeast',
+      'southwest',
+    ];
+    const nationwide =
+      r === '' || ['anywhere', 'any', 'nationwide', 'national'].includes(r);
+    const zone = ZONES.includes(r) || r.includes('border');
+    const regionFactor = nationwide ? 6 : zone ? 3 : 1;
+    const base = 120 + target * 2;
+    return Math.min(7200, Math.max(120, Math.round(base * regionFactor)));
   }
 
   // The effective background-scrape timeout (ms): the org's configured value (in
@@ -633,7 +690,16 @@ export class ReachService {
     const orgDefault = await this.repo.getDefaultTemplate(orgId);
     const tmpl = this.templateFor(aim, round, orgDefault);
     if (!tmpl || leads.length === 0) return 0;
-    const signatureImageUrl = await this.repo.getSignatureImageUrl(orgId);
+    // PER-USER sender identity: resolve the user who activated the aim's campaign and
+    // use THEIR signature image + From display name. No org fallback — the signature
+    // image is null when the user has none, and the From name degrades to the user's
+    // own account name, then the product default.
+    const sender = await this.repo.getSendIdentityByCampaign(
+      orgId,
+      aim.campaignId ?? null,
+    );
+    const signatureImageUrl = sender?.signatureImageUrl ?? null;
+    const fromName = sender?.senderName || sender?.name || 'EVERTRUST GmbH';
 
     const { mode, testRecipient, cap } = await this.resolveSendConfig(orgId);
     const targets = mode === 'live' ? leads : leads.slice(0, cap);
@@ -660,7 +726,7 @@ export class ReachService {
           to: recipient,
           subject,
           body,
-          fromName: 'EVERTRUST GmbH',
+          fromName,
           signatureImageUrl,
         });
         delivered++;

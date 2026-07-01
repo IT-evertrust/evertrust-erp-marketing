@@ -109,6 +109,8 @@ export class ProspectsController {
     @Query('createdTo') createdToParam?: string,
     @Query('limit') limitParam?: string,
     @Query('offset') offsetParam?: string,
+    // The Nurture pipeline passes engaged=true to show only prospects who replied.
+    @Query('engaged') engagedParam?: string,
   ): Promise<ProspectListDto> {
     const status = ProspectStatus.safeParse(statusParam);
     const campaignId = z.string().uuid().safeParse(campaignIdParam);
@@ -122,6 +124,7 @@ export class ProspectsController {
       createdTo: parseDate(createdToParam),
       status: status.success ? status.data : undefined,
       q: q || undefined,
+      engagedOnly: engagedParam === 'true',
       limit: Number.isFinite(limit) ? limit : undefined,
       offset: Number.isFinite(offset) ? offset : undefined,
     });

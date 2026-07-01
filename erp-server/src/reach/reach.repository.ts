@@ -25,6 +25,7 @@ import {
   type ReachRound,
   type ReachStats,
   type ReachTemplates,
+  type ScrapeProgress,
   type TrackKind,
 } from './reach.model';
 
@@ -87,6 +88,7 @@ function rowToAim(row: AimRow): ReachAim {
     scrapeError: row.scrapeError ?? null,
     scrapePrompt: row.scrapePrompt ?? null,
     scrapeBatch: row.scrapeBatch ?? 1,
+    scrapeProgress: (row.scrapeProgress as ScrapeProgress | null) ?? null,
     sender: row.sender,
     templates: (row.templates as ReachTemplates | null) ?? null,
     newsBrief: (row.newsBrief as ReachNewsBrief | null) ?? null,
@@ -169,6 +171,7 @@ export class ReachRepository {
     orgId: string,
     nicheId: string,
     aim: ReachAim,
+    activatedBy: string | null = null,
   ): Promise<string> {
     const [row] = await this.db
       .insert(schema.campaigns)
@@ -184,6 +187,9 @@ export class ReachRepository {
         salesCalendarId: aim.salesCalendarId ?? null,
         sender: aim.sender,
         lifecycle: 'ACTIVE',
+        // Stamp the creating user so the send path can resolve their PER-USER sender
+        // identity (no n8n activation path stamps this for Reach campaigns).
+        activatedBy,
       })
       .returning({ id: schema.campaigns.id });
     return row!.id;
@@ -441,6 +447,7 @@ export class ReachRepository {
         scrapeStartedAt: new Date(),
         scrapeEtaSeconds: etaSeconds,
         scrapeError: null, // clear any prior failure reason on a fresh run
+        scrapeProgress: null, // reset live progress; the agent populates it as it runs
         updatedAt: new Date(),
       })
       .where(
@@ -465,6 +472,27 @@ export class ReachRepository {
       )
       .returning();
     return row ? rowToAim(row) : undefined;
+  }
+
+  // Machine route: the agent pushes live per-phase progress mid-scrape. Scoped by
+  // aimId only (the arsenal token is the trust boundary, like the campaign machine
+  // routes) and gated to RUNNING aims so a late/stray tick can't resurrect progress
+  // on a finished run. Returns false when no RUNNING aim matched.
+  async updateScrapeProgress(
+    aimId: string,
+    progress: ScrapeProgress,
+  ): Promise<boolean> {
+    const rows = await this.db
+      .update(schema.reachAims)
+      .set({ scrapeProgress: progress, updatedAt: new Date() })
+      .where(
+        and(
+          eq(schema.reachAims.id, aimId),
+          eq(schema.reachAims.status, 'RUNNING'),
+        ),
+      )
+      .returning({ id: schema.reachAims.id });
+    return rows.length > 0;
   }
 
   async findAims(orgId: string): Promise<ReachAim[]> {
@@ -549,6 +577,7 @@ export class ReachRepository {
           companies: inserted.length,
           status: 'COMPLETED',
           scrapeError: null, // success clears any prior failure reason
+          scrapeProgress: null, // run finished — clear the live progress
           ...(lastSeconds != null ? { scrapeLastSeconds: lastSeconds } : {}),
           updatedAt: new Date(),
         })
@@ -894,6 +923,42 @@ export class ReachRepository {
       .where(eq(schema.orgConfig.organizationId, orgId))
       .limit(1);
     return row?.url ?? null;
+  }
+
+  // The SENDING user's per-user identity for an aim's campaign: join campaigns →
+  // users on campaigns.activated_by and return that user's name + sender name +
+  // signature image. Org-scoped (the campaign must belong to orgId) so it never reads
+  // another tenant's user. Returns null when there is no campaign, no activator, or the
+  // user is gone — the send path then falls back to the user's name / product default
+  // (NO org fallback). The campaign id comes from the aim's FK.
+  async getSendIdentityByCampaign(
+    orgId: string,
+    campaignId: string | null,
+  ): Promise<{
+    name: string;
+    senderName: string | null;
+    signatureImageUrl: string | null;
+  } | null> {
+    if (!campaignId) return null;
+    const [row] = await this.db
+      .select({
+        name: schema.users.name,
+        senderName: schema.users.senderName,
+        signatureImageUrl: schema.users.signatureImageUrl,
+      })
+      .from(schema.campaigns)
+      .innerJoin(
+        schema.users,
+        eq(schema.users.id, schema.campaigns.activatedBy),
+      )
+      .where(
+        and(
+          eq(schema.campaigns.id, campaignId),
+          tenantScope(orgId, schema.campaigns),
+        ),
+      )
+      .limit(1);
+    return row ?? null;
   }
 
   // Set (or clear, with null) the org signature image URL (find-or-creates the row).

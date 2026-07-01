@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { and, asc, desc, eq, isNull, or } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import { schema } from '@evertrust/db';
 import type { CalendarFreeSlotsDto } from '@evertrust/shared';
 import { DB, type DbClient } from '../db/db.tokens';
@@ -269,6 +269,22 @@ const REACH_LEAD_STATUS: Record<string, 'INTERESTED' | 'UNSURE' | 'NOT_INTERESTE
   UNINTERESTED: 'NOT_INTERESTED',
 };
 
+// reply_glock status -> the prospects.status (prospect_status enum) the NURTURE
+// pipeline reads. A reply moves the prospect off cold NEW/EMAILED into the pipeline:
+// INTERESTED → INTERESTED; any other genuine reply (UNSURE/TEMPORARY) → REPLIED ("in
+// conversation"); UNINTERESTED → NOT_INTERESTED (a reply, but not a working deal — so it
+// stays out of the engaged-only board). This is what surfaces a prospect in Nurture only
+// AFTER the client replies.
+const PROSPECT_STATUS_FROM_REPLY: Record<
+  string,
+  'INTERESTED' | 'REPLIED' | 'NOT_INTERESTED'
+> = {
+  INTERESTED: 'INTERESTED',
+  UNSURE: 'REPLIED',
+  TEMPORARY: 'REPLIED',
+  UNINTERESTED: 'NOT_INTERESTED',
+};
+
 interface ThreadMsg {
   id: string;
   threadId: string | null;
@@ -507,6 +523,49 @@ export class EngageRepliesService {
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'unknown error';
         this.logger.warn(`Engage propagate status lead ${leadId} failed: ${msg}`);
+      }
+    }
+
+    // (c) Promote the matching NURTURE prospect off cold NEW/EMAILED into the pipeline
+    // on the FIRST reply (the campaign's mirrored prospect is keyed by campaignId+email).
+    // Only NEW/EMAILED are touched, so we never downgrade a prospect the team has already
+    // advanced (e.g. MEETING_SCHEDULED). Best-effort — a failure never fails the scan.
+    const prospectStatus = PROSPECT_STATUS_FROM_REPLY[status];
+    if (prospectStatus) {
+      try {
+        const [aimRow] = await this.db
+          .select({ campaignId: schema.reachAims.campaignId })
+          .from(schema.reachAims)
+          .where(
+            and(tenantScope(orgId, schema.reachAims), eq(schema.reachAims.id, aimId)),
+          )
+          .limit(1);
+        const [leadRow] = await this.db
+          .select({ email: schema.reachLeads.email })
+          .from(schema.reachLeads)
+          .where(
+            and(
+              tenantScope(orgId, schema.reachLeads),
+              eq(schema.reachLeads.id, leadId),
+            ),
+          )
+          .limit(1);
+        if (aimRow?.campaignId && leadRow?.email) {
+          await this.db
+            .update(schema.prospects)
+            .set({ status: prospectStatus, updatedAt: new Date() })
+            .where(
+              and(
+                tenantScope(orgId, schema.prospects),
+                eq(schema.prospects.campaignId, aimRow.campaignId),
+                eq(schema.prospects.email, leadRow.email),
+                inArray(schema.prospects.status, ['NEW', 'EMAILED']),
+              ),
+            );
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'unknown error';
+        this.logger.warn(`Engage promote prospect (lead ${leadId}) failed: ${msg}`);
       }
     }
   }
@@ -1574,6 +1633,7 @@ export class EngageRepliesService {
     body: string,
     proposedSlot?: { start: string; end: string },
     proposedSlots?: { start: string; end: string }[],
+    userId?: string,
   ) {
     const row = await this.ownedReply(orgId, replyId);
     const lead = (
@@ -1607,11 +1667,34 @@ export class EngageRepliesService {
     const offeredSlots: Slot[] = proposedSlots ?? (proposedSlot ? [proposedSlot] : []);
     const finalBody = await this.stampMeetingTime(orgId, body, offeredSlots);
 
-    const signatureImageUrl = await this.reach.getSignatureImageUrl(orgId);
+    // PER-USER sender identity: resolve the operator who sent this reply and use THEIR
+    // sender name + signature image. No org fallback — the signature image is null when
+    // the user has none, and the From name degrades to the user's own account name, then
+    // the product default (REPLY_FROM_NAME). `userId` is the authenticated operator from
+    // the controller (optional only for back-compat — null resolves to the default).
+    const sender = userId
+      ? (
+          await this.db
+            .select({
+              name: schema.users.name,
+              senderName: schema.users.senderName,
+              signatureImageUrl: schema.users.signatureImageUrl,
+            })
+            .from(schema.users)
+            .where(
+              and(
+                tenantScope(orgId, schema.users),
+                eq(schema.users.id, userId),
+              ),
+            )
+            .limit(1)
+        )[0] ?? null
+      : null;
+    const signatureImageUrl = sender?.signatureImageUrl ?? null;
     const raw = buildRawReply({
       to: lead.email,
       from: access.account.email,
-      fromName: REPLY_FROM_NAME,
+      fromName: sender?.senderName || sender?.name || REPLY_FROM_NAME,
       subject: subject || row.inboundSubject || '(no subject)',
       body: finalBody,
       inReplyTo,

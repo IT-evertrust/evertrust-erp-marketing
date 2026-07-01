@@ -22,7 +22,7 @@ from zoneinfo import ZoneInfo
 from .clients import llm
 from .clients.erp import ErpGateway
 from .clients.search import SearchGateway, UrlFetcher
-from .domain import filters, geo, tender
+from .domain import filters, geo, geodata, icp, tender
 from .domain.models import Segment, build_segments, dedup_leads, leads_to_prospects
 from .domain.scrape import hit_to_lead, queries_for_segment, registrable_domain, scrape_emails
 
@@ -44,18 +44,41 @@ class RunOptions:
     persist: bool = False
     use_llm: bool = True
     max_segments: int | None = None  # cap segments this run (testing / training wheels)
-    # region_focus: a ZONE word ("North"/"South"/"East"/"West"/"Border-DE"…) — a relative part of
-    # the country, NOT a real place. It is never passed to geo.cities_for as a literal (that would
-    # search a garbage term); instead it is fed to the LLM country profiler ("focus on the {zone} of
-    # {country}") and treated like nationwide-within-zone (use the profiler's cities). Empty / None /
-    # "Anywhere" => whole country (the normal nationwide path). Set by the Reach adapter only.
-    region_focus: str | None = None
 
 
-def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetcher: UrlFetcher) -> dict:
+def _structural_company_filter(prospects: list[dict]) -> list[dict]:
+    """Cheap, language-AGNOSTIC safety net: keep only prospects that look like a COMPANY by
+    host + name signals (NO per-language keyword lists). Drops gov/edu TLDs, well-known global
+    platforms (LinkedIn/Wikipedia/Indeed/…) and structural non-companies. Used when the LLM
+    quality stage fails, so a flaky LLM/renderer can never dump the raw, ungated candidate list
+    to the leads sidebar. NOTE: language-specific junk (a local city portal, a person profile on
+    a generic domain) still needs the LLM gate — this is a backstop, not a replacement."""
+    def _is_company(p: dict) -> bool:
+        url = p.get("website", "")
+        if icp.structural_entity(url) is not None:  # gov/edu TLD or a global platform host
+            return False
+        return icp.classify_entity(p.get("companyName", ""), "", url, "") == icp.COMPANY
+
+    return [p for p in prospects if _is_company(p)]
+
+
+def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetcher: UrlFetcher,
+        on_progress=None) -> dict:
     run_id = "wf3-" + datetime.now(ZoneInfo(TZ)).strftime("%Y%m%d%H%M%S")
+    t_run0 = time.time()   # for SCRAPE TIMEOUT (settings.max_runtime_sec) deadline
     mode = "live" if opts.live else "dry"
     result: dict = {"runId": run_id, "mode": mode, "campaignId": opts.campaign_id, "status": "ok"}
+
+    # Live per-phase progress hook (search -> scrape -> qualify -> load). The caller (the
+    # Reach adapter) wires this to POST progress to the ERP so the UI shows a REAL countdown
+    # per process. ALWAYS best-effort: a progress failure must never break or slow a scrape.
+    def _progress(phase: str, current: int, total: int, label: str) -> None:
+        if on_progress is None:
+            return
+        try:
+            on_progress(phase, int(current), int(total), str(label))
+        except Exception:
+            pass
 
     if not opts.campaign_id:
         return {**result, "status": "error", "error": "campaignId is required"}
@@ -80,18 +103,12 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
     # keywords (local script + English). There are NO hardcoded country tables — discovery + the
     # niche gate work in the country's own language and find native-named firms. Needs a capable
     # model; with no LLM the run degrades to the country name as a single geo term.
-    # A ZONE focus ("North"/"South"/…) narrows the profiler to a part of the country; it is NOT a
-    # real place name, so it never reaches geo.cities_for as a literal. Empty / "Anywhere" => whole
-    # country. The zone is resolved by the LLM profiler (which returns real cities in that zone).
-    zone_focus = (opts.region_focus or "").strip()
-    if zone_focus and geo.is_nationwide(zone_focus):
-        zone_focus = ""
-    profile = (
-        llm.profile_country(settings, cfg.country, cfg.niche, cfg.industry, region_focus=zone_focus)
-        if (opts.use_llm and settings.llm_base_url) else {}
-    )
-    if zone_focus:
-        result["regionFocus"] = zone_focus
+    # An AIM zone (North/South/.../Central or a near-border zone) restricts the profiler to that
+    # zone's regions; "Anywhere" / a specific city list pass zone="" (whole country / verbatim).
+    zone = cfg.region if geo.is_zone(cfg.region) else ""
+    profile = llm.profile_country(settings, cfg.country, cfg.niche, cfg.industry,
+                                  want_cities=settings.profile_max_cities,
+                                  zone=zone) if (opts.use_llm and settings.llm_base_url) else {}
     iso2 = (profile.get("iso2") or "").lower()
     market_tld = ("." + iso2) if iso2 else ""
     if profile:
@@ -132,26 +149,24 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
     # 2) REGION BATCHES — "Anywhere" loops EVERY region of the AIM country (count = whatever the
     #    country has: 16 / 28 / 63…), one batch at a time with a cooldown, so each region gets its own
     #    query budget and the search backend isn't overloaded. A specific region/city list = 1 batch.
-    # A ZONE focus is "nationwide within the zone": the profiler already returned only the zone's
-    # cities, so use the profiler geography exactly as we do for "Anywhere" (never expand the zone
-    # word as a literal via cities_for).
-    use_profile_geo = geo.is_nationwide(cfg.region) or bool(zone_focus)
     region_batches = []
-    if use_profile_geo:
-        if profile.get("regions"):     # model gave real regions -> use them
+    # NATIONWIDE geography: prefer the LOCAL GeoNames dataset (real, complete, population-ranked
+    # cities per region) over the LLM profiler's guessed/capped list. Zones (North/South/…) stay on
+    # the profiler — it's zone-aware and geodata has no zone map. Country not in the dataset -> profiler.
+    if geo.is_nationwide(cfg.region) and geodata.has_country(cfg.country):
+        region_batches = geodata.region_batches(
+            cfg.country, min_pop=settings.geo_min_pop, per_region_limit=settings.profile_max_cities)
+        if region_batches:
+            result["geoSource"] = "geonames"
+    if not region_batches and (geo.is_nationwide(cfg.region) or geo.is_zone(cfg.region)):
+        if profile.get("regions"):     # model gave real regions (zone-filtered if a zone) -> use them
             region_batches = [(str(r.get("name") or f"region {i + 1}"), list(r.get("cities") or []))
                               for i, r in enumerate(profile["regions"]) if r.get("cities")]
         elif profile.get("cities"):    # flat city list -> chunk into batches (reliable + still looped)
             cs, n = profile["cities"], max(1, settings.region_chunk)
             region_batches = [(f"batch {i // n + 1}", cs[i:i + n]) for i in range(0, len(cs), n)]
     if not region_batches:
-        if use_profile_geo:
-            # Anywhere / zone with no profiler geography (no LLM, or it failed): degrade to the
-            # country as a single geo term. NEVER pass a zone word ("North") to cities_for — it
-            # would be searched as a literal place. The zone already steered the (skipped) profiler.
-            cities0 = [country] if country else []
-        else:
-            cities0 = geo.cities_for(cfg.country, cfg.region, cfg.default_regions) or ([country] if country else [])
+        cities0 = geo.cities_for(cfg.country, cfg.region, cfg.default_regions) or ([country] if country else [])
         region_batches = [("all", cities0)]
     # max_regions caps how many region batches one run sweeps (bounds time + SearXNG load). 0 = no
     # cap = cover EVERY region the country has (paired with the per-region cooldown so it stays kind
@@ -213,8 +228,21 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
     hits_total = dropped_blocked = dropped_offniche = queries_run = regions_scanned = 0
     # Anywhere/nationwide + exhaust flag: keep sweeping ALL regions for full coverage instead of
     # stopping once lead_target is hit (a specific region/city list is one batch, unaffected).
-    exhaust = use_profile_geo and settings.exhaust_anywhere_regions
-    for _rname, rcities in region_batches:
+    exhaust = (geo.is_nationwide(cfg.region) or geo.is_zone(cfg.region)) and settings.exhaust_anywhere_regions
+    deadline = (t_run0 + settings.max_runtime_sec) if settings.max_runtime_sec else None
+    n_regions = len(region_batches)
+    for _ri, (_rname, rcities) in enumerate(region_batches):
+        # SEARCH BUDGET (max_queries) + SCRAPE TIMEOUT (max_runtime_sec): hard global caps so the
+        # Config-page knobs actually bound the run. Checked at region boundaries (per-region budget
+        # may overshoot by at most one region's queries_per_region).
+        if settings.max_queries and queries_run >= settings.max_queries:
+            break
+        if deadline and time.time() >= deadline:
+            result["stoppedBy"] = "timeout"
+            break
+        # Live progress: which region we're sweeping (the long phase for nationwide runs).
+        _label = (str(_rname) if n_regions > 1 else "Searching & scraping")
+        _progress("search", _ri, n_regions, f"{_label} ({_ri + 1}/{n_regions})" if n_regions > 1 else _label)
         segs, lm, ht, blk, off, nq = _discover(rcities)
         all_segments.extend(segs)
         for k, v in lm.items():
@@ -225,6 +253,8 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
         queries_run += nq
         regions_scanned += 1
         if len(pool) >= settings.lead_target and not exhaust:
+            break
+        if settings.max_queries and queries_run >= settings.max_queries:
             break
         if len(region_batches) > 1 and regions_scanned < len(region_batches) and settings.region_cooldown > 0:
             time.sleep(settings.region_cooldown)
@@ -244,10 +274,23 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
 
     # FALLBACK when discovery found nothing (offline tests, or a dead backend).
     if hits_total == 0:
+        # A CONFIGURED SearXNG that returned nothing = rate-limited / unreachable. Do NOT fabricate
+        # leads via the LLM (the whole V2 point is real search -> real sites) — surface it honestly
+        # so the caller retries later (or restarts SearXNG). This also avoids a storm of slow 32B
+        # research_leads calls (one per segment) that could time out and kill the run.
+        if settings.searxng_url and not getattr(search, "offline", False):
+            return {**result, "status": "search_unavailable", "leadsFound": 0, "rawCandidates": 0,
+                    "prospects": 0, "verified": 0, "posted": False,
+                    "buzzwords": result.get("buzzwords", 0),
+                    "error": "SearXNG returned no results (the search engine is likely rate-limited "
+                             "or down); retry later, restart SearXNG, or widen SEARXNG_ENGINES"}
         if opts.use_llm and settings.llm_base_url:
             leads = []
             for seg in all_segments:
-                leads.extend(llm.research_leads(settings, seg, search))
+                try:                                  # a single segment's LLM timeout must not kill the run
+                    leads.extend(llm.research_leads(settings, seg, search))
+                except Exception:
+                    continue
         elif getattr(search, "offline", False):
             leads = []
             for seg in all_segments:
@@ -320,6 +363,9 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
     if opts.use_llm and settings.llm_base_url:
         from .clients.render import PlaywrightRenderer
         from .refine import refine_prospects
+        # The LLM niche-gate over every candidate — the second-longest phase. Total is the
+        # raw candidate count we're about to qualify.
+        _progress("qualify", 0, len(prospects), f"Qualifying {len(prospects)} companies")
         renderer = PlaywrightRenderer()
         try:
             ref = refine_prospects(
@@ -332,6 +378,12 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
             result["excludedByQualify"] = ref["excluded"]
         except Exception as e:  # noqa: BLE001 — never let the quality stage abort a run
             result["qualifyError"] = str(e)[:200]
+            # SAFETY NET: the LLM/render quality stage failed — but do NOT fall back to the
+            # raw, ungated candidate list (that's how article / city-portal / directory /
+            # person junk leaks through, e.g. "chmura"=cloud matching people named Chmura).
+            kept = _structural_company_filter(prospects)
+            result["qualifyFallbackDropped"] = len(prospects) - len(kept)
+            prospects = kept
         finally:
             renderer.close()
 
@@ -353,6 +405,8 @@ def run(settings, opts: RunOptions, erp: ErpGateway, search: SearchGateway, fetc
     # email, and the prospects table is the outreach queue. The full ranked list (incl. no-email)
     # is still returned to the UI via result["leads"].
     if opts.persist:
+        # Final phase: saving the qualified leads (+ mirroring to prospects on the ERP side).
+        _progress("load", 0, len(prospects), f"Saving {len(prospects)} leads")
         postable = [{k: p[k] for k in _PROSPECT_FIELDS if k in p and p[k] not in (None, "")}
                     for p in prospects if p.get("email")]
         result["postable"] = len(postable)

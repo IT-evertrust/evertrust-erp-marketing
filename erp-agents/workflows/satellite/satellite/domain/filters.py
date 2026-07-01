@@ -57,6 +57,10 @@ NICHE_BLOCK = (
     # news / blogs / tech media (English) + the job board & directory flagged earlier
     "mspoweruser", "techcrunch", "thenextweb", "venturebeat", "/blog/", "blog.", "wyborcza",
     "gowork", "firmania",
+    # NOTE: per the 2026-06-26 multi-country rework we DO NOT keep growing per-language keyword
+    # blocks (a German list never helps Poland/Hungary/VN). Off-niche / non-company / physical-vs-
+    # cyber distinctions are now the LANGUAGE-AGNOSTIC LLM classifier's job (clients/llm.classify_company
+    # -> nicheFit 'none' -> qualify EXCLUDE). This blocklist stays a thin, mostly-domain pre-filter.
 )
 
 

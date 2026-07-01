@@ -179,6 +179,7 @@ export function useReach() {
         ? {
             startedAt: selectedCampaign.scrapeStartedAt,
             etaSeconds: selectedCampaign.scrapeEtaSeconds ?? 0,
+            progress: selectedCampaign.scrapeProgress ?? null,
           }
         : null,
     [selectedCampaign],

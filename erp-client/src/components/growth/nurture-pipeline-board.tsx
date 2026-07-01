@@ -30,7 +30,7 @@ import {
   useUpdateProspectCard,
   useDeleteProspect,
 } from '@/hooks/use-prospects';
-import { useNicheTargets } from '@/hooks/use-niche-targets';
+import { useNiches } from '@/hooks/use-niches';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -71,16 +71,16 @@ export function NurturePipelineBoard({
   campaigns,
   campaignId,
   onCampaignChange,
-  nicheId,
 }: {
   campaigns: CampaignDto[];
   campaignId: string;
   onCampaignChange: (id: string) => void;
-  nicheId: string | null;
 }) {
   const t = useTranslations('nurture');
   const [search, setSearch] = useState('');
-  const [nicheTargetId, setNicheTargetId] = useState<string>(ALL);
+  // Selected sector niche NAME ('all' = no niche filter). Sourced from the org's
+  // niche catalog (sector DB) and applied client-side over the fetched board.
+  const [nicheName, setNicheName] = useState<string>(ALL);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
@@ -89,7 +89,7 @@ export function NurturePipelineBoard({
   // deal). Consumed once by that card's editor, then cleared.
   const [focusId, setFocusId] = useState<string | null>(null);
 
-  const targetsQ = useNicheTargets(nicheId, !!nicheId);
+  const nichesQ = useNiches();
   const setStage = useUpdateProspectStage();
   const updateDeal = useUpdateProspectDeal();
   const createCard = useCreateProspectCard();
@@ -99,13 +99,26 @@ export function NurturePipelineBoard({
   const q = useProspectsBoard({
     campaignId,
     q: search || undefined,
-    nicheTargetId: nicheTargetId === ALL ? undefined : nicheTargetId,
     createdFrom: from ? `${from}T00:00:00.000Z` : undefined,
     createdTo: to ? `${to}T23:59:59.999Z` : undefined,
+    // The Nurture pipeline only holds prospects who replied (engaged) — cold scraped
+    // leads stay out until the client responds.
+    engagedOnly: true,
     limit: 500,
   });
 
   const items = useMemo(() => q.data?.items ?? [], [q.data]);
+  // The board read has no niche-name param, so narrow the fetched cards to the
+  // chosen sector niche client-side (matching each prospect's resolved niche name).
+  const visibleItems = useMemo(
+    () =>
+      nicheName === ALL
+        ? items
+        : items.filter(
+            (p) => ((p.niche ?? p.nicheTargetName)?.trim() ?? '') === nicheName,
+          ),
+    [items, nicheName],
+  );
   const byStage = useMemo(() => {
     const map: Record<PipelineStage, ProspectDto[]> = {
       INTEREST: [],
@@ -115,9 +128,9 @@ export function NurturePipelineBoard({
       WON: [],
       LOST: [],
     };
-    for (const p of items) map[p.pipelineStage].push(p);
+    for (const p of visibleItems) map[p.pipelineStage].push(p);
     return map;
-  }, [items]);
+  }, [visibleItems]);
 
   // Per-column € total: sum each stage's cards' dealValue, computed client-side from
   // the grouped cards already in the board.
@@ -129,7 +142,9 @@ export function NurturePipelineBoard({
     return map;
   }, [byStage]);
 
-  const counts = q.data?.stageCounts ?? {};
+  // Server per-stage totals when unfiltered; while a niche filter is active the
+  // column headers fall back to the visible (filtered) counts (see the board map).
+  const counts = nicheName === ALL ? (q.data?.stageCounts ?? {}) : {};
   const activeCard = useMemo(
     () => items.find((p) => p.id === activeId) ?? null,
     [items, activeId],
@@ -226,8 +241,8 @@ export function NurturePipelineBoard({
             ))}
           </SelectContent>
         </Select>
-        {nicheId ? (
-          <Select value={nicheTargetId} onValueChange={setNicheTargetId}>
+        {(nichesQ.data?.length ?? 0) > 0 ? (
+          <Select value={nicheName} onValueChange={setNicheName}>
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder={t('pipeline.filters.allNiches')} />
             </SelectTrigger>
@@ -235,9 +250,9 @@ export function NurturePipelineBoard({
               <SelectItem value={ALL}>
                 {t('pipeline.filters.allNiches')}
               </SelectItem>
-              {(targetsQ.data ?? []).map((nt) => (
-                <SelectItem key={nt.id} value={nt.id}>
-                  {nt.name}
+              {(nichesQ.data ?? []).map((n) => (
+                <SelectItem key={n.id} value={n.name}>
+                  {n.name}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -270,12 +285,12 @@ export function NurturePipelineBoard({
             className="w-[150px]"
           />
         </label>
-        {(search || nicheTargetId !== ALL || from || to) && (
+        {(search || nicheName !== ALL || from || to) && (
           <button
             type="button"
             onClick={() => {
               setSearch('');
-              setNicheTargetId(ALL);
+              setNicheName(ALL);
               setFrom('');
               setTo('');
             }}

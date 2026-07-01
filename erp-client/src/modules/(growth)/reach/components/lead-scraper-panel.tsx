@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui/button';
 import { GrowthCard, StatusPill } from '../../shared';
 
-import type { Campaign, Lead } from '../types';
+import type { Campaign, Lead, ScrapeProgress } from '../types';
 import { BatchDialog } from './batch-dialog';
 import { CampaignTable } from './campaign-table';
 import { ScrapeCountdown } from './scrape-countdown';
@@ -22,7 +22,11 @@ type LeadScraperPanelProps = {
   loadingCampaigns?: boolean;
   loadingLeads?: boolean;
   // The selected campaign's in-flight scrape (server-seeded), or null when idle.
-  scrape?: { startedAt: string; etaSeconds: number } | null;
+  scrape?: {
+    startedAt: string;
+    etaSeconds: number;
+    progress?: ScrapeProgress | null;
+  } | null;
   // The reason the selected campaign's last scrape failed, or null.
   scrapeError?: string | null;
   // The selected campaign's generated base prompt (null until generated) — gates the
@@ -185,6 +189,7 @@ export function LeadScraperPanel({
           <ScrapeCountdown
             startedAt={scrape.startedAt}
             etaSeconds={scrape.etaSeconds}
+            progress={scrape.progress ?? null}
           />
         ) : loadingLeads ? (
           <Spinner label={t('scraper.loadingLeads')} />

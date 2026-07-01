@@ -7,7 +7,12 @@ import {
   useQueryClient,
   type QueryClient,
 } from '@tanstack/react-query';
-import type { LoginResponseDto, MeDto, UpdateMyNameDto } from '@evertrust/shared';
+import type {
+  LoginResponseDto,
+  MeDto,
+  UpdateMyNameDto,
+  UpdateMySenderIdentityDto,
+} from '@evertrust/shared';
 import { ApiError, api } from '@/lib/api';
 import { getLandingPath } from '@/lib/preferences';
 import { queryKeys } from '@/lib/query-keys';
@@ -86,6 +91,55 @@ export function useUpdateMyName() {
     mutationFn: (input) => api.updateMyName(input),
     onSuccess: (user) => {
       queryClient.setQueryData(queryKeys.me, user);
+    },
+  });
+}
+
+// The signature-image endpoints return only the resolved URL, so we invalidate the
+// `me` query (rather than seed it) to pull the freshly-stored signatureImageUrl.
+type SignatureImageResult = { signatureImageUrl: string | null };
+
+// PER-USER sender identity: PATCH the current user's own sender name + signature text.
+// The API returns the fresh MeDto, so seed the cache directly (no refetch).
+export function useUpdateMySenderIdentity() {
+  const queryClient = useQueryClient();
+  return useMutation<MeDto, ApiError, UpdateMySenderIdentityDto>({
+    mutationFn: (input) => api.users.updateMySenderIdentity(input),
+    onSuccess: (user) => {
+      queryClient.setQueryData(queryKeys.me, user);
+    },
+  });
+}
+
+// Upload the current user's signature image file (multipart → POST).
+export function useUploadMySignatureImage() {
+  const queryClient = useQueryClient();
+  return useMutation<SignatureImageResult, ApiError, File>({
+    mutationFn: (file) => api.users.uploadMySignatureImage(file),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.me });
+    },
+  });
+}
+
+// Point the current user's signature image at a pasted URL / Drive share link.
+export function useSetMySignatureImageUrl() {
+  const queryClient = useQueryClient();
+  return useMutation<SignatureImageResult, ApiError, string>({
+    mutationFn: (url) => api.users.setMySignatureImageUrl(url),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.me });
+    },
+  });
+}
+
+// Clear the current user's signature image (DELETE).
+export function useClearMySignatureImage() {
+  const queryClient = useQueryClient();
+  return useMutation<SignatureImageResult, ApiError, void>({
+    mutationFn: () => api.users.clearMySignatureImage(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.me });
     },
   });
 }

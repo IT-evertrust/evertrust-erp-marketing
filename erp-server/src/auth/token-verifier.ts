@@ -9,6 +9,10 @@ export interface VerifiedGoogleUser {
   email: string;
   emailVerified: boolean;
   name: string;
+  // Google's stable account id (`sub` claim). Present from the code-flow decode
+  // (used to key the connected mailbox); optional because the One-Tap verifier path
+  // doesn't need it.
+  sub?: string;
 }
 
 // Abstraction over Google ID-token verification so the auth service depends on

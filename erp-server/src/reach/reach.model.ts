@@ -44,6 +44,16 @@ export const EMPTY_STATS: ReachStats = {
   final: { ...EMPTY_ROUND_STATS },
 };
 
+// Live per-phase scrape progress (pushed by the Lead Satellite agent during a run).
+export type ScrapePhase = 'search' | 'scrape' | 'qualify' | 'load';
+export type ScrapeProgress = {
+  phase: ScrapePhase;
+  current: number;
+  total: number;
+  label: string;
+  updatedAt: string;
+};
+
 export type ReachAim = {
   id: string;
   name: string;
@@ -82,6 +92,9 @@ export type ReachAim = {
   scrapePrompt: string | null;
   // Which batch of the 4-batch dedup sweep this campaign is on (1..4).
   scrapeBatch: number;
+  // Live per-phase progress pushed by the agent during a run (search → scrape →
+  // qualify → load). Null when idle. Drives the per-process countdown in the UI.
+  scrapeProgress: ScrapeProgress | null;
   // Which mailbox the campaign sends from (info | hanna).
   sender: string;
   // Ammo Forge output (null until generated). getAims overrides this with the org
