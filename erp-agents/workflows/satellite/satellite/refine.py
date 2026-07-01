@@ -95,9 +95,10 @@ def refine_prospects(prospects, *, settings, fetcher, renderer=None, niche, coun
     icp = build_icp(niche, country, buzz=buzz)
     classifier = make_classifier(settings, niche, country)
     workers = max(1, getattr(settings, "scrape_workers", 10))
+    min_keep = int(getattr(settings, "min_keep_score", 40))
 
     buckets = qualify(prospects, fetcher, icp, country=country, niche=niche, market_tld=market_tld,
-                      workers=workers, classifier=classifier)
+                      workers=workers, classifier=classifier, min_keep_score=min_keep)
 
     # Hub expansion: mine member companies out of on-niche directory/association pages.
     seen = {registrable_domain(p.get("website", "")) for k in buckets for p in buckets[k]}
@@ -111,7 +112,8 @@ def refine_prospects(prospects, *, settings, fetcher, renderer=None, niche, coun
         hub_prospects = leads_to_prospects(hub_leads)
         n_hub_companies = len(hub_prospects)
         hub_buckets = qualify(hub_prospects, fetcher, icp, country=country, niche=niche,
-                              market_tld=market_tld, workers=workers, classifier=classifier)
+                              market_tld=market_tld, workers=workers, classifier=classifier,
+                              min_keep_score=min_keep)
         for k in buckets:
             buckets[k].extend(hub_buckets.get(k, []))
 

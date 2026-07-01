@@ -25,10 +25,16 @@ class UrlFetcher(Protocol):
 
 
 class SearxngClient:
-    def __init__(self, base_url: str, api_key: str = "", timeout: float = 30.0) -> None:
+    def __init__(self, base_url: str, api_key: str = "", timeout: float = 30.0,
+                 engines: str = "") -> None:
         import httpx
 
         self._base = base_url.rstrip("/")
+        # Pin the SearXNG engines for every query. Many instances DISABLE strong web engines
+        # (e.g. google) by default and leave a noisy mix that returns off-topic junk; naming the
+        # engines explicitly enables a disabled one for the request and stops weak engines from
+        # dominating. Comma-separated SearXNG engine names; empty = use the instance default.
+        self._engines = (engines or "").strip()
         # The searxng-auth Caddy proxy gates requests on this header (= SEARXNG_API_KEY).
         headers = {"X-Search-Key": api_key} if api_key else {}
         self._http = httpx.Client(timeout=timeout, headers=headers)
@@ -44,6 +50,8 @@ class SearxngClient:
             params["pageno"] = pageno
         if language:
             params["language"] = language
+        if self._engines:
+            params["engines"] = self._engines
         r = self._http.get(self._base + "/search", params=params)
         r.raise_for_status()
         data = r.json()
@@ -126,8 +134,8 @@ class WebSearch:
     page from quietly displacing SearXNG results. Either way the caller gets [{title,url,content}]."""
 
     def __init__(self, searxng_url: str = "", searxng_api_key: str = "", pages: int = 1,
-                 enable_ddg: bool = False) -> None:
-        self._searx = SearxngClient(searxng_url, searxng_api_key) if searxng_url else None
+                 enable_ddg: bool = False, engines: str = "") -> None:
+        self._searx = SearxngClient(searxng_url, searxng_api_key, engines=engines) if searxng_url else None
         # Build DDG only when explicitly enabled, or when there's no SearXNG to fall back from.
         self._ddg = DuckDuckGoSearch(pages=pages) if (enable_ddg or self._searx is None) else None
 

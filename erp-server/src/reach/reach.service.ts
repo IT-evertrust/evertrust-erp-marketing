@@ -25,6 +25,7 @@ import type {
   ReachNewsBrief,
   ReachRound,
   ReachTemplates,
+  ScrapePhase,
   TrackKind,
 } from './reach.model';
 
@@ -239,13 +240,14 @@ export class ReachService {
     };
   }
 
-  // AIM: create the campaign row (config.json = the input fields) and return FAST.
-  // We DON'T run Ammo Forge here anymore: the local model is serial, so generating the
-  // three email templates + news brief up front (≈77s) would block the operator's real
-  // goal — the scraping prompt. Ammo Forge is instead kicked off in the BACKGROUND after
-  // the prompt is authored (see generateScrapePrompt → runAmmoForgeInBackground), so the
-  // prompt shows immediately and templates fill in after via polling.
-  async createAim(orgId: string, dto: CreateAimDto): Promise<ReachAim> {
+  // AIM: create the campaign row (config.json = the input fields), then run Ammo
+  // Forge to generate the three templates + the news brief and store them. If the
+  // agent is unreachable the aim is still created (DRAFT) so it can be regenerated.
+  async createAim(
+    orgId: string,
+    dto: CreateAimDto,
+    userId?: string,
+  ): Promise<ReachAim> {
     // Derive the outreach-template placeholders from the niche's Sector instead of raw
     // input: {{Type}} <- first enabled target, {{IndustryFocus}} <- parent industry,
     // {{TenderFocus}} <- niche name. findOrCreate resolves (or seeds) the niche row, which
@@ -277,7 +279,12 @@ export class ReachService {
     let linked = aim;
     if (nicheRow) {
       try {
-        const campaignId = await this.repo.createLinkedCampaign(orgId, nicheRow.id, aim);
+        const campaignId = await this.repo.createLinkedCampaign(
+          orgId,
+          nicheRow.id,
+          aim,
+          userId ?? null,
+        );
         await this.repo.setAimCampaign(orgId, aim.id, campaignId);
         linked = { ...aim, campaignId };
       } catch (err) {
@@ -360,114 +367,23 @@ export class ReachService {
     return aim;
   }
 
-  // Permanently delete a campaign (aim): removes the aim + its leads/sends (cascade), and
-  // best-effort the linked bridge campaign + its prospects. 404 if the aim doesn't exist.
-  async deleteAim(orgId: string, aimId: string): Promise<{ ok: true }> {
-    await this.getAim(orgId, aimId); // 404 if missing / not this org
-    const campaignId = await this.repo.deleteAim(orgId, aimId);
-    if (campaignId) {
-      await this.repo.deleteLinkedCampaign(orgId, campaignId).catch((err) =>
-        this.logger.warn(
-          `Deleted aim ${aimId} but could not remove its linked campaign ${campaignId}: ${err instanceof Error ? err.message : 'error'}`,
-        ),
-      );
-    }
-    return { ok: true };
-  }
-
-  // Generate Prompt (replaces the old scrape trigger): the local model (hermes/qwen via
-  // reach.prompt_forge) takes this aim's config and AUTHORS an in-depth OpenAI lead-
-  // scraping prompt, scoped to the AIM fields. The only output is the prompt string,
-  // which we persist on the aim and return. No web search / scraping / lead writes happen
-  // — the operator copies the prompt into OpenAI to run the scrape.
-  async generateScrapePrompt(orgId: string, aimId: string): Promise<ReachAim> {
-    const aim = await this.getAim(orgId, aimId);
-    const config = await this.buildAgentConfig(orgId, aim);
-    const result = await this.agent.run('reach.prompt_forge', {
-      campaign_id: aim.id,
-      config,
-    });
-    const prompt = asString(result.output.prompt);
-    if (!prompt) {
-      throw new UnprocessableEntityException(
-        'The model did not return a prompt — check the local model gateway and try again.',
-      );
-    }
-    const updated = await this.repo.setScrapePrompt(orgId, aim.id, prompt);
-    const finalAim = updated ?? { ...aim, scrapePrompt: prompt };
-    // Prompt is done and about to be returned — NOW kick off template generation in the
-    // background (the local model is serial, so this runs after the prompt, not before).
-    // Only on the first prompt (no templates yet) so re-generating a prompt won't redo it.
-    if (!finalAim.templates && finalAim.status !== 'READY') {
-      void this.runAmmoForgeInBackground(orgId, finalAim);
-    }
-    return finalAim;
-  }
-
-  // ---- 4-batch dedup sweep ----
-
-  // The current batch state for a campaign: which batch (1..4), the prompt to run for it
-  // (base + the accumulated "Previously Collected Companies" exclusion block), how many
-  // companies have been collected, and whether the sweep is finished.
-  async getBatchState(orgId: string, aimId: string): Promise<ReachBatchState> {
-    const aim = await this.getAim(orgId, aimId);
-    const companies = await this.repo.getCollectedCompanies(orgId, aimId);
-    const done = aim.scrapeBatch > REACH_TOTAL_BATCHES;
-    const base = aim.scrapePrompt;
-    return {
-      batch: aim.scrapeBatch,
-      totalBatches: REACH_TOTAL_BATCHES,
-      batchSize: REACH_BATCH_SIZE,
-      prompt: done || !base ? null : buildBatchPrompt(base, companies),
-      collectedCount: companies.length,
-      done,
-    };
-  }
-
-  // Ingest one batch's pasted JSON: sanitize → append (deduped) to reach_leads → mirror
-  // the email-bearing leads into the campaign's prospects → advance the batch, and return
-  // the NEXT batch's state (its prompt now carries the enlarged exclusion list). This is
-  // the round-trip step that both saves the leads and drives dedup across the sweep.
-  async ingestBatchResults(
-    orgId: string,
+  // Machine callback: the Lead Satellite agent pushes live per-phase progress as it
+  // sweeps (search → scrape → qualify → load). Best-effort — the repo only writes it
+  // onto a RUNNING aim, so a stray/late tick after the run finished is a no-op. Not
+  // org-scoped: the arsenal token is the trust boundary (mirrors the campaign machine
+  // routes); the aimId is the addressing key.
+  async recordScrapeProgress(
     aimId: string,
-    body: unknown,
-  ): Promise<ReachBatchState> {
-    const aim = await this.getAim(orgId, aimId);
-    if (aim.scrapeBatch > REACH_TOTAL_BATCHES) {
-      throw new UnprocessableEntityException(
-        'All batches for this campaign are already complete.',
-      );
-    }
-    const leads = sanitizeLeads(extractLeadsPayload(body));
-    if (leads.length === 0) {
-      throw new UnprocessableEntityException(
-        'No leads found in the pasted output — expected JSON like {"leads": [ { "company": … } ]}.',
-      );
-    }
-    const { saved } = await this.repo.appendLeads(orgId, aimId, leads);
-    if (aim.campaignId) {
-      await this.repo
-        .mirrorLeadsToProspects(orgId, aim.campaignId, leads, aim.country ?? null)
-        .catch((err) =>
-          this.logger.warn(
-            `Mirror batch leads→prospects failed for aim ${aimId}: ${err instanceof Error ? err.message : 'error'}`,
-          ),
-        );
-    }
-    const nextBatch = aim.scrapeBatch + 1;
-    await this.repo.setScrapeBatch(orgId, aimId, nextBatch);
-    // Ammo Forge runs ALONGSIDE the lead scraping: if the email templates aren't ready
-    // yet, kick off generation in the background now (fire-and-forget) so it proceeds in
-    // parallel with the operator's batch round-trip. Guarded so it never re-runs once the
-    // templates exist (the aim flips to READY when Ammo Forge finishes).
-    if (!aim.templates && aim.status !== 'READY') {
-      void this.runAmmoForgeInBackground(orgId, aim);
-    }
-    this.logger.log(
-      `Reach batch ${aim.scrapeBatch}/${REACH_TOTAL_BATCHES} ingested for aim ${aimId}: ${saved} new lead(s), advancing to batch ${nextBatch}`,
-    );
-    return this.getBatchState(orgId, aimId);
+    progress: { phase: ScrapePhase; current: number; total: number; label: string },
+  ): Promise<{ applied: boolean }> {
+    const applied = await this.repo.updateScrapeProgress(aimId, {
+      phase: progress.phase,
+      current: Math.max(0, Math.floor(progress.current)),
+      total: Math.max(0, Math.floor(progress.total)),
+      label: progress.label.slice(0, 120),
+      updatedAt: new Date().toISOString(),
+    });
+    return { applied };
   }
 
   // Lead Satellite (ASYNC): a Reach scrape can take many minutes, so we DON'T hold
@@ -484,7 +400,8 @@ export class ReachService {
     // double-click / re-aim never launches a second concurrent run for the same aim.
     if (aim.status === 'RUNNING' && !this.isScrapeStale(aim, timeoutMs)) return aim;
 
-    const etaSeconds = aim.scrapeLastSeconds ?? this.estimateScrapeSeconds(scraper);
+    const etaSeconds =
+      aim.scrapeLastSeconds ?? this.estimateScrapeSeconds(scraper, aim.region);
     const running = (await this.repo.markScrapeStarted(orgId, aimId, etaSeconds)) ?? {
       ...aim,
       status: 'RUNNING' as const,
@@ -548,11 +465,37 @@ export class ReachService {
     }
   }
 
-  // Estimate a scrape's duration (seconds) from the org's Lead Scraper config — a
-  // rough seed for the FIRST run's countdown; later runs use the real last duration.
-  private estimateScrapeSeconds(scraper: { leadTarget: number | null }): number {
+  // Estimate a scrape's duration (seconds) — a seed for the FIRST run's countdown;
+  // later runs use the real last duration. REGION is the dominant factor: "Anywhere"
+  // loops every region of the country (~16+ batches, each its own search+scrape+LLM
+  // qualify pass), a zone (North/South/…) covers a slice, a specific region/city is a
+  // single batch. Ignoring it (the old `60 + target*4`) is why nationwide ETAs were
+  // wildly low. leadTarget scales within a region.
+  private estimateScrapeSeconds(
+    scraper: { leadTarget: number | null },
+    region: string | null | undefined,
+  ): number {
     const target = scraper.leadTarget ?? 100; // matches the satellite's env default
-    return Math.min(7200, Math.max(120, 60 + target * 4));
+    const r = (region ?? '').trim().toLowerCase();
+    const ZONES = [
+      'north',
+      'south',
+      'east',
+      'west',
+      'central',
+      'centre',
+      'center',
+      'northeast',
+      'northwest',
+      'southeast',
+      'southwest',
+    ];
+    const nationwide =
+      r === '' || ['anywhere', 'any', 'nationwide', 'national'].includes(r);
+    const zone = ZONES.includes(r) || r.includes('border');
+    const regionFactor = nationwide ? 6 : zone ? 3 : 1;
+    const base = 120 + target * 2;
+    return Math.min(7200, Math.max(120, Math.round(base * regionFactor)));
   }
 
   // The effective background-scrape timeout (ms): the org's configured value (in
@@ -633,7 +576,16 @@ export class ReachService {
     const orgDefault = await this.repo.getDefaultTemplate(orgId);
     const tmpl = this.templateFor(aim, round, orgDefault);
     if (!tmpl || leads.length === 0) return 0;
-    const signatureImageUrl = await this.repo.getSignatureImageUrl(orgId);
+    // PER-USER sender identity: resolve the user who activated the aim's campaign and
+    // use THEIR signature image + From display name. No org fallback — the signature
+    // image is null when the user has none, and the From name degrades to the user's
+    // own account name, then the product default.
+    const sender = await this.repo.getSendIdentityByCampaign(
+      orgId,
+      aim.campaignId ?? null,
+    );
+    const signatureImageUrl = sender?.signatureImageUrl ?? null;
+    const fromName = sender?.senderName || sender?.name || 'EVERTRUST GmbH';
 
     const { mode, testRecipient, cap } = await this.resolveSendConfig(orgId);
     const targets = mode === 'live' ? leads : leads.slice(0, cap);
@@ -660,7 +612,7 @@ export class ReachService {
           to: recipient,
           subject,
           body,
-          fromName: 'EVERTRUST GmbH',
+          fromName,
           signatureImageUrl,
         });
         delivered++;

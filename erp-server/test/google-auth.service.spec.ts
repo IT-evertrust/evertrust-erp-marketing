@@ -7,7 +7,14 @@ import { JwtService } from '@nestjs/jwt';
 import { schema } from '@evertrust/db';
 import { GoogleAuthService } from '../src/auth/google-auth.service';
 import { AuthController } from '../src/auth/auth.controller';
+import type { GoogleAccountsService } from '../src/google/google-accounts.service';
 import type { AppConfigService } from '../src/config/app-config.service';
+
+// Mailbox-connect on login is best-effort and only fires when a grant (refresh token)
+// is present; these specs drive the basic-scope login path, so a no-op upsert suffices.
+const fakeGoogleAccounts = {
+  upsertFromCallback: async () => undefined,
+} as unknown as GoogleAccountsService;
 import type {
   TokenVerifier,
   VerifiedGoogleUser,
@@ -92,7 +99,13 @@ async function make(
   ]);
   const db = getDb();
   const jwt = new JwtService({ secret: 'test-secret' });
-  const service = new GoogleAuthService(db, jwt, config, verifier);
+  const service = new GoogleAuthService(
+    db,
+    jwt,
+    config,
+    verifier,
+    fakeGoogleAccounts,
+  );
   return { service, jwt };
 }
 

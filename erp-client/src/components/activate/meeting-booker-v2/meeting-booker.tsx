@@ -36,7 +36,7 @@ import {
 const HOUR_PX = 56;
 const DAY_HOURS = 24;
 const WORK_DAYS = 5; // Mon–Fri
-const OPEN_SCROLL_TOP = 7 * HOUR_PX - 10;
+const OPEN_SCROLL_TOP = 7 * HOUR_PX + 10;
 // Floor on a rendered event card so a very short meeting is still readable/clickable.
 const MIN_EVENT_PX = 24;
 
@@ -213,19 +213,37 @@ export function MeetingBookerV2() {
             ...e,
             accountId: a.id,
           }));
-          return { timeZone: data.timeZone, configured: data.configured, events };
+          return {
+            accountId: a.id,
+            email: a.email,
+            timeZone: data.timeZone,
+            configured: data.configured,
+            reason: data.reason ?? null,
+            events,
+          };
         }),
       );
       return {
         timeZone: perAccount[0]?.timeZone ?? DEFAULT_TIME_ZONE,
         configured: perAccount.some((r) => r.configured),
         events: perAccount.flatMap((r) => r.events),
+        // Mailboxes whose calendar could NOT be read this fetch, with the server's
+        // human reason (missing Calendar scope / token revoked / …) — surfaced so a
+        // broken mailbox is explained instead of silently showing an empty week.
+        issues: perAccount
+          .filter((r) => !r.configured)
+          .map((r) => ({ accountId: r.accountId, email: r.email, reason: r.reason })),
       };
     },
   });
 
   const primaryTz = calQuery.data?.timeZone ?? DEFAULT_TIME_ZONE;
   const configured = Boolean(calQuery.data?.configured);
+  // Calendar-read failures for the account(s) currently in view ('' = All accounts).
+  const calIssues = calQuery.data?.issues ?? [];
+  const visibleIssues = accountFilter
+    ? calIssues.filter((i) => i.accountId === accountFilter)
+    : calIssues;
   const weekNumber = getIsoWeekNumber(mondayKey);
   const rangeText = weekRangeLabel(mondayKey);
 
@@ -409,11 +427,35 @@ export function MeetingBookerV2() {
           </div>
         ) : null}
 
+        {/* A connected mailbox whose calendar couldn't be read (missing Calendar
+            scope / revoked token) — explain it instead of a silent empty week, with
+            a one-click path to reconnect. */}
+        {visibleIssues.length > 0 ? (
+          <div className="flex flex-col gap-[3px] border-b border-[#e4e7eb] bg-[#fff8ef] px-4 py-[10px]">
+            {visibleIssues.map((issue) => (
+              <p key={issue.accountId} className="text-[11px] leading-[1.4] text-[#8a5a00]">
+                <span className="font-bold">{issue.email}:</span>{' '}
+                {issue.reason ?? 'Calendar could not be read for this account.'}{' '}
+                <Link href="/settings/general" className="font-bold underline">
+                  Reconnect
+                </Link>
+              </p>
+            ))}
+          </div>
+        ) : null}
+
         {/* Body: header row (gutter + day columns) + scrolling time grid */}
         <div className="flex p-0">
           <div className="flex h-[calc(100vh-300px)] min-h-[360px] w-full flex-col">
-            <div className="flex flex-none border-b border-[#e4e7eb] pr-[9px]">
-              <div className="flex w-[94px] flex-none items-end pb-[7px] text-[9.5px] font-bold tracking-[0.06em] text-[#959ca7]">
+            {/* ONE scroll container so the sticky header row and the scrolling grid
+                share an identical width — otherwise the header (which reserved its own
+                gutter) drifts out of alignment with the columns under it. */}
+            <div
+              ref={bodyRef}
+              className="flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable]"
+            >
+              <div className="sticky top-0 z-[3] flex flex-none border-b border-[#e4e7eb] bg-white">
+                <div className="flex w-[94px] flex-none items-end pb-[7px] text-[9.5px] font-bold tracking-[0.06em] text-[#959ca7]">
                 <div className="flex-1 pr-2 text-right">
                   {zoneShortLabel(primaryTz)}
                 </div>
@@ -440,13 +482,10 @@ export function MeetingBookerV2() {
                   </div>
                 );
               })}
-            </div>
+              </div>
 
-            <div
-              ref={bodyRef}
-              className="flex min-h-0 flex-1 items-start overflow-y-auto overflow-x-hidden py-[10px] [scrollbar-gutter:stable]"
-            >
-              <div className="flex w-[94px] flex-none" style={{ height: DAY_HOURS * HOUR_PX }}>
+              <div className="flex pb-[10px] pt-[10px]">
+                <div className="flex w-[94px] flex-none" style={{ height: DAY_HOURS * HOUR_PX }}>
                 <div className="relative flex-1">
                   {HOUR_LABELS.map((label, n) => (
                     <div
@@ -510,6 +549,7 @@ export function MeetingBookerV2() {
                   ))}
                 </div>
               ))}
+              </div>
             </div>
           </div>
         </div>

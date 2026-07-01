@@ -20,6 +20,9 @@ export type ProspectBoardFilters = {
   nicheTargetId?: string;
   createdFrom?: string;
   createdTo?: string;
+  // The Nurture pipeline passes this so the board shows ONLY prospects who replied
+  // (engaged) — cold scraped leads stay out until the client responds.
+  engagedOnly?: boolean;
   limit?: number;
   offset?: number;
 };

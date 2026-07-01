@@ -30,6 +30,10 @@ export class AuthService {
         permissions: schema.users.permissions,
         organizationId: schema.users.organizationId,
         organizationName: schema.organizations.name,
+        senderName: schema.users.senderName,
+        senderEmail: schema.users.senderEmail,
+        signature: schema.users.signature,
+        signatureImageUrl: schema.users.signatureImageUrl,
         active: schema.users.active,
         passwordHash: schema.authCredentials.passwordHash,
       })
@@ -61,6 +65,10 @@ export class AuthService {
       permissions: effectivePermissions(row.role, row.permissions),
       organizationId: row.organizationId,
       organizationName: row.organizationName,
+      senderName: row.senderName,
+      senderEmail: row.senderEmail,
+      signature: row.signature,
+      signatureImageUrl: row.signatureImageUrl,
     };
     const payload: JwtPayload = {
       sub: user.id,
@@ -86,6 +94,10 @@ export class AuthService {
         permissions: schema.users.permissions,
         organizationId: schema.users.organizationId,
         organizationName: schema.organizations.name,
+        senderName: schema.users.senderName,
+        senderEmail: schema.users.senderEmail,
+        signature: schema.users.signature,
+        signatureImageUrl: schema.users.signatureImageUrl,
       })
       .from(schema.users)
       .innerJoin(

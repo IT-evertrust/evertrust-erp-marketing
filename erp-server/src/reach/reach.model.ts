@@ -44,6 +44,16 @@ export const EMPTY_STATS: ReachStats = {
   final: { ...EMPTY_ROUND_STATS },
 };
 
+// Live per-phase scrape progress (pushed by the Lead Satellite agent during a run).
+export type ScrapePhase = 'search' | 'scrape' | 'qualify' | 'load';
+export type ScrapeProgress = {
+  phase: ScrapePhase;
+  current: number;
+  total: number;
+  label: string;
+  updatedAt: string;
+};
+
 export type ReachAim = {
   id: string;
   name: string;
@@ -76,12 +86,9 @@ export type ReachAim = {
   // Reason the last scrape failed (agent error / timeout), shown in the UI. Null when
   // the aim hasn't failed (cleared on a new run + on success).
   scrapeError: string | null;
-  // The BASE lead-scraping prompt authored by the local model from this aim's config, to
-  // be pasted into OpenAI to run the scrape. Null until Generate Prompt has been run.
-  // Batches 2-4 append a "Previously Collected Companies" exclusion block to this base.
-  scrapePrompt: string | null;
-  // Which batch of the 4-batch dedup sweep this campaign is on (1..4).
-  scrapeBatch: number;
+  // Live per-phase progress pushed by the agent during a run (search → scrape →
+  // qualify → load). Null when idle. Drives the per-process countdown in the UI.
+  scrapeProgress: ScrapeProgress | null;
   // Which mailbox the campaign sends from (info | hanna).
   sender: string;
   // Ammo Forge output (null until generated). getAims overrides this with the org

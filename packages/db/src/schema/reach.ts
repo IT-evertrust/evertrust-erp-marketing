@@ -61,6 +61,16 @@ type RoundStats = {
   meetings: number;
 };
 type ReachStats = { cold: RoundStats; followup: RoundStats; final: RoundStats };
+// Live per-phase scrape progress, pushed by the Lead Satellite agent during a run
+// (search → scrape → qualify → load) so the UI can show a REAL countdown per process
+// instead of a single opaque timer. Null when not scraping.
+type ScrapeProgress = {
+  phase: 'search' | 'scrape' | 'qualify' | 'load';
+  current: number; // e.g. region 4 (of total), or companies qualified so far
+  total: number; // e.g. 16 regions, or candidates to qualify
+  label: string; // human one-liner, e.g. "Region 4/16" or "Qualifying 30/64"
+  updatedAt: string; // ISO timestamp of this progress tick
+};
 
 export const reachAims = pgTable(
   'reach_aims',
@@ -129,17 +139,9 @@ export const reachAims = pgTable(
     // Why the last scrape FAILED (the agent's error / reason), surfaced in the UI so
     // the operator sees the cause instead of a generic "failed". Null when not failed.
     scrapeError: text('scrape_error'),
-    // The BASE lead-scraping prompt authored by the local model (reach.prompt_forge)
-    // from this aim's config — an in-depth instruction, scoped to the AIM fields, to be
-    // pasted into OpenAI to perform the scrape. Reach now PRODUCES this prompt instead
-    // of running the (local-model) Lead Satellite scrape itself. Null until generated.
-    // Batches 2-4 append a deterministic "Previously Collected Companies" exclusion block
-    // to this base (see the Reach batch flow) to dedupe across the sweep.
-    scrapePrompt: text('scrape_prompt'),
-    // Which batch of the 4-batch dedup sweep this campaign is on (1..4). Advances each
-    // time a batch's results are pasted back; the exclusion list accumulates from the
-    // reach_leads already saved for the aim.
-    scrapeBatch: integer('scrape_batch').notNull().default(1),
+    // Live per-phase progress pushed by the agent during a scrape (see ScrapeProgress).
+    // Null when idle; set/advanced via the machine PATCH .../scrape-progress route.
+    scrapeProgress: jsonb('scrape_progress').$type<ScrapeProgress>(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

@@ -69,6 +69,15 @@ class ErpClient:
         r.raise_for_status()
         return r.json()
 
+    def post_scrape_progress(self, aim_id: str, phase: str, current: int, total: int, label: str) -> None:
+        # Live per-phase progress for the Reach UI countdown. Best-effort + short timeout:
+        # this fires many times mid-scrape and must never slow or break the run.
+        self._http.patch(
+            f"/growth/reach/aims/{aim_id}/scrape-progress",
+            json={"phase": phase, "current": current, "total": total, "label": label},
+            timeout=5.0,
+        )
+
     def trigger_niche_analytics(self, campaign_id: str) -> dict:
         # best-effort; the n8n gate POSTs to the niche-analytics webhook then throws
         r = self._http.post("/niche-analytics", json={"campaignId": campaign_id, "trigger": "satellite-gate"})

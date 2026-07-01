@@ -99,6 +99,11 @@ services:
         sync: false
       - key: AGENT_TIMEOUT_MS
         value: "300000"
+      # Background Lead-Satellite scrape leash (ms). Detached from the request thread,
+      # so it can run long; 7200000 = 2h headroom for big nationwide sweeps. Per-org
+      # "Scrape timeout" (Config page, minutes) overrides this when set.
+      - key: REACH_SCRAPE_TIMEOUT_MS
+        value: "7200000"
       # Reach send safety: 'test' redirects EVERY send to REACH_TEST_RECIPIENT
       # (capped at REACH_TEST_SEND_CAP). Keep 'test' for the first prod deploy;
       # flip to 'live' (per-org) only after the prod smoke-test passes.

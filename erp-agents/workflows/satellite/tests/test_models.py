@@ -61,6 +61,19 @@ def test_build_segments_empty_without_targets_or_cities():
     assert build_segments(CampaignConfig(campaign_id="c1", niche="LED", region="")) == []
 
 
+def test_build_segments_searchhint_augments_target_name():
+    # The Sector page's searchHint ("Berlin, > 5 staff") must AUGMENT the archetype name, not
+    # replace it — otherwise the target ("Dental clinics") is dropped from the search phrase.
+    cfg = CampaignConfig(
+        campaign_id="c1", niche="Healthcare", region="Berlin", country="Germany",
+        targets=[{"id": "t1", "name": "Dental clinics", "slug": "dental", "searchHint": "> 5 staff"}],
+    )
+    segs = build_segments(cfg)
+    assert segs and all("DENTAL CLINICS" in s.niche for s in segs)        # name kept
+    assert all("> 5 STAFF" in s.niche for s in segs)                       # hint appended
+    assert all(s.niche_target_name == "Dental clinics" for s in segs)      # clean name preserved
+
+
 def test_dedup_and_prospects():
     leads = [
         Lead(name="Acme", website="https://acme.de", email="info@acme.de", city="Berlin", country="DE"),

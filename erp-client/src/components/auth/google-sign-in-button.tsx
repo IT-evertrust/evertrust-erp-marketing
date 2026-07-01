@@ -5,9 +5,19 @@ import Script from 'next/script';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { Loader2 } from 'lucide-react';
+import { GOOGLE_CONNECT_SCOPES } from '@evertrust/shared';
 import { ApiError } from '@/lib/api';
 import { useGoogleCodeLogin } from '@/hooks/use-auth';
-import { GOOGLE_CLIENT_ID } from '@/lib/env';
+import { GOOGLE_CLIENT_ID, GOOGLE_CONNECT_ON_LOGIN } from '@/lib/env';
+
+// The scopes the consent popup requests. Default = identity only. When
+// GOOGLE_CONNECT_ON_LOGIN is enabled, also request the Gmail + Calendar connect
+// scopes so the same sign-in connects the user's mailbox (the server upserts it from
+// the code exchange). Requires those scopes to be registered + verified on the OAuth
+// consent screen first — see the env flag's note.
+const LOGIN_SCOPE = GOOGLE_CONNECT_ON_LOGIN
+  ? [...GOOGLE_CONNECT_SCOPES].join(' ') // already includes openid/email/profile
+  : 'openid email profile';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
@@ -107,7 +117,7 @@ export function GoogleSignInButton() {
 
     clientRef.current = oauth2.initCodeClient({
       client_id: GOOGLE_CLIENT_ID,
-      scope: 'openid email profile',
+      scope: LOGIN_SCOPE,
       ux_mode: 'popup',
       callback: (response) => {
         if (response.code) {

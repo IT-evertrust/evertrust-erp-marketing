@@ -20,12 +20,25 @@ import {
 import type { LoginResponseDto, MeDto, UserRole } from '@evertrust/shared';
 import { AppConfigService } from '../config/app-config.service';
 import { DB, type DbClient } from '../db/db.tokens';
+import { GoogleAccountsService } from '../google/google-accounts.service';
 import type { JwtPayload } from './auth.types';
 import {
   TOKEN_VERIFIER,
   type TokenVerifier,
   type VerifiedGoogleUser,
 } from './token-verifier';
+
+// The Gmail/Calendar grant captured from a code-flow login, used to connect the
+// signing-in user's mailbox in the SAME step (one sign-in does both). Only acted on
+// when a refresh token actually came back (i.e. the consent granted offline access);
+// absent on the One-Tap id_token path and on re-logins where Google omits it.
+interface LoginMailboxGrant {
+  sub?: string;
+  refreshToken: string | null;
+  accessToken: string | null;
+  expiryDate: number | null;
+  scopes: string[];
+}
 
 // Google-only login + domain-based org auto-provisioning.
 //
@@ -59,6 +72,7 @@ export class GoogleAuthService {
     private readonly jwt: JwtService,
     private readonly config: AppConfigService,
     @Inject(TOKEN_VERIFIER) private readonly verifier: TokenVerifier,
+    private readonly googleAccounts: GoogleAccountsService,
   ) {}
 
   // Extract a useful, log-only reason from a Google auth failure. The client still
@@ -88,6 +102,7 @@ export class GoogleAuthService {
     const claims = JSON.parse(
       Buffer.from(parts[1]!, 'base64url').toString('utf8'),
     ) as {
+      sub?: string;
       email?: string;
       email_verified?: boolean | string;
       name?: string;
@@ -114,6 +129,7 @@ export class GoogleAuthService {
       emailVerified:
         claims.email_verified === true || claims.email_verified === 'true',
       name: claims.name ?? '',
+      sub: claims.sub,
     };
   }
 
@@ -157,6 +173,7 @@ export class GoogleAuthService {
     }
 
     let verified;
+    let grant: LoginMailboxGrant | undefined;
     try {
       const oauth = new OAuth2Client(clientId, clientSecret, 'postmessage');
       const { tokens } = await oauth.getToken({
@@ -169,6 +186,19 @@ export class GoogleAuthService {
       // trusted — decode + validate it OFFLINE (no signing-cert fetch, which some host
       // egress IPs, e.g. Render, get a 403 on from www.googleapis.com/oauth2/v1/certs).
       verified = this.decodeVerifiedIdToken(idToken);
+      // Capture the Gmail/Calendar grant so we can connect this user's mailbox in the
+      // same step. When the web login requests only basic scopes (the default), no
+      // refresh token comes back and provisionAndIssue simply skips the connect.
+      grant = {
+        sub: verified.sub,
+        refreshToken: tokens.refresh_token ?? null,
+        accessToken: tokens.access_token ?? null,
+        expiryDate: tokens.expiry_date ?? null,
+        scopes:
+          typeof tokens.scope === 'string'
+            ? tokens.scope.split(' ').filter(Boolean)
+            : [],
+      };
     } catch (err) {
       // Bad/expired code, exchange failure, or invalid id_token — all map to a
       // single generic 401 so we don't leak which check failed. Log the real reason
@@ -177,7 +207,7 @@ export class GoogleAuthService {
       throw new UnauthorizedException('Invalid Google token');
     }
 
-    return this.provisionAndIssue(verified);
+    return this.provisionAndIssue(verified, grant);
   }
 
   // Shared post-verification provisioning: given a verified Google identity,
@@ -186,6 +216,7 @@ export class GoogleAuthService {
   // so the provisioning rules live in exactly one place.
   private async provisionAndIssue(
     verified: VerifiedGoogleUser,
+    grant?: LoginMailboxGrant,
   ): Promise<LoginResponseDto> {
     if (!verified.emailVerified) {
       throw new UnauthorizedException('Google email is not verified');
@@ -205,6 +236,13 @@ export class GoogleAuthService {
       if (!existing.active) {
         throw new UnauthorizedException('Account is deactivated');
       }
+      await this.maybeConnectMailbox(
+        existing.organizationId,
+        existing.id,
+        email,
+        verified.name,
+        grant,
+      );
       const orgName = await this.orgNameById(existing.organizationId);
       return this.issue({ ...existing, organizationName: orgName });
     }
@@ -236,6 +274,14 @@ export class GoogleAuthService {
       throw new ServiceUnavailableException('User provisioning failed');
     }
 
+    await this.maybeConnectMailbox(
+      org.id,
+      created.id,
+      email,
+      created.name,
+      grant,
+    );
+
     return this.issue({
       id: created.id,
       email: created.email,
@@ -247,6 +293,50 @@ export class GoogleAuthService {
       organizationId: created.organizationId,
       organizationName: org.name,
     });
+  }
+
+  // Connect the signing-in user's Google mailbox to their org when the login consent
+  // granted Gmail/Calendar (a refresh token came back). BEST-EFFORT + NON-FATAL: any
+  // failure — no refresh token (basic-scope login or a re-login Google didn't re-issue
+  // one for), missing sub, encryption, or DB — is logged and swallowed so login NEVER
+  // breaks; the user is still signed in, just without the mailbox auto-connected. The
+  // org is the user's OWN resolved org (never client input), so tenant isolation holds.
+  private async maybeConnectMailbox(
+    orgId: string,
+    userId: string,
+    email: string,
+    name: string,
+    grant?: LoginMailboxGrant,
+  ): Promise<void> {
+    if (!grant?.refreshToken || !grant.sub) return;
+    // NEVER downgrade an existing connection: only connect/refresh the mailbox when
+    // the grant actually carries a Gmail/Calendar scope. A basic-scope login
+    // ('openid email profile' — the default when GOOGLE_CONNECT_ON_LOGIN is off) can
+    // STILL return a refresh token, and upsertFromCallback overwrites the stored
+    // scopes — so without this guard a plain login would strip an already
+    // Calendar/Gmail-connected mailbox down to basic, breaking calendar + email reads.
+    const hasMailboxScope = grant.scopes.some(
+      (s) =>
+        s.startsWith('https://www.googleapis.com/auth/gmail') ||
+        s.startsWith('https://www.googleapis.com/auth/calendar') ||
+        s === 'https://mail.google.com/',
+    );
+    if (!hasMailboxScope) return;
+    try {
+      await this.googleAccounts.upsertFromCallback(orgId, userId, {
+        sub: grant.sub,
+        email,
+        name: name.trim() || email,
+        refreshToken: grant.refreshToken,
+        accessToken: grant.accessToken,
+        expiryDate: grant.expiryDate,
+        scopes: grant.scopes,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Login mailbox-connect skipped: ${this.describeGoogleError(err)}`,
+      );
+    }
   }
 
   // Case-insensitive lookup: the email is already lowercased by the caller and we

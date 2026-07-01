@@ -52,34 +52,75 @@ export class ReachAgentClient {
     // headersTimeout, aborting any >5min scrape as "fetch failed" no matter what
     // AbortController we set. undici.request lets the cap be the real limit.
     const cap = timeoutMs ?? this.config.get('AGENT_TIMEOUT_MS');
-    try {
-      const { statusCode, body } = await request(`${base}/run`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workflow, mode, input }),
-        headersTimeout: cap,
-        bodyTimeout: cap,
-      });
-      if (statusCode < 200 || statusCode >= 300) {
-        const text = await body.text().catch(() => '');
-        throw new ServiceUnavailableException(
-          `Agent ${workflow} HTTP ${statusCode}: ${text.slice(0, 200)}`,
+
+    // The agent sits behind a Tailscale Funnel that can flap (the mini sleeps / the
+    // relay drops), so a fresh connection occasionally dies "before the TLS handshake".
+    // Retry that — but ONLY when it fails fast (connection setup), never a drop after the
+    // long, side-effectful scrape has already started (elapsed >= RETRY_WINDOW_MS), to
+    // avoid kicking off a second concurrent run.
+    const MAX_ATTEMPTS = 3;
+    const RETRY_WINDOW_MS = 30_000;
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      const startedAt = Date.now();
+      try {
+        const { statusCode, body } = await request(`${base}/run`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workflow, mode, input }),
+          headersTimeout: cap,
+          bodyTimeout: cap,
+        });
+        if (statusCode < 200 || statusCode >= 300) {
+          const text = await body.text().catch(() => '');
+          throw new ServiceUnavailableException(
+            `Agent ${workflow} HTTP ${statusCode}: ${text.slice(0, 200)}`,
+          );
+        }
+        const result = (await body.json()) as AgentRunResult;
+        if (result.status === 'failed') {
+          throw new ServiceUnavailableException(
+            `Agent ${workflow} failed: ${result.errors?.[0] ?? 'unknown error'}`,
+          );
+        }
+        return result;
+      } catch (err) {
+        if (err instanceof ServiceUnavailableException) throw err; // agent answered — don't retry
+        lastErr = err;
+        const elapsed = Date.now() - startedAt;
+        const retryable =
+          attempt < MAX_ATTEMPTS &&
+          elapsed < RETRY_WINDOW_MS &&
+          isTransientConnectError(err);
+        if (!retryable) break;
+        const backoffMs = 2000 * attempt; // 2s, 4s
+        this.logger.warn(
+          `Agent ${workflow} connect failed (attempt ${attempt}/${MAX_ATTEMPTS}, ${Math.round(elapsed / 1000)}s) — retrying in ${backoffMs}ms: ${err instanceof Error ? err.message : 'error'}`,
         );
+        await new Promise((r) => setTimeout(r, backoffMs));
       }
-      const result = (await body.json()) as AgentRunResult;
-      if (result.status === 'failed') {
-        throw new ServiceUnavailableException(
-          `Agent ${workflow} failed: ${result.errors?.[0] ?? 'unknown error'}`,
-        );
-      }
-      return result;
-    } catch (err) {
-      if (err instanceof ServiceUnavailableException) throw err;
-      const msg = err instanceof Error ? err.message : 'agent call failed';
-      this.logger.warn(`Agent ${workflow} call failed: ${msg}`);
-      throw new ServiceUnavailableException(
-        `Agent ${workflow} call failed: ${msg}`,
-      );
     }
+
+    const msg = lastErr instanceof Error ? lastErr.message : 'agent call failed';
+    this.logger.warn(`Agent ${workflow} call failed: ${msg}`);
+    throw new ServiceUnavailableException(`Agent ${workflow} call failed: ${msg}`);
   }
+}
+
+// A funnel-flap connection-setup failure (safe to retry), vs an HTTP/app error.
+function isTransientConnectError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const code = (err as { code?: string }).code ?? '';
+  const msg = (err as Error).message ?? '';
+  return (
+    code === 'UND_ERR_SOCKET' ||
+    code === 'UND_ERR_CONNECT_TIMEOUT' ||
+    code === 'ECONNRESET' ||
+    code === 'ECONNREFUSED' ||
+    code === 'ETIMEDOUT' ||
+    code === 'ENOTFOUND' ||
+    /socket disconnected before secure TLS|other side closed|ECONNRESET|ECONNREFUSED/i.test(
+      msg,
+    )
+  );
 }
