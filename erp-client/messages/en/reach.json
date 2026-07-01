@@ -29,7 +29,8 @@
       "confirmTitle": "Delete campaign?",
       "confirmBody": "This permanently deletes “{name}” and all of its leads from the database. This cannot be undone.",
       "cancel": "Cancel",
-      "confirm": "Delete"
+      "confirm": "Delete",
+      "deleting": "Deleting campaign…"
     }
   },
   "scraper": {

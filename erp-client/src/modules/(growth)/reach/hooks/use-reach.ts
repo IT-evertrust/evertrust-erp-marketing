@@ -335,6 +335,9 @@ export function useReach() {
       toast.success(t('toast.campaignDeleted'));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t('toast.deleteFailed'));
+      // Rethrow so the confirm dialog can stop its "Deleting…" spinner and skip the
+      // page refresh when the delete didn't actually happen.
+      throw err;
     }
   }
 

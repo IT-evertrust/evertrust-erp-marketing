@@ -29,7 +29,8 @@
       "confirmTitle": "Kampagne löschen?",
       "confirmBody": "Dies löscht „{name}“ und alle zugehörigen Leads dauerhaft aus der Datenbank. Dies kann nicht rückgängig gemacht werden.",
       "cancel": "Abbrechen",
-      "confirm": "Löschen"
+      "confirm": "Löschen",
+      "deleting": "Kampagne wird gelöscht…"
     }
   },
   "scraper": {

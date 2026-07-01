@@ -33,7 +33,7 @@ type CampaignTableProps = {
   metricValue?: (campaign: Campaign) => ReactNode;
   // When provided, each row gets a trash button that (after a confirm popup)
   // permanently deletes the campaign.
-  onDeleteCampaign?: (campaignId: string) => void;
+  onDeleteCampaign?: (campaignId: string) => void | Promise<void>;
 };
 
 export function CampaignTable({
@@ -52,11 +52,22 @@ export function CampaignTable({
   const t = useTranslations('reach');
   // The campaign the confirm popup is currently asking about, or null when closed.
   const [pendingDelete, setPendingDelete] = useState<Campaign | null>(null);
+  // True while the delete DB call is in flight — swaps the popup for a spinner.
+  const [deleting, setDeleting] = useState(false);
   const canDelete = !!onDeleteCampaign;
 
-  function confirmDelete() {
-    if (pendingDelete) onDeleteCampaign?.(pendingDelete.id);
-    setPendingDelete(null);
+  async function confirmDelete() {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await onDeleteCampaign?.(pendingDelete.id);
+      // Success: refresh the page so the table reflects the deletion from the server.
+      window.location.reload();
+    } catch {
+      // The hook already surfaced the error toast — just close the popup.
+      setDeleting(false);
+      setPendingDelete(null);
+    }
   }
 
   return (
@@ -149,7 +160,7 @@ export function CampaignTable({
                           e.stopPropagation(); // don't select the row
                           setPendingDelete(campaign);
                         }}
-                        className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                        className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                       >
                         <Trash2 className="size-4" />
                       </button>
@@ -163,34 +174,56 @@ export function CampaignTable({
       </div>
       )}
 
-      {/* Delete confirmation popup */}
+      {/* Delete confirmation popup — swaps to a spinner while the delete is in flight. */}
       <Dialog
         open={!!pendingDelete}
         onOpenChange={(o) => {
-          if (!o) setPendingDelete(null);
+          // Don't let the operator dismiss the popup mid-delete.
+          if (!o && !deleting) setPendingDelete(null);
         }}
       >
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>{t('campaignTable.delete.confirmTitle')}</DialogTitle>
-            <DialogDescription>
-              {t('campaignTable.delete.confirmBody', {
-                name: pendingDelete?.name ?? '',
-              })}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setPendingDelete(null)}
-            >
-              {t('campaignTable.delete.cancel')}
-            </Button>
-            <Button type="button" variant="destructive" onClick={confirmDelete}>
-              {t('campaignTable.delete.confirm')}
-            </Button>
-          </DialogFooter>
+        <DialogContent
+          className="sm:max-w-sm"
+          showCloseButton={!deleting}
+          onEscapeKeyDown={(e) => {
+            if (deleting) e.preventDefault();
+          }}
+          onInteractOutside={(e) => {
+            if (deleting) e.preventDefault();
+          }}
+        >
+          {deleting ? (
+            <Spinner label={t('campaignTable.delete.deleting')} />
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle>
+                  {t('campaignTable.delete.confirmTitle')}
+                </DialogTitle>
+                <DialogDescription>
+                  {t('campaignTable.delete.confirmBody', {
+                    name: pendingDelete?.name ?? '',
+                  })}
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setPendingDelete(null)}
+                >
+                  {t('campaignTable.delete.cancel')}
+                </Button>
+                <Button
+                  type="button"
+                  className="bg-foreground text-background hover:bg-foreground/90"
+                  onClick={confirmDelete}
+                >
+                  {t('campaignTable.delete.confirm')}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </GrowthCard>
