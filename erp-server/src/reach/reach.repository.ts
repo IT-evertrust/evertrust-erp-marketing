@@ -364,6 +364,37 @@ export class ReachRepository {
     });
   }
 
+  // Permanently delete an aim (org-scoped). Cascades reach_leads + reach_sends (FK
+  // onDelete cascade). Returns the linked campaign id (if any) so the caller can clean
+  // up the bridge campaign too.
+  async deleteAim(orgId: string, aimId: string): Promise<string | null> {
+    const [row] = await this.db
+      .delete(schema.reachAims)
+      .where(
+        and(eq(schema.reachAims.id, aimId), tenantScope(orgId, schema.reachAims)),
+      )
+      .returning({ campaignId: schema.reachAims.campaignId });
+    return row?.campaignId ?? null;
+  }
+
+  // Delete an aim's linked bridge campaign + its mirrored prospects (org-scoped). Called
+  // best-effort after the aim is gone; leaves the campaign if other rows still reference it.
+  async deleteLinkedCampaign(orgId: string, campaignId: string): Promise<void> {
+    await this.db
+      .delete(schema.prospects)
+      .where(
+        and(
+          eq(schema.prospects.campaignId, campaignId),
+          tenantScope(orgId, schema.prospects),
+        ),
+      );
+    await this.db
+      .delete(schema.campaigns)
+      .where(
+        and(eq(schema.campaigns.id, campaignId), tenantScope(orgId, schema.campaigns)),
+      );
+  }
+
   // Set the current batch number for a campaign's sweep (org-scoped).
   async setScrapeBatch(
     orgId: string,

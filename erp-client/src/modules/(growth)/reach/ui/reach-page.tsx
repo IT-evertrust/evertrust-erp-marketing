@@ -31,6 +31,7 @@ export function ReachPage() {
           scrapeMode={reach.scrapeMode}
           onSetScrapeMode={reach.setScrapeMode}
           onRunLeadSatellite={reach.runLeadSatellite}
+          onDeleteCampaign={reach.deleteCampaign}
         />
       ) : null}
 
@@ -44,6 +45,7 @@ export function ReachPage() {
           loadingCampaigns={reach.loadingCampaigns}
           onSend={reach.sendRound}
           usingOrgDefault={reach.selectedCampaign?.usingOrgDefault ?? false}
+          onDeleteCampaign={reach.deleteCampaign}
         />
       ) : null}
 

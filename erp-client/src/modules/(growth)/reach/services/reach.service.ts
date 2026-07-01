@@ -95,7 +95,7 @@ async function getJson<T>(path: string): Promise<T> {
 }
 
 async function mutate<T>(
-  method: 'POST' | 'PATCH' | 'PUT',
+  method: 'POST' | 'PATCH' | 'PUT' | 'DELETE',
   path: string,
   body?: unknown,
 ): Promise<T> {
@@ -147,6 +147,11 @@ export async function createReachAim(
     // niche's Sector — not sent from the form.
   });
   return mapAim(aim);
+}
+
+// Permanently delete a campaign (aim) + its leads from the database.
+export async function deleteReachAim(aimId: string): Promise<void> {
+  await mutate<{ ok: boolean }>('DELETE', `/growth/reach/aims/${aimId}`);
 }
 
 // Trigger Lead Satellite for an aim. The scrape now runs in the BACKGROUND, so this

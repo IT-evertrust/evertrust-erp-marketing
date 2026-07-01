@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 
 import {
   createReachAim,
+  deleteReachAim,
   EMPTY_STATS,
   generateReachPrompt,
   getCampaignLeads,
@@ -320,6 +321,23 @@ export function useReach() {
     }
   }
 
+  // Permanently delete a campaign (aim) + its leads. Removes it from the list and, if it
+  // was the selected campaign, selects the next one (clearing its leads).
+  async function deleteCampaign(aimId: string) {
+    try {
+      await deleteReachAim(aimId);
+      const remaining = campaigns.filter((c) => c.id !== aimId);
+      setCampaigns(remaining);
+      if (selectedCampaignId === aimId) {
+        setSelectedCampaignId(remaining[0]?.id ?? '');
+        setLeads([]);
+      }
+      toast.success(t('toast.campaignDeleted'));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('toast.deleteFailed'));
+    }
+  }
+
   // Toggle Reach Bazooka on/off for a campaign.
   async function toggleAutoSend(aimId: string) {
     const current = campaigns.find((c) => c.id === aimId);
@@ -405,6 +423,7 @@ export function useReach() {
     openCampaignForm,
     closeCampaignForm,
     createCampaign,
+    deleteCampaign,
     generatedPrompt,
     genStage,
     reloadAfterBatch,

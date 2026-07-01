@@ -22,6 +22,14 @@
       "SCRAPING": "Scraping",
       "IN CAMPAIGN": "In campaign",
       "OVER": "Over"
+    },
+    "delete": {
+      "aria": "Delete {name}",
+      "title": "Delete campaign",
+      "confirmTitle": "Delete campaign?",
+      "confirmBody": "This permanently deletes “{name}” and all of its leads from the database. This cannot be undone.",
+      "cancel": "Cancel",
+      "confirm": "Delete"
     }
   },
   "scraper": {
@@ -183,7 +191,9 @@
     "roundRecorded": "Recorded {count} {round} send(s). Gmail delivery pending OAuth.",
     "sendFailed": "Send failed",
     "scrapeDone": "Scrape complete — {count} companies found.",
-    "scrapeFailed": "Lead scrape failed."
+    "scrapeFailed": "Lead scrape failed.",
+    "campaignDeleted": "Campaign deleted",
+    "deleteFailed": "Couldn’t delete the campaign"
   },
   "templates": {
     "orgWide": "Org-wide",

@@ -1,8 +1,18 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
+import { Trash2 } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { GrowthCard, StatusPill } from '../../shared';
 
 import type { Campaign } from '../types';
@@ -21,6 +31,9 @@ type CampaignTableProps = {
   // overrides it to show "Sent" (total emails sent across the three rounds).
   metricLabel?: string;
   metricValue?: (campaign: Campaign) => ReactNode;
+  // When provided, each row gets a trash button that (after a confirm popup)
+  // permanently deletes the campaign.
+  onDeleteCampaign?: (campaignId: string) => void;
 };
 
 export function CampaignTable({
@@ -34,8 +47,17 @@ export function CampaignTable({
   loading = false,
   metricLabel,
   metricValue,
+  onDeleteCampaign,
 }: CampaignTableProps) {
   const t = useTranslations('reach');
+  // The campaign the confirm popup is currently asking about, or null when closed.
+  const [pendingDelete, setPendingDelete] = useState<Campaign | null>(null);
+  const canDelete = !!onDeleteCampaign;
+
+  function confirmDelete() {
+    if (pendingDelete) onDeleteCampaign?.(pendingDelete.id);
+    setPendingDelete(null);
+  }
 
   return (
     <GrowthCard
@@ -78,6 +100,7 @@ export function CampaignTable({
               <th className="px-3 pb-3 text-left text-[9.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                 {t('campaignTable.col.status')}
               </th>
+              {canDelete ? <th className="w-8 px-3 pb-3" /> : null}
             </tr>
           </thead>
 
@@ -114,6 +137,24 @@ export function CampaignTable({
                       {t(`campaignTable.status.${campaign.status}`)}
                     </StatusPill>
                   </td>
+                  {canDelete ? (
+                    <td className="px-2 py-3 text-right">
+                      <button
+                        type="button"
+                        aria-label={t('campaignTable.delete.aria', {
+                          name: campaign.name,
+                        })}
+                        title={t('campaignTable.delete.title')}
+                        onClick={(e) => {
+                          e.stopPropagation(); // don't select the row
+                          setPendingDelete(campaign);
+                        }}
+                        className="rounded p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </td>
+                  ) : null}
                 </tr>
               );
             })}
@@ -121,6 +162,37 @@ export function CampaignTable({
         </table>
       </div>
       )}
+
+      {/* Delete confirmation popup */}
+      <Dialog
+        open={!!pendingDelete}
+        onOpenChange={(o) => {
+          if (!o) setPendingDelete(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t('campaignTable.delete.confirmTitle')}</DialogTitle>
+            <DialogDescription>
+              {t('campaignTable.delete.confirmBody', {
+                name: pendingDelete?.name ?? '',
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPendingDelete(null)}
+            >
+              {t('campaignTable.delete.cancel')}
+            </Button>
+            <Button type="button" variant="destructive" onClick={confirmDelete}>
+              {t('campaignTable.delete.confirm')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </GrowthCard>
   );
 }

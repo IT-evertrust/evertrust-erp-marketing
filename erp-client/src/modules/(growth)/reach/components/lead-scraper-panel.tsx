@@ -35,6 +35,8 @@ type LeadScraperPanelProps = {
   onSetScrapeMode?: (mode: 'manual' | 'auto') => void;
   // Automatic mode: kick off the Lead Satellite scrape for the selected campaign.
   onRunLeadSatellite?: (aimId: string) => void;
+  // Permanently delete a campaign (after the confirm popup).
+  onDeleteCampaign?: (aimId: string) => void;
 };
 
 // Client-side pagination: the leads list is already fully loaded, so we page through
@@ -57,6 +59,7 @@ export function LeadScraperPanel({
   scrapeMode = 'manual',
   onSetScrapeMode,
   onRunLeadSatellite,
+  onDeleteCampaign,
 }: LeadScraperPanelProps) {
   const t = useTranslations('reach');
 
@@ -106,6 +109,7 @@ export function LeadScraperPanel({
         showAction
         onActionClick={onCreateCampaign}
         loading={loadingCampaigns}
+        onDeleteCampaign={onDeleteCampaign}
         />
 
       <GrowthCard

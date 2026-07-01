@@ -348,6 +348,21 @@ export class ReachService {
     return aim;
   }
 
+  // Permanently delete a campaign (aim): removes the aim + its leads/sends (cascade), and
+  // best-effort the linked bridge campaign + its prospects. 404 if the aim doesn't exist.
+  async deleteAim(orgId: string, aimId: string): Promise<{ ok: true }> {
+    await this.getAim(orgId, aimId); // 404 if missing / not this org
+    const campaignId = await this.repo.deleteAim(orgId, aimId);
+    if (campaignId) {
+      await this.repo.deleteLinkedCampaign(orgId, campaignId).catch((err) =>
+        this.logger.warn(
+          `Deleted aim ${aimId} but could not remove its linked campaign ${campaignId}: ${err instanceof Error ? err.message : 'error'}`,
+        ),
+      );
+    }
+    return { ok: true };
+  }
+
   // Generate Prompt (replaces the old scrape trigger): the local model (hermes/qwen via
   // reach.prompt_forge) takes this aim's config and AUTHORS an in-depth OpenAI lead-
   // scraping prompt, scoped to the AIM fields. The only output is the prompt string,

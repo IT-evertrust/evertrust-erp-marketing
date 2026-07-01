@@ -22,6 +22,14 @@
       "SCRAPING": "Wird gescrapt",
       "IN CAMPAIGN": "In Kampagne",
       "OVER": "Beendet"
+    },
+    "delete": {
+      "aria": "{name} löschen",
+      "title": "Kampagne löschen",
+      "confirmTitle": "Kampagne löschen?",
+      "confirmBody": "Dies löscht „{name}“ und alle zugehörigen Leads dauerhaft aus der Datenbank. Dies kann nicht rückgängig gemacht werden.",
+      "cancel": "Abbrechen",
+      "confirm": "Löschen"
     }
   },
   "scraper": {
@@ -183,7 +191,9 @@
     "roundRecorded": "{count} {round}-Versand(e) erfasst. Gmail-Zustellung wartet auf OAuth.",
     "sendFailed": "Senden fehlgeschlagen",
     "scrapeDone": "Scrape abgeschlossen — {count} Firmen gefunden.",
-    "scrapeFailed": "Lead-Scrape fehlgeschlagen."
+    "scrapeFailed": "Lead-Scrape fehlgeschlagen.",
+    "campaignDeleted": "Kampagne gelöscht",
+    "deleteFailed": "Kampagne konnte nicht gelöscht werden"
   },
   "templates": {
     "orgWide": "Organisationsweit",

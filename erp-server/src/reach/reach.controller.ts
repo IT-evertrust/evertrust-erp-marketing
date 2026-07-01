@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Header,
   Param,
@@ -81,6 +82,13 @@ export class ReachController {
   @Get('aims/:aimId')
   getAim(@OrgId() orgId: string, @Param('aimId') aimId: string) {
     return this.reachService.getAim(orgId, aimId);
+  }
+
+  // Permanently delete a campaign (aim) + its leads. Used by the trash button.
+  @RequirePermissions('campaigns:write')
+  @Delete('aims/:aimId')
+  deleteAim(@OrgId() orgId: string, @Param('aimId') aimId: string) {
+    return this.reachService.deleteAim(orgId, aimId);
   }
 
   // AIM: create the campaign (config.json) + generate templates + news brief. The
